@@ -12,8 +12,10 @@
 			"name": "pulsar",
 			"source": "./",
 			"description": "Let AI coding agents in any harness find and message each other: one machine-wide list, tags, multicast, a * bus, and push delivery that wakes idle sessions.",
-			"version": "1.0.1",
-			"author": { "name": "Eric Schoffstall" },
+			"version": "1.1.0",
+			"author": {
+				"name": "Eric Schoffstall"
+			},
 			"homepage": "https://github.com/yocontra/pulsar",
 			"license": "MIT",
 			"keywords": ["mcp", "agents", "multi-agent", "messaging"],

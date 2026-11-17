@@ -74,11 +74,16 @@ export function findHarnessAncestor(
 export interface GitInfo {
 	project: string | null;
 	branch: string | null;
+	/** Folder name of a linked worktree; null in the main checkout. */
+	worktree: string | null;
 }
 
-/** Project = name of the main checkout's folder, so worktrees share one tag. */
+/**
+ * Project = name of the main checkout's folder, so every worktree of a repo
+ * shares one project tag. Branch and worktree are the folder's own.
+ */
 export function gitInfo(cwd: string | null): GitInfo {
-	if (!cwd) return { project: null, branch: null };
+	if (!cwd) return { project: null, branch: null, worktree: null };
 	try {
 		const out = execFileSync(
 			"git",
@@ -88,20 +93,78 @@ export function gitInfo(cwd: string | null): GitInfo {
 				"rev-parse",
 				"--path-format=absolute",
 				"--git-common-dir",
-				"--abbrev-ref",
-				"HEAD",
+				"--git-dir",
+				"--show-toplevel",
 			],
 			{ encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 3000 },
 		)
 			.trim()
 			.split("\n");
-		const common = out[0] ?? "";
-		const branch = out[1] && out[1] !== "HEAD" ? out[1] : null;
+		const [common = "", gitDir = "", top = ""] = out;
+		const local = localBranch(cwd);
+		// Worktrees often have random local names: report the branch it pushes to.
+		const branch = (local && pushBranch(cwd)) || local;
 		const root = basename(common) === ".git" ? dirname(common) : common;
-		return { project: slug(basename(root)) || null, branch };
+		const worktree =
+			gitDir && gitDir !== common && top ? slug(basename(top)) || null : null;
+		return { project: slug(basename(root)) || null, branch, worktree };
 	} catch {
-		return { project: slug(basename(resolve(cwd))) || null, branch: null };
+		return {
+			project: slug(basename(resolve(cwd))) || null,
+			branch: null,
+			worktree: null,
+		};
 	}
+}
+
+/** The checked-out branch, also before the first commit; null when detached. */
+function localBranch(cwd: string): string | null {
+	try {
+		return (
+			execFileSync(
+				"git",
+				["-C", cwd, "symbolic-ref", "--short", "-q", "HEAD"],
+				{
+					encoding: "utf8",
+					stdio: ["ignore", "pipe", "ignore"],
+					timeout: 3000,
+				},
+			).trim() || null
+		);
+	} catch {
+		return null;
+	}
+}
+
+/** The remote branch `git push` would update (`origin/fix-1378` → `fix-1378`), if any. */
+export function pushBranch(cwd: string): string | null {
+	try {
+		const ref = execFileSync(
+			"git",
+			[
+				"-C",
+				cwd,
+				"rev-parse",
+				"--abbrev-ref",
+				"--symbolic-full-name",
+				"@{push}",
+			],
+			{
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+				timeout: 3000,
+			},
+		).trim();
+		const slash = ref.indexOf("/");
+		return slash > 0 ? ref.slice(slash + 1) : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Tags pulsar sets and refreshes itself; agents add any others. */
+export function isAutoTag(tag: string): boolean {
+	return /^(harness|project|branch|worktree|pr|model):/.test(tag);
 }
 
 export function slug(text: string): string {
@@ -170,6 +233,7 @@ export function codexThreadIds(pid: number, cwd: string | null): string[] {
 			const head = readFileSync(file, "utf8").slice(0, 8192);
 			if (head.includes("parent_thread_id")) continue;
 			const recorded = /"cwd":"([^"]+)"/.exec(head)?.[1] ?? null;
+			if (recorded) codexThreadCwds.set(id, recorded);
 			candidates.push({
 				id,
 				cwdMatch: !!cwd && recorded === cwd,
@@ -185,6 +249,28 @@ export function codexThreadIds(pid: number, cwd: string | null): string[] {
 }
 
 /** The best Codex thread guess for a process, skipping ones already claimed. */
+const codexThreadCwds = new Map<string, string>();
+
+/** The folder a Codex thread works in, from its rollout (not the MCP server's own folder). */
+export function codexThreadCwd(threadId: string): string | null {
+	return codexThreadCwds.get(threadId) ?? null;
+}
+
+/** Points a Codex registration at its thread: id, the thread's folder, and its git tags. */
+export function adoptCodexThread(reg: Registration, threadId: string | null) {
+	reg.sessionId = threadId;
+	const cwd = threadId ? codexThreadCwd(threadId) : null;
+	if (!cwd || cwd === reg.cwd) return;
+	reg.cwd = cwd;
+	const git = gitInfo(cwd);
+	reg.project = git.project;
+	reg.branch = git.branch;
+	reg.tags = [
+		...autoTags(reg.harness, git),
+		...reg.tags.filter((t) => !isAutoTag(t)),
+	];
+}
+
 export function codexThreadId(
 	pid: number,
 	cwd: string | null,
@@ -213,11 +299,10 @@ export function opencodeSessionDir(sessionId: string): string | null {
 				timeout: 5000,
 			},
 		);
-		const info = JSON.parse(out) as {
-			directory?: string;
-			data?: { directory?: string };
-		};
-		return info.directory ?? info.data?.directory ?? null;
+		type Info = { directory?: string; location?: { directory?: string } };
+		const raw = JSON.parse(out) as Info & { data?: Info };
+		const info = raw.data ?? raw;
+		return info.location?.directory ?? info.directory ?? null;
 	} catch {
 		return null;
 	}
@@ -228,6 +313,7 @@ export function autoTags(harness: Harness, git: GitInfo): string[] {
 	const tags = [`harness:${harness}`];
 	if (git.project) tags.push(`project:${git.project}`);
 	if (git.branch) tags.push(`branch:${git.branch}`);
+	if (git.worktree) tags.push(`worktree:${git.worktree}`);
 	return tags;
 }
 
@@ -275,6 +361,8 @@ export function detectRegistration(role: Registration["role"]): Registration {
 			process.env.CODEX_THREAD_ID ??
 			process.env.CODEX_SESSION_ID ??
 			(pid ? codexThreadId(pid, sessionCwd) : null);
+		// Under the app-server, this process's folder is not the thread's: use the rollout's.
+		if (sessionId) sessionCwd = codexThreadCwd(sessionId) ?? sessionCwd;
 	} else if (harness === "opencode") {
 		sessionId ??= process.env.OPENCODE_SESSION_ID ?? null;
 	}

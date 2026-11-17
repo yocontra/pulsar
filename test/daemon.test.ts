@@ -442,3 +442,30 @@ describe("ask", () => {
 		expect(asker.pushes).toHaveLength(0);
 	});
 });
+
+describe("activity, model and PR tags", () => {
+	test("set_identity activity and model are searchable", async () => {
+		const a = await spawnAgent({ project: "apparish" });
+		await a.client.call("set_identity", {
+			activity: "reviewing PR #1402",
+			tagsAdd: ["pr:1402", "role:reviewer"],
+			model: "claude-fable-5-2",
+		});
+		const op = await operator();
+		clients.push(op);
+		const byModel = await op.call<PublicAgent[]>("list", {
+			selector: "model=fable",
+		});
+		expect(byModel.map((x) => x.id)).toEqual([a.agent.id]);
+		expect(byModel[0]!.tags).toContain("model:claude-fable-5-2");
+		expect(
+			await op.call<PublicAgent[]>("list", {
+				selector: "pr=1402 role=reviewer",
+			}),
+		).toHaveLength(1);
+		expect(
+			await op.call<PublicAgent[]>("list", { selector: "~1402" }),
+		).toHaveLength(1);
+		expect(byModel[0]!.summary).toBe("reviewing PR #1402");
+	});
+});

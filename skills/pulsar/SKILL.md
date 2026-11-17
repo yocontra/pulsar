@@ -1,6 +1,6 @@
 ---
 name: pulsar
-description: Find and message other AI agents running on this machine, in any harness (Claude Code, Codex, OpenCode, pi, omp). Use when work overlaps another agent's, to hand off or ask a question, to tell every agent on a project something, or to wait for another agent instead of polling.
+description: Find and message other AI agents running on this machine, in any harness (Claude Code, Codex, OpenCode, pi, omp). Use when work overlaps another agent's, to message "your reviewer", "the PR author" or "all my Fable agents", to hand off or ask a question, to tell every agent on a project something, or to wait for another agent instead of polling.
 ---
 
 # pulsar: talk to other agents on this machine
@@ -10,23 +10,38 @@ pulsar's MCP tools reach every live agent on this machine, whatever harness it r
 ## Find agents
 
 - `list_agents` with no selector lists everyone.
-- Narrow it with a selector:
-  - `project=apparish`: every agent on the apparish repo (worktrees included)
-  - `harness=codex`
-  - `workstream=auth`: a tag an agent set on itself
-  - `project=apparish status=idle`: terms are ANDed
+- Narrow it with a selector (terms are ANDed):
+  - `project=apparish`: every agent on the apparish repo, worktrees included
+  - `branch=fix-1378`: the agent on that branch (the branch it pushes to, even from a randomly named worktree)
+  - `pr=1402`: agents on that PR (pulsar tags the PR author's agent automatically from its branch)
+  - `role=reviewer`, `issue=1378`, `workstream=auth`: tags agents set on themselves
+  - `harness=codex`, `model=fable` (part of the model id), `status=idle`
+  - `~1378` or `#1378`: that text anywhere in name, branch, tags or activity
   - a single agent's name, e.g. `codex@apparish`
 - Each agent shows `push` (a message wakes it) or `pull-only` (it reads its inbox when it next acts).
 
-## Tag yourself early
+## Say what you are doing
 
-Call `set_identity` when you start real work, so others can find you by what you do:
+Call `set_identity` when you start a task, and again when it changes:
 
 ```
-set_identity tags_add=["workstream:auth"] summary="moving login to the new session API"
+set_identity activity="reviewing PR #1402" tags_add=["pr:1402", "role:reviewer"]
+set_identity activity="fixing issue #1378" tags_add=["issue:1378", "role:author"]
 ```
 
-`project`, `harness` and `branch` tags are automatic.
+pulsar sets `harness`, `model`, `project`, `branch`, `worktree` and `pr` (the open PR for your branch) on its own. If you move to another worktree, pass `cwd=<its path>`.
+
+## Common lookups
+
+| Ask | Selector |
+| --- | --- |
+| "message your reviewer" (you wrote PR 1402) | `pr=1402 role=reviewer`, or `~1402` |
+| "message the PR author" (you review 1402) | `pr=1402 role=author`, or `branch=<the PR's head branch>` |
+| "who is on issue 1378?" | `~1378` |
+| "all my Fable agents" | `model=fable` |
+| "everyone on apparish" | `project=apparish` |
+
+When a selector matches nothing, widen it (`~1402`) before you give up, and list what you found.
 
 ## Send
 

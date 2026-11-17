@@ -128,6 +128,21 @@ export default function pulsarExtension(pi: HostApi) {
 		if (!client.connected) await connect().catch(() => reconnectLater());
 	});
 	pi.on("agent_start", () => setStatus("busy"));
+	// Report the model after each reply, so `model=…` selectors find this agent.
+	let lastModel: string | null = null;
+	pi.on("message_end", (event) => {
+		const message = (event as { message?: { role?: string; model?: string } })
+			?.message;
+		if (
+			message?.role !== "assistant" ||
+			!message.model ||
+			message.model === lastModel
+		)
+			return;
+		lastModel = message.model;
+		if (client.connected)
+			client.call("set_identity", { model: message.model }).catch(() => {});
+	});
 	pi.on("agent_settled", () => setStatus("idle"));
 	if (harness === "omp") pi.on("agent_end", () => setStatus("idle"));
 	pi.on("session_shutdown", (event) => {

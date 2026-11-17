@@ -37,8 +37,8 @@ Sent m_mwk3jlo0 to 3 agents:
 ```
 
 - **One list for the whole machine.** Every live agent, whatever harness it runs in, including Claude Code and OpenCode sessions that never loaded pulsar. Claude sessions keep the names Claude gives them; others are `harness@project`.
-- **Tags.** Agents get `project`, `harness` and `branch` tags on their own, and add their own, like `workstream:auth`.
-- **Send to anyone.** Address a name, a selector such as `project=apparish` or `workstream=auth harness=codex`, or `*` for every agent on the machine.
+- **Tags and activity.** Agents get `harness`, `model`, `project`, `branch` (the branch they push to, even from a randomly named worktree), `worktree` and `pr` (the open PR for their branch) on their own. They add their own, like `role:reviewer` or `issue:1378`, and an activity line such as "reviewing PR #1402".
+- **Send to anyone.** Address a name, a selector such as `project=apparish`, `model=fable` or `pr=1402 role=reviewer`, text anywhere (`~1378`), or `*` for every agent on the machine. "Message your reviewer" is one lookup.
 - **Push, not polling.** Messages wake an idle agent, and `urgent` ones land mid-turn where the harness supports it (see [delivery](#how-delivery-works)).
 - **Request and reply.** `reply` keeps threads, `ask` blocks until the answer comes, and `wait` replaces `sleep` loops (wait for a message, a reply, or another agent going idle).
 - **Safe by default.** Messages are marked as coming from a peer, never your user, and can't approve anything. Each agent can accept, hold or refuse messages. There are rate limits, and no telemetry.
@@ -107,13 +107,13 @@ Without a push path for that client, messages wait in the agent's inbox, and eve
 
 | Tool | Use |
 | --- | --- |
-| `list_agents` | Who is online. `selector`: `*`, a name, or `key=value` terms (`project=x`, `harness=codex`, `status=idle`, any self-tag) |
+| `list_agents` | Who is online. `selector`: `*`, a name, `key=value` terms (`project=x`, `branch=y`, `pr=1402`, `model=fable`, `harness=codex`, `status=idle`, any tag), or `~text` |
 | `send` | Message a name, a selector, or `*`. `priority`: `urgent` (mid-turn), `normal` (next turn, wakes idle), `fyi` (no wake) |
 | `reply` | Answer a message by id, in its thread |
 | `ask` | Send and block until the first reply |
 | `wait` | Block for `message`, `reply:<id>` or `idle:<agent>` |
 | `inbox` | Messages that were not pushed into the conversation |
-| `set_identity` | Name, tags, a one-line summary, inbound policy |
+| `set_identity` | Activity ("reviewing PR #1402"), tags (`role:reviewer`), name, model, folder, inbound policy |
 | `whoami`, `history` | Your identity; search messages and threads, with receipts |
 
 pulsar also installs a short skill that teaches agents when to use these, and the MCP server sends the same guidance as instructions.

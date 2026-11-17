@@ -14,6 +14,7 @@ function agent(over: Partial<PublicAgent>): PublicAgent {
 		branch: "main",
 		tags: ["harness:claude", "project:apparish", "branch:main"],
 		status: "idle",
+		model: null,
 		summary: null,
 		inbound: "accept",
 		registered: true,
@@ -98,5 +99,55 @@ describe("release metadata", () => {
 		);
 		expect(read("server.json").version).toBe(version);
 		expect(read("server.json").packages[0].version).toBe(version);
+	});
+});
+
+describe("finding agents by model, PR, issue and activity", () => {
+	const author = agent({
+		name: "codex@apparish",
+		model: "gpt-5.5",
+		branch: "fix-1378",
+		summary: "fixing issue #1378",
+		tags: [
+			"harness:codex",
+			"project:apparish",
+			"branch:fix-1378",
+			"pr:1402",
+			"role:author",
+			"issue:1378",
+			"model:gpt-5.5",
+		],
+	});
+	const reviewer = agent({
+		name: "reviewer-7",
+		model: "claude-fable-5-2",
+		summary: "reviewing PR #1402",
+		tags: [
+			"harness:claude",
+			"project:apparish",
+			"pr:1402",
+			"role:reviewer",
+			"model:claude-fable-5-2",
+		],
+	});
+	const pick = (sel: string) =>
+		[author, reviewer]
+			.filter((a) => matches(a, parseSelector(sel)))
+			.map((a) => a.name);
+
+	test("model=fable finds every Fable agent", () => {
+		expect(pick("model=fable")).toEqual(["reviewer-7"]);
+		expect(pick("model=gpt-5*")).toEqual(["codex@apparish"]);
+	});
+	test("message your reviewer / message the PR author", () => {
+		expect(pick("pr=1402 role=reviewer")).toEqual(["reviewer-7"]);
+		expect(pick("pr=1402 role=author")).toEqual(["codex@apparish"]);
+		expect(pick("branch=fix-1378")).toEqual(["codex@apparish"]);
+	});
+	test("~text and #number match anywhere", () => {
+		expect(pick("~1402")).toEqual(["codex@apparish", "reviewer-7"]);
+		expect(pick("#1378")).toEqual(["codex@apparish"]);
+		expect(pick("activity=reviewing")).toEqual(["reviewer-7"]);
+		expect(pick("~fable")).toEqual(["reviewer-7"]);
 	});
 });

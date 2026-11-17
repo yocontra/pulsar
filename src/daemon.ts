@@ -3,7 +3,9 @@ import { chmodSync, existsSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { basename } from "node:path";
 import { adapterFor } from "./adapters/index.ts";
-import { autoTags, gitInfo, slug } from "./identity.ts";
+import { openPr } from "./github.ts";
+import { autoTags, gitInfo, isAutoTag, slug } from "./identity.ts";
+import { codexModel, opencodeModel } from "./models.ts";
 import { dbPath, socketPath } from "./paths.ts";
 import { type Frame, RpcError, readFrames, writeFrame } from "./rpc.ts";
 import {
@@ -133,6 +135,10 @@ export class Daemon {
 			void this.scanRemote();
 		}
 		this.timers.push(setInterval(() => this.sweep(), 5000));
+		// Branches change under running agents (checkout, a new worktree): re-read git.
+		this.timers.push(setInterval(() => this.refreshGit(), 30_000));
+		this.timers.push(setInterval(() => void this.refreshPrs(), 60_000));
+		this.timers.push(setInterval(() => void this.refreshModels(), 30_000));
 		this.timers.push(
 			setInterval(
 				() => this.store.prune(Date.now(), LIMITS.messageRetentionMs),
@@ -207,20 +213,14 @@ export class Daemon {
 		meta: Record<string, string>;
 		registered: boolean;
 		status?: AgentStatus;
+		model?: string | null;
 	}): Agent {
 		const id = this.agentId(input.harness, input.sessionId, input.pid);
 		const now = Date.now();
 		const existing = this.agents.get(id);
 		const saved = existing ? null : this.store.loadIdentity(id);
 		const selfTags =
-			saved?.tags ??
-			existing?.tags.filter(
-				(t) =>
-					!t.startsWith("harness:") &&
-					!t.startsWith("project:") &&
-					!t.startsWith("branch:"),
-			) ??
-			[];
+			saved?.tags ?? existing?.tags.filter((t) => !isAutoTag(t)) ?? [];
 		const tags = [...new Set([...input.tags, ...selfTags])];
 		// Claude sessions keep the name Claude shows (and its own SendMessage uses),
 		// and follow renames, until the agent names itself with set_identity.
@@ -262,6 +262,7 @@ export class Daemon {
 			status:
 				input.status ??
 				(existing && existing.status !== "gone" ? existing.status : "unknown"),
+			model: input.model ?? existing?.model ?? null,
 			summary: existing?.summary ?? saved?.summary ?? null,
 			inbound: existing?.inbound ?? saved?.inbound ?? "accept",
 			registered: input.registered || (existing?.registered ?? false),
@@ -270,6 +271,7 @@ export class Daemon {
 			createdAt: existing?.createdAt ?? now,
 			meta: { ...(existing?.meta ?? {}), ...input.meta, nameFrom },
 		};
+		this.finishTags(agent, existing?.tags, existing?.branch);
 		agent.reach = this.reachOf(agent);
 		this.agents.set(id, agent);
 		if (previousStatus !== "idle" && agent.status === "idle")
@@ -315,6 +317,7 @@ export class Daemon {
 				meta: s.meta,
 				registered: false,
 				status: s.status,
+				model: s.model ?? null,
 			});
 			seen.add(agent.id);
 		}
@@ -347,6 +350,93 @@ export class Daemon {
 		agent.status = "gone";
 		agent.lastSeen = Date.now();
 		this.emitTail("agent", { action: "gone", agent: toPublic(agent) });
+	}
+
+	/** Re-reads project, branch and worktree for every live agent, one git call per folder. */
+	private refreshGit() {
+		const byCwd = new Map<string, ReturnType<typeof gitInfo>>();
+		for (const agent of this.live()) {
+			if (!agent.cwd) continue;
+			let git = byCwd.get(agent.cwd);
+			if (!git) {
+				git = gitInfo(agent.cwd);
+				byCwd.set(agent.cwd, git);
+			}
+			this.applyGit(agent, git);
+		}
+	}
+
+	/** Sets an agent's git fields and auto-tags; self-tags are kept. */
+	private applyGit(agent: Agent, git: ReturnType<typeof gitInfo>) {
+		const before = agent.tags;
+		const beforeBranch = agent.branch;
+		const changed =
+			agent.project !== git.project || agent.branch !== git.branch;
+		agent.project = git.project;
+		agent.branch = git.branch;
+		agent.tags = [
+			...autoTags(agent.harness, git),
+			...before.filter((t) => !isAutoTag(t)),
+		];
+		this.finishTags(agent, before, beforeBranch);
+		if (changed || agent.tags.join() !== before.join())
+			this.emitTail("agent", { action: "update", agent: toPublic(agent) });
+	}
+
+	/**
+	 * Adds the auto-tags that do not come from git: `model:<id>`, and `pr:<n>`
+	 * carried over while the branch is the same (the PR refresh sets it).
+	 */
+	private finishTags(
+		agent: Agent,
+		previous: string[] | undefined,
+		previousBranch: string | null | undefined,
+	) {
+		const keepPr =
+			previous && previousBranch === agent.branch
+				? previous.filter((t) => t.startsWith("pr:"))
+				: [];
+		const base = agent.tags.filter(
+			(t) => !t.startsWith("model:") && !t.startsWith("pr:"),
+		);
+		agent.tags = [
+			...new Set([
+				...base,
+				...keepPr,
+				...(agent.model ? [`model:${agent.model}`] : []),
+			]),
+		];
+	}
+
+	/** Tags each agent with the open GitHub PR for its branch (via `gh`, cached). */
+	private async refreshPrs() {
+		for (const agent of this.live()) {
+			if (!agent.cwd || !agent.branch) continue;
+			const pr = await openPr(agent.cwd, agent.branch);
+			const tags = agent.tags.filter((t) => !t.startsWith("pr:"));
+			if (pr) tags.push(`pr:${pr}`);
+			if (tags.join() !== agent.tags.join()) {
+				agent.tags = tags;
+				this.emitTail("agent", { action: "update", agent: toPublic(agent) });
+			}
+		}
+	}
+
+	/** Model for harnesses whose scanner does not report it (Codex, OpenCode). */
+	private async refreshModels() {
+		for (const agent of this.live()) {
+			if (!agent.sessionId) continue;
+			const model =
+				agent.harness === "codex"
+					? codexModel(agent.sessionId)
+					: agent.harness === "opencode"
+						? await opencodeModel(agent.sessionId)
+						: null;
+			if (model && model !== agent.model) {
+				agent.model = model;
+				this.finishTags(agent, agent.tags, agent.branch);
+			}
+		}
 	}
 
 	private sweep() {
@@ -448,6 +538,7 @@ export class Daemon {
 				branch: null,
 				tags: ["harness:cli"],
 				status: "idle",
+				model: null,
 				summary: "the human at the terminal",
 				inbound: "accept",
 				registered: false,
@@ -617,6 +708,7 @@ export class Daemon {
 			...(reg.name ? { name: reg.name } : {}),
 			meta: reg.meta ?? {},
 			registered: true,
+			model: reg.model ?? null,
 		});
 		// A connection that says hello again under a new id (Codex learned its thread) moves over.
 		if (conn.agentId && conn.agentId !== agent.id) {
@@ -663,8 +755,22 @@ export class Daemon {
 			(Array.isArray(p.tagsRemove) ? p.tagsRemove : []).map(String),
 		);
 		me.tags = [...new Set([...me.tags.filter((t) => !remove.has(t)), ...add])];
-		if (typeof p.summary === "string")
-			me.summary = p.summary.slice(0, 500) || null;
+		// An agent that moved to another folder or worktree says so; git tags follow.
+		if (
+			typeof p.cwd === "string" &&
+			p.cwd.startsWith("/") &&
+			existsSync(p.cwd)
+		) {
+			me.cwd = p.cwd;
+			this.applyGit(me, gitInfo(me.cwd));
+		}
+		const activity = typeof p.activity === "string" ? p.activity : p.summary;
+		if (typeof activity === "string")
+			me.summary = activity.slice(0, 500) || null;
+		if (typeof p.model === "string" && p.model.trim()) {
+			me.model = p.model.trim().slice(0, 120);
+			this.finishTags(me, me.tags, me.branch);
+		}
 		if (
 			p.inbound === "accept" ||
 			p.inbound === "hold" ||
@@ -675,15 +781,11 @@ export class Daemon {
 			if (before === "hold" && me.inbound === "accept")
 				void this.releaseHeld(me);
 		}
-		const auto = (t: string) =>
-			t.startsWith("harness:") ||
-			t.startsWith("project:") ||
-			t.startsWith("branch:");
 		this.store.saveIdentity(
 			me.id,
 			{
 				name: me.name,
-				tags: me.tags.filter((t) => !auto(t)),
+				tags: me.tags.filter((t) => !isAutoTag(t)),
 				summary: me.summary,
 				inbound: me.inbound,
 			},

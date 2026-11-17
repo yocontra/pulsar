@@ -14,19 +14,26 @@ export function ago(ms: number, now = Date.now()): string {
 }
 
 export function agentLine(a: PublicAgent): string {
-	const selfTags = a.tags.filter((t) => !/^(harness|project|branch):/.test(t));
+	const selfTags = a.tags.filter(
+		(t) => !/^(harness|project|branch|worktree|pr|model):/.test(t),
+	);
+	const pr = a.tags.find((t) => t.startsWith("pr:"))?.slice(3);
+	const worktree = a.tags.find((t) => t.startsWith("worktree:"))?.slice(9);
 	const bits = [
 		a.name,
 		`[${a.harness}]`,
 		a.project ? `project=${a.project}` : null,
 		a.branch ? `branch=${a.branch}` : null,
+		worktree ? `worktree=${worktree}` : null,
+		pr ? `pr=${pr}` : null,
+		a.model ? `model=${a.model}` : null,
 		a.status,
 		a.reach === "push" ? "push" : "pull-only",
 		selfTags.length ? `tags=${selfTags.join(",")}` : null,
 		a.registered ? null : "(not running pulsar)",
 		a.inbound !== "accept" ? `inbound=${a.inbound}` : null,
 	].filter(Boolean);
-	return `- ${bits.join(" · ")}${a.summary ? `\n  ${a.summary}` : ""}\n  id: ${a.id}`;
+	return `- ${bits.join(" · ")}${a.summary ? `\n  doing: ${a.summary}` : ""}\n  id: ${a.id}`;
 }
 
 export function agentsText(agents: PublicAgent[], selector: string): string {

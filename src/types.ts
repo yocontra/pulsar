@@ -35,6 +35,9 @@ export interface Agent {
 	/** `key:value` or bare tags. Auto-tags plus self-tags. */
 	tags: string[];
 	status: AgentStatus;
+	/** The model the session runs, e.g. `claude-fable-5-2` or `gpt-5.5`. */
+	model: string | null;
+	/** What the agent says it is doing, e.g. "reviewing PR #1402". */
 	summary: string | null;
 	inbound: InboundPolicy;
 	/** true when the agent runs the pulsar MCP server or extension. */
@@ -94,6 +97,7 @@ export interface Registration {
 	branch: string | null;
 	tags: string[];
 	name?: string;
+	model?: string | null;
 	/** Adapter hints, e.g. claude socket path. */
 	meta?: Record<string, string>;
 	/** "mcp" | "extension" | "cli". An extension can push into its own session. */

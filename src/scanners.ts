@@ -6,6 +6,7 @@ import {
 	claudeSessionsDir,
 	opencodeServiceRunning,
 } from "./identity.ts";
+import { claudeModel } from "./models.ts";
 import type { AgentStatus, Harness } from "./types.ts";
 
 /** A live session found on disk or through a harness API. */
@@ -15,6 +16,7 @@ export interface Scanned {
 	pid: number | null;
 	cwd: string | null;
 	status: AgentStatus;
+	model?: string | null;
 	meta: Record<string, string>;
 }
 
@@ -55,6 +57,7 @@ export function scanClaude(): Scanned[] {
 				pid: rec.pid,
 				cwd: rec.cwd ?? null,
 				status: claudeStatus(rec.status),
+				model: claudeModel(rec.cwd ?? null, rec.sessionId),
 				meta: {
 					...(rec.messagingSocketPath
 						? { socket: rec.messagingSocketPath }
@@ -99,8 +102,10 @@ export async function scanOpencode(): Promise<Scanned[]> {
 	for (const [id, state] of Object.entries(active)) {
 		type SessionInfo = {
 			directory?: string;
+			location?: { directory?: string };
 			title?: string;
 			parentID?: string | null;
+			model?: { id?: string };
 		};
 		const got = (await runJson("opencode", [
 			"api",
@@ -113,8 +118,9 @@ export async function scanOpencode(): Promise<Scanned[]> {
 			harness: "opencode",
 			sessionId: id,
 			pid: null,
-			cwd: info?.directory ?? null,
+			cwd: info?.location?.directory ?? info?.directory ?? null,
 			status: state?.type === "running" ? "busy" : "idle",
+			model: info?.model?.id ?? null,
 			meta: info?.title ? { title: info.title } : {},
 		});
 	}

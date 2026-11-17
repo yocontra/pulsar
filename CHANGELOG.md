@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 - 2026-11-16
+
+- Model awareness: each agent shows the model it runs (Claude transcripts, Codex rollouts, OpenCode messages, pi/omp extension). `model=fable` selects every Fable agent.
+- PR awareness: agents are tagged `pr:<n>` with the open GitHub PR for their branch (via `gh`, cached).
+- Activity: `set_identity activity="reviewing PR #1402"` with tags like `role:reviewer` / `issue:1378`; the skill teaches the lookups ("message your reviewer", "message the PR author").
+- Text search: `~1378` or `#1378` matches name, branch, tags, model or activity.
+- Worktrees: `branch` is the branch a worktree pushes to (randomly named worktrees report their real branch); new `worktree:` tag; git info is re-read every 30 seconds; `set_identity cwd=…` for agents that move.
+- Codex agents under the app-server take their folder from the thread's rollout.
+
 ## 1.0.1 - 2026-11-16
 
 - Upgrades: clients start the daemon from the installed `current` version, an outdated daemon hands off to a newer installed one, and `pulsar setup` starts the new daemon right after stopping the old, so sessions still running an older copy cannot bring an old daemon back.
