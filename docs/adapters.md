@@ -15,6 +15,10 @@ The MCP server walks up its process tree to the first harness process, then asks
 
 `PULSAR_HARNESS`, `PULSAR_SESSION_ID`, `PULSAR_NAME` and `PULSAR_TAGS` override detection.
 
+**Names:** a Claude session keeps the name Claude gives it (the one `ListAgents`/`SendMessage` use) and follows renames until the agent calls `set_identity name=…`. Other agents are `harness@project`, with `-2`, `-3` on collisions. `operator`, `user`, `human` and `system` are reserved.
+
+**Status:** Claude's session file and OpenCode's `session.active` give busy/idle; the pi/omp extension reports it directly. Codex reports none, so `wait idle:` does not resolve for Codex agents.
+
 ## Claude Code
 
 - **Path:** Claude's per-session inbox socket (`messagingSocketPath` in `~/.claude/sessions/<pid>.json`). pulsar authenticates with the session's published peer key (`<pid>.<hash>.key`) and writes one `{"type":"user", …}` line. The body is wrapped in a `<cross-session-message from-name="…">` envelope, so Claude shows who sent it.

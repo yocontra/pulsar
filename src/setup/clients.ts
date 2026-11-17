@@ -1,6 +1,6 @@
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
 	editJson,
 	getPath,
@@ -248,7 +248,15 @@ export const CLIENTS: Client[] = [
 			{
 				client: "pi",
 				describe: `pi install ${ctx.installDir.replace(home, "~")} (extension: push delivery, MCP tools, skill)`,
-				apply: () => runCli("pi", ["install", ctx.installDir]),
+				apply: () => {
+					// pi keys packages by path: drop earlier pulsar paths so the extension loads once.
+					const root = dirname(ctx.installDir);
+					for (const entry of existsSync(root) ? readdirSync(root) : []) {
+						const path = join(root, entry);
+						if (path !== ctx.installDir) tryCli("pi", ["remove", path]);
+					}
+					runCli("pi", ["install", ctx.installDir]);
+				},
 				undo: { type: "cli", cmd: "pi", args: ["remove", ctx.installDir] },
 			},
 		],

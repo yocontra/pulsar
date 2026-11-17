@@ -4,7 +4,9 @@ import {
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	renameSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -94,13 +96,19 @@ function installStableCopy(): string {
 				cpSync(join(root, entry), join(dir, entry), { recursive: true });
 		}
 	}
+	// Agent configs point at `current`, so an upgrade only moves this link.
+	const current = join(installRoot(), "current");
+	const tmp = `${current}.${process.pid}`;
+	rmSync(tmp, { force: true });
+	symlinkSync(VERSION, tmp);
+	renameSync(tmp, current);
 	// Keep the two newest versions; older ones are no longer referenced.
 	const versions = readdirSync(installRoot())
 		.filter((v) => v !== VERSION && /^\d/.test(v))
 		.sort();
 	for (const old of versions.slice(0, -1))
 		rmSync(join(installRoot(), old), { recursive: true, force: true });
-	return dir;
+	return current;
 }
 
 async function confirm(question: string): Promise<boolean> {
@@ -189,7 +197,7 @@ export async function runSetup(argv: string[]): Promise<number> {
 		return 1;
 	}
 
-	const installDir = join(installRoot(), VERSION);
+	const installDir = join(installRoot(), "current");
 	const skillsDir = values["skills-dir"]
 		? resolve(values["skills-dir"].replace(/^~/, home))
 		: null;

@@ -67,7 +67,9 @@ function debug(line: string) {
 class Session {
 	readonly client = new DaemonClient();
 	me: PublicAgent | null = null;
+	lastUsed = Date.now();
 	private connecting: Promise<void> | null = null;
+	private closed = false;
 
 	readonly registration: Registration;
 	private readonly onMessage: (m: DeliveredMessage) => void;
@@ -82,6 +84,7 @@ class Session {
 		// Reconnect when the daemon restarts (upgrade, crash), keeping the identity.
 		this.client.onClose(() => {
 			this.me = null;
+			if (this.closed) return;
 			let delay = 250;
 			const retry = () => {
 				this.ensure().catch(() => {
@@ -153,12 +156,14 @@ class Session {
 		params?: unknown,
 		timeoutMs?: number,
 	): Promise<T> {
+		this.lastUsed = Date.now();
 		await this.ensure();
 		await this.refresh();
 		return this.client.call<T>(method, params, timeoutMs);
 	}
 
 	close() {
+		this.closed = true;
 		this.client.close();
 	}
 }
@@ -189,6 +194,18 @@ export async function runMcp() {
 
 	const baseSession = new Session(base, onMessage);
 	const perSession = new Map<string, Session>();
+	// OpenCode keeps one MCP process for all its sessions. A session that has not
+	// called pulsar for a while lets go of its connection, so finished sessions
+	// leave the list (the scanner still shows ones that are running).
+	const SESSION_IDLE_MS = 20 * 60_000;
+	setInterval(() => {
+		for (const [id, s] of perSession) {
+			if (Date.now() - s.lastUsed > SESSION_IDLE_MS) {
+				s.close();
+				perSession.delete(id);
+			}
+		}
+	}, 60_000).unref();
 
 	/** The session a tool call belongs to. OpenCode names it in `_meta`. */
 	function sessionFor(meta: Meta): Session {

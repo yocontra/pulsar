@@ -5,7 +5,8 @@
 	"description": "Let AI coding agents in any harness find and message each other: one list, tags, multicast, * bus.",
 	"repository": {
 		"url": "https://github.com/yocontra/pulsar",
-		"source": "github"
+		"source": "github",
+		"id": "1460848622"
 	},
 	"version": "1.0.0",
 	"packages": [

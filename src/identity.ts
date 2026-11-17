@@ -267,6 +267,7 @@ export function detectRegistration(role: Registration["role"]): Registration {
 			sessionId ??= rec.sessionId ?? null;
 			if (rec.cwd) sessionCwd = rec.cwd;
 			if (rec.messagingSocketPath) meta.socket = rec.messagingSocketPath;
+			if (rec.name) meta.claudeName = rec.name;
 		}
 		sessionId ??= process.env.CLAUDE_CODE_SESSION_ID ?? null;
 	} else if (harness === "codex") {

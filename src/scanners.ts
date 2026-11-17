@@ -89,22 +89,25 @@ function runJson(cmd: string, args: string[]): Promise<unknown> {
 export async function scanOpencode(): Promise<Scanned[]> {
 	// `opencode api` starts a service when none runs; only look when one already does.
 	if (!opencodeServiceRunning()) return [];
-	const active = (await runJson("opencode", [
-		"api",
-		"session.active",
-	])) as Record<string, { type?: string }> | null;
+	// The server wraps results: {"data": {"ses_…": {"type": "running"}}}.
+	const raw = (await runJson("opencode", ["api", "session.active"])) as {
+		data?: Record<string, { type?: string }>;
+	} | null;
+	const active = raw?.data ?? null;
 	if (!active || typeof active !== "object") return [];
 	const out: Scanned[] = [];
 	for (const [id, state] of Object.entries(active)) {
-		const info = (await runJson("opencode", [
-			"api",
-			"GET",
-			`/api/session/${id}`,
-		])) as {
+		type SessionInfo = {
 			directory?: string;
 			title?: string;
 			parentID?: string | null;
-		} | null;
+		};
+		const got = (await runJson("opencode", [
+			"api",
+			"GET",
+			`/api/session/${id}`,
+		])) as (SessionInfo & { data?: SessionInfo }) | null;
+		const info = got?.data ?? got;
 		if (info?.parentID) continue;
 		out.push({
 			harness: "opencode",

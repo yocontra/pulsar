@@ -222,17 +222,36 @@ export class Daemon {
 			) ??
 			[];
 		const tags = [...new Set([...input.tags, ...selfTags])];
-		const wantedName =
-			input.name ??
-			saved?.name ??
-			existing?.name ??
-			this.defaultName(input.harness, input.project, input.cwd);
+		// Claude sessions keep the name Claude shows (and its own SendMessage uses),
+		// and follow renames, until the agent names itself with set_identity.
+		const harnessName = input.meta.claudeName;
+		const followsHarness =
+			!input.name &&
+			!saved?.name &&
+			(!existing || existing.meta.nameFrom === "harness");
+		let name: string;
+		if (input.name) name = this.uniqueName(input.name, id);
+		else if (harnessName && followsHarness)
+			name =
+				existing?.meta.claudeName === harnessName
+					? existing.name
+					: this.uniqueName(slug(harnessName) || harnessName, id);
+		else if (existing) name = existing.name;
+		else
+			name = this.uniqueName(
+				saved?.name ??
+					this.defaultName(input.harness, input.project, input.cwd),
+				id,
+			);
+		const nameFrom = input.name
+			? "self"
+			: harnessName && followsHarness
+				? "harness"
+				: (existing?.meta.nameFrom ?? (saved?.name ? "self" : "pulsar"));
+		const previousStatus = existing?.status;
 		const agent: Agent = {
 			id,
-			name:
-				existing?.name && !input.name
-					? existing.name
-					: this.uniqueName(wantedName, id),
+			name,
 			harness: input.harness,
 			sessionId: input.sessionId,
 			pid: input.pid ?? existing?.pid ?? null,
@@ -249,11 +268,21 @@ export class Daemon {
 			reach: "pull",
 			lastSeen: now,
 			createdAt: existing?.createdAt ?? now,
-			meta: { ...(existing?.meta ?? {}), ...input.meta },
+			meta: { ...(existing?.meta ?? {}), ...input.meta, nameFrom },
 		};
 		agent.reach = this.reachOf(agent);
 		this.agents.set(id, agent);
+		if (previousStatus !== "idle" && agent.status === "idle")
+			this.notifyIdle(agent);
 		return agent;
+	}
+
+	/** Wakes anyone waiting for this agent to finish its turn. */
+	private notifyIdle(agent: Agent) {
+		for (const w of [...this.waiters]) {
+			if (w.kind === "idle" && w.target === agent.id)
+				this.resolveWaiter(w, { event: "idle", agent: toPublic(agent) });
+		}
 	}
 
 	private reachOf(agent: Agent): Agent["reach"] {
@@ -289,11 +318,20 @@ export class Daemon {
 			});
 			seen.add(agent.id);
 		}
-		// Sessions a scanner owns that vanished, with no pulsar connection, are gone.
+		// Sessions a scanner owns that vanished: gone, unless a pulsar connection
+		// still serves them (an OpenCode session that finished its run is idle).
 		for (const agent of this.agents.values()) {
-			if (!harnesses.has(agent.harness) || seen.has(agent.id)) continue;
-			if (this.connsFor(agent.id).length === 0 && agent.status !== "gone")
-				this.markGone(agent);
+			if (
+				!harnesses.has(agent.harness) ||
+				seen.has(agent.id) ||
+				agent.status === "gone"
+			)
+				continue;
+			if (this.connsFor(agent.id).length === 0) this.markGone(agent);
+			else if (agent.status !== "idle") {
+				agent.status = "idle";
+				this.notifyIdle(agent);
+			}
 		}
 	}
 
@@ -614,6 +652,7 @@ export class Daemon {
 	}
 
 	private setIdentity(me: Agent, p: Record<string, unknown>) {
+		if (typeof p.name === "string" && p.name.trim()) me.meta.nameFrom = "self";
 		if (typeof p.name === "string" && p.name.trim())
 			me.name = this.uniqueName(slug(p.name.trim()) || me.name, me.id);
 		const add = (Array.isArray(p.tagsAdd) ? p.tagsAdd : [])
@@ -655,14 +694,10 @@ export class Daemon {
 	}
 
 	private setStatus(agent: Agent, status: AgentStatus) {
+		const was = agent.status;
 		agent.status = status;
 		agent.lastSeen = Date.now();
-		if (status === "idle") {
-			for (const w of [...this.waiters]) {
-				if (w.kind === "idle" && w.target === agent.id)
-					this.resolveWaiter(w, { event: "idle", agent: toPublic(agent) });
-			}
-		}
+		if (status === "idle" && was !== "idle") this.notifyIdle(agent);
 	}
 
 	// ---------------------------------------------------------------- messaging

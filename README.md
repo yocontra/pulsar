@@ -24,19 +24,19 @@ That's the whole install. Restart your agents.
 > list agents on apparish
 
 3 agents (project=apparish):
-- claude@apparish · [claude] · branch=main · busy · push · tags=workstream:auth
+- apparish-auth   · [claude] · branch=main · busy · push · tags=workstream:auth
 - codex@apparish  · [codex]  · branch=feat/billing · idle · push
 - omp@apparish    · [omp]    · branch=main · idle · push
 
 > tell everyone on apparish that main is frozen until the release is tagged
 
 Sent m_mwk3jlo0 to 3 agents:
-- claude@apparish: delivered via claude-socket
-- codex@apparish: delivered via codex-queue
+- apparish-auth: sent via claude-socket
+- codex@apparish: sent via codex-queue
 - omp@apparish: delivered via extension
 ```
 
-- **One list for the whole machine.** Every live agent, whatever harness it runs in, including sessions that never loaded pulsar.
+- **One list for the whole machine.** Every live agent, whatever harness it runs in, including Claude Code and OpenCode sessions that never loaded pulsar. Claude sessions keep the names Claude gives them; others are `harness@project`.
 - **Tags.** Agents get `project`, `harness` and `branch` tags on their own, and add their own, like `workstream:auth`.
 - **Send to anyone.** Address a name, a selector such as `project=apparish` or `workstream=auth harness=codex`, or `*` for every agent on the machine.
 - **Push, not polling.** Messages wake an idle agent, and `urgent` ones land mid-turn where the harness supports it (see [delivery](#how-delivery-works)).
@@ -49,7 +49,7 @@ Sent m_mwk3jlo0 to 3 agents:
 npx pulsar setup
 ```
 
-Setup finds your agents, shows exactly which files it will change, and asks once. It backs up every file it touches, copies pulsar to `~/.local/share/pulsar/<version>`, and points each agent at that copy, so no session start waits on npm.
+Setup finds your agents, shows exactly which files it will change, and asks once. It backs up every file it touches and copies pulsar to a local folder that each agent runs, so no session start waits on npm.
 
 | Flag | Does |
 | --- | --- |
@@ -59,6 +59,8 @@ Setup finds your agents, shows exactly which files it will change, and asks once
 | `--no-mcp` | Install only the extensions and the skill (when you manage MCP config yourself) |
 | `--skills-dir <path>` | Put the skill in one shared folder instead of each agent's |
 | `--uninstall` | Undo everything setup did |
+
+Setup installs to `~/.local/share/pulsar/<version>` and points every agent at the `current` link, so `npx pulsar@latest setup` upgrades in place.
 
 No Node? `curl -fsSL https://raw.githubusercontent.com/yocontra/pulsar/main/install.sh | bash` installs a private Node and runs the same setup.
 
@@ -139,7 +141,7 @@ The daemon also scans for live Claude Code and OpenCode sessions that never load
 | Send to a group | one call per recipient | `project=x`, any selector |
 | Broadcast | — | `*` |
 | Wait for a reply | — | `ask`, `wait reply:<id>` |
-| Idle notice | ✓ | ✓ (`wait idle:<agent>`) |
+| Idle notice | ✓ | ✓ (`wait idle:<agent>`; Claude, OpenCode, pi, omp) |
 | Receipts and history | — | per recipient; searchable |
 | Machines | local + Remote Control | one machine (v1) |
 
