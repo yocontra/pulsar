@@ -1,6 +1,8 @@
 import { cpSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { MAX_BLOCK_SECONDS } from "../mcp.ts";
+import { which } from "../util.ts";
 import {
 	editJson,
 	getPath,
@@ -8,7 +10,6 @@ import {
 	runCli,
 	setTomlKey,
 	tryCli,
-	which,
 } from "./files.ts";
 
 /** What setup knows when it plans: where the stable copy lives and which node runs it. */
@@ -183,7 +184,7 @@ export const CLIENTS: Client[] = [
 									toml,
 									"mcp_servers.pulsar",
 									"tool_timeout_sec",
-									"1900",
+									String(MAX_BLOCK_SECONDS + 100),
 								);
 							},
 							undo: {

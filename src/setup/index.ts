@@ -286,25 +286,38 @@ async function restartOutdatedDaemon() {
 	const client = new DaemonClient();
 	try {
 		await client.connect(false);
+	} catch {
+		// No daemon running: nothing to restart.
+		return;
+	}
+	try {
 		await client.call("hello", {
 			protocol: PROTOCOL_VERSION,
 			version: VERSION,
 			registration: { role: "cli" },
 		});
 		const status = await client.call<{ version: string }>("status");
-		if (status.version !== VERSION) {
-			await client.call("shutdown");
-			// Start the new daemon at once (from `current`), before older sessions reconnect.
-			await new Promise((r) => setTimeout(r, 300));
-			const fresh = new DaemonClient();
-			await fresh.connect(true).catch(() => {});
-			fresh.close();
+		if (status.version === VERSION) return;
+		await client.call("shutdown");
+		// Start the new daemon at once (from `current`), before older sessions reconnect.
+		await new Promise((r) => setTimeout(r, 300));
+		const fresh = new DaemonClient();
+		try {
+			await fresh.connect(true);
 			console.log(
 				`Restarted the pulsar daemon (${status.version} → ${VERSION}).`,
 			);
+		} catch (e) {
+			console.error(
+				`Stopped the old pulsar daemon (${status.version}) but the new one did not start: ${(e as Error).message}`,
+			);
+		} finally {
+			fresh.close();
 		}
-	} catch {
-		// No daemon running: nothing to restart.
+	} catch (e) {
+		console.error(
+			`Could not check the running pulsar daemon: ${(e as Error).message}`,
+		);
 	} finally {
 		client.close();
 	}

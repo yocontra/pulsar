@@ -27,7 +27,7 @@ function cliEntry(): string {
 }
 
 /** Starts the daemon detached, so it outlives the session that started it. */
-export function spawnDaemon() {
+function spawnDaemon() {
 	const child = spawn(process.execPath, [cliEntry(), "daemon"], {
 		detached: true,
 		stdio: "ignore",
@@ -41,7 +41,7 @@ async function sleep(ms: number) {
 }
 
 /** Connects to the daemon, starting it first when no daemon answers. */
-export async function connectDaemon(autoStart = true): Promise<Socket> {
+async function connectDaemon(autoStart = true): Promise<Socket> {
 	const path = socketPath();
 	try {
 		return await tryConnect(path);

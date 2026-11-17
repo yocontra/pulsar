@@ -8,6 +8,7 @@ import { startDaemon } from "./helpers.ts";
 const cli = join(import.meta.dir, "..", "src", "cli.ts");
 let daemon: Daemon;
 let home: string;
+let cleanup: () => void;
 const clients: Client[] = [];
 
 async function mcpClient(harness: string, cwd: string, sessionId: string) {
@@ -37,12 +38,13 @@ function textOf(result: unknown): string {
 }
 
 beforeAll(async () => {
-	({ daemon, home } = await startDaemon());
+	({ daemon, home, cleanup } = await startDaemon());
 });
 
 afterAll(async () => {
 	for (const c of clients) await c.close();
 	await daemon.stop();
+	cleanup();
 });
 
 describe("MCP server", () => {

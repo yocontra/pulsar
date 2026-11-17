@@ -8,7 +8,9 @@
  */
 import { fileURLToPath } from "node:url";
 import { DaemonClient } from "./client.ts";
-import { autoTags, envTags, gitInfo } from "./identity.ts";
+import { gitInfo } from "./git.ts";
+import { autoTags, envTags } from "./identity.ts";
+import { daemonLog } from "./log.ts";
 import type { DeliveredMessage, Harness, Registration } from "./types.ts";
 import { PROTOCOL_VERSION } from "./types.ts";
 import { VERSION } from "./version.ts";
@@ -62,6 +64,19 @@ export default function pulsarExtension(pi: HostApi) {
 		};
 	};
 
+	// Acks lost with a dropped connection; each is sent once more after reconnect.
+	const pendingAcks = new Set<string>();
+
+	function ack(messageId: string, retry: boolean) {
+		client.call("ack", { messageId, via: "extension" }).catch((e) => {
+			if (retry) pendingAcks.add(messageId);
+			else
+				daemonLog(
+					`extension ack for ${messageId} failed: ${(e as Error).message}`,
+				);
+		});
+	}
+
 	async function connect() {
 		await client.connect(true);
 		await client.call("hello", {
@@ -69,6 +84,8 @@ export default function pulsarExtension(pi: HostApi) {
 			version: VERSION,
 			registration: registration(),
 		});
+		for (const id of pendingAcks) ack(id, false);
+		pendingAcks.clear();
 	}
 
 	function reconnectLater(delay = 500) {
@@ -98,9 +115,7 @@ export default function pulsarExtension(pi: HostApi) {
 					deliverAs: message.priority === "urgent" ? "steer" : "followUp",
 				},
 			);
-			client
-				.call("ack", { messageId: message.id, via: "extension" })
-				.catch(() => {});
+			ack(message.id, true);
 		} catch (e) {
 			// The daemon puts it back in the inbox.
 			client

@@ -15,7 +15,7 @@ function agent(over: Partial<PublicAgent>): PublicAgent {
 		tags: ["harness:claude", "project:apparish", "branch:main"],
 		status: "idle",
 		model: null,
-		summary: null,
+		activity: null,
 		inbound: "accept",
 		registered: true,
 		reach: "push",
@@ -78,7 +78,7 @@ describe("matches", () => {
 
 describe("doctor version compare", () => {
 	test("semver ordering", async () => {
-		const { newer } = await import("../src/setup/doctor.ts");
+		const { newer } = await import("../src/util.ts");
 		expect(newer("1.0.1", "1.0.0")).toBe(true);
 		expect(newer("0.2.0", "1.0.0")).toBe(false);
 		expect(newer("1.0.0", "1.0.0-rc.1")).toBe(true);
@@ -107,7 +107,7 @@ describe("finding agents by model, PR, issue and activity", () => {
 		name: "codex@apparish",
 		model: "gpt-5.5",
 		branch: "fix-1378",
-		summary: "fixing issue #1378",
+		activity: "fixing issue #1378",
 		tags: [
 			"harness:codex",
 			"project:apparish",
@@ -121,7 +121,7 @@ describe("finding agents by model, PR, issue and activity", () => {
 	const reviewer = agent({
 		name: "reviewer-7",
 		model: "claude-fable-5-2",
-		summary: "reviewing PR #1402",
+		activity: "reviewing PR #1402",
 		tags: [
 			"harness:claude",
 			"project:apparish",

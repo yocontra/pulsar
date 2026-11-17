@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { DaemonClient } from "../client.ts";
 import { PROTOCOL_VERSION } from "../types.ts";
+import { newer } from "../util.ts";
 import { VERSION } from "../version.ts";
 import { CLIENTS } from "./clients.ts";
 
@@ -21,27 +22,6 @@ async function latestVersion(): Promise<string | null> {
 	} catch {
 		return null;
 	}
-}
-
-/** True when semver `a` is newer than `b` (prereleases count as older). */
-export function newer(a: string, b: string): boolean {
-	const parse = (v: string) => {
-		const [core, pre] = v.split("-", 2);
-		return {
-			nums: (core ?? "").split(".").map((n) => Number(n) || 0),
-			pre: pre ?? null,
-		};
-	};
-	const x = parse(a);
-	const y = parse(b);
-	for (let i = 0; i < 3; i++) {
-		const d = (x.nums[i] ?? 0) - (y.nums[i] ?? 0);
-		if (d !== 0) return d > 0;
-	}
-	if (x.pre === y.pre) return false;
-	if (x.pre === null) return true;
-	if (y.pre === null) return false;
-	return x.pre > y.pre;
 }
 
 /** Checks the daemon and every harness integration. Returns an exit code. */

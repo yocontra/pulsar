@@ -6,7 +6,7 @@ import {
 	readFileSync,
 	writeFileSync,
 } from "node:fs";
-import { delimiter, dirname, join } from "node:path";
+import { dirname } from "node:path";
 import {
 	applyEdits,
 	type ModificationOptions,
@@ -20,7 +20,7 @@ const FORMAT: ModificationOptions = {
 const backedUp = new Set<string>();
 
 /** Copies a file to `<file>.bak-pulsar-<timestamp>` once per run, before the first change. */
-export function backup(file: string): string | null {
+function backup(file: string): string | null {
 	if (!existsSync(file) || backedUp.has(file)) return null;
 	const stamp = new Date()
 		.toISOString()
@@ -78,15 +78,6 @@ export function editJson(file: string, path: string[], value: unknown) {
 	writeFileSync(file, next);
 }
 
-/** Absolute path of a command on PATH, or null. */
-export function which(cmd: string): string | null {
-	for (const dir of (process.env.PATH ?? "").split(delimiter)) {
-		const full = join(dir, cmd);
-		if (dir && existsSync(full)) return full;
-	}
-	return null;
-}
-
 /** Runs a harness CLI. Throws with its stderr on failure. */
 export function runCli(cmd: string, args: string[]): string {
 	return execFileSync(cmd, args, {
@@ -118,8 +109,11 @@ export function setTomlKey(
 	if (header === -1) return;
 	let end = lines.findIndex((l, i) => i > header && /^\s*\[/.test(l));
 	if (end === -1) end = lines.length;
+	const keyPattern = new RegExp(
+		`^\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=`,
+	);
 	const existing = lines.findIndex(
-		(l, i) => i > header && i < end && new RegExp(`^\\s*${key}\\s*=`).test(l),
+		(l, i) => i > header && i < end && keyPattern.test(l),
 	);
 	const line = `${key} = ${value}`;
 	if (existing !== -1) {

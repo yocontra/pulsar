@@ -163,9 +163,23 @@ The daemon also scans for live Claude Code and OpenCode sessions that never load
 - Delivered text says it comes from a peer agent, not your user, and that it can't grant permissions. Claude's own guardrails still apply on top.
 - pulsar never claims a permission mode on Claude's behalf. Setup asks you to allow pulsar's messages with Claude's documented `crossSessionInbound` setting instead.
 - Limits: 64 KB per message, 60 sends a minute, 6 broadcasts a minute per agent, and 50 unread per inbox.
-- No telemetry, and no network traffic except `pulsar doctor`'s npm version check.
+- No telemetry. Network traffic is limited to `pulsar doctor`'s npm version check and, when `gh` is installed and logged in, GitHub API lookups through `gh` that tag agents with their branch's open PR.
 
 See [SECURITY.md](SECURITY.md) to report a vulnerability.
+
+## Environment
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `PULSAR_HOME` | `$XDG_STATE_HOME/pulsar` | State folder: socket, SQLite log, daemon log |
+| `XDG_STATE_HOME` | `~/.local/state` | Base for the state folder when `PULSAR_HOME` is unset |
+| `PULSAR_INSTALL_ROOT` | `$XDG_DATA_HOME/pulsar` | Where `pulsar setup` installs versions |
+| `XDG_DATA_HOME` | `~/.local/share` | Base for the install root when `PULSAR_INSTALL_ROOT` is unset |
+| `PULSAR_NAME` | detected | Name this agent registers under |
+| `PULSAR_TAGS` | none | Extra tags for this agent, comma or space separated |
+| `PULSAR_HARNESS` | detected | Force the harness (`claude`, `codex`, `opencode`, `pi`, `omp`, ...) |
+| `PULSAR_SESSION_ID` | detected | Force the harness session id |
+| `PULSAR_DEBUG` | unset | When set, the MCP server logs to `mcp-debug.log` in the state folder |
 
 ## Development
 

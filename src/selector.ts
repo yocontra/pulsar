@@ -12,9 +12,9 @@ import type { PublicAgent } from "./types.ts";
  *   branch, project, tags or activity: "find whoever is on 1378".
  * - A single bare word matches an agent name or id exactly, or a bare tag.
  */
-export type Term = { key: string; value: string };
+type Term = { key: string; value: string };
 
-export type Selector =
+type Selector =
 	| { kind: "all" }
 	| { kind: "terms"; terms: Term[] }
 	| { kind: "name"; value: string };
@@ -78,13 +78,13 @@ function termMatches(agent: PublicAgent, { key, value }: Term): boolean {
 				agent.branch,
 				agent.project,
 				agent.model,
-				agent.summary,
+				agent.activity,
 				...agent.tags,
 			],
 			value,
 		);
 	}
-	if (key === "activity") return contains([agent.summary], value);
+	if (key === "activity") return contains([agent.activity], value);
 	// `model=fable` matches claude-fable-5-2; `model=gpt-5*` works as a prefix too.
 	if (key === "model")
 		return value.endsWith("*")

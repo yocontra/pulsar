@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gitInfo } from "../src/identity.ts";
+import { gitInfo } from "../src/git.ts";
 
 const git = (cwd: string, ...args: string[]) =>
 	execFileSync("git", ["-C", cwd, ...args], {

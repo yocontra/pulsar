@@ -3,8 +3,9 @@ import { chmodSync, existsSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { basename } from "node:path";
 import { adapterFor } from "./adapters/index.ts";
+import { gitInfo, slug } from "./git.ts";
 import { openPr } from "./github.ts";
-import { autoTags, gitInfo, isAutoTag, slug } from "./identity.ts";
+import { autoTags, isAutoTag } from "./identity.ts";
 import { codexModel, opencodeModel } from "./models.ts";
 import { dbPath, socketPath } from "./paths.ts";
 import { type Frame, RpcError, readFrames, writeFrame } from "./rpc.ts";
@@ -40,6 +41,18 @@ export const LIMITS = {
 	idleExitMs: 30 * 60_000,
 };
 
+/** How often the daemon's background jobs run. */
+const INTERVALS = {
+	scanLocalMs: 4000,
+	scanRemoteMs: 20_000,
+	sweepMs: 5000,
+	refreshGitMs: 30_000,
+	refreshPrsMs: 60_000,
+	refreshModelsMs: 30_000,
+	pruneMs: 3600_000,
+	rateWindowMs: 60_000,
+};
+
 interface Conn {
 	socket: Socket;
 	agentId: string | null;
@@ -48,6 +61,8 @@ interface Conn {
 }
 
 interface Waiter {
+	/** The connection blocked on this wait; its waiters are dropped when it closes. */
+	conn: Conn;
 	agentId: string;
 	kind: "message" | "idle" | "reply";
 	target?: string;
@@ -57,7 +72,18 @@ interface Waiter {
 
 const RESERVED_NAMES = new Set(["operator", "user", "human", "system"]);
 
-export function newId(prefix: string): string {
+/** A numeric request field clamped to [min, max]; missing or non-numeric input gets the default. */
+function clampInt(raw: unknown, fallback: number, min: number, max: number) {
+	const n = Number(raw ?? fallback);
+	const value = Number.isFinite(n) ? Math.trunc(n) : fallback;
+	return Math.min(Math.max(value, min), max);
+}
+
+function normalPriority(priority: Priority): Priority {
+	return ["urgent", "normal", "fyi"].includes(priority) ? priority : "normal";
+}
+
+function newId(prefix: string): string {
 	return `${prefix}_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
 }
 
@@ -67,7 +93,7 @@ function toPublic(agent: Agent): PublicAgent {
 }
 
 /** The text pushed into a receiving session. Marked as a peer message, never the user. */
-export function formatPush(
+function formatPush(
 	msg: Message,
 	from: Pick<Agent, "name" | "harness" | "project">,
 ): string {
@@ -127,22 +153,43 @@ export class Daemon {
 		});
 		try {
 			chmodSync(this.path, 0o600);
-		} catch {}
+		} catch (e) {
+			// Only this user may talk to the daemon; never serve a socket others can open.
+			const server = this.server;
+			this.server = null;
+			await new Promise<void>((resolve) => server.close(() => resolve()));
+			try {
+				unlinkSync(this.path);
+			} catch {}
+			throw new Error(
+				`could not restrict ${this.path} to this user: ${(e as Error).message}`,
+			);
+		}
 		if (this.scan) {
-			this.timers.push(setInterval(() => this.scanLocal(), 4000));
-			this.timers.push(setInterval(() => void this.scanRemote(), 20_000));
+			this.timers.push(
+				setInterval(() => this.scanLocal(), INTERVALS.scanLocalMs),
+			);
+			this.timers.push(
+				setInterval(() => void this.scanRemote(), INTERVALS.scanRemoteMs),
+			);
 			this.scanLocal();
 			void this.scanRemote();
 		}
-		this.timers.push(setInterval(() => this.sweep(), 5000));
+		this.timers.push(setInterval(() => this.sweep(), INTERVALS.sweepMs));
 		// Branches change under running agents (checkout, a new worktree): re-read git.
-		this.timers.push(setInterval(() => this.refreshGit(), 30_000));
-		this.timers.push(setInterval(() => void this.refreshPrs(), 60_000));
-		this.timers.push(setInterval(() => void this.refreshModels(), 30_000));
+		this.timers.push(
+			setInterval(() => this.refreshGit(), INTERVALS.refreshGitMs),
+		);
+		this.timers.push(
+			setInterval(() => void this.refreshPrs(), INTERVALS.refreshPrsMs),
+		);
+		this.timers.push(
+			setInterval(() => void this.refreshModels(), INTERVALS.refreshModelsMs),
+		);
 		this.timers.push(
 			setInterval(
 				() => this.store.prune(Date.now(), LIMITS.messageRetentionMs),
-				3600_000,
+				INTERVALS.pruneMs,
 			),
 		);
 		return true;
@@ -263,7 +310,7 @@ export class Daemon {
 				input.status ??
 				(existing && existing.status !== "gone" ? existing.status : "unknown"),
 			model: input.model ?? existing?.model ?? null,
-			summary: existing?.summary ?? saved?.summary ?? null,
+			activity: existing?.activity ?? saved?.activity ?? null,
 			inbound: existing?.inbound ?? saved?.inbound ?? "accept",
 			registered: input.registered || (existing?.registered ?? false),
 			reach: "pull",
@@ -478,6 +525,9 @@ export class Daemon {
 		socket.on("close", () => {
 			this.conns.delete(conn);
 			this.lastActivity = Date.now();
+			// Nobody is left to hear a pending wait; drop it so it cannot take a later message.
+			for (const w of [...this.waiters])
+				if (w.conn === conn) this.resolveWaiter(w, { event: "closed" });
 			// A CLI call made from inside an agent borrows its identity; it never owns presence.
 			if (!conn.agentId || conn.role === "cli") return;
 			const agent = this.agents.get(conn.agentId);
@@ -539,7 +589,7 @@ export class Daemon {
 				tags: ["harness:cli"],
 				status: "idle",
 				model: null,
-				summary: "the human at the terminal",
+				activity: "the human at the terminal",
 				inbound: "accept",
 				registered: false,
 				reach: "pull",
@@ -597,7 +647,7 @@ export class Daemon {
 				return this.inbox(
 					this.sender(conn),
 					p.markRead !== false,
-					Number(p.limit ?? 20),
+					clampInt(p.limit, 20, 1, 100),
 				);
 			case "set_identity":
 				return this.setIdentity(this.self(conn), p);
@@ -630,7 +680,7 @@ export class Daemon {
 				return { ok: true };
 			}
 			case "wait":
-				return await this.wait(this.sender(conn), p);
+				return await this.wait(conn, this.sender(conn), p);
 			case "history":
 				return this.history(this.sender(conn), p);
 			case "tail":
@@ -714,9 +764,11 @@ export class Daemon {
 		if (conn.agentId && conn.agentId !== agent.id) {
 			const previous = this.agents.get(conn.agentId);
 			this.store.reassign(conn.agentId, agent.id);
-			if (previous && this.connsFor(previous.id).length <= 1)
+			// The new id inherits the old name only once nothing else holds it.
+			if (previous && this.connsFor(previous.id).length <= 1) {
 				this.agents.delete(previous.id);
-			agent.name = previous?.name ?? agent.name;
+				agent.name = this.uniqueName(previous.name, agent.id);
+			}
 		}
 		conn.agentId = agent.id;
 		agent.reach = this.reachOf(agent);
@@ -766,7 +818,7 @@ export class Daemon {
 		}
 		const activity = typeof p.activity === "string" ? p.activity : p.summary;
 		if (typeof activity === "string")
-			me.summary = activity.slice(0, 500) || null;
+			me.activity = activity.slice(0, 500) || null;
 		if (typeof p.model === "string" && p.model.trim()) {
 			me.model = p.model.trim().slice(0, 120);
 			this.finishTags(me, me.tags, me.branch);
@@ -786,7 +838,7 @@ export class Daemon {
 			{
 				name: me.name,
 				tags: me.tags.filter((t) => !isAutoTag(t)),
-				summary: me.summary,
+				activity: me.activity,
 				inbound: me.inbound,
 			},
 			Date.now(),
@@ -804,18 +856,44 @@ export class Daemon {
 
 	// ---------------------------------------------------------------- messaging
 
-	private rateLimited(senderId: string, broadcast: boolean): boolean {
+	/** The trimmed body, or an error when it is empty or too large. */
+	private checkBody(raw: string): string {
+		const body = raw.trim();
+		if (!body) throw new RpcError("bad_request", "`body` is empty");
+		if (body.length > LIMITS.maxBody)
+			throw new RpcError(
+				"too_large",
+				`body is over ${LIMITS.maxBody} characters`,
+			);
+		return body;
+	}
+
+	/** The sender's recent send times; prunes entries outside the window. */
+	private sendTimes(senderId: string, broadcast: boolean): number[] {
 		const now = Date.now();
 		const key = broadcast ? `${senderId}#*` : senderId;
-		const log = (this.sendLog.get(key) ?? []).filter((t) => now - t < 60_000);
-		const cap = broadcast ? LIMITS.broadcastsPerMinute : LIMITS.sendsPerMinute;
-		if (log.length >= cap) {
-			this.sendLog.set(key, log);
-			return true;
-		}
-		log.push(now);
+		const log = (this.sendLog.get(key) ?? []).filter(
+			(t) => now - t < INTERVALS.rateWindowMs,
+		);
 		this.sendLog.set(key, log);
-		return false;
+		return log;
+	}
+
+	/** Throws when the sender is at its per-minute cap. Records nothing. */
+	private checkRate(senderId: string, broadcast: boolean) {
+		const cap = broadcast ? LIMITS.broadcastsPerMinute : LIMITS.sendsPerMinute;
+		if (this.sendTimes(senderId, broadcast).length >= cap)
+			throw new RpcError(
+				"rate_limited",
+				broadcast
+					? `at most ${LIMITS.broadcastsPerMinute} broadcasts a minute`
+					: `at most ${LIMITS.sendsPerMinute} messages a minute`,
+			);
+	}
+
+	/** Counts an accepted send against the sender's per-minute cap. */
+	private recordSend(senderId: string, broadcast: boolean) {
+		this.sendTimes(senderId, broadcast).push(Date.now());
 	}
 
 	private resolveTargets(to: string, sender: Agent): Agent[] {
@@ -842,38 +920,22 @@ export class Daemon {
 			expectReply: boolean;
 		},
 	): Promise<{ message: Message; receipts: Receipt[] }> {
-		const body = input.body.trim();
 		if (!input.to.trim())
 			throw new RpcError(
 				"bad_request",
 				"`to` is required: a name, a selector like project=x, or *",
 			);
-		if (!body) throw new RpcError("bad_request", "`body` is empty");
-		if (body.length > LIMITS.maxBody)
-			throw new RpcError(
-				"too_large",
-				`body is over ${LIMITS.maxBody} characters`,
-			);
-		const priority: Priority = ["urgent", "normal", "fyi"].includes(
-			input.priority,
-		)
-			? input.priority
-			: "normal";
+		const body = this.checkBody(input.body);
+		const priority = normalPriority(input.priority);
 		const broadcast = isBroadcast(parseSelector(input.to));
-		if (this.rateLimited(sender.id, broadcast)) {
-			throw new RpcError(
-				"rate_limited",
-				broadcast
-					? `at most ${LIMITS.broadcastsPerMinute} broadcasts a minute`
-					: `at most ${LIMITS.sendsPerMinute} messages a minute`,
-			);
-		}
 		const targets = this.resolveTargets(input.to, sender);
 		if (targets.length === 0)
 			throw new RpcError(
 				"no_recipients",
 				`no live agent matches "${input.to}". Call list_agents to see who is online.`,
 			);
+		this.checkRate(sender.id, broadcast);
+		this.recordSend(sender.id, broadcast);
 
 		const parent = input.replyTo ? this.store.getMessage(input.replyTo) : null;
 		const message: Message = {
@@ -929,14 +991,17 @@ export class Daemon {
 			throw new RpcError("gone", `${original.fromName} is no longer online`);
 		if (to === "cli:operator") {
 			// The operator reads replies with `pulsar inbox` / `pulsar tail`; store it for them.
+			const checked = this.checkBody(body);
+			this.checkRate(sender.id, false);
+			this.recordSend(sender.id, false);
 			const message: Message = {
 				id: newId("m"),
 				threadId: original.threadId,
 				fromId: sender.id,
 				fromName: sender.name,
 				to: "operator",
-				body: body.trim(),
-				priority,
+				body: checked,
+				priority: normalPriority(priority),
 				replyTo: original.id,
 				expectReply: false,
 				createdAt: Date.now(),
@@ -1034,6 +1099,7 @@ export class Daemon {
 			if (
 				w.kind === "reply" &&
 				w.agentId === target.id &&
+				this.conns.has(w.conn) &&
 				message.replyTo &&
 				w.target === message.replyTo
 			) {
@@ -1047,7 +1113,11 @@ export class Daemon {
 		for (const c of this.connsFor(target.id))
 			writeFrame(c.socket, { event: "message", data: delivered });
 		for (const w of [...this.waiters]) {
-			if (w.kind === "message" && w.agentId === target.id) {
+			if (
+				w.kind === "message" &&
+				w.agentId === target.id &&
+				this.conns.has(w.conn)
+			) {
 				this.resolveWaiter(w, { event: "message", message: delivered });
 				this.store.markRead(target.id, [message.id], Date.now());
 				return this.receipt(message.id, target, "read", "wait", null);
@@ -1122,10 +1192,7 @@ export class Daemon {
 	}
 
 	private inbox(me: Agent, markRead: boolean, limit: number) {
-		const messages = this.store.unread(
-			me.id,
-			Math.min(Math.max(limit, 1), 100),
-		);
+		const messages = this.store.unread(me.id, limit);
 		if (markRead && messages.length)
 			this.store.markRead(
 				me.id,
@@ -1141,7 +1208,7 @@ export class Daemon {
 	}
 
 	private history(me: Agent, p: Record<string, unknown>) {
-		const limit = Math.min(Number(p.limit ?? 30), 200);
+		const limit = clampInt(p.limit, 30, 1, 200);
 		if (typeof p.threadId === "string" && p.threadId)
 			return { messages: this.store.thread(p.threadId, limit) };
 		if (typeof p.messageId === "string" && p.messageId) {
@@ -1156,9 +1223,12 @@ export class Daemon {
 		return { messages: this.store.search(scope, String(p.query ?? ""), limit) };
 	}
 
-	private wait(me: Agent, p: Record<string, unknown>): Promise<unknown> {
-		const timeoutMs =
-			Math.min(Math.max(Number(p.timeoutSeconds ?? 60), 1), 3600) * 1000;
+	private wait(
+		conn: Conn,
+		me: Agent,
+		p: Record<string, unknown>,
+	): Promise<unknown> {
+		const timeoutMs = clampInt(p.timeoutSeconds, 60, 1, 3600) * 1000;
 		const forWhat = String(p.for ?? "message");
 		let kind: Waiter["kind"] = "message";
 		let target: string | undefined;
@@ -1192,6 +1262,7 @@ export class Daemon {
 		}
 		return new Promise((resolve) => {
 			const waiter: Waiter = {
+				conn,
 				agentId: me.id,
 				kind,
 				...(target ? { target } : {}),

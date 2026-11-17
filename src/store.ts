@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
+import { daemonLog } from "./log.ts";
 import type { Agent, Message, Receipt, ReceiptState } from "./types.ts";
 
 // node:sqlite still prints an ExperimentalWarning on some Node versions.
@@ -81,10 +82,11 @@ function toReceipt(r: Row): Receipt {
 }
 
 /** Saved self-description that survives a restart of the same session. */
-export interface SavedIdentity {
+interface SavedIdentity {
 	name: string | null;
 	tags: string[];
-	summary: string | null;
+	/** Stored in the `summary` column (its 1.0 name). */
+	activity: string | null;
 	inbound: Agent["inbound"] | null;
 }
 
@@ -213,12 +215,17 @@ export class Store {
 		).map(toMessage);
 	}
 
-	/** Moves an agent's pending receipts to a new id (a session re-registered). */
+	/**
+	 * Moves an agent's receipts to a new id (a session re-registered). Where the
+	 * new id already has a receipt for the same message, that one is kept and the
+	 * old id's copy is dropped.
+	 */
 	reassign(fromAgentId: string, toAgentId: string) {
 		if (fromAgentId === toAgentId) return;
 		this.db
 			.prepare("UPDATE OR IGNORE receipts SET agent_id = ? WHERE agent_id = ?")
 			.run(toAgentId, fromAgentId);
+		this.db.prepare("DELETE FROM receipts WHERE agent_id = ?").run(fromAgentId);
 	}
 
 	repliesTo(messageId: string): Message[] {
@@ -272,7 +279,7 @@ export class Store {
 				agentId,
 				id.name,
 				JSON.stringify(id.tags),
-				id.summary,
+				id.activity,
 				id.inbound,
 				now,
 			);
@@ -285,12 +292,23 @@ export class Store {
 		if (!row) return null;
 		let tags: string[] = [];
 		try {
-			tags = JSON.parse(String(row.tags)) as string[];
-		} catch {}
+			const parsed: unknown = JSON.parse(String(row.tags));
+			if (
+				Array.isArray(parsed) &&
+				parsed.every((t): t is string => typeof t === "string")
+			)
+				tags = parsed;
+			else
+				daemonLog(`saved tags for ${agentId} are not a string list; ignored`);
+		} catch (e) {
+			daemonLog(
+				`saved tags for ${agentId} unreadable: ${(e as Error).message}`,
+			);
+		}
 		return {
 			name: (row.name as string | null) ?? null,
 			tags,
-			summary: (row.summary as string | null) ?? null,
+			activity: (row.summary as string | null) ?? null,
 			inbound: (row.inbound as Agent["inbound"] | null) ?? null,
 		};
 	}

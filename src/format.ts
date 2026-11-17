@@ -5,7 +5,7 @@ import type {
 	Receipt,
 } from "./types.ts";
 
-export function ago(ms: number, now = Date.now()): string {
+function ago(ms: number, now = Date.now()): string {
 	const s = Math.max(0, Math.round((now - ms) / 1000));
 	if (s < 60) return `${s}s ago`;
 	if (s < 3600) return `${Math.round(s / 60)}m ago`;
@@ -13,7 +13,7 @@ export function ago(ms: number, now = Date.now()): string {
 	return `${Math.round(s / 86400)}d ago`;
 }
 
-export function agentLine(a: PublicAgent): string {
+function agentLine(a: PublicAgent): string {
 	const selfTags = a.tags.filter(
 		(t) => !/^(harness|project|branch|worktree|pr|model):/.test(t),
 	);
@@ -33,7 +33,7 @@ export function agentLine(a: PublicAgent): string {
 		a.registered ? null : "(not running pulsar)",
 		a.inbound !== "accept" ? `inbound=${a.inbound}` : null,
 	].filter(Boolean);
-	return `- ${bits.join(" · ")}${a.summary ? `\n  doing: ${a.summary}` : ""}\n  id: ${a.id}`;
+	return `- ${bits.join(" · ")}${a.activity ? `\n  doing: ${a.activity}` : ""}\n  id: ${a.id}`;
 }
 
 export function agentsText(agents: PublicAgent[], selector: string): string {

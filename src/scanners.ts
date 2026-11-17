@@ -1,13 +1,10 @@
-import { execFile } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import {
-	type ClaudeSessionRecord,
-	claudeSessionsDir,
-	opencodeServiceRunning,
-} from "./identity.ts";
+import { readdirSync } from "node:fs";
+import { debugLog } from "./log.ts";
 import { claudeModel } from "./models.ts";
+import { opencodeServiceRunning } from "./processes.ts";
+import { claudeSessionsDir, readClaudeSession } from "./sessions.ts";
 import type { AgentStatus, Harness } from "./types.ts";
+import { runJson } from "./util.ts";
 
 /** A live session found on disk or through a harness API. */
 export interface Scanned {
@@ -47,10 +44,8 @@ export function scanClaude(): Scanned[] {
 	const out: Scanned[] = [];
 	for (const file of files) {
 		try {
-			const rec = JSON.parse(
-				readFileSync(join(claudeSessionsDir(), file), "utf8"),
-			) as ClaudeSessionRecord;
-			if (!rec.pid || !rec.sessionId || !pidAlive(rec.pid)) continue;
+			const rec = readClaudeSession(Number(file.slice(0, -5)));
+			if (!rec?.pid || !rec.sessionId || !pidAlive(rec.pid)) continue;
 			out.push({
 				harness: "claude",
 				sessionId: rec.sessionId,
@@ -65,27 +60,11 @@ export function scanClaude(): Scanned[] {
 					...(rec.name ? { claudeName: rec.name } : {}),
 				},
 			});
-		} catch {}
+		} catch (e) {
+			debugLog(`claude scan skipped ${file}: ${(e as Error).message}`);
+		}
 	}
 	return out;
-}
-
-function runJson(cmd: string, args: string[]): Promise<unknown> {
-	return new Promise((resolve) => {
-		execFile(
-			cmd,
-			args,
-			{ timeout: 8000, maxBuffer: 8 * 1024 * 1024 },
-			(err, stdout) => {
-				if (err) return resolve(null);
-				try {
-					resolve(JSON.parse(stdout));
-				} catch {
-					resolve(null);
-				}
-			},
-		);
-	});
 }
 
 /** OpenCode sessions that are running right now, from its shared server. */

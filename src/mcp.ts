@@ -5,16 +5,16 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { DaemonClient } from "./client.ts";
 import { agentsText, messageText, receiptsText } from "./format.ts";
+import { gitInfo } from "./git.ts";
 import {
 	adoptCodexThread,
 	autoTags,
-	codexThreadId,
 	detectRegistration,
 	envTags,
-	gitInfo,
-	opencodeSessionDir,
 } from "./identity.ts";
 import { stateDir } from "./paths.ts";
+import { RpcError } from "./rpc.ts";
+import { codexThreadId, opencodeSessionDir } from "./sessions.ts";
 import type {
 	DeliveredMessage,
 	Message,
@@ -38,6 +38,9 @@ type Meta = Record<string, unknown> | undefined;
 
 /** `_meta` keys harnesses use to say which of their sessions made a tool call. */
 const OPENCODE_SESSION_KEY = "ai.opencode/sessionID";
+
+/** Longest an `ask` or `wait` call may block. Harness tool timeouts must exceed it. */
+export const MAX_BLOCK_SECONDS = 1800;
 
 function text(t: string) {
 	return { content: [{ type: "text" as const, text: t }] };
@@ -89,7 +92,15 @@ class Session {
 			if (this.closed) return;
 			let delay = 250;
 			const retry = () => {
-				this.ensure().catch(() => {
+				this.ensure().catch((e) => {
+					// The daemon answered with an error (protocol too new, session
+					// claimed, ...): retrying will not help. The next tool call tries
+					// again and reports it.
+					if (e instanceof RpcError) {
+						debug(`reconnect stopped: ${e.code}: ${e.message}`);
+						return;
+					}
+					debug(`reconnect failed: ${(e as Error).message}`);
 					delay = Math.min(delay * 2, 10_000);
 					setTimeout(retry, delay).unref();
 				});
@@ -405,7 +416,7 @@ export async function runMcp() {
 					.number()
 					.int()
 					.min(5)
-					.max(1800)
+					.max(MAX_BLOCK_SECONDS)
 					.optional()
 					.describe("Default 120."),
 			},
@@ -452,7 +463,7 @@ export async function runMcp() {
 					.number()
 					.int()
 					.min(1)
-					.max(1800)
+					.max(MAX_BLOCK_SECONDS)
 					.optional()
 					.describe("Default 60."),
 			},
@@ -496,7 +507,7 @@ export async function runMcp() {
 					"whoami",
 				);
 				return text(
-					`You are ${r.agent.name} (${r.agent.id})\nharness: ${r.agent.harness}\nmodel: ${r.agent.model ?? "-"}\nactivity: ${r.agent.summary ?? "-"}\nbranch: ${r.agent.branch ?? "-"}\nproject: ${r.agent.project ?? "-"}\ntags: ${r.agent.tags.join(", ") || "-"}\ninbound: ${r.agent.inbound}\nreach: ${r.agent.reach}\nunread: ${r.unread}`,
+					`You are ${r.agent.name} (${r.agent.id})\nharness: ${r.agent.harness}\nmodel: ${r.agent.model ?? "-"}\nactivity: ${r.agent.activity ?? "-"}\nbranch: ${r.agent.branch ?? "-"}\nproject: ${r.agent.project ?? "-"}\ntags: ${r.agent.tags.join(", ") || "-"}\ninbound: ${r.agent.inbound}\nreach: ${r.agent.reach}\nunread: ${r.unread}`,
 				);
 			} catch (e) {
 				return errorText(e);
@@ -556,7 +567,7 @@ export async function runMcp() {
 				});
 				s.me = r.agent;
 				return text(
-					`You are ${r.agent.name}${r.agent.summary ? ` · doing: ${r.agent.summary}` : ""} · tags: ${r.agent.tags.join(", ")} · inbound: ${r.agent.inbound}`,
+					`You are ${r.agent.name}${r.agent.activity ? ` · doing: ${r.agent.activity}` : ""} · tags: ${r.agent.tags.join(", ")} · inbound: ${r.agent.inbound}`,
 				);
 			} catch (e) {
 				return errorText(e);

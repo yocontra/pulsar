@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0 - 2026-11-16
+
+Cleanup release: fixes from a full audit, no new features.
+
+- JSON output: an agent's `summary` field is now `activity`, matching the tools. `set_identity summary=` still works.
+- `wait` and `ask` calls from a disconnected session no longer swallow later messages.
+- Replies to the operator get the same size, empty-body and rate checks as other sends; failed sends no longer count against the rate limit.
+- A session that re-registers under a new id can no longer take another agent's name.
+- The daemon exits after an unexpected error (the next call starts a fresh one) and refuses to start if it cannot lock down its socket.
+- `pulsar stop` / `status` and setup report real errors instead of "not running".
+- Internals: `identity.ts` split into `processes.ts`, `git.ts` and `sessions.ts`; shared helpers; unit tests for envelopes, frame parsing, TOML edits, the store, GitHub lookups and harness detection (87 tests).
+- README lists the environment variables and says that PR lookups call GitHub through `gh`.
+
 ## 1.1.0 - 2026-11-16
 
 - Model awareness: each agent shows the model it runs (Claude transcripts, Codex rollouts, OpenCode messages, pi/omp extension). `model=fable` selects every Fable agent.

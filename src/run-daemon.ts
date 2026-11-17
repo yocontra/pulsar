@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Daemon } from "./daemon.ts";
 import { currentCli, logPath } from "./paths.ts";
-import { newer } from "./setup/doctor.ts";
+import { newer } from "./util.ts";
 import { VERSION } from "./version.ts";
 
 function log(line: string) {
@@ -35,9 +35,11 @@ export async function runDaemon() {
 	};
 	process.on("SIGTERM", () => void stop("SIGTERM"));
 	process.on("SIGINT", () => void stop("SIGINT"));
-	process.on("uncaughtException", (e) =>
-		log(`uncaught: ${e.stack ?? e.message}`),
-	);
+	process.on("uncaughtException", (e) => {
+		// State may be half-changed; exit so the next client starts a fresh daemon.
+		log(`uncaught: ${e.stack ?? e.message}`);
+		void daemon.stop().finally(() => process.exit(1));
+	});
 	process.on("unhandledRejection", (e) => log(`unhandled: ${String(e)}`));
 	setInterval(() => {
 		if (daemon.idleTooLong()) void stop("idle");

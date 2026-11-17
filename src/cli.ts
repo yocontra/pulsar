@@ -34,12 +34,27 @@ https://github.com/yocontra/pulsar`;
 async function operatorClient(autoStart = true) {
 	const client = new DaemonClient();
 	await client.connect(autoStart);
-	// Run from a terminal, this is the operator. Run from an agent's shell, it is that agent.
+	await sayHello(client);
+	return client;
+}
+
+/** Run from a terminal, this is the operator. Run from an agent's shell, it is that agent. */
+async function sayHello(client: DaemonClient) {
 	await client.call("hello", {
 		protocol: PROTOCOL_VERSION,
 		version: VERSION,
 		registration: detectRegistration("cli"),
 	});
+}
+
+/** Connects to a running daemon without starting one; null when none is running. */
+async function runningClient(): Promise<DaemonClient | null> {
+	const client = new DaemonClient();
+	try {
+		await client.connect(false);
+	} catch {
+		return null;
+	}
 	return client;
 }
 
@@ -175,24 +190,32 @@ async function main(argv: string[]) {
 			return;
 		}
 		case "status": {
-			try {
-				const client = await operatorClient(false);
-				console.log(JSON.stringify(await client.call("status"), null, 2));
-				client.close();
-			} catch {
+			const client = await runningClient();
+			if (!client) {
 				console.log("daemon: not running (it starts on first use)");
+				return;
+			}
+			try {
+				await sayHello(client);
+				console.log(JSON.stringify(await client.call("status"), null, 2));
+			} finally {
+				client.close();
 			}
 			return;
 		}
 		case "stop": {
-			try {
-				const client = await operatorClient(false);
-				await client.call("shutdown");
-				client.close();
-				console.log("daemon stopped");
-			} catch {
+			const client = await runningClient();
+			if (!client) {
 				console.log("daemon was not running");
+				return;
 			}
+			try {
+				await sayHello(client);
+				await client.call("shutdown");
+			} finally {
+				client.close();
+			}
+			console.log("daemon stopped");
 			return;
 		}
 		case "doctor": {

@@ -29,11 +29,15 @@ export function readFrames(socket: Socket, onFrame: (f: Frame) => void) {
 			const line = buffer.slice(0, nl).trim();
 			buffer = buffer.slice(nl + 1);
 			if (line) {
+				let frame: Frame;
 				try {
-					onFrame(JSON.parse(line) as Frame);
+					frame = JSON.parse(line) as Frame;
 				} catch {
 					// Ignore malformed lines; the peer is local and same-user.
+					nl = buffer.indexOf("\n");
+					continue;
 				}
+				onFrame(frame);
 			}
 			nl = buffer.indexOf("\n");
 		}

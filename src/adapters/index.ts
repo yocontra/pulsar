@@ -2,14 +2,11 @@ import { execFile } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { join } from "node:path";
-import {
-	claudeSessionsDir,
-	opencodeServiceRunning,
-	readClaudeSession,
-} from "../identity.ts";
+import { opencodeServiceRunning } from "../processes.ts";
+import { claudeSessionsDir, readClaudeSession } from "../sessions.ts";
 import type { Agent, Priority } from "../types.ts";
 
-export interface DeliveryResult {
+interface DeliveryResult {
 	ok: boolean;
 	via: string;
 	detail?: string;
@@ -79,7 +76,7 @@ export function claudeEnvelope(fromName: string, body: string): string {
 	return `<cross-session-message from-name="${name}">\n${safe}\n</cross-session-message>`;
 }
 
-export const claudeAdapter: Adapter = {
+const claudeAdapter: Adapter = {
 	canPush(agent) {
 		return agent.harness === "claude" && agent.pid !== null;
 	},
@@ -132,7 +129,7 @@ export const claudeAdapter: Adapter = {
 	},
 };
 
-export const codexAdapter: Adapter = {
+const codexAdapter: Adapter = {
 	canPush(agent) {
 		return agent.harness === "codex" && !!agent.sessionId;
 	},
@@ -153,7 +150,7 @@ export const codexAdapter: Adapter = {
 	},
 };
 
-export const opencodeAdapter: Adapter = {
+const opencodeAdapter: Adapter = {
 	canPush(agent) {
 		return agent.harness === "opencode" && !!agent.sessionId;
 	},

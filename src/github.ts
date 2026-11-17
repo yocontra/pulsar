@@ -1,39 +1,31 @@
-import { execFile } from "node:child_process";
-import { which } from "./setup/files.ts";
+import { runJson, which } from "./util.ts";
 
 /** Open PR numbers by `<cwd>\0<branch>`, refreshed at most every few minutes. */
 const cache = new Map<string, { pr: number | null; at: number }>();
 const TTL_MS = 3 * 60_000;
 const DEFAULT_BRANCHES = new Set(["main", "master", "develop", "dev", "trunk"]);
 
-function ghPrForBranch(cwd: string, branch: string): Promise<number | null> {
-	return new Promise((resolve) => {
-		execFile(
-			"gh",
-			[
-				"pr",
-				"list",
-				"--head",
-				branch,
-				"--state",
-				"open",
-				"--json",
-				"number",
-				"--limit",
-				"1",
-			],
-			{ cwd, timeout: 15_000 },
-			(err, stdout) => {
-				if (err) return resolve(null);
-				try {
-					const list = JSON.parse(stdout) as Array<{ number: number }>;
-					resolve(list[0]?.number ?? null);
-				} catch {
-					resolve(null);
-				}
-			},
-		);
-	});
+async function ghPrForBranch(
+	cwd: string,
+	branch: string,
+): Promise<number | null> {
+	const list = (await runJson(
+		"gh",
+		[
+			"pr",
+			"list",
+			"--head",
+			branch,
+			"--state",
+			"open",
+			"--json",
+			"number",
+			"--limit",
+			"1",
+		],
+		{ cwd, timeout: 15_000 },
+	)) as Array<{ number: number }> | null;
+	return list?.[0]?.number ?? null;
 }
 
 /**

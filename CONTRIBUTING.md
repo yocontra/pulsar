@@ -22,11 +22,14 @@ The source runs directly with Node 22.13+ or Bun (`node src/cli.ts ls`). It uses
 | `src/adapters/` | How to push into Claude Code, Codex, OpenCode |
 | `src/scanners.ts` | Finding live sessions that do not run pulsar |
 | `src/identity.ts` | Which harness and session an MCP server serves |
+| `src/processes.ts` | Process table and harness detection from command lines |
+| `src/sessions.ts` | Reading each harness's session records (Claude, Codex, OpenCode) |
+| `src/git.ts` | Project, branch and worktree of a folder |
 | `src/setup/` | `pulsar setup` / `doctor`, one entry per harness in `clients.ts` |
 
 ## Adding a harness
 
-1. Detection: add a case to `harnessOfArgs` and a session-id lookup to `detectRegistration` in `src/identity.ts`.
+1. Detection: add a case to `harnessOfArgs` in `src/processes.ts` and a session-id lookup to `detectRegistration` in `src/identity.ts`.
 2. Push: add an adapter in `src/adapters/index.ts` if the harness has an outside way into a running session. Otherwise it is pull-only and still works.
 3. Setup: add an entry to `CLIENTS` in `src/setup/clients.ts` with detect / configured / plan.
 4. Document the path, and what you verified, in `docs/adapters.md`.

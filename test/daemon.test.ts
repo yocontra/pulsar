@@ -11,6 +11,7 @@ import {
 	agentClient,
 	operator,
 	registration,
+	roundTrip,
 	startDaemon,
 	until,
 } from "./helpers.ts";
@@ -18,15 +19,18 @@ import {
 type SendResult = { message: Message; receipts: Receipt[] };
 
 let daemon: Daemon;
+let home: string;
+let cleanup: () => void;
 const clients: Array<{ close: () => void }> = [];
 
 beforeEach(async () => {
-	({ daemon } = await startDaemon());
+	({ daemon, home, cleanup } = await startDaemon());
 });
 
 afterEach(async () => {
 	for (const c of clients.splice(0)) c.close();
 	await daemon.stop();
+	cleanup();
 });
 
 async function spawnAgent(over: Parameters<typeof registration>[0] = {}) {
@@ -68,7 +72,7 @@ describe("tags (goal 2)", () => {
 		const a = await spawnAgent({ sessionId: "fixed-1" });
 		await a.client.call("set_identity", {
 			tagsAdd: ["workstream:auth"],
-			summary: "fixing login",
+			activity: "fixing login",
 		});
 		const op = await operator();
 		clients.push(op);
@@ -76,7 +80,7 @@ describe("tags (goal 2)", () => {
 			selector: "workstream=auth",
 		});
 		expect(found).toHaveLength(1);
-		expect(found[0]!.summary).toBe("fixing login");
+		expect(found[0]!.activity).toBe("fixing login");
 
 		a.client.close();
 		await until(() => daemon.live().length === 0);
@@ -202,7 +206,7 @@ describe("delivery rules", () => {
 			"wait",
 			{ timeoutSeconds: 5 },
 		);
-		await new Promise((r) => setTimeout(r, 30));
+		await roundTrip(b.client);
 		await a.client.call("send", { to: b.agent.name, body: "ping" });
 		const r = await waiting;
 		expect(r.message.body).toBe("ping");
@@ -224,7 +228,7 @@ describe("delivery rules", () => {
 			for: `idle:${b.agent.name}`,
 			timeoutSeconds: 5,
 		});
-		await new Promise((r) => setTimeout(r, 30));
+		await roundTrip(a.client);
 		await b.client.call("set_status", { status: "idle" });
 		expect((await waiting).event).toBe("idle");
 	});
@@ -307,7 +311,7 @@ describe("delivery rules", () => {
 		pull.client.close();
 		clients.length = 0;
 		await daemon.stop();
-		({ daemon } = await startDaemonAt(process.env.PULSAR_HOME!));
+		({ daemon } = await startDaemonAt(home));
 		const back = await spawnAgent({
 			harness: "cursor",
 			role: "mcp",
@@ -367,8 +371,11 @@ describe("identity safety", () => {
 			body: "from my shell",
 		});
 		expect(r.message.fromId).toBe(agent.agent.id);
+		const connections = async () =>
+			(await peer.client.call<{ connections: number }>("status")).connections;
+		const before = await connections();
 		cli.close();
-		await new Promise((res) => setTimeout(res, 50));
+		await until(async () => (await connections()) < before);
 		expect(daemon.live().some((a) => a.id === agent.agent.id)).toBe(true);
 	});
 
@@ -431,14 +438,14 @@ describe("ask", () => {
 			for: `reply:${sent.message.id}`,
 			timeoutSeconds: 5,
 		});
-		await new Promise((r) => setTimeout(r, 30));
+		await roundTrip(asker.client);
 		const r = await answerer.client.call<SendResult>("reply", {
 			messageId: sent.message.id,
 			body: "42",
 		});
 		expect((await waiting).message.body).toBe("42");
 		expect(r.receipts[0]!.state).toBe("read");
-		await new Promise((res) => setTimeout(res, 50));
+		await roundTrip(asker.client);
 		expect(asker.pushes).toHaveLength(0);
 	});
 });
@@ -466,6 +473,6 @@ describe("activity, model and PR tags", () => {
 		expect(
 			await op.call<PublicAgent[]>("list", { selector: "~1402" }),
 		).toHaveLength(1);
-		expect(byModel[0]!.summary).toBe("reviewing PR #1402");
+		expect(byModel[0]!.activity).toBe("reviewing PR #1402");
 	});
 });

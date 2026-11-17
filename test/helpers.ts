@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonClient } from "../src/client.ts";
@@ -10,17 +10,35 @@ import type {
 } from "../src/types.ts";
 import { PROTOCOL_VERSION } from "../src/types.ts";
 
-/** A daemon on a private socket and database, with harness scanners off. */
+/** Sets an env var back to a saved value, deleting it when it was unset. */
+export function restoreEnv(name: string, value: string | undefined) {
+	if (value === undefined) delete process.env[name];
+	else process.env[name] = value;
+}
+
+/**
+ * A daemon on a private socket and database, with harness scanners off.
+ * PULSAR_HOME points at it until `cleanup` restores the old value and removes
+ * the directory; stop the daemon first.
+ */
 export async function startDaemon() {
 	const home = mkdtempSync(join(tmpdir(), "pulsar-test-"));
+	const previous = process.env.PULSAR_HOME;
 	process.env.PULSAR_HOME = home;
+	const cleanup = () => {
+		restoreEnv("PULSAR_HOME", previous);
+		rmSync(home, { recursive: true, force: true });
+	};
 	const daemon = new Daemon({
 		socket: join(home, "bus.sock"),
 		db: join(home, "pulsar.db"),
 		scan: false,
 	});
-	if (!(await daemon.start())) throw new Error("daemon did not start");
-	return { daemon, home };
+	if (!(await daemon.start())) {
+		cleanup();
+		throw new Error("daemon did not start");
+	}
+	return { daemon, home, cleanup };
 }
 
 let pidCounter = 900_000;
@@ -70,10 +88,22 @@ export async function operator() {
 	return client;
 }
 
-export async function until(check: () => boolean, ms = 2000) {
+/**
+ * One round trip on `client`. The daemon handles a connection's frames in
+ * order, so a `wait` sent before this is registered once it resolves, and any
+ * event the daemon wrote to this connection earlier has been dispatched.
+ */
+export async function roundTrip(client: DaemonClient) {
+	await client.call("status");
+}
+
+export async function until(
+	check: () => boolean | Promise<boolean>,
+	ms = 2000,
+) {
 	const end = Date.now() + ms;
 	while (Date.now() < end) {
-		if (check()) return;
+		if (await check()) return;
 		await new Promise((r) => setTimeout(r, 10));
 	}
 	throw new Error("condition not met in time");

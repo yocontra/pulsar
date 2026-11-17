@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import {
 	closeSync,
 	existsSync,
@@ -9,7 +8,8 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { opencodeServiceRunning } from "./identity.ts";
+import { opencodeServiceRunning } from "./processes.ts";
+import { runJson } from "./util.ts";
 
 /** Last `bytes` of a file as text (transcripts can be large). */
 function tail(file: string, bytes = 96 * 1024): string {
@@ -110,32 +110,17 @@ export function codexModel(threadId: string): string | null {
 }
 
 /** OpenCode: the model of the session's newest assistant message. */
-export function opencodeModel(sessionId: string): Promise<string | null> {
-	if (!opencodeServiceRunning()) return Promise.resolve(null);
-	return new Promise((resolve) => {
-		execFile(
-			"opencode",
-			["api", "GET", `/api/session/${sessionId}/message`],
-			{ timeout: 8000, maxBuffer: 32 * 1024 * 1024 },
-			(err, stdout) => {
-				if (err) return resolve(null);
-				try {
-					const raw = JSON.parse(stdout) as { data?: unknown } | unknown[];
-					const list =
-						(Array.isArray(raw) ? raw : (raw as { data?: unknown[] }).data) ??
-						[];
-					for (const m of list as Array<{
-						type?: string;
-						model?: { id?: string };
-					}>) {
-						if (m.type === "assistant" && m.model?.id)
-							return resolve(m.model.id);
-					}
-					resolve(null);
-				} catch {
-					resolve(null);
-				}
-			},
-		);
-	});
+export async function opencodeModel(sessionId: string): Promise<string | null> {
+	if (!opencodeServiceRunning()) return null;
+	const raw = (await runJson(
+		"opencode",
+		["api", "GET", `/api/session/${sessionId}/message`],
+		{ maxBuffer: 32 * 1024 * 1024 },
+	)) as { data?: unknown[] } | unknown[] | null;
+	const list = Array.isArray(raw) ? raw : raw?.data;
+	if (!Array.isArray(list)) return null;
+	for (const m of list as Array<{ type?: string; model?: { id?: string } }>) {
+		if (m.type === "assistant" && m.model?.id) return m.model.id;
+	}
+	return null;
 }

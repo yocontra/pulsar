@@ -20,7 +20,7 @@ export type InboundPolicy = "accept" | "hold" | "refuse";
 export type Priority = "urgent" | "normal" | "fyi";
 
 /** How a message can reach the agent without it asking. */
-export type Reach = "push" | "pull";
+type Reach = "push" | "pull";
 
 export interface Agent {
 	/** Stable id: `<harness>:<session id>` when known, else `<harness>:pid:<pid>`. */
@@ -38,7 +38,7 @@ export interface Agent {
 	/** The model the session runs, e.g. `claude-fable-5-2` or `gpt-5.5`. */
 	model: string | null;
 	/** What the agent says it is doing, e.g. "reviewing PR #1402". */
-	summary: string | null;
+	activity: string | null;
 	inbound: InboundPolicy;
 	/** true when the agent runs the pulsar MCP server or extension. */
 	registered: boolean;

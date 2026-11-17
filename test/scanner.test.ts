@@ -1,10 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Daemon } from "../src/daemon.ts";
 import type { PublicAgent } from "../src/types.ts";
-import { agentClient, operator, registration, until } from "./helpers.ts";
+import {
+	agentClient,
+	operator,
+	registration,
+	restoreEnv,
+	roundTrip,
+	until,
+} from "./helpers.ts";
 
 // A fake Claude config dir: one "live" session record pointing at this test process.
 const claudeDir = mkdtempSync(join(tmpdir(), "pulsar-claude-"));
@@ -23,11 +30,15 @@ const record = (status: string, name = "sweep-apparish") =>
 	);
 
 let daemon: Daemon;
+const home = mkdtempSync(join(tmpdir(), "pulsar-test-"));
+const previousEnv = {
+	CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+	PULSAR_HOME: process.env.PULSAR_HOME,
+};
 const closers: Array<{ close: () => void }> = [];
 
 beforeAll(async () => {
 	process.env.CLAUDE_CONFIG_DIR = claudeDir;
-	const home = mkdtempSync(join(tmpdir(), "pulsar-test-"));
 	process.env.PULSAR_HOME = home;
 	record("busy");
 	daemon = new Daemon({
@@ -41,7 +52,10 @@ beforeAll(async () => {
 afterAll(async () => {
 	for (const c of closers) c.close();
 	await daemon.stop();
-	delete process.env.CLAUDE_CONFIG_DIR;
+	for (const [name, value] of Object.entries(previousEnv))
+		restoreEnv(name, value);
+	rmSync(claudeDir, { recursive: true, force: true });
+	rmSync(home, { recursive: true, force: true });
 });
 
 describe("Claude scanner", () => {
@@ -64,7 +78,7 @@ describe("Claude scanner", () => {
 			{ for: "idle:sweep-apparish", timeoutSeconds: 15 },
 			20_000,
 		);
-		await new Promise((r) => setTimeout(r, 100));
+		await roundTrip(waiter.client);
 		record("idle");
 		expect((await pending).event).toBe("idle");
 	}, 20_000);
