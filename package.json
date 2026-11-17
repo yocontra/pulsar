@@ -1,0 +1,71 @@
+{
+	"name": "pulsar",
+	"version": "1.0.0",
+	"description": "MCP server that lets AI coding agents in any harness find and message each other: one machine-wide list, tags, multicast and a * bus.",
+	"keywords": [
+		"mcp",
+		"mcp-server",
+		"model-context-protocol",
+		"agents",
+		"multi-agent",
+		"agent-communication",
+		"claude-code",
+		"codex",
+		"opencode",
+		"pi-package",
+		"omp"
+	],
+	"license": "MIT",
+	"author": "Eric Schoffstall",
+	"homepage": "https://github.com/yocontra/pulsar#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/yocontra/pulsar.git"
+	},
+	"bugs": "https://github.com/yocontra/pulsar/issues",
+	"mcpName": "io.github.yocontra/pulsar",
+	"type": "module",
+	"bin": {
+		"pulsar": "dist/cli.js"
+	},
+	"exports": {
+		"./extension": "./dist/extension.js",
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist",
+		"skills",
+		"install.sh",
+		"README.md",
+		"LICENSE"
+	],
+	"pi": {
+		"extensions": [
+			"./dist/extension.js"
+		],
+		"skills": [
+			"./skills"
+		]
+	},
+	"engines": {
+		"node": ">=22.13"
+	},
+	"scripts": {
+		"build": "rm -rf dist && bun build src/cli.ts src/extension.ts --target=node --format=esm --outdir dist && chmod +x dist/cli.js",
+		"typecheck": "tsc --noEmit && tsc --noEmit -p test",
+		"lint": "biome check .",
+		"format": "biome check --write .",
+		"test": "bun test",
+		"check": "bun run typecheck && bun run lint && bun run test",
+		"prepublishOnly": "bun run check && bun run build"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.6.8",
+		"@modelcontextprotocol/sdk": "^1.32.2",
+		"@types/bun": "latest",
+		"@types/node": "^24.0.0",
+		"jsonc-parser": "^3.3.1",
+		"typescript": "^5.9.3",
+		"zod": "^4.6.7"
+	}
+}

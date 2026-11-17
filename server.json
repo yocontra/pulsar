@@ -1,0 +1,27 @@
+{
+	"$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+	"name": "io.github.yocontra/pulsar",
+	"title": "pulsar",
+	"description": "Let AI coding agents in any harness find and message each other: one list, tags, multicast, * bus.",
+	"repository": {
+		"url": "https://github.com/yocontra/pulsar",
+		"source": "github"
+	},
+	"version": "1.0.0",
+	"packages": [
+		{
+			"registryType": "npm",
+			"identifier": "pulsar",
+			"version": "1.0.0",
+			"transport": {
+				"type": "stdio"
+			},
+			"packageArguments": [
+				{
+					"type": "positional",
+					"value": "mcp"
+				}
+			]
+		}
+	]
+}
