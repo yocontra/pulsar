@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 - 2026-11-16
+
+- `ask`: the reply it waits for goes to the waiting call only. It was also pushed into the asker's session, which started a second prompt in OpenCode and interrupted the `ask`.
+
 ## 1.0.0 - 2026-11-16
 
 First release of pulsar as an agent-communication MCP server. Versions below 1.0.0 were an unrelated 2012 WebSocket pub/sub library, now published as `pulsar-archive`.
