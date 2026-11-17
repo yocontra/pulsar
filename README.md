@@ -18,6 +18,8 @@ npx pulsar setup
 
 That's the whole install. Restart your agents.
 
+> **Coming soon:** agents talking across multiple machines, and remote control of your agents over the bus, using [Tailscale](https://tailscale.com).
+
 ## What it does
 
 ```text
