@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import {
-	chmodSync,
 	existsSync,
 	mkdtempSync,
 	readdirSync,
@@ -14,8 +14,8 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { adapterFor } from "../src/adapters/index.ts";
 import { slug } from "../src/git.ts";
-import { openPr } from "../src/github.ts";
 import { findHarnessAncestor, harnessOfArgs } from "../src/processes.ts";
+import { githubSlug, prFromRefs, prFromText, repoSlug } from "../src/prs.ts";
 import { type Frame, readFrames } from "../src/rpc.ts";
 import { setTomlKey } from "../src/setup/files.ts";
 import { Store } from "../src/store.ts";
@@ -283,39 +283,63 @@ describe("Store", () => {
 	});
 });
 
-describe("openPr", () => {
-	const bin = tempDir("pulsar-gh-");
-	const log = join(bin, "calls.log");
-	const previousPath = process.env.PATH;
-
-	beforeEach(() => {
-		const gh = join(bin, "gh");
-		writeFileSync(
-			gh,
-			`#!/bin/sh\necho "$@" >> "${log}"\necho '[{"number":42}]'\n`,
+describe("offline PR detection", () => {
+	test("githubSlug reads https, ssh and scp remotes", () => {
+		expect(githubSlug("https://github.com/YoContra/Pulsar.git")).toBe(
+			"yocontra/pulsar",
 		);
-		chmodSync(gh, 0o755);
-		process.env.PATH = `${bin}:${previousPath ?? ""}`;
+		expect(githubSlug("git@github.com:yocontra/pulsar.git")).toBe(
+			"yocontra/pulsar",
+		);
+		expect(githubSlug("ssh://git@github.com/yocontra/pulsar")).toBe(
+			"yocontra/pulsar",
+		);
+		expect(githubSlug("https://gitlab.com/a/b.git")).toBeNull();
 	});
 
-	afterAll(() => restoreEnv("PATH", previousPath));
-
-	const calls = () =>
-		existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").length : 0;
-
-	test("default branches and no branch never ask gh", async () => {
-		expect(await openPr(bin, null)).toBeNull();
-		expect(await openPr(bin, "main")).toBeNull();
-		expect(await openPr(bin, "master")).toBeNull();
-		expect(calls()).toBe(0);
+	test("prFromText prefers Claude pr-link records, then the last PR URL, in the agent's repo only", () => {
+		const log = [
+			'{"type":"user","text":"see https://github.com/yocontra/pulsar/pull/10"}',
+			'{"type":"pr-link","prRepository":"yocontra/pulsar","prNumber":1402,"prUrl":"..."}',
+			'{"text":"also https://github.com/yocontra/pulsar/pull/11"}',
+		].join("\n");
+		expect(prFromText(log, "yocontra/pulsar")).toBe(1402);
+		expect(
+			prFromText(
+				"pushed: https://github.com/yocontra/pulsar/pull/7 then /pull/8 https://github.com/yocontra/pulsar/pull/9",
+				"yocontra/pulsar",
+			),
+		).toBe(9);
+		expect(
+			prFromText("https://github.com/other/repo/pull/5", "yocontra/pulsar"),
+		).toBeNull();
+		expect(prFromText("anything", null)).toBeNull();
 	});
 
-	test("asks gh for the branch's open PR once, then serves the cache", async () => {
-		const cwd = tempDir("pulsar-gh-cwd-");
-		expect(await openPr(cwd, "fix-1378")).toBe(42);
-		expect(await openPr(cwd, "fix-1378")).toBe(42);
-		expect(calls()).toBe(1);
-		expect(readFileSync(log, "utf8")).toContain("--head fix-1378");
+	test("prFromRefs finds the PR whose head ref is the checked-out commit; repoSlug reads the push remote", () => {
+		const repo = mkdtempSync(join(tmpdir(), "pulsar-pr-"));
+		const run = (...args: string[]) =>
+			execFileSync("git", ["-C", repo, ...args], {
+				stdio: "ignore",
+				env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null" },
+			});
+		execFileSync("git", ["init", "-q", "-b", "wt-random", repo]);
+		run(
+			"-c",
+			"user.email=t@t",
+			"-c",
+			"user.name=t",
+			"commit",
+			"-q",
+			"--allow-empty",
+			"-m",
+			"x",
+		);
+		expect(prFromRefs(repo)).toBeNull();
+		run("update-ref", "refs/remotes/origin/pr/1402", "HEAD");
+		expect(prFromRefs(repo)).toBe(1402);
+		run("remote", "add", "origin", "git@github.com:yocontra/pulsar.git");
+		expect(repoSlug(repo)).toBe("yocontra/pulsar");
 	});
 });
 

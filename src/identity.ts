@@ -1,5 +1,9 @@
 import { type GitInfo, gitInfo } from "./git.ts";
-import { findHarnessAncestor, harnessOfArgs } from "./processes.ts";
+import {
+	findHarnessAncestor,
+	harnessOfArgs,
+	processTable,
+} from "./processes.ts";
 import {
 	codexThreadCwd,
 	codexThreadId,
@@ -9,7 +13,7 @@ import { HARNESSES, type Harness, type Registration } from "./types.ts";
 
 /** Tags pulsar sets and refreshes itself; agents add any others. */
 export function isAutoTag(tag: string): boolean {
-	return /^(harness|project|branch|worktree|pr|model):/.test(tag);
+	return /^(harness|project|branch|worktree|model):/.test(tag);
 }
 
 /** Points a Codex registration at its thread: id, the thread's folder, and its git tags. */
@@ -76,7 +80,7 @@ export function detectRegistration(role: Registration["role"]): Registration {
 	const meta: Record<string, string> = {};
 	let sessionId: string | null = process.env.PULSAR_SESSION_ID ?? null;
 	let name: string | undefined;
-	let sessionCwd = cwd;
+	let sessionCwd: string | null = cwd;
 
 	if (harness === "claude" && pid) {
 		const rec = readClaudeSession(pid);
@@ -92,8 +96,13 @@ export function detectRegistration(role: Registration["role"]): Registration {
 			process.env.CODEX_THREAD_ID ??
 			process.env.CODEX_SESSION_ID ??
 			(pid ? codexThreadId(pid, sessionCwd) : null);
-		// Under the app-server, this process's folder is not the thread's: use the rollout's.
+		// Under the app-server, this process's folder is not the thread's: use the
+		// rollout's, and claim no folder until the thread is known.
+		const appServer = pid
+			? /\bapp-server\b/.test(processTable().get(pid)?.args ?? "")
+			: false;
 		if (sessionId) sessionCwd = codexThreadCwd(sessionId) ?? sessionCwd;
+		else if (appServer) sessionCwd = null;
 	} else if (harness === "opencode") {
 		sessionId ??= process.env.OPENCODE_SESSION_ID ?? null;
 	}

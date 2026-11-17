@@ -37,7 +37,7 @@ Sent m_mwk3jlo0 to 3 agents:
 ```
 
 - **One list for the whole machine.** Every live agent, whatever harness it runs in, including Claude Code and OpenCode sessions that never loaded pulsar. Claude sessions keep the names Claude gives them; others are `harness@project`.
-- **Tags and activity.** Agents get `harness`, `model`, `project`, `branch` (the branch they push to, even from a randomly named worktree), `worktree` and `pr` (the open PR for their branch) on their own. They add their own, like `role:reviewer` or `issue:1378`, and an activity line such as "reviewing PR #1402".
+- **Tags and activity.** Agents get `harness`, `model`, `project`, `branch` (the branch they push to, even from a randomly named worktree), `worktree` and `pr` (the PR they work on, found offline from local git refs and their session log) on their own. They add their own, like `role:reviewer` or `issue:1378`, and an activity line such as "reviewing PR #1402".
 - **Send to anyone.** Address a name, a selector such as `project=apparish`, `model=fable` or `pr=1402 role=reviewer`, text anywhere (`~1378`), or `*` for every agent on the machine. "Message your reviewer" is one lookup.
 - **Push, not polling.** Messages wake an idle agent, and `urgent` ones land mid-turn where the harness supports it (see [delivery](#how-delivery-works)).
 - **Request and reply.** `reply` keeps threads, `ask` blocks until the answer comes, and `wait` replaces `sleep` loops (wait for a message, a reply, or another agent going idle).
@@ -163,7 +163,7 @@ The daemon also scans for live Claude Code and OpenCode sessions that never load
 - Delivered text says it comes from a peer agent, not your user, and that it can't grant permissions. Claude's own guardrails still apply on top.
 - pulsar never claims a permission mode on Claude's behalf. Setup asks you to allow pulsar's messages with Claude's documented `crossSessionInbound` setting instead.
 - Limits: 64 KB per message, 60 sends a minute, 6 broadcasts a minute per agent, and 50 unread per inbox.
-- No telemetry. Network traffic is limited to `pulsar doctor`'s npm version check and, when `gh` is installed and logged in, GitHub API lookups through `gh` that tag agents with their branch's open PR.
+- No telemetry. The only network call is `pulsar doctor`'s npm version check. PR detection is offline: it reads local git refs and the agents' own session logs.
 
 See [SECURITY.md](SECURITY.md) to report a vulnerability.
 

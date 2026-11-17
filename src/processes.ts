@@ -9,7 +9,7 @@ export interface ProcessInfo {
 }
 
 /** One `ps` call; returns every process keyed by pid. */
-function processTable(): Map<number, ProcessInfo> {
+export function processTable(): Map<number, ProcessInfo> {
 	const table = new Map<number, ProcessInfo>();
 	if (process.platform === "win32") return table;
 	let out = "";

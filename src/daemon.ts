@@ -4,10 +4,10 @@ import { connect, createServer, type Server, type Socket } from "node:net";
 import { basename } from "node:path";
 import { adapterFor } from "./adapters/index.ts";
 import { gitInfo, slug } from "./git.ts";
-import { openPr } from "./github.ts";
 import { autoTags, isAutoTag } from "./identity.ts";
 import { codexModel, opencodeModel } from "./models.ts";
 import { dbPath, socketPath } from "./paths.ts";
+import { prFromRefs, prFromText, repoSlug } from "./prs.ts";
 import { type Frame, RpcError, readFrames, writeFrame } from "./rpc.ts";
 import {
 	pidAlive,
@@ -17,6 +17,7 @@ import {
 } from "./scanners.ts";
 import { isBroadcast, matches, parseSelector } from "./selector.ts";
 import { Store } from "./store.ts";
+import { sessionText } from "./transcripts.ts";
 import {
 	type Agent,
 	type AgentStatus,
@@ -318,7 +319,7 @@ export class Daemon {
 			createdAt: existing?.createdAt ?? now,
 			meta: { ...(existing?.meta ?? {}), ...input.meta, nameFrom },
 		};
-		this.finishTags(agent, existing?.tags, existing?.branch);
+		this.finishTags(agent);
 		agent.reach = this.reachOf(agent);
 		this.agents.set(id, agent);
 		if (previousStatus !== "idle" && agent.status === "idle")
@@ -416,7 +417,6 @@ export class Daemon {
 	/** Sets an agent's git fields and auto-tags; self-tags are kept. */
 	private applyGit(agent: Agent, git: ReturnType<typeof gitInfo>) {
 		const before = agent.tags;
-		const beforeBranch = agent.branch;
 		const changed =
 			agent.project !== git.project || agent.branch !== git.branch;
 		agent.project = git.project;
@@ -425,47 +425,43 @@ export class Daemon {
 			...autoTags(agent.harness, git),
 			...before.filter((t) => !isAutoTag(t)),
 		];
-		this.finishTags(agent, before, beforeBranch);
+		this.finishTags(agent);
 		if (changed || agent.tags.join() !== before.join())
 			this.emitTail("agent", { action: "update", agent: toPublic(agent) });
 	}
 
 	/**
-	 * Adds the auto-tags that do not come from git: `model:<id>`, and `pr:<n>`
-	 * carried over while the branch is the same (the PR refresh sets it).
+	 * Adds the auto-tag that does not come from git: `model:<id>`.
 	 */
-	private finishTags(
-		agent: Agent,
-		previous: string[] | undefined,
-		previousBranch: string | null | undefined,
-	) {
-		const keepPr =
-			previous && previousBranch === agent.branch
-				? previous.filter((t) => t.startsWith("pr:"))
-				: [];
-		const base = agent.tags.filter(
-			(t) => !t.startsWith("model:") && !t.startsWith("pr:"),
-		);
+	private finishTags(agent: Agent) {
+		const base = agent.tags.filter((t) => !t.startsWith("model:"));
 		agent.tags = [
-			...new Set([
-				...base,
-				...keepPr,
-				...(agent.model ? [`model:${agent.model}`] : []),
-			]),
+			...new Set([...base, ...(agent.model ? [`model:${agent.model}`] : [])]),
 		];
 	}
 
-	/** Tags each agent with the open GitHub PR for its branch (via `gh`, cached). */
+	/**
+	 * Tags each agent with the PR it works on, offline: PR refs in the local repo
+	 * that point at its branch, else the last PR of its repo named in its own
+	 * session log (Claude's pr-link records, `gh pr create` output, PR URLs).
+	 * Only the tag pulsar added is replaced; `pr:` tags an agent set stay.
+	 */
 	private async refreshPrs() {
+		const slugs = new Map<string, string | null>();
 		for (const agent of this.live()) {
-			if (!agent.cwd || !agent.branch) continue;
-			const pr = await openPr(agent.cwd, agent.branch);
-			const tags = agent.tags.filter((t) => !t.startsWith("pr:"));
-			if (pr) tags.push(`pr:${pr}`);
-			if (tags.join() !== agent.tags.join()) {
-				agent.tags = tags;
-				this.emitTail("agent", { action: "update", agent: toPublic(agent) });
-			}
+			if (!agent.cwd) continue;
+			if (!slugs.has(agent.cwd)) slugs.set(agent.cwd, repoSlug(agent.cwd));
+			const pr =
+				prFromRefs(agent.cwd) ??
+				prFromText(await sessionText(agent), slugs.get(agent.cwd) ?? null);
+			const next = pr ? String(pr) : "";
+			const prev = agent.meta.autoPr ?? "";
+			if (next === prev) continue;
+			agent.tags = agent.tags.filter((t) => !prev || t !== `pr:${prev}`);
+			if (next && !agent.tags.includes(`pr:${next}`))
+				agent.tags.push(`pr:${next}`);
+			agent.meta.autoPr = next;
+			this.emitTail("agent", { action: "update", agent: toPublic(agent) });
 		}
 	}
 
@@ -481,7 +477,7 @@ export class Daemon {
 						: null;
 			if (model && model !== agent.model) {
 				agent.model = model;
-				this.finishTags(agent, agent.tags, agent.branch);
+				this.finishTags(agent);
 			}
 		}
 	}
@@ -821,7 +817,7 @@ export class Daemon {
 			me.activity = activity.slice(0, 500) || null;
 		if (typeof p.model === "string" && p.model.trim()) {
 			me.model = p.model.trim().slice(0, 120);
-			this.finishTags(me, me.tags, me.branch);
+			this.finishTags(me);
 		}
 		if (
 			p.inbound === "accept" ||
@@ -837,7 +833,10 @@ export class Daemon {
 			me.id,
 			{
 				name: me.name,
-				tags: me.tags.filter((t) => !isAutoTag(t)),
+				// The PR tag pulsar detected is re-detected, not saved as the agent's own.
+				tags: me.tags.filter(
+					(t) => !isAutoTag(t) && t !== `pr:${me.meta.autoPr}`,
+				),
 				activity: me.activity,
 				inbound: me.inbound,
 			},

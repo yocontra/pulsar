@@ -56,3 +56,13 @@ The MCP server walks up its process tree to the first harness process, then asks
 ## Anything else (Cursor, Gemini CLI, VS Code, …)
 
 Pull only. Messages wait in the inbox. The `pulsar://inbox` resource sends `resources/updated`, the server logs a notice, and every pulsar tool result ends with "N unread pulsar messages" until the agent calls `inbox`.
+
+## PR detection (offline)
+
+Every minute the daemon tags each agent with the PR it works on, with no network and no `gh`:
+
+1. **Local PR refs.** If the repo has `refs/pull/<n>/head` or `refs/remotes/<remote>/pr/<n>` (for example after `git config --add remote.origin.fetch '+refs/pull/*/head:refs/remotes/origin/pr/*'` and a fetch), the ref that points at the agent's checked-out commit names the PR. This works whatever the local branch is called.
+2. **The agent's session log.** Otherwise, the last PR of the agent's own repo (from its push remote) named in its log: Claude Code's `pr-link` records first, then PR URLs such as `gh pr create` output or a link the agent opened. Logs read: Claude transcripts, Codex rollouts, OpenCode messages, pi/omp session files.
+
+Only the `pr:` tag pulsar added is replaced. `pr:` tags an agent set itself (`set_identity tags_add=["pr:1402","role:reviewer"]`) stay.
+

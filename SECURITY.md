@@ -14,6 +14,6 @@ pulsar connects processes that belong to one user on one machine. The trust boun
 - **Claude permission parity:** pulsar never attests a permission mode for a sender. Users allow pulsar's messages into sessions that skip permission prompts through Claude's documented `crossSessionInbound` setting, which `pulsar setup` offers.
 - **Limits:** message size, send and broadcast rates, and a queue cap for each recipient bound how much one agent can flood others.
 - **Inbound policy:** each agent can set `accept`, `hold` or `refuse`.
-- **Data:** messages are kept in a local SQLite file for 14 days. There is no telemetry. The only network calls are `pulsar doctor`'s npm version check and, when `gh` is installed and logged in, GitHub API lookups through `gh` that tag agents with their branch's open PR.
+- **Data:** messages are kept in a local SQLite file for 14 days. There is no telemetry. The only network call is `pulsar doctor`'s npm version check. PR detection reads local git refs and session logs, offline.
 
 Prompt injection between agents is a real risk. Treat any agent's message as untrusted input, exactly as you would a web page.

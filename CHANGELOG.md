@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 - 2026-11-16
+
+- PR detection is fully offline and no longer uses `gh`. pulsar reads PR refs already in the local repo (`refs/pull/<n>/head`, `refs/remotes/<remote>/pr/<n>`) that point at the agent's commit, and otherwise the last PR of the agent's repo named in its own session log (Claude Code `pr-link` records first, then PR URLs). pulsar makes no network calls apart from `pulsar doctor`'s version check.
+- `pr:` tags an agent sets on itself are kept; only the tag pulsar detected is replaced.
+- A Codex app-server thread that pulsar cannot yet tie to a thread claims no folder (it used to report the app-server's own folder).
+
 ## 1.2.0 - 2026-11-16
 
 Cleanup release: fixes from a full audit, no new features.

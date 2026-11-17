@@ -29,7 +29,7 @@ set_identity activity="reviewing PR #1402" tags_add=["pr:1402", "role:reviewer"]
 set_identity activity="fixing issue #1378" tags_add=["issue:1378", "role:author"]
 ```
 
-pulsar sets `harness`, `model`, `project`, `branch`, `worktree` and `pr` (the open PR for your branch) on its own. If you move to another worktree, pass `cwd=<its path>`.
+pulsar sets `harness`, `model`, `project`, `branch`, `worktree` and `pr` (the PR you work on, from local git refs or a PR link in your session) on its own. If you move to another worktree, pass `cwd=<its path>`.
 
 ## Common lookups
 
