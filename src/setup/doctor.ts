@@ -23,6 +23,27 @@ async function latestVersion(): Promise<string | null> {
 	}
 }
 
+/** True when semver `a` is newer than `b` (prereleases count as older). */
+export function newer(a: string, b: string): boolean {
+	const parse = (v: string) => {
+		const [core, pre] = v.split("-", 2);
+		return {
+			nums: (core ?? "").split(".").map((n) => Number(n) || 0),
+			pre: pre ?? null,
+		};
+	};
+	const x = parse(a);
+	const y = parse(b);
+	for (let i = 0; i < 3; i++) {
+		const d = (x.nums[i] ?? 0) - (y.nums[i] ?? 0);
+		if (d !== 0) return d > 0;
+	}
+	if (x.pre === y.pre) return false;
+	if (x.pre === null) return true;
+	if (y.pre === null) return false;
+	return x.pre > y.pre;
+}
+
 /** Checks the daemon and every harness integration. Returns an exit code. */
 export async function runDoctor(
 	opts: { quiet?: boolean } = {},
@@ -69,7 +90,7 @@ export async function runDoctor(
 
 	if (!opts.quiet) {
 		const latest = await latestVersion();
-		if (latest && latest !== VERSION)
+		if (latest && newer(latest, VERSION))
 			note(`pulsar ${latest} is available: run \`npx pulsar@latest setup\``);
 	}
 	return problems ? 1 : 0;
