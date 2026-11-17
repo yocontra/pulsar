@@ -85,10 +85,15 @@ export function head(file: string, bytes = 256 * 1024): string {
 
 /** The last model id written in a JSONL log, skipping placeholders like `<synthetic>`. */
 export function lastModel(text: string): string | null {
-	const re = /"model"\s*:\s*"([^"<>]+)"/g;
+	// `model` (Claude, Codex, pi/omp messages, omp's model_change as provider/id)
+	// and `modelId` (pi's model_change); the last one written wins.
+	const re = /"model(?:Id)?"\s*:\s*"([^"<>]+)"/g;
 	let found: string | null = null;
 	for (let m = re.exec(text); m; m = re.exec(text)) found = m[1] ?? found;
-	return found;
+	if (!found) return null;
+	// omp writes `provider/model`; keep ids consistent across harnesses.
+	const slash = found.lastIndexOf("/");
+	return slash >= 0 ? found.slice(slash + 1) || found : found;
 }
 
 /** Runs a command and resolves with its stdout; rejects with a short stderr message. */

@@ -4,26 +4,39 @@ import { join } from "node:path";
 import { tail } from "../util.ts";
 
 /**
- * pi-style session log: the newest session file for a folder in
- * `~/<dir>/agent/sessions/--<cwd with / as ->--/*.jsonl` ("" when none).
- * Shared by the pi and omp drivers (omp keeps pi's session layout).
+ * Session folder names a pi-style harness may use for a working folder:
+ * pi's `--<abs path with / as ->--`, and omp's home-relative `-<path under ~>`
+ * (omp uses the `--…--` form only outside the home folder).
+ */
+export function sessionFolderNames(cwd: string, home = homedir()): string[] {
+	const dashed = (p: string) => p.replace(/^\//, "").replace(/\//g, "-");
+	const names = [`--${dashed(cwd)}--`];
+	if (cwd === home) names.push("-");
+	else if (cwd.startsWith(`${home}/`))
+		names.push(`-${dashed(cwd.slice(home.length))}`);
+	return names;
+}
+
+/**
+ * pi-style session log: the newest session file for a folder under
+ * `~/<dir>/agent/sessions/<folder>/*.jsonl` ("" when none). Shared by the pi
+ * and omp drivers.
  */
 export function piSessionLog(dir: string, cwd: string | null): string {
 	if (!cwd) return "";
 	const root = join(homedir(), dir, "agent", "sessions");
-	const folder = join(
-		root,
-		`--${cwd.replace(/^\//, "").replace(/\//g, "-")}--`,
-	);
-	let file: string | null = null;
-	try {
-		const newest = readdirSync(folder)
-			.filter((f) => f.endsWith(".jsonl"))
-			.map((f) => ({ f, t: statSync(join(folder, f)).mtimeMs }))
-			.sort((a, b) => b.t - a.t)[0];
-		file = newest ? join(folder, newest.f) : null;
-	} catch {
-		file = null;
+	let newest: { file: string; t: number } | null = null;
+	for (const name of sessionFolderNames(cwd)) {
+		const folder = join(root, name);
+		try {
+			for (const f of readdirSync(folder)) {
+				if (!f.endsWith(".jsonl")) continue;
+				const t = statSync(join(folder, f)).mtimeMs;
+				if (!newest || t > newest.t) newest = { file: join(folder, f), t };
+			}
+		} catch {
+			// This naming scheme isn't used for this folder.
+		}
 	}
-	return file ? tail(file, 512 * 1024) : "";
+	return newest ? tail(newest.file, 512 * 1024) : "";
 }

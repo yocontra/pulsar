@@ -401,3 +401,36 @@ describe("slug", () => {
 		expect(slug("@@@")).toBe("");
 	});
 });
+
+describe("pi/omp session folders and model ids", () => {
+	test("sessionFolderNames covers pi's absolute form and omp's home-relative form", async () => {
+		const { sessionFolderNames } = await import(
+			"../src/harnesses/pi-sessions.ts"
+		);
+		expect(sessionFolderNames("/Users/me/Projects/app", "/Users/me")).toEqual([
+			"--Users-me-Projects-app--",
+			"-Projects-app",
+		]);
+		expect(sessionFolderNames("/Users/me", "/Users/me")).toEqual([
+			"--Users-me--",
+			"-",
+		]);
+		expect(sessionFolderNames("/Volumes/data/x", "/Users/me")).toEqual([
+			"--Volumes-data-x--",
+		]);
+	});
+
+	test("lastModel reads pi's modelId and strips omp's provider prefix", async () => {
+		const { lastModel } = await import("../src/util.ts");
+		expect(
+			lastModel(
+				'{"type":"model_change","provider":"anthropic","modelId":"claude-fable-5-2"}',
+			),
+		).toBe("claude-fable-5-2");
+		expect(
+			lastModel('{"type":"model_change","model":"openrouter/gpt-6-astra"}'),
+		).toBe("gpt-6-astra");
+		expect(lastModel('{"model":"a"}\n{"model":"b"}')).toBe("b");
+		expect(lastModel("nothing here")).toBeNull();
+	});
+});

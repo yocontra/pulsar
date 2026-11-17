@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0 - 2026-11-17
+
+- omp sessions in folders under the home directory are found again. omp names those session folders relative to home (`-Projects` for `~/Projects`), which pulsar missed, so PR detection and model lookup failed for them.
+- Model ids from pi (`model_change.modelId`) are read, and omp's `provider/model` ids are shortened to the model id, so `model=` selectors match the same way across harnesses.
+
 ## 1.3.0 - 2026-11-16
 
 - PR detection is fully offline and no longer uses `gh`. pulsar reads PR refs already in the local repo (`refs/pull/<n>/head`, `refs/remotes/<remote>/pr/<n>`) that point at the agent's commit, and otherwise the last PR of the agent's repo named in its own session log (Claude Code `pr-link` records first, then PR URLs). pulsar makes no network calls apart from `pulsar doctor`'s version check.
