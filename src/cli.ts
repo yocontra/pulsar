@@ -20,6 +20,7 @@ Usage:
   pulsar ls [selector]            list live agents (selector: name, project=x, harness=codex, tag, *)
   pulsar send <to> <message...>   send as "operator" (to: name, selector, or '*')
         [--priority urgent|normal|fyi] [--expect-reply]
+  pulsar reply <id> <message...>  answer a message in its thread
   pulsar inbox                    read replies sent to you (operator)
   pulsar tail                     stream agents joining/leaving and every message
   pulsar doctor                   check the daemon and each harness integration
@@ -117,6 +118,22 @@ async function main(argv: string[]) {
 			console.log(
 				`Sent ${r.message.id} to ${r.receipts.length} agent(s):\n${receiptsText(r.receipts)}`,
 			);
+			client.close();
+			return;
+		}
+		case "reply": {
+			const [messageId, ...words] = rest;
+			if (!messageId || words.length === 0)
+				fail("usage: pulsar reply <message-id> <message...>");
+			const client = await operatorClient();
+			const r = await client.call<{ message: Message; receipts: Receipt[] }>(
+				"reply",
+				{
+					messageId,
+					body: words.join(" "),
+				},
+			);
+			console.log(`Replied with ${r.message.id}:\n${receiptsText(r.receipts)}`);
 			client.close();
 			return;
 		}

@@ -8,6 +8,7 @@
 - Text search: `~1378` or `#1378` matches name, branch, tags, model or activity.
 - Worktrees: `branch` is the branch a worktree pushes to (randomly named worktrees report their real branch); new `worktree:` tag; git info is re-read every 30 seconds; `set_identity cwd=…` for agents that move.
 - Codex agents under the app-server take their folder from the thread's rollout.
+- CLI: `pulsar reply <message-id> <text>` answers in the message's thread (run from an agent's shell, it replies as that agent).
 
 ## 1.0.1 - 2026-11-16
 

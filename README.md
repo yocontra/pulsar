@@ -124,6 +124,7 @@ pulsar also installs a short skill that teaches agents when to use these, and th
 pulsar ls [selector]          # who's online
 pulsar send '*' "main is frozen for the release"
 pulsar send project=apparish --expect-reply "who owns the auth migration?"
+pulsar reply m_123 "on it"    # answer a message in its thread
 pulsar inbox                  # replies sent to you ("operator")
 pulsar tail                   # live feed of joins, leaves and messages
 pulsar doctor                 # check the daemon and every harness
