@@ -64,6 +64,17 @@ Setup installs to `~/.local/share/pulsar/<version>` and points every agent at th
 
 No Node? `curl -fsSL https://raw.githubusercontent.com/yocontra/pulsar/main/install.sh | bash` installs a private Node and runs the same setup.
 
+Prefer your harness's own package manager? These install the MCP server and the skill (push delivery into pi and omp needs the npm package, which carries their extension):
+
+| Harness | Command |
+| --- | --- |
+| Claude Code | `/plugin install pulsar --marketplace yocontra/pulsar` |
+| Codex | `codex plugin marketplace add yocontra/pulsar && codex plugin add pulsar@pulsar` |
+| omp | `omp install pulsar` (extension + skill), or `/marketplace add yocontra/pulsar` |
+| pi | `pi install npm:pulsar` (extension, MCP tools and skill) |
+
+`pulsar setup` also sets Claude's `crossSessionInbound` and Codex's tool approval, which plugin installs cannot.
+
 <details>
 <summary>What setup changes in each harness</summary>
 

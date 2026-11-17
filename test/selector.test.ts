@@ -85,3 +85,18 @@ describe("doctor version compare", () => {
 		expect(newer("1.0.0", "1.0.0")).toBe(false);
 	});
 });
+
+describe("release metadata", () => {
+	test("plugin, marketplace and server.json versions match package.json", async () => {
+		const { readFileSync } = await import("node:fs");
+		const read = (p: string) =>
+			JSON.parse(readFileSync(new URL(`../${p}`, import.meta.url), "utf8"));
+		const version = read("package.json").version;
+		expect(read(".claude-plugin/plugin.json").version).toBe(version);
+		expect(read(".claude-plugin/marketplace.json").plugins[0].version).toBe(
+			version,
+		);
+		expect(read("server.json").version).toBe(version);
+		expect(read("server.json").packages[0].version).toBe(version);
+	});
+});
