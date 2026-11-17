@@ -14,7 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { stateDir } from "../paths.ts";
+import { installRoot, stateDir } from "../paths.ts";
 import { VERSION } from "../version.ts";
 import {
 	type Action,
@@ -63,13 +63,6 @@ function packageRoot(): string {
 		dir = dirname(dir);
 	}
 	throw new Error("could not find the pulsar package folder");
-}
-
-export function installRoot(): string {
-	return (
-		process.env.PULSAR_INSTALL_ROOT ??
-		join(process.env.XDG_DATA_HOME ?? join(home, ".local", "share"), "pulsar")
-	);
 }
 
 /**
@@ -301,6 +294,11 @@ async function restartOutdatedDaemon() {
 		const status = await client.call<{ version: string }>("status");
 		if (status.version !== VERSION) {
 			await client.call("shutdown");
+			// Start the new daemon at once (from `current`), before older sessions reconnect.
+			await new Promise((r) => setTimeout(r, 300));
+			const fresh = new DaemonClient();
+			await fresh.connect(true).catch(() => {});
+			fresh.close();
 			console.log(
 				`Restarted the pulsar daemon (${status.version} → ${VERSION}).`,
 			);

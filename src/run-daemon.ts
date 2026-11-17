@@ -1,6 +1,15 @@
-import { appendFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import {
+	appendFileSync,
+	existsSync,
+	readFileSync,
+	realpathSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Daemon } from "./daemon.ts";
-import { logPath } from "./paths.ts";
+import { currentCli, logPath } from "./paths.ts";
+import { newer } from "./setup/doctor.ts";
 import { VERSION } from "./version.ts";
 
 function log(line: string) {
@@ -11,6 +20,7 @@ function log(line: string) {
 
 /** Runs the daemon until it is idle for a long time or told to stop. */
 export async function runDaemon() {
+	if (handOffToNewer()) process.exit(0);
 	const daemon = new Daemon();
 	const started = await daemon.start();
 	if (!started) {
@@ -33,4 +43,28 @@ export async function runDaemon() {
 		if (daemon.idleTooLong()) void stop("idle");
 	}, 60_000).unref();
 	await new Promise(() => {});
+}
+
+/** When setup installed a newer version than this copy, start that daemon instead. */
+function handOffToNewer(): boolean {
+	const installed = currentCli();
+	if (!existsSync(installed)) return false;
+	try {
+		if (
+			realpathSync(installed) === realpathSync(fileURLToPath(import.meta.url))
+		)
+			return false;
+		const pkg = JSON.parse(
+			readFileSync(join(dirname(installed), "..", "package.json"), "utf8"),
+		) as { version: string };
+		if (!newer(pkg.version, VERSION)) return false;
+		spawn(process.execPath, [installed, "daemon"], {
+			detached: true,
+			stdio: "ignore",
+		}).unref();
+		log(`daemon ${VERSION} handed off to installed ${pkg.version}`);
+		return true;
+	} catch {
+		return false;
+	}
 }

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { connect, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
-import { socketPath } from "./paths.ts";
+import { currentCli, socketPath } from "./paths.ts";
 import { type Frame, RpcError, readFrames, writeFrame } from "./rpc.ts";
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
@@ -17,6 +17,10 @@ function tryConnect(path: string): Promise<Socket> {
 
 /** The CLI entry the daemon is started from (works from src/ and from dist/). */
 function cliEntry(): string {
+	// Prefer the installed `current` version, so a session still running an older
+	// copy never restarts an outdated daemon after an upgrade.
+	const installed = currentCli();
+	if (existsSync(installed)) return installed;
 	const here = fileURLToPath(new URL(".", import.meta.url));
 	const js = `${here}cli.js`;
 	return existsSync(js) ? js : `${here}cli.ts`;
