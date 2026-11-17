@@ -332,3 +332,85 @@ async function startDaemonAt(home: string) {
 	await d.start();
 	return { daemon: d };
 }
+
+describe("identity safety", () => {
+	test("no agent can take the operator name", async () => {
+		const a = await spawnAgent();
+		const r = await a.client.call<{ agent: PublicAgent }>("set_identity", {
+			name: "operator",
+		});
+		expect(r.agent.name).not.toBe("operator");
+	});
+
+	test("a CLI call from inside an agent speaks as that agent", async () => {
+		const agent = await spawnAgent({
+			harness: "codex",
+			role: "mcp",
+			sessionId: "thread-1",
+		});
+		const peer = await spawnAgent();
+		const { DaemonClient } = await import("../src/client.ts");
+		const { PROTOCOL_VERSION } = await import("../src/types.ts");
+		const cli = new DaemonClient();
+		await cli.connect(false);
+		clients.push(cli);
+		await cli.call("hello", {
+			protocol: PROTOCOL_VERSION,
+			registration: registration({
+				harness: "codex",
+				role: "cli",
+				sessionId: "thread-1",
+			}),
+		});
+		const r = await cli.call<SendResult>("send", {
+			to: peer.agent.name,
+			body: "from my shell",
+		});
+		expect(r.message.fromId).toBe(agent.agent.id);
+		cli.close();
+		await new Promise((res) => setTimeout(res, 50));
+		expect(daemon.live().some((a) => a.id === agent.agent.id)).toBe(true);
+	});
+
+	test("one MCP connection owns a session id", async () => {
+		await spawnAgent({ harness: "codex", role: "mcp", sessionId: "thread-x" });
+		await expect(
+			agentClient(
+				registration({ harness: "codex", role: "mcp", sessionId: "thread-x" }),
+			),
+		).rejects.toThrow(/already served/);
+	});
+});
+
+describe("receipts", () => {
+	test("extension pushes are sent, then delivered on ack", async () => {
+		const sender = await spawnAgent();
+		const peer = await spawnAgent();
+		const r = await sender.client.call<SendResult>("send", {
+			to: peer.agent.name,
+			body: "x",
+		});
+		expect(r.receipts[0]!.state).toBe("sent");
+		await until(() => peer.pushes.length === 1);
+		await peer.client.call("ack", { messageId: r.message.id });
+		const h = await sender.client.call<{ receipts: Receipt[] }>("history", {
+			messageId: r.message.id,
+		});
+		expect(h.receipts[0]!.state).toBe("delivered");
+	});
+
+	test("a nack puts the message back in the inbox", async () => {
+		const sender = await spawnAgent();
+		const peer = await spawnAgent();
+		const r = await sender.client.call<SendResult>("send", {
+			to: peer.agent.name,
+			body: "retry me",
+		});
+		await peer.client.call("nack", { messageId: r.message.id, reason: "busy" });
+		const inbox = await peer.client.call<{ messages: DeliveredMessage[] }>(
+			"inbox",
+			{},
+		);
+		expect(inbox.messages.map((m) => m.body)).toEqual(["retry me"]);
+	});
+});

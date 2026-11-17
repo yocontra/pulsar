@@ -53,6 +53,10 @@ main() {
 	else
 		install_node
 	fi
+	# Piped into bash, stdin is the script itself: ask the question on the terminal instead.
+	if [ ! -t 0 ] && (exec </dev/tty) 2>/dev/null; then
+		exec npx --yes pulsar@latest setup "$@" </dev/tty
+	fi
 	exec npx --yes pulsar@latest setup "$@"
 }
 

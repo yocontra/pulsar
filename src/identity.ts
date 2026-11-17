@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Harness, Registration } from "./types.ts";
@@ -139,12 +139,13 @@ export function readClaudeSession(pid: number): ClaudeSessionRecord | null {
 }
 
 /**
- * The Codex thread a codex process is writing, from the rollout file it holds
- * open (`rollout-<time>-<thread uuid>.jsonl`). Codex does not tell MCP servers
- * their thread id. When one process serves several threads, the one whose
- * recorded cwd matches wins, newest first.
+ * Codex threads a codex process is writing, best guess first. Codex does not
+ * tell MCP servers their thread id, but it holds each thread's
+ * `rollout-<time>-<thread uuid>.jsonl` open. The app-server daemon serves many
+ * threads from one process, so candidates whose recorded cwd matches come
+ * first, newest first; the daemon refuses a thread another session claimed.
  */
-export function codexThreadId(pid: number, cwd: string | null): string | null {
+export function codexThreadIds(pid: number, cwd: string | null): string[] {
 	let out = "";
 	try {
 		out = execFileSync("lsof", ["-p", String(pid), "-Fn"], {
@@ -153,32 +154,73 @@ export function codexThreadId(pid: number, cwd: string | null): string | null {
 			timeout: 3000,
 		});
 	} catch {
-		return null;
+		return [];
 	}
-	const files = out
-		.split("\n")
-		.filter((l) => l.startsWith("n") && /rollout-.*\.jsonl$/.test(l))
-		.map((l) => l.slice(1));
-	const candidates: Array<{ id: string; cwd: string | null; file: string }> =
+	const candidates: Array<{ id: string; cwdMatch: boolean; mtime: number }> =
 		[];
-	for (const file of files) {
+	for (const line of out.split("\n")) {
+		if (!line.startsWith("n") || !/rollout-.*\.jsonl$/.test(line)) continue;
+		const file = line.slice(1);
 		const id =
 			/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/.exec(
 				file,
 			)?.[1];
 		if (!id) continue;
-		let recorded: string | null = null;
 		try {
 			const head = readFileSync(file, "utf8").slice(0, 8192);
-			recorded = /"cwd":"([^"]+)"/.exec(head)?.[1] ?? null;
 			if (head.includes("parent_thread_id")) continue;
+			const recorded = /"cwd":"([^"]+)"/.exec(head)?.[1] ?? null;
+			candidates.push({
+				id,
+				cwdMatch: !!cwd && recorded === cwd,
+				mtime: statSync(file).mtimeMs,
+			});
 		} catch {}
-		candidates.push({ id, cwd: recorded, file });
 	}
-	const match =
-		candidates.find((c) => cwd && c.cwd === cwd) ??
-		(candidates.length === 1 ? candidates[0] : undefined);
-	return match?.id ?? null;
+	return candidates
+		.sort(
+			(a, b) => Number(b.cwdMatch) - Number(a.cwdMatch) || b.mtime - a.mtime,
+		)
+		.map((c) => c.id);
+}
+
+/** The best Codex thread guess for a process, skipping ones already claimed. */
+export function codexThreadId(
+	pid: number,
+	cwd: string | null,
+	exclude: Set<string> = new Set(),
+): string | null {
+	return codexThreadIds(pid, cwd).find((id) => !exclude.has(id)) ?? null;
+}
+
+/** True when OpenCode's shared background server is running (never starts one). */
+export function opencodeServiceRunning(table = processTable()): boolean {
+	for (const p of table.values())
+		if (/opencode(\S*)? serve\b.*--service/.test(p.args)) return true;
+	return false;
+}
+
+/** The folder an OpenCode session works in, from its server. */
+export function opencodeSessionDir(sessionId: string): string | null {
+	if (!opencodeServiceRunning()) return null;
+	try {
+		const out = execFileSync(
+			"opencode",
+			["api", "GET", `/api/session/${sessionId}`],
+			{
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+				timeout: 5000,
+			},
+		);
+		const info = JSON.parse(out) as {
+			directory?: string;
+			data?: { directory?: string };
+		};
+		return info.directory ?? info.data?.directory ?? null;
+	} catch {
+		return null;
+	}
 }
 
 /** Auto-tags every agent gets. Self-tags are added on top. */

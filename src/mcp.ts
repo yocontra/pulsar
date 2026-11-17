@@ -1,9 +1,19 @@
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { DaemonClient } from "./client.ts";
 import { agentsText, messageText, receiptsText } from "./format.ts";
-import { codexThreadId, detectRegistration } from "./identity.ts";
+import {
+	autoTags,
+	codexThreadId,
+	detectRegistration,
+	envTags,
+	gitInfo,
+	opencodeSessionDir,
+} from "./identity.ts";
+import { stateDir } from "./paths.ts";
 import type {
 	DeliveredMessage,
 	Message,
@@ -22,6 +32,10 @@ const INSTRUCTIONS = `pulsar connects you to every other AI agent on this machin
 - set_identity tags you (e.g. workstream:auth) so others can find you by what you work on.`;
 
 type SendResult = { message: Message; receipts: Receipt[] };
+type Meta = Record<string, unknown> | undefined;
+
+/** `_meta` keys harnesses use to say which of their sessions made a tool call. */
+const OPENCODE_SESSION_KEY = "ai.opencode/sessionID";
 
 function text(t: string) {
 	return { content: [{ type: "text" as const, text: t }] };
@@ -36,12 +50,122 @@ function errorText(e: unknown) {
 	};
 }
 
-/** Runs the stdio MCP server for one agent session. */
-export async function runMcp() {
-	const registration: Registration = detectRegistration("mcp");
-	const client = new DaemonClient();
-	let me: PublicAgent | null = null;
+function debug(line: string) {
+	if (!process.env.PULSAR_DEBUG) return;
+	try {
+		appendFileSync(
+			join(stateDir(), "mcp-debug.log"),
+			`${new Date().toISOString()} [${process.pid}] ${line}\n`,
+		);
+	} catch {}
+}
 
+/**
+ * One agent's connection to the daemon. Usually an MCP server serves one
+ * agent; OpenCode's shared server serves many, one Session per OpenCode session.
+ */
+class Session {
+	readonly client = new DaemonClient();
+	me: PublicAgent | null = null;
+	private connecting: Promise<void> | null = null;
+
+	readonly registration: Registration;
+	private readonly onMessage: (m: DeliveredMessage) => void;
+
+	constructor(
+		registration: Registration,
+		onMessage: (m: DeliveredMessage) => void,
+	) {
+		this.registration = registration;
+		this.onMessage = onMessage;
+		this.client.on("message", (d) => this.onMessage(d as DeliveredMessage));
+		// Reconnect when the daemon restarts (upgrade, crash), keeping the identity.
+		this.client.onClose(() => {
+			this.me = null;
+			let delay = 250;
+			const retry = () => {
+				this.ensure().catch(() => {
+					delay = Math.min(delay * 2, 10_000);
+					setTimeout(retry, delay).unref();
+				});
+			};
+			setTimeout(retry, delay).unref();
+		});
+	}
+
+	/** Codex threads another connection already serves. */
+	private readonly claimed = new Set<string>();
+
+	private async hello(): Promise<void> {
+		try {
+			const r = await this.client.call<{ agent: PublicAgent }>("hello", {
+				protocol: PROTOCOL_VERSION,
+				version: VERSION,
+				registration: this.registration,
+			});
+			this.me = r.agent;
+		} catch (e) {
+			const reg = this.registration;
+			if (
+				(e as { code?: string }).code !== "session_claimed" ||
+				reg.harness !== "codex" ||
+				!reg.sessionId
+			)
+				throw e;
+			// Two Codex threads share one app-server: take the next candidate.
+			this.claimed.add(reg.sessionId);
+			reg.sessionId = reg.pid
+				? codexThreadId(reg.pid, reg.cwd, this.claimed)
+				: null;
+			return this.hello();
+		}
+	}
+
+	ensure(): Promise<void> {
+		if (this.client.connected && this.me) return Promise.resolve();
+		this.connecting ??= (async () => {
+			try {
+				if (!this.client.connected) await this.client.connect(true);
+				await this.hello();
+			} finally {
+				this.connecting = null;
+			}
+		})();
+		return this.connecting;
+	}
+
+	/**
+	 * Codex creates its thread (and rollout file) after starting MCP servers, so
+	 * the thread id can appear later. Once it does, say hello again: the daemon
+	 * moves this agent to its thread id, which `codex queue` can push to.
+	 */
+	async refresh() {
+		const reg = this.registration;
+		if (reg.harness !== "codex" || reg.sessionId || !reg.pid) return;
+		const thread = codexThreadId(reg.pid, reg.cwd, this.claimed);
+		if (!thread) return;
+		reg.sessionId = thread;
+		await this.hello();
+	}
+
+	async call<T>(
+		method: string,
+		params?: unknown,
+		timeoutMs?: number,
+	): Promise<T> {
+		await this.ensure();
+		await this.refresh();
+		return this.client.call<T>(method, params, timeoutMs);
+	}
+
+	close() {
+		this.client.close();
+	}
+}
+
+/** Runs the stdio MCP server for one agent session (or one per OpenCode session). */
+export async function runMcp() {
+	const base = detectRegistration("mcp");
 	const server = new McpServer(
 		{ name: "pulsar", version: VERSION },
 		{
@@ -50,35 +174,7 @@ export async function runMcp() {
 		},
 	);
 
-	async function connect() {
-		await client.connect(true);
-		const hello = await client.call<{ agent: PublicAgent }>("hello", {
-			protocol: PROTOCOL_VERSION,
-			version: VERSION,
-			registration,
-		});
-		me = hello.agent;
-	}
-
-	// Reconnect when the daemon restarts (upgrade, crash): keep the session's identity.
-	function watchConnection() {
-		client.onClose(() => {
-			me = null;
-			let delay = 250;
-			const retry = async () => {
-				try {
-					await connect();
-				} catch {
-					delay = Math.min(delay * 2, 10_000);
-					setTimeout(retry, delay).unref();
-				}
-			};
-			setTimeout(retry, delay).unref();
-		});
-	}
-
-	client.on("message", (data) => {
-		const m = data as DeliveredMessage;
+	const onMessage = (m: DeliveredMessage) => {
 		void server.server
 			.sendResourceUpdated({ uri: "pulsar://inbox" })
 			.catch(() => {});
@@ -89,45 +185,48 @@ export async function runMcp() {
 				data: `Message from ${m.from.name}: ${m.body.slice(0, 200)}`,
 			})
 			.catch(() => {});
-	});
+	};
 
-	async function call<T>(
-		method: string,
-		params?: unknown,
-		timeoutMs?: number,
-	): Promise<T> {
-		if (!client.connected) await connect();
-		await refreshSession();
-		return client.call<T>(method, params, timeoutMs);
-	}
+	const baseSession = new Session(base, onMessage);
+	const perSession = new Map<string, Session>();
 
-	/**
-	 * Codex creates its thread (and rollout file) after starting MCP servers, so
-	 * the thread id can appear later. Once it does, say hello again: the daemon
-	 * moves this agent to its thread id, which `codex queue` can push to.
-	 */
-	async function refreshSession() {
+	/** The session a tool call belongs to. OpenCode names it in `_meta`. */
+	function sessionFor(meta: Meta): Session {
+		debug(`call meta=${JSON.stringify(meta ?? null)}`);
+		const opencode = meta?.[OPENCODE_SESSION_KEY];
 		if (
-			registration.harness !== "codex" ||
-			registration.sessionId ||
-			!registration.pid
-		)
-			return;
-		const thread = codexThreadId(registration.pid, registration.cwd);
-		if (!thread) return;
-		registration.sessionId = thread;
-		const hello = await client.call<{ agent: PublicAgent }>("hello", {
-			protocol: PROTOCOL_VERSION,
-			version: VERSION,
-			registration,
-		});
-		me = hello.agent;
+			typeof opencode === "string" &&
+			opencode &&
+			(base.harness === "opencode" || base.harness === "unknown")
+		) {
+			let s = perSession.get(opencode);
+			if (!s) {
+				const cwd = opencodeSessionDir(opencode) ?? base.cwd;
+				const git = gitInfo(cwd);
+				s = new Session(
+					{
+						harness: "opencode",
+						sessionId: opencode,
+						pid: null,
+						cwd,
+						project: git.project,
+						branch: git.branch,
+						tags: [...autoTags("opencode", git), ...envTags()],
+						role: "mcp",
+					},
+					onMessage,
+				);
+				perSession.set(opencode, s);
+			}
+			return s;
+		}
+		return baseSession;
 	}
 
 	/** Appends a short note when messages are waiting, so pull-only harnesses notice them. */
-	async function withInboxNote(body: string) {
+	async function withInboxNote(s: Session, body: string) {
 		try {
-			const { unread } = await call<{ unread: number }>("whoami");
+			const { unread } = await s.call<{ unread: number }>("whoami");
 			if (unread > 0)
 				return text(
 					`${body}\n\n📨 ${unread} unread pulsar message${unread === 1 ? "" : "s"}: call inbox to read.`,
@@ -158,16 +257,16 @@ export async function runMcp() {
 			},
 			annotations: { readOnlyHint: true },
 		},
-		async ({ selector, include_gone }) => {
+		async ({ selector, include_gone }, extra) => {
+			const s = sessionFor(extra._meta);
 			try {
 				const sel = selector?.trim() || "*";
-				const agents = await call<PublicAgent[]>("list", {
+				const agents = await s.call<PublicAgent[]>("list", {
 					selector: sel,
 					includeGone: include_gone,
 				});
-				const self = me as PublicAgent | null;
-				const youAre = self ? `\nYou are ${self.name} (${self.id}).` : "";
-				return withInboxNote(`${agentsText(agents, sel)}${youAre}`);
+				const youAre = s.me ? `\nYou are ${s.me.name} (${s.me.id}).` : "";
+				return withInboxNote(s, `${agentsText(agents, sel)}${youAre}`);
 			} catch (e) {
 				return errorText(e);
 			}
@@ -190,15 +289,17 @@ export async function runMcp() {
 					.describe("Tell recipients you are waiting for an answer."),
 			},
 		},
-		async ({ to, body, priority: p, expect_reply }) => {
+		async ({ to, body, priority: p, expect_reply }, extra) => {
+			const s = sessionFor(extra._meta);
 			try {
-				const r = await call<SendResult>("send", {
+				const r = await s.call<SendResult>("send", {
 					to,
 					body,
 					priority: p,
 					expectReply: expect_reply,
 				});
 				return withInboxNote(
+					s,
 					`Sent ${r.message.id} to ${r.receipts.length} agent${r.receipts.length === 1 ? "" : "s"}:\n${receiptsText(r.receipts)}`,
 				);
 			} catch (e) {
@@ -222,14 +323,16 @@ export async function runMcp() {
 				priority,
 			},
 		},
-		async ({ message_id, body, priority: p }) => {
+		async ({ message_id, body, priority: p }, extra) => {
+			const s = sessionFor(extra._meta);
 			try {
-				const r = await call<SendResult>("reply", {
+				const r = await s.call<SendResult>("reply", {
 					messageId: message_id,
 					body,
 					priority: p,
 				});
 				return withInboxNote(
+					s,
 					`Replied with ${r.message.id}:\n${receiptsText(r.receipts)}`,
 				);
 			} catch (e) {
@@ -249,9 +352,10 @@ export async function runMcp() {
 				mark_read: z.boolean().optional(),
 			},
 		},
-		async ({ limit, mark_read }) => {
+		async ({ limit, mark_read }, extra) => {
+			const s = sessionFor(extra._meta);
 			try {
-				const r = await call<{ messages: DeliveredMessage[]; held: number }>(
+				const r = await s.call<{ messages: DeliveredMessage[]; held: number }>(
 					"inbox",
 					{ limit, markRead: mark_read },
 				);
@@ -286,16 +390,17 @@ export async function runMcp() {
 					.describe("Default 120."),
 			},
 		},
-		async ({ to, body, timeout_seconds }) => {
+		async ({ to, body, timeout_seconds }, extra) => {
+			const s = sessionFor(extra._meta);
 			try {
 				const timeout = timeout_seconds ?? 120;
-				const sent = await call<SendResult>("send", {
+				const sent = await s.call<SendResult>("send", {
 					to,
 					body,
 					priority: "urgent",
 					expectReply: true,
 				});
-				const r = await call<{ event: string; message?: DeliveredMessage }>(
+				const r = await s.call<{ event: string; message?: DeliveredMessage }>(
 					"wait",
 					{ for: `reply:${sent.message.id}`, timeoutSeconds: timeout },
 					(timeout + 10) * 1000,
@@ -306,6 +411,7 @@ export async function runMcp() {
 					);
 				}
 				return withInboxNote(
+					s,
 					`Reply from ${r.message.from.name}:\n${r.message.body}\n(message ${r.message.id})`,
 				);
 			} catch (e) {
@@ -331,10 +437,11 @@ export async function runMcp() {
 					.describe("Default 60."),
 			},
 		},
-		async ({ for: what, timeout_seconds }) => {
+		async ({ for: what, timeout_seconds }, extra) => {
+			const s = sessionFor(extra._meta);
 			try {
 				const timeout = timeout_seconds ?? 60;
-				const r = await call<{
+				const r = await s.call<{
 					event: string;
 					message?: DeliveredMessage;
 					agent?: PublicAgent;
@@ -362,9 +469,12 @@ export async function runMcp() {
 			inputSchema: {},
 			annotations: { readOnlyHint: true },
 		},
-		async () => {
+		async (_args, extra) => {
+			const s = sessionFor(extra._meta);
 			try {
-				const r = await call<{ agent: PublicAgent; unread: number }>("whoami");
+				const r = await s.call<{ agent: PublicAgent; unread: number }>(
+					"whoami",
+				);
 				return text(
 					`You are ${r.agent.name} (${r.agent.id})\nharness: ${r.agent.harness}\nproject: ${r.agent.project ?? "-"}\ntags: ${r.agent.tags.join(", ") || "-"}\ninbound: ${r.agent.inbound}\nreach: ${r.agent.reach}\nunread: ${r.unread}`,
 				);
@@ -391,16 +501,17 @@ export async function runMcp() {
 				inbound: z.enum(["accept", "hold", "refuse"]).optional(),
 			},
 		},
-		async ({ name, tags_add, tags_remove, summary, inbound }) => {
+		async ({ name, tags_add, tags_remove, summary, inbound }, extra) => {
+			const s = sessionFor(extra._meta);
 			try {
-				const r = await call<{ agent: PublicAgent }>("set_identity", {
+				const r = await s.call<{ agent: PublicAgent }>("set_identity", {
 					name,
 					tagsAdd: tags_add,
 					tagsRemove: tags_remove,
 					summary,
 					inbound,
 				});
-				me = r.agent;
+				s.me = r.agent;
 				return text(
 					`You are ${r.agent.name} · tags: ${r.agent.tags.join(", ")} · inbound: ${r.agent.inbound}`,
 				);
@@ -424,9 +535,10 @@ export async function runMcp() {
 			},
 			annotations: { readOnlyHint: true },
 		},
-		async ({ query, message_id, thread_id, limit }) => {
+		async ({ query, message_id, thread_id, limit }, extra) => {
+			const s = sessionFor(extra._meta);
 			try {
-				const r = await call<{ messages: Message[]; receipts?: Receipt[] }>(
+				const r = await s.call<{ messages: Message[]; receipts?: Receipt[] }>(
 					"history",
 					{
 						query,
@@ -455,9 +567,10 @@ export async function runMcp() {
 			mimeType: "text/plain",
 		},
 		async (uri) => {
-			const r = await call<{ messages: DeliveredMessage[] }>("inbox", {
-				markRead: false,
-			});
+			const r = await baseSession.call<{ messages: DeliveredMessage[] }>(
+				"inbox",
+				{ markRead: false },
+			);
 			return {
 				contents: [
 					{
@@ -471,21 +584,22 @@ export async function runMcp() {
 		},
 	);
 
-	try {
-		await connect();
-	} catch (e) {
-		process.stderr.write(
-			`pulsar: could not reach the daemon yet (${(e as Error).message}); retrying on first use\n`,
-		);
+	// OpenCode's shared server is not an agent itself; its sessions register on first use.
+	if (base.harness !== "opencode") {
+		await baseSession.ensure().catch((e) => {
+			process.stderr.write(
+				`pulsar: could not reach the daemon yet (${(e as Error).message}); retrying on first use\n`,
+			);
+		});
 	}
-	watchConnection();
+
 	const transport = new StdioServerTransport();
-	// The harness owns this process: when it closes stdin, exit (and leave the daemon running).
+	// The harness owns this process: when it closes stdin, exit (the daemon keeps running).
 	const exit = () => {
-		client.close();
+		baseSession.close();
+		for (const s of perSession.values()) s.close();
 		process.exit(0);
 	};
-	transport.onclose = exit;
 	process.stdin.on("end", exit);
 	process.stdin.on("close", exit);
 	await server.connect(transport);

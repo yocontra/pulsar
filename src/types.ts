@@ -64,6 +64,9 @@ export interface Message {
 
 export type ReceiptState =
 	| "queued"
+	/** Handed to the harness (socket, CLI, API). The harness may still hold it. */
+	| "sent"
+	/** The receiving session confirmed it injected the message. */
 	| "delivered"
 	| "read"
 	| "replied"

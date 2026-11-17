@@ -2,7 +2,11 @@ import { execFile } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { join } from "node:path";
-import { claudeSessionsDir, readClaudeSession } from "../identity.ts";
+import {
+	claudeSessionsDir,
+	opencodeServiceRunning,
+	readClaudeSession,
+} from "../identity.ts";
 import type { Agent, Priority } from "../types.ts";
 
 export interface DeliveryResult {
@@ -154,6 +158,12 @@ export const opencodeAdapter: Adapter = {
 		return agent.harness === "opencode" && !!agent.sessionId;
 	},
 	async deliver(agent, text, priority) {
+		if (!opencodeServiceRunning())
+			return {
+				ok: false,
+				via: "opencode-api",
+				detail: "OpenCode service is not running",
+			};
 		const body = JSON.stringify({
 			text,
 			delivery: priority === "urgent" ? "steer" : "queue",

@@ -1,7 +1,11 @@
 import { execFile } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type ClaudeSessionRecord, claudeSessionsDir } from "./identity.ts";
+import {
+	type ClaudeSessionRecord,
+	claudeSessionsDir,
+	opencodeServiceRunning,
+} from "./identity.ts";
 import type { AgentStatus, Harness } from "./types.ts";
 
 /** A live session found on disk or through a harness API. */
@@ -83,6 +87,8 @@ function runJson(cmd: string, args: string[]): Promise<unknown> {
 
 /** OpenCode sessions that are running right now, from its shared server. */
 export async function scanOpencode(): Promise<Scanned[]> {
+	// `opencode api` starts a service when none runs; only look when one already does.
+	if (!opencodeServiceRunning()) return [];
 	const active = (await runJson("opencode", [
 		"api",
 		"session.active",

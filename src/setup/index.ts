@@ -272,7 +272,34 @@ export async function runSetup(argv: string[]): Promise<number> {
 	console.log(
 		'Then try: `pulsar ls` here, or ask any agent to "list agents with pulsar".\n',
 	);
+	await restartOutdatedDaemon();
 	const { runDoctor } = await import("./doctor.ts");
 	await runDoctor({ quiet: true });
 	return failures ? 1 : 0;
+}
+
+/** Stops a daemon from an older version; the next agent call starts this one. Agents reconnect on their own. */
+async function restartOutdatedDaemon() {
+	const { DaemonClient } = await import("../client.ts");
+	const { PROTOCOL_VERSION } = await import("../types.ts");
+	const client = new DaemonClient();
+	try {
+		await client.connect(false);
+		await client.call("hello", {
+			protocol: PROTOCOL_VERSION,
+			version: VERSION,
+			registration: { role: "cli" },
+		});
+		const status = await client.call<{ version: string }>("status");
+		if (status.version !== VERSION) {
+			await client.call("shutdown");
+			console.log(
+				`Restarted the pulsar daemon (${status.version} → ${VERSION}).`,
+			);
+		}
+	} catch {
+		// No daemon running: nothing to restart.
+	} finally {
+		client.close();
+	}
 }

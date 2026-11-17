@@ -132,4 +132,23 @@ describe("MCP server", () => {
 		);
 		expect(listed).toContain("1 unread pulsar message");
 	});
+
+	test("OpenCode: one shared server, one agent per session (from _meta)", async () => {
+		const oc = await mcpClient("opencode", "/tmp", "");
+		const who = async (sid: string) =>
+			textOf(
+				await oc.callTool({
+					name: "whoami",
+					arguments: {},
+					_meta: { "ai.opencode/sessionID": sid },
+				}),
+			);
+		const a = await who("ses_aaa");
+		const b = await who("ses_bbb");
+		expect(a).toContain("opencode:ses_aaa");
+		expect(b).toContain("opencode:ses_bbb");
+		expect(daemon.live().filter((x) => x.harness === "opencode")).toHaveLength(
+			2,
+		);
+	});
 });

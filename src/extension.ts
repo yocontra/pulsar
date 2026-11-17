@@ -98,8 +98,14 @@ export default function pulsarExtension(pi: HostApi) {
 					deliverAs: message.priority === "urgent" ? "steer" : "followUp",
 				},
 			);
-		} catch {
-			// The daemon keeps the message queued; it shows in `inbox`.
+			client
+				.call("ack", { messageId: message.id, via: "extension" })
+				.catch(() => {});
+		} catch (e) {
+			// The daemon puts it back in the inbox.
+			client
+				.call("nack", { messageId: message.id, reason: (e as Error).message })
+				.catch(() => {});
 		}
 	});
 

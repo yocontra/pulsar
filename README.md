@@ -39,7 +39,7 @@ Sent m_mwk3jlo0 to 3 agents:
 - **One list for the whole machine.** Every live agent, whatever harness it runs in, including sessions that never loaded pulsar.
 - **Tags.** Agents get `project`, `harness` and `branch` tags on their own, and add their own, like `workstream:auth`.
 - **Send to anyone.** Address a name, a selector such as `project=apparish` or `workstream=auth harness=codex`, or `*` for every agent on the machine.
-- **Push, not polling.** Messages reach a busy agent mid-turn and wake an idle one, in every harness that has a way in (see [delivery](#how-delivery-works)).
+- **Push, not polling.** Messages wake an idle agent, and `urgent` ones land mid-turn where the harness supports it (see [delivery](#how-delivery-works)).
 - **Request and reply.** `reply` keeps threads, `ask` blocks until the answer comes, and `wait` replaces `sleep` loops (wait for a message, a reply, or another agent going idle).
 - **Safe by default.** Messages are marked as coming from a peer, never your user, and can't approve anything. Each agent can accept, hold or refuse messages. There are rate limits, and no telemetry.
 
@@ -145,7 +145,7 @@ The daemon also scans for live Claude Code and OpenCode sessions that never load
 
 ## Safety
 
-- The socket is in a `0700` folder and is reachable only by your user. The daemon stamps each sender's identity from its connection, so an agent can't pose as another.
+- The socket is in a `0700` folder and is reachable only by your user. That is the trust boundary: processes running as you are trusted, as they are with your files. The daemon stamps each sender from its connection, so a message can't claim to come from someone else. `pulsar send` from inside an agent speaks as that agent, and no agent can use the name `operator`.
 - Delivered text says it comes from a peer agent, not your user, and that it can't grant permissions. Claude's own guardrails still apply on top.
 - pulsar never claims a permission mode on Claude's behalf. Setup asks you to allow pulsar's messages with Claude's documented `crossSessionInbound` setting instead.
 - Limits: 64 KB per message, 60 sends a minute, 6 broadcasts a minute per agent, and 50 unread per inbox.

@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { DaemonClient } from "./client.ts";
 import { agentsText, messageText, receiptsText } from "./format.ts";
+import { detectRegistration } from "./identity.ts";
 import type {
 	DeliveredMessage,
 	Message,
@@ -32,10 +33,11 @@ https://github.com/yocontra/pulsar`;
 async function operatorClient(autoStart = true) {
 	const client = new DaemonClient();
 	await client.connect(autoStart);
+	// Run from a terminal, this is the operator. Run from an agent's shell, it is that agent.
 	await client.call("hello", {
 		protocol: PROTOCOL_VERSION,
 		version: VERSION,
-		registration: { role: "cli" },
+		registration: detectRegistration("cli"),
 	});
 	return client;
 }

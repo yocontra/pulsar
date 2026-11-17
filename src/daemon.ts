@@ -53,6 +53,8 @@ interface Waiter {
 	timer: NodeJS.Timeout;
 }
 
+const RESERVED_NAMES = new Set(["operator", "user", "human", "system"]);
+
 export function newId(prefix: string): string {
 	return `${prefix}_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
 }
@@ -160,7 +162,11 @@ export class Daemon {
 
 	// ---------------------------------------------------------------- presence
 
-	private uniqueName(base: string, selfId: string): string {
+	private uniqueName(wanted: string, selfId: string): string {
+		// "operator" is the human at the terminal; no agent may take it.
+		const base = RESERVED_NAMES.has(wanted.toLowerCase())
+			? `${wanted}-agent`
+			: wanted;
 		const taken = new Set(
 			[...this.agents.values()]
 				.filter((a) => a.id !== selfId && a.status !== "gone")
@@ -344,7 +350,8 @@ export class Daemon {
 		socket.on("close", () => {
 			this.conns.delete(conn);
 			this.lastActivity = Date.now();
-			if (!conn.agentId) return;
+			// A CLI call made from inside an agent borrows its identity; it never owns presence.
+			if (!conn.agentId || conn.role === "cli") return;
 			const agent = this.agents.get(conn.agentId);
 			if (!agent) return;
 			if (this.connsFor(agent.id).length === 0) {
@@ -471,6 +478,17 @@ export class Daemon {
 				if (status === "busy" || status === "idle") this.setStatus(me, status);
 				return { ok: true };
 			}
+			case "nack": {
+				const me = this.self(conn);
+				this.receipt(
+					String(p.messageId),
+					me,
+					"queued",
+					"extension",
+					`the session could not take it: ${String(p.reason ?? "unknown")}`,
+				);
+				return { ok: true };
+			}
 			case "ack": {
 				const me = this.self(conn);
 				this.receipt(
@@ -507,8 +525,49 @@ export class Daemon {
 		}
 		const reg = p.registration as Registration | undefined;
 		conn.role = reg?.role ?? "cli";
-		if (!reg || reg.role === "cli")
+		// One live MCP connection owns a session id; a second claimant (two Codex
+		// threads in one app-server) is told to pick another thread.
+		if (reg?.role === "mcp" && reg.sessionId) {
+			const id = this.agentId(reg.harness, reg.sessionId, reg.pid);
+			if (this.connsFor(id).some((c) => c !== conn && c.role === "mcp")) {
+				throw new RpcError(
+					"session_claimed",
+					`${id} is already served by another connection`,
+				);
+			}
+		}
+		if (!reg)
 			return { version: VERSION, protocol: PROTOCOL_VERSION, agent: null };
+		if (reg.role === "cli") {
+			// `pulsar send` run by an agent's shell speaks as that agent, never as the operator.
+			if (
+				reg.harness === "cli" ||
+				reg.harness === "unknown" ||
+				(!reg.sessionId && !reg.pid)
+			) {
+				return { version: VERSION, protocol: PROTOCOL_VERSION, agent: null };
+			}
+			const id = this.agentId(reg.harness, reg.sessionId, reg.pid);
+			const agent =
+				this.agents.get(id) ??
+				this.upsert({
+					harness: reg.harness,
+					sessionId: reg.sessionId,
+					pid: reg.pid,
+					cwd: reg.cwd,
+					project: reg.project,
+					branch: reg.branch,
+					tags: reg.tags ?? [],
+					meta: reg.meta ?? {},
+					registered: false,
+				});
+			conn.agentId = agent.id;
+			return {
+				version: VERSION,
+				protocol: PROTOCOL_VERSION,
+				agent: toPublic(agent),
+			};
+		}
 		const agent = this.upsert({
 			harness: reg.harness,
 			sessionId: reg.sessionId,
@@ -865,7 +924,8 @@ export class Daemon {
 				event: "push",
 				data: { message: this.delivered(message, sender), text },
 			});
-			return this.receipt(message.id, target, "delivered", "extension", null);
+			// The extension acks once the message is in the conversation.
+			return this.receipt(message.id, target, "sent", "extension", null);
 		}
 		const adapter = adapterFor(target);
 		if (!adapter)
@@ -883,7 +943,7 @@ export class Daemon {
 			sender.name,
 		);
 		return result.ok
-			? this.receipt(message.id, target, "delivered", result.via, null)
+			? this.receipt(message.id, target, "sent", result.via, null)
 			: this.receipt(
 					message.id,
 					target,
