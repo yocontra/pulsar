@@ -926,6 +926,21 @@ export class Daemon {
 		this.receipt(message.id, target, "queued", null, null);
 		const delivered = this.delivered(message, sender);
 
+		// A reply that an `ask` is blocked on goes to that call only. Pushing it
+		// too would start a second prompt in the asker's session and interrupt it.
+		for (const w of [...this.waiters]) {
+			if (
+				w.kind === "reply" &&
+				w.agentId === target.id &&
+				message.replyTo &&
+				w.target === message.replyTo
+			) {
+				this.resolveWaiter(w, { event: "reply", message: delivered });
+				this.store.markRead(target.id, [message.id], Date.now());
+				return this.receipt(message.id, target, "read", "ask", null);
+			}
+		}
+
 		// Live pulsar connections hear about every message (MCP notifications, waiters).
 		for (const c of this.connsFor(target.id))
 			writeFrame(c.socket, { event: "message", data: delivered });

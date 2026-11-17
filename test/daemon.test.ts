@@ -414,3 +414,31 @@ describe("receipts", () => {
 		expect(inbox.messages.map((m) => m.body)).toEqual(["retry me"]);
 	});
 });
+
+describe("ask", () => {
+	test("the reply an ask waits for is not also pushed into the asker's session", async () => {
+		const asker = await spawnAgent();
+		const answerer = await spawnAgent();
+		const sent = await asker.client.call<SendResult>("send", {
+			to: answerer.agent.name,
+			body: "6*7?",
+			expectReply: true,
+		});
+		const waiting = asker.client.call<{
+			event: string;
+			message: DeliveredMessage;
+		}>("wait", {
+			for: `reply:${sent.message.id}`,
+			timeoutSeconds: 5,
+		});
+		await new Promise((r) => setTimeout(r, 30));
+		const r = await answerer.client.call<SendResult>("reply", {
+			messageId: sent.message.id,
+			body: "42",
+		});
+		expect((await waiting).message.body).toBe("42");
+		expect(r.receipts[0]!.state).toBe("read");
+		await new Promise((res) => setTimeout(res, 50));
+		expect(asker.pushes).toHaveLength(0);
+	});
+});
