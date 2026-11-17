@@ -5,6 +5,7 @@
 - PR detection is fully offline and no longer uses `gh`. pulsar reads PR refs already in the local repo (`refs/pull/<n>/head`, `refs/remotes/<remote>/pr/<n>`) that point at the agent's commit, and otherwise the last PR of the agent's repo named in its own session log (Claude Code `pr-link` records first, then PR URLs). pulsar makes no network calls apart from `pulsar doctor`'s version check.
 - `pr:` tags an agent sets on itself are kept; only the tag pulsar detected is replaced.
 - A Codex app-server thread that pulsar cannot yet tie to a thread claims no folder (it used to report the app-server's own folder).
+- Harness drivers: each harness (Claude Code, Codex, OpenCode, pi, omp, Cursor, Gemini CLI, VS Code) is one module in `src/harnesses/` behind one `HarnessDriver` interface: process matching, identity, scanning, push delivery, model and session-log lookup, and setup. Adding a harness is one new file plus one line in the registry; a contract test checks every driver. No behavior change.
 
 ## 1.2.0 - 2026-11-16
 

@@ -2,22 +2,16 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { basename } from "node:path";
-import { adapterFor } from "./adapters/index.ts";
 import { gitInfo, slug } from "./git.ts";
-import { autoTags, isAutoTag } from "./identity.ts";
-import { codexModel, opencodeModel } from "./models.ts";
+import { DRIVERS, driverFor, pushFor } from "./harnesses/index.ts";
+import type { HarnessDriver, Scanned } from "./harnesses/types.ts";
 import { dbPath, socketPath } from "./paths.ts";
+import { pidAlive } from "./processes.ts";
 import { prFromRefs, prFromText, repoSlug } from "./prs.ts";
 import { type Frame, RpcError, readFrames, writeFrame } from "./rpc.ts";
-import {
-	pidAlive,
-	type Scanned,
-	scanClaude,
-	scanOpencode,
-} from "./scanners.ts";
 import { isBroadcast, matches, parseSelector } from "./selector.ts";
 import { Store } from "./store.ts";
-import { sessionText } from "./transcripts.ts";
+import { autoTags, isAutoTag } from "./tags.ts";
 import {
 	type Agent,
 	type AgentStatus,
@@ -44,8 +38,6 @@ export const LIMITS = {
 
 /** How often the daemon's background jobs run. */
 const INTERVALS = {
-	scanLocalMs: 4000,
-	scanRemoteMs: 20_000,
 	sweepMs: 5000,
 	refreshGitMs: 30_000,
 	refreshPrsMs: 60_000,
@@ -167,14 +159,16 @@ export class Daemon {
 			);
 		}
 		if (this.scan) {
-			this.timers.push(
-				setInterval(() => this.scanLocal(), INTERVALS.scanLocalMs),
-			);
-			this.timers.push(
-				setInterval(() => void this.scanRemote(), INTERVALS.scanRemoteMs),
-			);
-			this.scanLocal();
-			void this.scanRemote();
+			// Each harness scanner on its own interval, plus one run now.
+			for (const driver of DRIVERS) {
+				const scan = driver.scan;
+				if (!scan) continue;
+				this.timers.push(
+					setInterval(() => this.runScan(driver.id, scan), scan.intervalMs),
+				);
+			}
+			for (const driver of DRIVERS)
+				if (driver.scan) this.runScan(driver.id, driver.scan);
 		}
 		this.timers.push(setInterval(() => this.sweep(), INTERVALS.sweepMs));
 		// Branches change under running agents (checkout, a new worktree): re-read git.
@@ -270,8 +264,9 @@ export class Daemon {
 		const selfTags =
 			saved?.tags ?? existing?.tags.filter((t) => !isAutoTag(t)) ?? [];
 		const tags = [...new Set([...input.tags, ...selfTags])];
-		// Claude sessions keep the name Claude shows (and its own SendMessage uses),
-		// and follow renames, until the agent names itself with set_identity.
+		// A session whose harness names it (driver meta `claudeName`, a wire key
+		// kept for older MCP servers; today the Claude driver sets it) keeps that
+		// name and follows renames, until the agent names itself with set_identity.
 		const harnessName = input.meta.claudeName;
 		const followsHarness =
 			!input.name &&
@@ -337,7 +332,7 @@ export class Daemon {
 
 	private reachOf(agent: Agent): Agent["reach"] {
 		if (this.extensionConn(agent.id)) return "push";
-		return adapterFor(agent) ? "push" : "pull";
+		return pushFor(agent) ? "push" : "pull";
 	}
 
 	private extensionConn(agentId: string): Conn | undefined {
@@ -386,12 +381,12 @@ export class Daemon {
 		}
 	}
 
-	private scanLocal() {
-		this.applyScan(scanClaude(), new Set(["claude"]));
-	}
-
-	private async scanRemote() {
-		this.applyScan(await scanOpencode(), new Set(["opencode"]));
+	/** Applies one driver's scan; a synchronous scanner applies at once. */
+	private runScan(harness: string, scan: NonNullable<HarnessDriver["scan"]>) {
+		const owns = new Set([harness]);
+		const found = scan.sessions();
+		if (Array.isArray(found)) this.applyScan(found, owns);
+		else void found.then((list) => this.applyScan(list, owns));
 	}
 
 	private markGone(agent: Agent) {
@@ -453,7 +448,10 @@ export class Daemon {
 			if (!slugs.has(agent.cwd)) slugs.set(agent.cwd, repoSlug(agent.cwd));
 			const pr =
 				prFromRefs(agent.cwd) ??
-				prFromText(await sessionText(agent), slugs.get(agent.cwd) ?? null);
+				prFromText(
+					(await driverFor(agent.harness)?.sessionLog?.(agent)) ?? "",
+					slugs.get(agent.cwd) ?? null,
+				);
 			const next = pr ? String(pr) : "";
 			const prev = agent.meta.autoPr ?? "";
 			if (next === prev) continue;
@@ -465,16 +463,12 @@ export class Daemon {
 		}
 	}
 
-	/** Model for harnesses whose scanner does not report it (Codex, OpenCode). */
+	/** Model for harnesses whose scanner does not report it (drivers with a `model` hook). */
 	private async refreshModels() {
 		for (const agent of this.live()) {
 			if (!agent.sessionId) continue;
-			const model =
-				agent.harness === "codex"
-					? codexModel(agent.sessionId)
-					: agent.harness === "opencode"
-						? await opencodeModel(agent.sessionId)
-						: null;
+			const read = driverFor(agent.harness)?.model;
+			const model = read ? await read(agent) : null;
 			if (model && model !== agent.model) {
 				agent.model = model;
 				this.finishTags(agent);
@@ -529,8 +523,12 @@ export class Daemon {
 			const agent = this.agents.get(conn.agentId);
 			if (!agent) return;
 			if (this.connsFor(agent.id).length === 0) {
-				// A scanner may still see the session; otherwise it is gone.
-				if (!agent.pid || !pidAlive(agent.pid) || agent.harness !== "claude")
+				// A scanner may still see the session by its pid; otherwise it is gone.
+				if (
+					!agent.pid ||
+					!pidAlive(agent.pid) ||
+					!driverFor(agent.harness)?.scan?.tracksPid
+				)
 					this.markGone(agent);
 				agent.registered = false;
 			}
@@ -1148,7 +1146,7 @@ export class Daemon {
 			// The extension acks once the message is in the conversation.
 			return this.receipt(message.id, target, "sent", "extension", null);
 		}
-		const adapter = adapterFor(target);
+		const adapter = pushFor(target);
 		if (!adapter)
 			return this.receipt(
 				message.id,

@@ -9,9 +9,10 @@
 import { fileURLToPath } from "node:url";
 import { DaemonClient } from "./client.ts";
 import { gitInfo } from "./git.ts";
-import { autoTags, envTags } from "./identity.ts";
+import { extensionHostFor } from "./harnesses/index.ts";
 import { daemonLog } from "./log.ts";
-import type { DeliveredMessage, Harness, Registration } from "./types.ts";
+import { autoTags, envTags } from "./tags.ts";
+import type { DeliveredMessage, Registration } from "./types.ts";
 import { PROTOCOL_VERSION } from "./types.ts";
 import { VERSION } from "./version.ts";
 
@@ -33,18 +34,14 @@ interface HostApi {
 	) => void;
 }
 
-function hostHarness(): Harness {
-	const argv = process.argv.join(" ");
-	return /oh-my-pi|(^|\/)omp(\s|$)/.test(argv) ? "omp" : "pi";
-}
-
 function cliPath(): string {
 	const js = fileURLToPath(new URL("./cli.js", import.meta.url));
 	return js;
 }
 
 export default function pulsarExtension(pi: HostApi) {
-	const harness = hostHarness();
+	const host = extensionHostFor(process.argv.join(" "));
+	const harness = host?.id ?? "unknown";
 	const client = new DaemonClient();
 	let stopped = false;
 
@@ -158,8 +155,8 @@ export default function pulsarExtension(pi: HostApi) {
 		if (client.connected)
 			client.call("set_identity", { model: message.model }).catch(() => {});
 	});
-	pi.on("agent_settled", () => setStatus("idle"));
-	if (harness === "omp") pi.on("agent_end", () => setStatus("idle"));
+	for (const event of host?.extension?.idleEvents ?? [])
+		pi.on(event, () => setStatus("idle"));
 	pi.on("session_shutdown", (event) => {
 		if ((event as { reason?: string })?.reason === "quit") {
 			stopped = true;

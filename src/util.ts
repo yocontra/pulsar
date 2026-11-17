@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 /** Absolute path of a command on PATH, or null. */
@@ -50,6 +50,68 @@ export function runJson(
 				} catch {
 					resolve(null);
 				}
+			},
+		);
+	});
+}
+
+/** Reads `len` bytes at `from` (or the end when `from` is "end"); "" on any error. */
+function slice(file: string, len: number, from: number | "end"): string {
+	try {
+		const size = statSync(file).size;
+		const n = Math.min(size, len);
+		const fd = openSync(file, "r");
+		try {
+			const buf = Buffer.alloc(n);
+			readSync(fd, buf, 0, n, from === "end" ? size - n : from);
+			return buf.toString("utf8");
+		} finally {
+			closeSync(fd);
+		}
+	} catch {
+		return "";
+	}
+}
+
+/** Last `bytes` of a file (transcripts can be large). */
+export function tail(file: string, bytes = 96 * 1024): string {
+	return slice(file, bytes, "end");
+}
+
+/** First `bytes` of a file. */
+export function head(file: string, bytes = 256 * 1024): string {
+	return slice(file, bytes, 0);
+}
+
+/** The last model id written in a JSONL log, skipping placeholders like `<synthetic>`. */
+export function lastModel(text: string): string | null {
+	const re = /"model"\s*:\s*"([^"<>]+)"/g;
+	let found: string | null = null;
+	for (let m = re.exec(text); m; m = re.exec(text)) found = m[1] ?? found;
+	return found;
+}
+
+/** Runs a command and resolves with its stdout; rejects with a short stderr message. */
+export function run(
+	cmd: string,
+	args: string[],
+	timeoutMs = 20_000,
+): Promise<string> {
+	return new Promise((resolve, reject) => {
+		execFile(
+			cmd,
+			args,
+			{ timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 },
+			(err, stdout, stderr) => {
+				if (err)
+					reject(
+						new Error(
+							`${cmd} failed: ${String(stderr || err.message)
+								.trim()
+								.slice(0, 300)}`,
+						),
+					);
+				else resolve(stdout);
 			},
 		);
 	});

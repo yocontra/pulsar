@@ -12,9 +12,12 @@ import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
-import { adapterFor } from "../src/adapters/index.ts";
 import { slug } from "../src/git.ts";
-import { findHarnessAncestor, harnessOfArgs } from "../src/processes.ts";
+import {
+	driverForProcess,
+	findHarnessAncestor,
+	pushFor,
+} from "../src/harnesses/index.ts";
 import { githubSlug, prFromRefs, prFromText, repoSlug } from "../src/prs.ts";
 import { type Frame, readFrames } from "../src/rpc.ts";
 import { setTomlKey } from "../src/setup/files.ts";
@@ -34,7 +37,7 @@ afterAll(() => {
 });
 
 describe("Claude envelope", () => {
-	/** Pushes `body` from `fromName` through the Claude adapter; returns the envelope it sent. */
+	/** Pushes `body` from `fromName` through the Claude driver; returns the envelope it sent. */
 	async function envelope(fromName: string, body: string): Promise<string> {
 		const dir = tempDir("pulsar-claude-");
 		const previous = process.env.CLAUDE_CONFIG_DIR;
@@ -54,7 +57,7 @@ describe("Claude envelope", () => {
 				pid: 4242,
 				meta: { socket: socketFile },
 			} as unknown as Agent;
-			const result = await adapterFor(agent)!.deliver(
+			const result = await pushFor(agent)!.deliver(
 				agent,
 				body,
 				"normal",
@@ -362,9 +365,7 @@ describe("harness detection", () => {
 		["node server.js", null],
 		["vim pi.txt", null],
 	])("%s -> %s", (args, harness) => {
-		expect(harnessOfArgs(args)).toBe(
-			harness as ReturnType<typeof harnessOfArgs>,
-		);
+		expect(driverForProcess(args)?.id ?? null).toBe(harness);
 	});
 
 	const table = (rows: Array<[number, number, string]>) =>

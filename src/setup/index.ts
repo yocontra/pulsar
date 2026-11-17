@@ -14,15 +14,16 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { CLIENTS } from "../harnesses/index.ts";
 import { installRoot, stateDir } from "../paths.ts";
 import { VERSION } from "../version.ts";
 import {
 	type Action,
-	CLIENTS,
 	type SetupContext,
 	type Undo,
 	undoAction,
-} from "./clients.ts";
+} from "./actions.ts";
+import { loadJsonc } from "./jsonc.ts";
 
 const home = homedir();
 const tilde = (p: string) => p.replace(home, "~");
@@ -155,6 +156,7 @@ function describeUndo(u: Undo): string {
 }
 
 export async function runSetup(argv: string[]): Promise<number> {
+	await loadJsonc();
 	const { values } = parseArgs({
 		args: argv,
 		options: {

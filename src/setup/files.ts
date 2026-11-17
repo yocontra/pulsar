@@ -7,12 +7,24 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import {
-	applyEdits,
-	type ModificationOptions,
-	modify,
-	parse,
-} from "jsonc-parser/lib/esm/main.js";
+import type { ModificationOptions } from "jsonc-parser/lib/esm/main.js";
+
+export type JsoncParser = typeof import("jsonc-parser/lib/esm/main.js");
+let jsonc: JsoncParser | null = null;
+
+/**
+ * Hands this module the JSONC parser (see `loadJsonc` in jsonc.ts). Harness
+ * drivers import this module, so it never imports the parser itself: the MCP
+ * server, daemon and extension load the drivers but never edit configs.
+ */
+export function useJsonc(parser: JsoncParser) {
+	jsonc = parser;
+}
+
+function parser(): JsoncParser {
+	if (!jsonc) throw new Error("setup: loadJsonc() must run first");
+	return jsonc;
+}
 
 const FORMAT: ModificationOptions = {
 	formattingOptions: { insertSpaces: true, tabSize: 2, eol: "\n" },
@@ -34,7 +46,9 @@ function backup(file: string): string | null {
 
 export function readJsonc(file: string): unknown {
 	if (!existsSync(file)) return undefined;
-	return parse(readFileSync(file, "utf8"), [], { allowTrailingComma: true });
+	return parser().parse(readFileSync(file, "utf8"), [], {
+		allowTrailingComma: true,
+	});
 }
 
 /** Reads a nested value, e.g. getPath(obj, ["mcpServers", "pulsar"]). */
@@ -49,6 +63,7 @@ export function getPath(value: unknown, path: string[]): unknown {
 
 /** Sets (or with `undefined`, removes) one key in a JSON/JSONC file, keeping comments and layout. */
 export function editJson(file: string, path: string[], value: unknown) {
+	const { applyEdits, modify, parse } = parser();
 	const text = existsSync(file) ? readFileSync(file, "utf8") : "{}\n";
 	if (
 		value === undefined &&

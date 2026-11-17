@@ -1,6 +1,6 @@
 # Delivery adapters
 
-How pulsar gets a message into a running session in each harness, what was verified, and the known limits. Tested end to end on 2026-11-16 (Claude Code 2.1.326, Codex 0.169.0, OpenCode 2.2.5, pi 1.5.0, omp 18.21.0).
+How pulsar gets a message into a running session in each harness, what was verified, and the known limits. Each harness's code is one driver in `src/harnesses/<id>.ts`. Tested end to end on 2026-11-16 (Claude Code 2.1.326, Codex 0.169.0, OpenCode 2.2.5, pi 1.5.0, omp 18.21.0).
 
 ## Identity: which session is this MCP server serving?
 

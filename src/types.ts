@@ -1,19 +1,14 @@
 /** Wire protocol version. Bump on any breaking change to daemon RPC. */
 export const PROTOCOL_VERSION = 1;
 
-export const HARNESSES = [
-	"claude",
-	"codex",
-	"opencode",
-	"omp",
-	"pi",
-	"cursor",
-	"gemini",
-	"vscode",
-	"cli",
-	"unknown",
-] as const;
-export type Harness = (typeof HARNESSES)[number];
+/**
+ * A harness id: one of the drivers in src/harnesses, or the pseudo-harnesses
+ * "cli" (a plain terminal) and "unknown" (no harness found).
+ */
+export type Harness = string;
+
+/** Longest an `ask` or `wait` call may block. Harness tool timeouts must exceed it. */
+export const MAX_BLOCK_SECONDS = 1800;
 
 export type AgentStatus = "busy" | "idle" | "unknown" | "gone";
 export type InboundPolicy = "accept" | "hold" | "refuse";

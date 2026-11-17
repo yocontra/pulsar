@@ -6,15 +6,11 @@ import { z } from "zod";
 import { DaemonClient } from "./client.ts";
 import { agentsText, messageText, receiptsText } from "./format.ts";
 import { gitInfo } from "./git.ts";
-import {
-	adoptCodexThread,
-	autoTags,
-	detectRegistration,
-	envTags,
-} from "./identity.ts";
+import { DRIVERS, driverFor } from "./harnesses/index.ts";
+import { detectRegistration } from "./identity.ts";
 import { stateDir } from "./paths.ts";
 import { RpcError } from "./rpc.ts";
-import { codexThreadId, opencodeSessionDir } from "./sessions.ts";
+import { autoTags, envTags } from "./tags.ts";
 import type {
 	DeliveredMessage,
 	Message,
@@ -22,7 +18,7 @@ import type {
 	Receipt,
 	Registration,
 } from "./types.ts";
-import { PROTOCOL_VERSION } from "./types.ts";
+import { MAX_BLOCK_SECONDS, PROTOCOL_VERSION } from "./types.ts";
 import { VERSION } from "./version.ts";
 
 const INSTRUCTIONS = `pulsar connects you to every other AI agent on this machine, in any harness (Claude Code, Codex, OpenCode, pi, omp, ...).
@@ -35,12 +31,6 @@ const INSTRUCTIONS = `pulsar connects you to every other AI agent on this machin
 
 type SendResult = { message: Message; receipts: Receipt[] };
 type Meta = Record<string, unknown> | undefined;
-
-/** `_meta` keys harnesses use to say which of their sessions made a tool call. */
-const OPENCODE_SESSION_KEY = "ai.opencode/sessionID";
-
-/** Longest an `ask` or `wait` call may block. Harness tool timeouts must exceed it. */
-export const MAX_BLOCK_SECONDS = 1800;
 
 function text(t: string) {
 	return { content: [{ type: "text" as const, text: t }] };
@@ -109,7 +99,7 @@ class Session {
 		});
 	}
 
-	/** Codex threads another connection already serves. */
+	/** Session ids another connection already serves (two Codex threads in one app-server). */
 	private readonly claimed = new Set<string>();
 
 	private async hello(): Promise<void> {
@@ -122,18 +112,16 @@ class Session {
 			this.me = r.agent;
 		} catch (e) {
 			const reg = this.registration;
+			const late = driverFor(reg.harness)?.lateSession;
 			if (
 				(e as { code?: string }).code !== "session_claimed" ||
-				reg.harness !== "codex" ||
+				!late ||
 				!reg.sessionId
 			)
 				throw e;
-			// Two Codex threads share one app-server: take the next candidate.
+			// Another session of this process has that id: take the next candidate.
 			this.claimed.add(reg.sessionId);
-			adoptCodexThread(
-				reg,
-				reg.pid ? codexThreadId(reg.pid, reg.cwd, this.claimed) : null,
-			);
+			late.adopt(reg, late.find(reg, this.claimed));
 			return this.hello();
 		}
 	}
@@ -152,16 +140,17 @@ class Session {
 	}
 
 	/**
-	 * Codex creates its thread (and rollout file) after starting MCP servers, so
-	 * the thread id can appear later. Once it does, say hello again: the daemon
-	 * moves this agent to its thread id, which `codex queue` can push to.
+	 * Some harnesses name the session after starting MCP servers (Codex creates
+	 * its thread later). Once the id appears, say hello again: the daemon moves
+	 * this agent to it, which the harness's push path can reach.
 	 */
 	async refresh() {
 		const reg = this.registration;
-		if (reg.harness !== "codex" || reg.sessionId || !reg.pid) return;
-		const thread = codexThreadId(reg.pid, reg.cwd, this.claimed);
-		if (!thread) return;
-		adoptCodexThread(reg, thread);
+		const late = driverFor(reg.harness)?.lateSession;
+		if (!late || reg.sessionId) return;
+		const found = late.find(reg, this.claimed);
+		if (!found) return;
+		late.adopt(reg, found);
 		await this.hello();
 	}
 
@@ -208,7 +197,7 @@ export async function runMcp() {
 
 	const baseSession = new Session(base, onMessage);
 	const perSession = new Map<string, Session>();
-	// OpenCode keeps one MCP process for all its sessions. A session that has not
+	// OpenCode keeps one MCP process for all its sessions (`toolSessions`). A session that has not
 	// called pulsar for a while lets go of its connection, so finished sessions
 	// leave the list (the scanner still shows ones that are running).
 	const SESSION_IDLE_MS = 20 * 60_000;
@@ -221,33 +210,34 @@ export async function runMcp() {
 		}
 	}, 60_000).unref();
 
-	/** The session a tool call belongs to. OpenCode names it in `_meta`. */
+	/** The session a tool call belongs to. Some harnesses (OpenCode) name it in `_meta`. */
 	function sessionFor(meta: Meta): Session {
 		debug(`call meta=${JSON.stringify(meta ?? null)}`);
-		const opencode = meta?.[OPENCODE_SESSION_KEY];
-		if (
-			typeof opencode === "string" &&
-			opencode &&
-			(base.harness === "opencode" || base.harness === "unknown")
-		) {
-			let s = perSession.get(opencode);
+		for (const driver of DRIVERS) {
+			const tool = driver.toolSessions;
+			if (!tool || (base.harness !== driver.id && base.harness !== "unknown"))
+				continue;
+			const sessionId = tool.sessionId(meta);
+			if (!sessionId) continue;
+			const key = `${driver.id}:${sessionId}`;
+			let s = perSession.get(key);
 			if (!s) {
-				const cwd = opencodeSessionDir(opencode) ?? base.cwd;
+				const cwd = tool.cwd(sessionId) ?? base.cwd;
 				const git = gitInfo(cwd);
 				s = new Session(
 					{
-						harness: "opencode",
-						sessionId: opencode,
+						harness: driver.id,
+						sessionId,
 						pid: null,
 						cwd,
 						project: git.project,
 						branch: git.branch,
-						tags: [...autoTags("opencode", git), ...envTags()],
+						tags: [...autoTags(driver.id, git), ...envTags()],
 						role: "mcp",
 					},
 					onMessage,
 				);
-				perSession.set(opencode, s);
+				perSession.set(key, s);
 			}
 			return s;
 		}
@@ -638,8 +628,8 @@ export async function runMcp() {
 		},
 	);
 
-	// OpenCode's shared server is not an agent itself; its sessions register on first use.
-	if (base.harness !== "opencode") {
+	// A shared server (OpenCode) is not an agent itself; its sessions register on first use.
+	if (!driverFor(base.harness)?.toolSessions) {
 		await baseSession.ensure().catch((e) => {
 			process.stderr.write(
 				`pulsar: could not reach the daemon yet (${(e as Error).message}); retrying on first use\n`,

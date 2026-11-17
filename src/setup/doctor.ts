@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import { DaemonClient } from "../client.ts";
+import { CLIENTS } from "../harnesses/index.ts";
 import { PROTOCOL_VERSION } from "../types.ts";
 import { newer } from "../util.ts";
 import { VERSION } from "../version.ts";
-import { CLIENTS } from "./clients.ts";
+import { loadJsonc } from "./jsonc.ts";
 
 interface Status {
 	version: string;
@@ -28,6 +29,7 @@ async function latestVersion(): Promise<string | null> {
 export async function runDoctor(
 	opts: { quiet?: boolean } = {},
 ): Promise<number> {
+	await loadJsonc();
 	let problems = 0;
 	const ok = (msg: string) => console.log(`  ✓ ${msg}`);
 	const bad = (msg: string) => {
