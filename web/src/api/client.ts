@@ -9,6 +9,7 @@ import {
 } from "../prove/state.ts";
 import {
 	type AgentRow,
+	type AgentUsage,
 	type AgentSort,
 	type AgentsPage,
 	API_BASE,
@@ -44,6 +45,9 @@ import {
 	type SendResponse,
 	type SendResult,
 	type ServerEvent,
+	type UsagePeriod,
+	type UsagePrice,
+	type UsageReport,
 	type SessionOptionsResponse,
 	type SessionVerifyResponse,
 	type StopResult,
@@ -453,6 +457,23 @@ export const api = {
 		request<ChangesSummary>(
 			`/agents/${enc(agentId)}/changes${query({ mode })}`,
 		),
+	/** The pool's token usage, priced on this node; `refresh` reads new session lines first. */
+	usage: (p: { period: UsagePeriod; tz: number; refresh?: boolean }) =>
+		request<UsageReport>(
+			`/usage${query({ period: p.period, tz: p.tz, refresh: p.refresh ? 1 : null })}`,
+		),
+	/** One agent's tokens, cost and context. */
+	agentUsage: (agentId: string) =>
+		request<AgentUsage>(`/agents/${enc(agentId)}/usage`),
+	/** Set a model's price (dollars per million tokens), or null to drop the edit. */
+	setUsagePrice: (
+		model: string,
+		price: Omit<UsagePrice, "model" | "source"> | null,
+	) =>
+		request<{ prices: UsagePrice[] }>("/usage/prices", {
+			method: "PUT",
+			body: { model, price },
+		}),
 	/** One changed file's unified diff. */
 	changeFile: (agentId: string, mode: ChangesMode, path: string) =>
 		request<FileDiff>(
