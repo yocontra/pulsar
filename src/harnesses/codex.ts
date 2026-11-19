@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { type Action, skillFor } from "../setup/actions.ts";
 import { exists, runCli, setTomlKey, tryCli, which } from "../setup/files.ts";
+import { codexTurnFailed } from "../transcripts/turn-outcome.ts";
 import { MAX_BLOCK_SECONDS } from "../types.ts";
 import { headAsync, lastModel, run, statAsync, tailAsync } from "../util.ts";
 import { codexIdent } from "./codex-ident.ts";
@@ -161,6 +162,7 @@ export const codex: HarnessDriver = {
 			return file ? { kind: "file", path: file } : null;
 		},
 		parse: parseCodex,
+		turnFailed: codexTurnFailed,
 	},
 
 	// Spawned threads; their transcript is the thread's own (`transcript.locate`).

@@ -140,8 +140,21 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 					.map((x) => cleanApproval(x, id))
 					.filter((x): x is Approval => x !== null)
 			: [],
+		...turnOf(a.turn),
 	};
 }
+
+/** A shared last turn, checked; dropped when malformed. */
+function turnOf(raw: unknown): { turn?: FedAgent["turn"] } {
+	const t = raw as Record<string, unknown> | null;
+	if (!t || typeof t !== "object") return {};
+	const at = Number(t.at);
+	if (!(at > 0) || (t.kind !== "finished" && t.kind !== "failed")) return {};
+	return { turn: { kind: t.kind, at } };
+}
+
+/** A remote turn older than this when it first arrives is not announced (a long-offline peer). */
+const TURN_FRESH_MS = 10 * 60_000;
 
 const APPROVAL_STATES = new Set<ApprovalState>([
 	"pending",
@@ -258,6 +271,12 @@ export class PoolState {
 	onIdle: (address: string) => void = () => {};
 	/** A remote prompt appeared or changed (pool-address ids): SSE and push follow. */
 	onApproval: (approval: Approval) => void = () => {};
+	/**
+	 * A remote agent's turn ended (its home node's newer `turn`): never for
+	 * an agent this node had not seen before, nor for a stale record.
+	 */
+	onTurn: (address: string, turn: NonNullable<FedAgent["turn"]>) => void =
+		() => {};
 	/** Pool-address prompt id → its agent's pool address. */
 	private approvalAgent = new Map<string, string>();
 
@@ -432,6 +451,14 @@ export class PoolState {
 		const address = `${peer.machineId}/${f.id}`;
 		if (before && before !== "idle" && f.status === "idle")
 			queueMicrotask(() => this.onIdle(address));
+		const turn = f.turn;
+		if (
+			prev &&
+			turn &&
+			turn.at > (prev.turn?.at ?? 0) &&
+			Date.now() - turn.at < TURN_FRESH_MS
+		)
+			queueMicrotask(() => this.onTurn(address, turn));
 		const seen = new Map(
 			(prev?.approvals ?? []).map((x) => [
 				x.requestId,

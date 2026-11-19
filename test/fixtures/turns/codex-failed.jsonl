@@ -1,0 +1,4 @@
+{"timestamp":"2026-11-19T21:07:52.990Z","type":"session_meta","payload":{"id":"01a1f5a3-230b-7873-9170-2b218c5de579","cwd":"/work/demo","originator":"codex_exec","cli_version":"0.169.0"}}
+{"timestamp":"2026-11-19T21:07:53.000Z","type":"event_msg","payload":{"type":"task_started","turn_attribution":{"turn_id":"t1","turn_trigger":"exec","parent_turn_id":null,"root_turn_id":"t1"}}}
+{"timestamp":"2026-11-19T21:07:53.100Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"th","turn_id":"t1","item":{"type":"UserMessage","id":"i1","content":[{"type":"text","text":"say hi"}]}}}
+{"timestamp":"2026-11-19T21:07:53.900Z","type":"event_msg","payload":{"type":"task_complete","root_turn_id":"t1","turn_id":"t1","last_agent_message":null,"error":{"message":"The 'no-such-model' model is not supported when using Codex with a ChatGPT account.","codex_error_info":"bad_request"}}}

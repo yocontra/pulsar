@@ -1,5 +1,11 @@
 import { chmod, readFile, writeFile } from "node:fs/promises";
-import type { PushPayload, PushSubscribeRequest } from "../http/wire.ts";
+import type {
+	PushPayload,
+	PushSettings,
+	PushSettingsRequest,
+	PushSubscribeRequest,
+	TurnNotifyMode,
+} from "../http/wire.ts";
 import { daemonLog } from "../log.ts";
 import {
 	allowedEndpoint,
@@ -16,7 +22,7 @@ import type { EventBus } from "./events.ts";
 import type { Registry } from "./registry.ts";
 
 /**
- * Web Push for approvals. Each node has its own VAPID key pair (a 0600 file
+ * Web Push for approvals, security notices, and finished or failed turns. Each node has its own VAPID key pair (a 0600 file
  * in the state folder) and sends for its own approvals to the subscriptions
  * it knows: those made by app tabs it served. Syncing subscriptions across
  * the pool is a later step.
@@ -24,6 +30,12 @@ import type { Registry } from "./registry.ts";
  * Payloads carry no agent names, tools or arguments, since they pass
  * through Apple's or Google's push service: only the approval's opaque id
  * and the badge count. The app fetches the details.
+ *
+ * Finished and failed turns (`notify`, src/service/turns.ts) go only to
+ * subscriptions whose "Agent activity" setting includes notifications
+ * (`turns` notify or both), with the agent's opaque id. Each kind has its
+ * own `Topic` (the push service replaces an undelivered message of the same
+ * topic), so a finish never replaces a pending approval.
  */
 
 export interface PushOptions {
@@ -44,8 +56,22 @@ export interface PushOptions {
 const SUBJECT = "https://github.com/yocontra/pulsar";
 const MAX_SUBSCRIPTIONS = 50;
 const SECURITY_PUSH_MS = 60_000;
+const MODES = new Set<TurnNotifyMode>(["off", "notify", "sound", "both"]);
+
+/** The `Topic` header per payload kind: plaintext to the push service, so never an id. */
+const TOPICS: Record<PushPayload["kind"], string> = {
+	approval: "approval",
+	security: "security",
+	finished: "finished",
+	failed: "failed",
+};
 
 type Row = Record<string, string | number | null>;
+
+/** One subscription's payload for a push, or null to skip it. */
+type PerSubscription = (sub: {
+	turns: TurnNotifyMode | null;
+}) => PushPayload | null;
 
 export class Push {
 	private keys: VapidKeys | null = null;
@@ -88,17 +114,27 @@ export class Push {
 				badge: this.o.registry.needingYou().length,
 			});
 		});
+		// A finished or failed turn the operator cares about (Interest).
+		const offNotify = this.o.events.on("notify", ({ kind, agentId }) => {
+			this.send({ kind, agentId }, (row) => {
+				const mode = row.turns ?? "notify";
+				if (mode === "notify") return { kind, agentId };
+				if (mode === "both") return { kind, agentId, sound: true };
+				return null;
+			});
+		});
 		this.off = () => {
 			offApproval();
 			offSecurity();
+			offNotify();
 		};
 	}
 
 	private lastSecurityPush = 0;
 
 	/** `notify` in the background; a failure (no key file) is logged while running. */
-	private send(payload: PushPayload) {
-		this.notify(payload).catch((e) => {
+	private send(payload: PushPayload, per?: PerSubscription) {
+		this.notify(payload, per).catch((e) => {
 			if (this.off) daemonLog(`push failed: ${(e as Error).message}`);
 		});
 	}
@@ -209,6 +245,42 @@ export class Push {
 			.run(endpoint);
 	}
 
+	/**
+	 * `POST /push/settings`: this browser's finish/fail settings, changed
+	 * when given. Only a subscription this node holds keeps them.
+	 */
+	settings(p: Principal, req: PushSettingsRequest): PushSettings {
+		authorize(p, "push.subscribe");
+		const db = this.o.store.db;
+		const turns =
+			req.turns !== undefined && MODES.has(req.turns) ? req.turns : undefined;
+		if (turns !== undefined)
+			db.prepare(
+				"UPDATE push_subscriptions SET turns = ? WHERE endpoint = ?",
+			).run(turns, req.endpoint);
+		if (typeof req.inApp === "boolean")
+			db.prepare(
+				"UPDATE push_subscriptions SET in_app = ? WHERE endpoint = ?",
+			).run(req.inApp ? 1 : 0, req.endpoint);
+		const r = db
+			.prepare(
+				"SELECT turns, in_app FROM push_subscriptions WHERE endpoint = ?",
+			)
+			.get(req.endpoint) as Row | undefined;
+		if (!r)
+			return {
+				subscribed: false,
+				turns: turns ?? "notify",
+				inApp: req.inApp ?? true,
+			};
+		const mode = String(r.turns) as TurnNotifyMode;
+		return {
+			subscribed: true,
+			turns: MODES.has(mode) ? mode : "notify",
+			inApp: Number(r.in_app) !== 0,
+		};
+	}
+
 	count(): number {
 		const r = this.o.store.db
 			.prepare("SELECT COUNT(*) AS n FROM push_subscriptions")
@@ -216,14 +288,24 @@ export class Push {
 		return Number(r.n);
 	}
 
-	/** Sends one payload to every subscription; drops the ones the push service says are gone. */
-	async notify(payload: PushPayload): Promise<number> {
-		const subs = this.o.store.db
+	/**
+	 * Sends one payload to every subscription; drops the ones the push
+	 * service says are gone. `per` picks each subscription's payload (null:
+	 * skip that one).
+	 */
+	async notify(payload: PushPayload, per?: PerSubscription): Promise<number> {
+		const all = this.o.store.db
 			.prepare("SELECT * FROM push_subscriptions")
 			.all() as Row[];
+		const subs: Array<{ r: Row; body: Buffer }> = [];
+		for (const r of all) {
+			const p = per
+				? per({ turns: (r.turns as TurnNotifyMode | null) ?? null })
+				: payload;
+			if (p) subs.push({ r, body: Buffer.from(JSON.stringify(p)) });
+		}
 		if (subs.length === 0) return 0;
 		const keys = await this.vapid();
-		const body = Buffer.from(JSON.stringify(payload));
 		const send =
 			this.o.send ??
 			((url, init) =>
@@ -236,7 +318,7 @@ export class Push {
 				}));
 		let sent = 0;
 		await Promise.all(
-			subs.map(async (r) => {
+			subs.map(async ({ r, body }) => {
 				const endpoint = String(r.endpoint);
 				try {
 					const res = await send(endpoint, {
@@ -251,9 +333,10 @@ export class Push {
 							"Content-Encoding": "aes128gcm",
 							"Content-Type": "application/octet-stream",
 							TTL: "3600",
-							Urgency: "high",
-							// A newer "approval pending" replaces an undelivered one.
-							Topic: "approval",
+							// A finished turn can wait for the device to wake; the rest can't.
+							Urgency: payload.kind === "finished" ? "normal" : "high",
+							// A newer push of the same kind replaces an undelivered one.
+							Topic: TOPICS[payload.kind],
 						},
 						body: encryptPayload(
 							{

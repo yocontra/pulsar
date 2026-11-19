@@ -333,6 +333,8 @@ export class Federation implements PoolView {
 		this.state.selfProtocol = this.protocol;
 		this.state.onApproval = (approval) =>
 			this.service.events.emit("approval", { approval });
+		this.state.onTurn = (address, turn) =>
+			this.service.events.emit("agent:turn", { agentId: address, ...turn });
 		this.state.onIdle = (address) => {
 			const agent = this.service.registry.find(address);
 			if (agent) this.service.waiters.resolveIdle(agent);

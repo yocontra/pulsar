@@ -4,6 +4,7 @@ import type {
 	ChangesMode,
 	NeedsYou,
 	SubagentCounts,
+	TurnKind,
 	UsagePeriod,
 	Wake,
 } from "../http/wire.ts";
@@ -125,6 +126,11 @@ export interface FedAgent
 	 * two minutes (so other nodes show the outcome). Home-node ids.
 	 */
 	approvals?: Approval[];
+	/**
+	 * Its last ended turn as the home node decided it (src/service/turns.ts):
+	 * a newer `at` is a new finish or failure (absent from older nodes).
+	 */
+	turn?: { kind: TurnKind; at: number };
 }
 
 /** Down frames on `/fed/v1/stream`. */

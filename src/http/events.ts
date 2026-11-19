@@ -74,6 +74,7 @@ type TopicKind =
 	| "changes"
 	| "approvals"
 	| "security"
+	| "notify"
 	| "subagents";
 
 interface TopicEvent {
@@ -140,6 +141,8 @@ function topicsOf(sub: Subscription, login: string): string[] {
 		topicKey("attention"),
 		topicKey("approvals"),
 		topicKey("security"),
+		// Finished and failed turns of agents the operator acted on (src/service/turns.ts).
+		topicKey("notify"),
 	];
 	const filter = sub.window?.filter ?? "";
 	if (sub.window) keys.push(topicKey("tree", sub.window.group, filter));
@@ -216,9 +219,13 @@ export class EventHub {
 		const offSecurity = this.service.events.on("security", (data) =>
 			this.publish(topicKey("security"), "security", data),
 		);
+		const offNotify = this.service.events.on("notify", (data) =>
+			this.publish(topicKey("notify"), "notify", data),
+		);
 		this.offApprovals = () => {
 			offApproval();
 			offSecurity();
+			offNotify();
 		};
 	}
 
@@ -309,6 +316,9 @@ export class EventHub {
 		const stream = this.streams.get(streamId);
 		if (!stream || stream.login !== login) return false;
 		const next = new Set(topicsOf(sub, login));
+		// Opening an agent makes its finish/fail notifications relevant.
+		if (sub.session && sub.session !== stream.sub.session)
+			this.service.interest.note(sub.session);
 		stream.sub = sub;
 		for (const key of stream.topics)
 			if (!next.has(key)) stream.since.delete(key);
@@ -533,7 +543,11 @@ export class EventHub {
 	 */
 	private snapshot(stream: Stream, key: string, resuming = false) {
 		const topic = this.topic(key);
-		if (topic.kind === "approvals" || topic.kind === "security") {
+		if (
+			topic.kind === "approvals" ||
+			topic.kind === "security" ||
+			topic.kind === "notify"
+		) {
 			stream.since.set(key, ++this.seq);
 			return;
 		}
@@ -577,7 +591,8 @@ export class EventHub {
 			topic.kind === "transcript" ||
 			topic.kind === "changes" ||
 			topic.kind === "approvals" ||
-			topic.kind === "security"
+			topic.kind === "security" ||
+			topic.kind === "notify"
 		)
 			return;
 		const next = this.compute(topic);
@@ -733,6 +748,7 @@ export class EventHub {
 			case "changes":
 			case "approvals":
 			case "security":
+			case "notify":
 				// Never recomputed: events arrive from the service (see publish).
 				return whole(topic.kind, {});
 		}

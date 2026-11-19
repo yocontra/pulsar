@@ -303,6 +303,27 @@ CREATE TABLE IF NOT EXISTS usage_seen (
 );
 `),
 	},
+	// 9: finish and fail notifications: what each push subscription wants
+	// (`turns`: off, notify, sound, both; `in_app`), and the agents the
+	// operator recently started, messaged or opened. Additive, ensure-style.
+	{
+		ensure: (db) => {
+			if (!hasColumn(db, "push_subscriptions", "turns"))
+				db.exec(
+					"ALTER TABLE push_subscriptions ADD COLUMN turns TEXT NOT NULL DEFAULT 'notify'",
+				);
+			if (!hasColumn(db, "push_subscriptions", "in_app"))
+				db.exec(
+					"ALTER TABLE push_subscriptions ADD COLUMN in_app INTEGER NOT NULL DEFAULT 1",
+				);
+			db.exec(`
+CREATE TABLE IF NOT EXISTS agent_interest (
+	agent_id TEXT PRIMARY KEY,
+	at INTEGER NOT NULL
+);
+`);
+		},
+	},
 ];
 
 /** The schema version this pulsar writes. */

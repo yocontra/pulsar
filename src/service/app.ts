@@ -77,6 +77,8 @@ export class AppApi {
 	private tokens = new Map<string, ResolveToken>();
 	/** Real sends by `<login> <clientId>`, for idempotent retries. */
 	private sent = new Map<string, { at: number; result: Promise<SendResult> }>();
+	/** The operator sent from the app to these agents (notification interest). */
+	onOperatorSend: (agentIds: string[]) => void = () => {};
 
 	constructor(deps: {
 		registry: Registry;
@@ -270,6 +272,7 @@ export class AppApi {
 				"no_recipients",
 				ids ? "none of those agents is live" : `no live agent matches "${to}"`,
 			);
+		this.onOperatorSend(targets.map((t) => t.id));
 		if (input.resolveToken) {
 			const token = this.takeToken(input.resolveToken);
 			if (!token || token.login !== p.login || token.key !== key)

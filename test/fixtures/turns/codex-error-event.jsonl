@@ -1,0 +1,2 @@
+{"timestamp":"2026-11-19T21:07:53.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}
+{"timestamp":"2026-11-19T21:07:54.000Z","type":"event_msg","payload":{"type":"error","message":"stream disconnected before completion"}}

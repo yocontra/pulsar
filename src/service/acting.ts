@@ -106,6 +106,12 @@ type Resolved =
 export class Acting {
 	private handlers = new Map<ActingOp, ActingHandler>();
 	private o: ActingOptions;
+	/**
+	 * An op the operator ran from this node's app succeeded: its target (as
+	 * the app named it), or the agent a launch reports (`agentId`), else null.
+	 * Finish/fail notifications follow these agents (src/service/interest.ts).
+	 */
+	onActed: (agentId: string | null) => void = () => {};
 
 	constructor(o: ActingOptions) {
 		this.o = o;
@@ -126,6 +132,21 @@ export class Acting {
 	 * node with `assertion` (signed over that node's `options`).
 	 */
 	async run(
+		principal: Principal,
+		op: ActingOp,
+		target: ActTarget,
+		params: unknown,
+		assertion?: unknown,
+	): Promise<unknown> {
+		const result = await this.runOnce(principal, op, target, params, assertion);
+		const launched = (result as { agentId?: unknown } | null)?.agentId;
+		this.onActed(
+			target.agent ?? (typeof launched === "string" ? launched : null),
+		);
+		return result;
+	}
+
+	private async runOnce(
 		principal: Principal,
 		op: ActingOp,
 		target: ActTarget,

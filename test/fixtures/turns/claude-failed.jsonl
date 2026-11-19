@@ -1,0 +1,6 @@
+{"type":"user","message":{"role":"user","content":"Fix the login test"},"uuid":"u1","sessionId":"s1","timestamp":"2026-11-19T10:00:00.000Z"}
+{"type":"assistant","message":{"id":"m1","role":"assistant","model":"claude-opus-5-5","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"bun test"}}],"stop_reason":"tool_use"},"uuid":"a1","sessionId":"s1","timestamp":"2026-11-19T10:00:01.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"1 fail","is_error":true}]},"uuid":"u2","sessionId":"s1","timestamp":"2026-11-19T10:00:02.000Z"}
+{"type":"system","subtype":"api_error","level":"error","retryAttempt":1,"uuid":"y1","sessionId":"s1","timestamp":"2026-11-19T10:00:03.000Z"}
+{"type":"assistant","message":{"id":"m2","role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"You've hit your weekly limit"}],"stop_reason":"stop_sequence"},"isApiErrorMessage":true,"error":"rate_limit","apiError":"usage_limit_reached","uuid":"a2","sessionId":"s1","timestamp":"2026-11-19T10:00:04.000Z"}
+{"type":"last-prompt","lastPrompt":"Fix the login test","sessionId":"s1"}

@@ -23,6 +23,7 @@ import {
 	which,
 } from "../setup/files.ts";
 import { isPane, panePid as panePidOf, sendKeys } from "../tmux.ts";
+import { claudeTurnFailed } from "../transcripts/turn-outcome.ts";
 import type { AgentStatus } from "../types.ts";
 import { lastModel, statAsync, tailAsync } from "../util.ts";
 import { claudeLocalAnswer } from "./claude-approvals.ts";
@@ -499,6 +500,7 @@ export const claude: HarnessDriver = {
 			return file ? { kind: "file", path: file } : null;
 		},
 		parse: parseClaude,
+		turnFailed: claudeTurnFailed,
 	},
 
 	subagents: {
