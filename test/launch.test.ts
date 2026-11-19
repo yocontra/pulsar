@@ -405,6 +405,8 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 			expect(agent.meta.tmux).toBe(pane);
 			expect(home.service.app.agent(VERIFIED, agent.id).tmux).toBe(pane);
 			expect(agent.name).toBe("login-fixer");
+			// The operator started it: its finished and failed turns notify.
+			expect(home.service.interest.has(agent.id)).toBe(true);
 			const steps = states.get(s.id)!.map((x) => x.step);
 			expect(steps[0]).toBe("starting");
 			expect(steps).toContain("waiting");
@@ -747,6 +749,9 @@ describe.skipIf(!HAS_TMUX)("launching on another machine", () => {
 			expect(sends.at(-1)!.body).toContain("remote hello");
 			// The app opens its session next: this node's pool has it.
 			expect(relay.service.registry.find(`${hid}/${agent.id}`)).toBeDefined();
+			// Interest on both nodes: the relay by pool address, home by local id.
+			expect(relay.service.interest.has(`${hid}/${agent.id}`)).toBe(true);
+			expect(home.service.interest.has(agent.id)).toBe(true);
 			// The relay's own stream carried the steps.
 			expect(states.get(s.id)!.at(-1)!.step).toBe("done");
 			// Reads go to the home node too.

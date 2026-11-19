@@ -397,6 +397,7 @@ export class PulsarService {
 				})) as SendDone;
 				return r.receipts[0]?.state ?? null;
 			},
+			onAgent: (id) => this.interest.note(id),
 			...opts.launch,
 		});
 		this.acting.register("agents.launch", ({ user, params }) =>
