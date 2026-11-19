@@ -25,6 +25,7 @@ const WHY: Record<ProveReason, string> = {
 	notifications: "To turn on approval alerts, prove you're human.",
 	remove: "To remove a device, prove you're human.",
 	signout: "To sign out another device, prove you're human.",
+	act: "To make changes on an agent's machine, prove you're human.",
 	manual:
 		"Agents can't pass your device's passkey check. Proving you're human lets you approve prompts, stop agents and send as yourself.",
 };

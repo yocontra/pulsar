@@ -27,6 +27,7 @@ import {
 	wakeFor,
 } from "../lib/format.ts";
 import { useInFlight } from "../lib/inflight.ts";
+import { type ComposerSlotProps, Slot } from "../lib/registry.tsx";
 import { navigate } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import { onReceipts, watchReceipts } from "../lib/store.ts";
@@ -457,6 +458,14 @@ function ComposerImpl({
 				? "error"
 				: "ready";
 
+	// What the toolbar slots (lib/registry.tsx) get.
+	const slot: ComposerSlotProps = {
+		target,
+		compact,
+		busy: phase === "checking" || phase === "sending",
+		hasText,
+		textarea: ta,
+	};
 	const form = compact ? (
 		<PromptInput
 			onSubmit={(msg) => void start(msg.text)}
@@ -468,6 +477,7 @@ function ComposerImpl({
 				expectReply={expectReply}
 				onExpectReply={setExpectReply}
 			/>
+			<Slot name="composer.left" {...slot} />
 			<PromptInputBody>
 				<PromptInputTextarea
 					ref={ta}
@@ -479,6 +489,7 @@ function ComposerImpl({
 					onPaste={pasteText}
 				/>
 			</PromptInputBody>
+			<Slot name="composer.right" {...slot} />
 			<PromptInputSubmit
 				className="send-btn m-send"
 				status={status}
@@ -538,6 +549,7 @@ function ComposerImpl({
 					</PromptInputBody>
 					<PromptInputFooter className="composer-bar">
 						<PromptInputTools className="composer-tools">
+							<Slot name="composer.left" {...slot} />
 							<PriorityPicker value={priority} onChange={setPriority} />
 							<label className="check d-toggle">
 								<input
@@ -552,6 +564,7 @@ function ComposerImpl({
 						<span className="composer-hint hide-mobile">
 							<Kbd keys={["mod", "enter"]} /> Send
 						</span>
+						<Slot name="composer.right" {...slot} />
 						<PromptInputSubmit
 							className="send-btn"
 							status={status}

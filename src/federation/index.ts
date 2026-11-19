@@ -9,6 +9,7 @@ import type {
 	Wake,
 } from "../http/wire.ts";
 import { RpcError } from "../rpc.ts";
+import type { RelayedAct } from "../service/acting.ts";
 import { authorize } from "../service/authorize.ts";
 import type { Principal } from "../service/caller.ts";
 import { principalLabel } from "../service/caller.ts";
@@ -529,6 +530,53 @@ export class Federation implements PoolView {
 			as,
 		);
 		return r.result;
+	}
+
+	/** Relayed acting op, step 1: the home node's challenge for this exact act. */
+	async actingOptions(
+		machineId: string,
+		act: RelayedAct,
+		as: Principal,
+	): Promise<unknown> {
+		const r = await this.act(
+			`${machineId}/`,
+			{
+				op: "acting.options",
+				name: act.op,
+				agent: act.agent,
+				params: act.params,
+			},
+			as,
+		);
+		return r.options;
+	}
+
+	/** Relayed acting op, step 2: the home node verifies the assertion, then runs it. */
+	async acting(
+		machineId: string,
+		act: RelayedAct & { assertion: unknown },
+		as: Principal,
+	): Promise<unknown> {
+		const r = await this.act(
+			`${machineId}/`,
+			{
+				op: "acting.run",
+				name: act.op,
+				agent: act.agent,
+				params: act.params,
+				assertion: act.assertion,
+			},
+			as,
+		);
+		return r.result;
+	}
+
+	/** A linked machine's id, by id or name. */
+	machineIdOf(machine: string): string | null {
+		if (this.state.peers.has(machine)) return machine;
+		for (const p of this.state.peers.values())
+			if (p.name === machine) return p.machineId;
+		return null;
 	}
 
 	machines(): PoolMachine[] {
@@ -2281,6 +2329,27 @@ export class Federation implements PoolView {
 				});
 				return { ok: true, result };
 			}
+			case "acting.options": {
+				// This node's own challenge, bound to the op, target and params.
+				const options = await this.service.acting.optionsFor(
+					user,
+					this.rpFor(link),
+					relayedAct(action),
+					`node:${link.node.nodeId}`,
+				);
+				return { ok: true, options };
+			}
+			case "acting.run": {
+				// Verified here with this node's challenge and credentials; the
+				// frame itself grants nothing.
+				const result = await this.service.acting.runFor(
+					user,
+					this.rpFor(link),
+					{ ...relayedAct(action), assertion: action.assertion },
+					link.name,
+				);
+				return { ok: true, result };
+			}
 			case "ask": {
 				authorize(user, "lookup");
 				const response = await this.service.ask.local(
@@ -2361,6 +2430,19 @@ export class Federation implements PoolView {
 				);
 		}
 	}
+}
+
+/** An acting frame's act, checked for shape (the op name by the service). */
+function relayedAct(action: {
+	name: unknown;
+	agent: unknown;
+	params: unknown;
+}): RelayedAct {
+	return {
+		op: String(action.name).slice(0, 40) as RelayedAct["op"],
+		agent: typeof action.agent === "string" ? action.agent.slice(0, 300) : null,
+		params: action.params ?? null,
+	};
 }
 
 /** What changed in a message's receipts, for the tracking signature. */

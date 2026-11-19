@@ -17,6 +17,7 @@ import type {
 import type { TranscriptListener } from "../transcripts/tailer.ts";
 import type { MediaType } from "../transcripts/types.ts";
 import type { Agent, Message, Receipt } from "../types.ts";
+import type { ActingRelay } from "./acting.ts";
 import type { Principal } from "./caller.ts";
 import type { TranscriptPageResult } from "./transcripts.ts";
 
@@ -30,7 +31,7 @@ import type { TranscriptPageResult } from "./transcripts.ts";
  * agent. A local subagent id (`<agent id>/sub:<key>`) has one, but its
  * first part is a local agent id (`harness:…`, never a bare machine id).
  */
-export interface PoolView {
+export interface PoolView extends ActingRelay {
 	/** This node's machine id. */
 	readonly machineId: string;
 	/** Remote agents, including those on machines that can't be reached now. */

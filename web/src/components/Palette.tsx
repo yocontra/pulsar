@@ -1,4 +1,5 @@
 import {
+	ChevronRightIcon,
 	FolderIcon,
 	HashIcon,
 	KeyboardIcon,
@@ -15,6 +16,11 @@ import type { SearchResponse } from "../api/types.ts";
 import { openPrompt } from "../approval/focus.ts";
 import { AgentAvatar, AgentStatus, Kbd } from "../ds/index.ts";
 import { plural } from "../lib/format.ts";
+import {
+	matchingCommands,
+	type PaletteResult,
+	paletteProviders,
+} from "../lib/registry.tsx";
 import { navigate } from "../lib/router.ts";
 import { attention, recent } from "../lib/store.ts";
 import { AskPanel } from "./AskPanel.tsx";
@@ -26,7 +32,7 @@ type Item = {
 	key: string;
 	group: string;
 	label: string;
-	sub?: string;
+	sub?: ReactNode;
 	icon: ReactNode;
 	trail?: ReactNode;
 	go: () => void;
@@ -60,6 +66,26 @@ export default function Palette({ onClose }: { onClose: () => void }) {
 				.then(setRes)
 				.catch(() => {});
 		}, 120);
+		return () => {
+			clearTimeout(t);
+			ctrl.abort();
+		};
+	}, [q, asking]);
+	// Results of the providers features registered (lib/registry.tsx).
+	const [found, setFound] = useState<Record<string, PaletteResult[]>>({});
+	useEffect(() => {
+		const providers = paletteProviders.list();
+		setFound({});
+		if (!q.trim() || asking || providers.length === 0) return;
+		const ctrl = new AbortController();
+		const t = setTimeout(() => {
+			for (const p of providers)
+				p.search(q, ctrl.signal)
+					.then((r) => {
+						if (!ctrl.signal.aborted) setFound((f) => ({ ...f, [p.id]: r }));
+					})
+					.catch(() => {});
+		}, 150);
 		return () => {
 			clearTimeout(t);
 			ctrl.abort();
@@ -156,7 +182,18 @@ export default function Palette({ onClose }: { onClose: () => void }) {
 				trail,
 				go,
 			});
-	} else if (res) {
+	}
+	// Commands features registered: all with no query, else those that match.
+	const commandItems: Item[] = (asking ? [] : matchingCommands(q)).map((c) => ({
+		key: `cmd-${c.id}`,
+		group: c.group ?? "Actions",
+		label: c.label,
+		icon: c.icon ?? <ChevronRightIcon className={ICO} />,
+		trail: c.keys ? <Kbd keys={c.keys} /> : undefined,
+		go: done(c.run),
+	}));
+	if (!q.trim()) items.push(...commandItems);
+	if (q.trim() && res) {
 		for (const a of res.agents)
 			items.push({
 				key: a.id,
@@ -204,6 +241,20 @@ export default function Palette({ onClose }: { onClose: () => void }) {
 				icon: <HashIcon className={ICO} />,
 				go: done(() => navigate({ view: "broadcast", selector: t.term })),
 			});
+	}
+	if (q.trim()) {
+		items.push(...commandItems);
+		for (const p of paletteProviders.list())
+			for (const r of found[p.id] ?? [])
+				items.push({
+					key: `${p.id}:${r.key}`,
+					group: p.group,
+					label: r.label,
+					sub: r.sub,
+					icon: r.icon ?? <SearchIcon className={ICO} />,
+					trail: r.trail,
+					go: done(r.run),
+				});
 	}
 	const sel = Math.min(idx, Math.max(0, items.length - 1));
 

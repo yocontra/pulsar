@@ -44,6 +44,8 @@ export default defineConfig<unknown, E2EWorkerOptions>({
 			env: { PULSAR_NATIVE_PRESENCE: "off" },
 			// Agents registered, control and TLS servers listening.
 			readyLine: "real daemon: app",
+			// Its control port vouches for the app port (e2e/infra.ts).
+			identity: { controlPortEnv: "PULSAR_REAL_CONTROL_PORT" },
 		},
 	},
 });

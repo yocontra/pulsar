@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Daemon } from "../src/daemon.ts";
 import { hostMachineName, magicDnsName } from "../src/machine.ts";
 import {
+	ACTING_OPS,
 	ALL_OPS,
 	authorize,
 	authorizeForwarded,
@@ -96,19 +97,25 @@ describe("authorize matrix", () => {
 		"transcript.read",
 		"stop",
 		"lookup",
+		"acting.options",
+		...ACTING_OPS,
 	]);
+	// Acting ops (attachments, launch, git): the human operator only, with a session.
+	const acting = new Set<Op>(ACTING_OPS);
 	// What a linked pulsar node may do: exactly the federation ops.
 	const fedOps = new Set<Op>(FED_OPS);
 	// No target: an agent's transcript.read names no agent, so it is refused.
 	const expected = (kind: Principal["kind"], op: Op): string | null => {
 		// Only the user approves (with a passkey); agents never.
 		if (op === "approve" && kind !== "human") return "forbidden";
+		if ((acting.has(op) || op === "acting.options") && kind !== "human")
+			return "forbidden";
 		if (kind === "peer") return fedOps.has(op) ? null : "forbidden";
 		if (fedOps.has(op)) return "forbidden";
 		if (kind === "human") {
 			if (!userOps.has(op)) return "forbidden";
 			// Stop and passkey removal need a passkey session.
-			return op === "stop" || op === "passkeys.remove"
+			return op === "stop" || op === "passkeys.remove" || acting.has(op)
 				? "session_required"
 				: null;
 		}

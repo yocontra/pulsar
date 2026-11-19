@@ -6,7 +6,7 @@
  *   imports + that layout's app chunk) gzipped (the .gz sidecars
  *   finish-dist.ts writes, which the daemon serves): the phone (Ionic shell)
  *   ≤ 170 KB, the desktop ≤ 130 KB.
- * - Package: dist/web ≤ 9 MB and ≤ 300 files unpacked, not counting the
+ * - Package: dist/web ≤ 9 MB and ≤ 340 files unpacked, not counting the
  *   precompressed .br/.gz sidecars, which have their own ≤ 4 MB budget
  *   (Shiki languages and KaTeX fonts are trimmed in astro.config.mjs;
  *   Mermaid loads lazily).
@@ -35,8 +35,9 @@ const PACKAGE_BYTES = 9 * 1024 * 1024;
 // grammar chunks). What's here now is on-demand and expected: ~36 Mermaid
 // diagram types, 20 KaTeX fonts, ~22 Shiki grammars, the formatter's
 // plugins. Merging those would make one diagram or one language load all
-// of them, so the cap has headroom instead (raised from 260 at 258).
-const PACKAGE_FILES = 300;
+// of them, so the cap has headroom instead (raised from 260 at 258, and
+// from 300 to 340 at 271 for the lazy chunks of new features).
+const PACKAGE_FILES = 340;
 const SIDECAR_BYTES = 4 * 1024 * 1024;
 const problems: string[] = [];
 

@@ -10,6 +10,7 @@ import {
 	useSessions,
 } from "../data/index.ts";
 import { clock, plural } from "../lib/format.ts";
+import { shownSettingsSections } from "../lib/registry.tsx";
 import { observer } from "../lib/signals.ts";
 import { can, hello, securityVersion, showToast } from "../lib/store.ts";
 import { setShowFinished, showFinished } from "../lib/subagents.ts";
@@ -149,11 +150,16 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 	} = useSettings();
 	const h = hello.value;
 	const [active, setActive] = useState<string>("set-general");
-	const shown = SECTIONS.filter(
-		([id]) =>
-			(id !== "set-push" || can("push")) &&
-			(id !== "set-keys" || can("approvals")),
-	);
+	// Sections features registered (lib/registry.tsx) come after ours.
+	const extra = shownSettingsSections(false);
+	const shown: (readonly [string, string])[] = [
+		...SECTIONS.filter(
+			([id]) =>
+				(id !== "set-push" || can("push")) &&
+				(id !== "set-keys" || can("approvals")),
+		),
+		...extra.map((x) => [`set-x-${x.id}`, x.title] as const),
+	];
 	const jump = (id: string) => {
 		setActive(id);
 		document
@@ -433,6 +439,19 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 							</li>
 						</ul>
 					</section>
+					{extra.map((x) => {
+						const Body = x.desktop!;
+						return (
+							<section
+								key={x.id}
+								className="d-set-sec"
+								aria-labelledby={`set-x-${x.id}`}
+							>
+								<h3 id={`set-x-${x.id}`}>{x.title}</h3>
+								<Body />
+							</section>
+						);
+					})}
 				</div>
 			</div>
 		</Layer>

@@ -22,6 +22,7 @@ import {
 	useSessions,
 } from "../data/index.ts";
 import { clock } from "../lib/format.ts";
+import { shownSettingsSections } from "../lib/registry.tsx";
 import { observer } from "../lib/signals.ts";
 import { branches, can, hello, nodes, showToast } from "../lib/store.ts";
 import { setShowFinished, showFinished } from "../lib/subagents.ts";
@@ -41,7 +42,8 @@ import { IonLabel, IonList, IonNote } from "./ionic-lazy.tsx";
 import { loadIonicLazy, useIonicLazy } from "./lazyIonic.ts";
 import { Bar, linkWord } from "./rows.tsx";
 
-function Group({
+/** A titled inset list (registered sections render IonItems inside one). */
+export function Group({
 	title,
 	foot,
 	children,
@@ -378,6 +380,16 @@ function SettingsPageImpl() {
 						})}
 					</Group>
 				)}
+
+				{/* Sections features registered (lib/registry.tsx). */}
+				{shownSettingsSections(true).map((x) => {
+					const Body = x.phone!;
+					return (
+						<Group key={x.id} title={x.title}>
+							<Body />
+						</Group>
+					);
+				})}
 
 				{h && (
 					<Group title="About">

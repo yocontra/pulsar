@@ -383,6 +383,19 @@ async function ask(login: string, asTerminal: boolean) {
 
 const control = createServer(async (req, res) => {
 	const url = new URL(req.url ?? "/", "http://x");
+	// Which daemon this is (e2e/infra.ts): the worker's token, and the
+	// machine id this fresh state folder got, which the app port's /hello
+	// must report. A port another worker's daemon holds fails loudly.
+	if (url.pathname === "/e2e-identity") {
+		res.writeHead(200, { "content-type": "application/json" });
+		res.end(
+			JSON.stringify({
+				token: process.env.PULSAR_E2E_TOKEN ?? null,
+				machineId: daemon.service.machineId,
+			}),
+		);
+		return;
+	}
 	if (url.pathname === "/presence") {
 		if (req.method === "POST")
 			await ask(

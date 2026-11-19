@@ -287,7 +287,8 @@ export function takePreload(
 	return p.token === token && now - p.at < PRELOAD_MS ? p.res : null;
 }
 
-async function request<T>(
+/** A request to the daemon's API (`/api/v1<path>`) with this tab's session. */
+export async function request<T>(
 	path: string,
 	init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
@@ -497,6 +498,46 @@ export const api = {
 			body: { assertion },
 		});
 	},
+	/**
+	 * An acting op (src/service/acting.ts: attachments, launch, git). Here:
+	 * `send()` with this browser's passkey session (Prove Human first if
+	 * needed). On another machine (an agent address with `/`, or a `machine`,
+	 * which callers pass only for another machine): that machine issues a
+	 * challenge for exactly this op, target and `params`, the passkey signs
+	 * it, and `send(assertion)` makes the op's own request with it, which
+	 * that machine verifies. `params` must be what the request sends.
+	 */
+	acting: async <T>(
+		op: ActingOp,
+		target: { agent?: string; machine?: string },
+		params: unknown,
+		send: (assertion?: unknown) => Promise<T>,
+		/** What the Prove Human sheet says it is for. */
+		reason: ProveReason = "act",
+	): Promise<T> => {
+		const remote = target.agent ? target.agent.includes("/") : !!target.machine;
+		if (!remote) return withSession(() => send(), reason);
+		let options: unknown;
+		try {
+			options = await request<unknown>("/acting/options", {
+				method: "POST",
+				body: { op, ...target, params },
+			});
+		} catch (e) {
+			if (e instanceof ApiError && e.code === "no_passkey")
+				throw new Error(
+					"That machine doesn't know this device yet. Open Pulsar on that machine and prove you're human there.",
+				);
+			throw e;
+		}
+		const { startAuthentication } = await import("@simplewebauthn/browser");
+		const assertion = await startAuthentication({
+			optionsJSON: options as Parameters<
+				typeof startAuthentication
+			>[0]["optionsJSON"],
+		});
+		return send(assertion);
+	},
 	approval: (requestId: string) =>
 		request<Approval>(`/approvals/${enc(requestId)}`),
 	/** Passkey request options whose challenge covers this prompt and this answer. */
@@ -616,6 +657,14 @@ export class ProveCancelled extends Error {
 export class SendCancelled extends ProveCancelled {}
 
 /** Runs `fn` with a passkey session; asks again once if the daemon says it expired. */
+/** Ops that change something on an agent's machine (src/service/authorize.ts ACTING_OPS). */
+export type ActingOp =
+	| "attachments.upload"
+	| "agents.launch"
+	| "git.commit"
+	| "git.push"
+	| "git.pr";
+
 async function withSession<T>(
 	fn: () => Promise<T>,
 	reason: ProveReason = "manual",

@@ -6,6 +6,7 @@
 
 import { lazy } from "../lib/lazy.tsx";
 import { prefetch } from "../lib/prefetch.ts";
+import { pageFor, pageProps } from "../lib/registry.tsx";
 import type { Route } from "../lib/router.ts";
 import Home from "./Home.tsx";
 import { PageSkeleton } from "./skeletons.tsx";
@@ -45,6 +46,8 @@ export function preloadPage(r: Route): Promise<unknown> {
 			return Ids.preload();
 		case "changes":
 			return Changes.preload();
+		case "page":
+			return pageFor(r)?.phone?.preload?.() ?? Promise.resolve();
 		default:
 			return Promise.resolve();
 	}
@@ -75,6 +78,11 @@ export function PageFor({ route }: { route: Route }) {
 			return (
 				<Changes id={route.id} {...(route.file ? { file: route.file } : {})} />
 			);
+		case "page": {
+			// A feature's page (lib/registry.tsx); Home when it has no phone view.
+			const Page = pageFor(route)?.phone;
+			return Page ? <Page {...pageProps(route)} /> : <Home />;
+		}
 		default:
 			return <PageSkeleton title="" />;
 	}

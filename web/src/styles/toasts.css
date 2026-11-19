@@ -1,0 +1,55 @@
+/* Sonner's toasts in our tokens (src/lib/toast.ts). Light and dark both come
+   from the --ds-* tokens, so the toaster stays on Sonner's light theme. */
+[data-sonner-toaster][data-sonner-theme] {
+	--normal-bg: var(--ds-surface);
+	--normal-border: var(--ds-border);
+	--normal-text: var(--ds-text);
+	--success-bg: var(--ds-surface);
+	--success-border: var(--ds-border);
+	--success-text: var(--ds-text);
+	--info-bg: var(--ds-surface);
+	--info-border: var(--ds-border);
+	--info-text: var(--ds-text);
+	--warning-bg: var(--ds-surface);
+	--warning-border: var(--ds-border);
+	--warning-text: var(--ds-text);
+	--error-bg: var(--ds-surface);
+	--error-border: var(--ds-border);
+	--error-text: var(--ds-text);
+	--border-radius: var(--ds-radius-lg);
+	--gray2: var(--ds-surface-hover);
+	--gray5: var(--ds-border-strong);
+	font-family: var(--ds-font-sans);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+	box-shadow: var(--ds-shadow-md);
+	font-size: var(--ds-text-secondary);
+	gap: var(--ds-space-2);
+}
+[data-sonner-toaster]
+	[data-sonner-toast][data-styled="true"]
+	[data-description] {
+	color: var(--ds-text-3);
+}
+/* Status colors on the icon only: success, info, warning, error. */
+[data-sonner-toaster] [data-sonner-toast][data-type="success"] [data-icon] {
+	color: var(--ds-success);
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="info"] [data-icon] {
+	color: var(--ds-busy);
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="warning"] [data-icon] {
+	color: var(--ds-needs);
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="error"] [data-icon] {
+	color: var(--ds-danger);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button] {
+	height: 28px;
+	padding: 0 var(--ds-space-3);
+	border-radius: var(--ds-radius-md);
+	background: var(--ds-primary);
+	color: var(--ds-on-primary);
+	font-size: var(--ds-text-footnote);
+	font-weight: var(--ds-weight-semibold);
+}

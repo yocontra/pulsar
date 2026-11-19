@@ -125,7 +125,12 @@ export type Purpose =
 	| { kind: "approval"; binding: ApprovalBinding }
 	| { kind: "session"; context: string }
 	/** Interrupting one agent (a Stop relayed to its home node). */
-	| { kind: "stop"; agent: string };
+	| { kind: "stop"; agent: string }
+	/**
+	 * One acting op relayed to its home node (src/service/acting.ts): the op,
+	 * its target, and a digest of its exact parameters.
+	 */
+	| { kind: "act"; op: string; target: string; digest: string };
 
 /** The challenge bytes for a purpose and a fresh nonce. */
 function purposeChallenge(purpose: Purpose, nonce: string): Buffer {
@@ -134,6 +139,17 @@ function purposeChallenge(purpose: Purpose, nonce: string): Buffer {
 	if (purpose.kind === "stop")
 		return challengeBytes(
 			{ v: 1, purpose: "stop", agent: purpose.agent },
+			nonce,
+		);
+	if (purpose.kind === "act")
+		return challengeBytes(
+			{
+				v: 1,
+				purpose: "act",
+				op: purpose.op,
+				target: purpose.target,
+				digest: purpose.digest,
+			},
 			nonce,
 		);
 	return challengeBytes(
@@ -410,6 +426,35 @@ export class Passkeys {
 		assertion: unknown,
 	): Promise<Signer> {
 		return this.check(login, rp, { kind: "stop", agent }, assertion);
+	}
+
+	/**
+	 * Request options for one acting op (single use, two minutes). The
+	 * challenge covers the op, its target and `digest` (its parameters).
+	 */
+	actOptions(
+		login: string,
+		rp: RelyingParty,
+		act: { op: string; target: string; digest: string },
+		requester = "local",
+	) {
+		return this.issue(
+			login,
+			rp,
+			{ kind: "act", ...act },
+			Number.POSITIVE_INFINITY,
+			requester,
+		);
+	}
+
+	/** Verifies a signature for exactly this op, target and parameter digest. */
+	verifyAct(
+		login: string,
+		rp: RelyingParty,
+		act: { op: string; target: string; digest: string },
+		assertion: unknown,
+	): Promise<Signer> {
+		return this.check(login, rp, { kind: "act", ...act }, assertion);
 	}
 
 	private async issue(

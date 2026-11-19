@@ -8,7 +8,7 @@
  * navigation stack: screens below the top stay mounted (scroll kept) and the
  * back button names the screen it returns to.
  */
-import { hrefFor, parseHash, type Route } from "./hash.ts";
+import { hrefFor, onPageName, parseHash, type Route } from "./hash.ts";
 import { signal } from "./signals.ts";
 
 export { hrefFor, parseHash, type Route };
@@ -29,6 +29,16 @@ export const stack = signal<Route[]>(
  * animated, or a swipe-back that finished its own animation).
  */
 export const motion = signal<"push" | "pop" | "none">("none");
+
+// A feature page registered after the first URL was read (src/features.ts
+// loads at start): open it now if the URL names it.
+onPageName(() => {
+	if (route.value.view !== "home" || !globalThis.location) return;
+	const r = parseHash(location.hash);
+	if (r.view !== "page") return;
+	route.value = r;
+	stack.value = [HOME, r];
+});
 let pendingPop: "pop" | "none" | null = null;
 
 addEventListener("popstate", (e) => {

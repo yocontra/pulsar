@@ -11,6 +11,7 @@ import type { TreeNode } from "../api/types.ts";
 import { sessionless } from "../approval/sessionless.ts";
 import { Kbd } from "../ds/index.ts";
 import { lazy } from "../lib/lazy.tsx";
+import { pageFor, pageProps, Slot } from "../lib/registry.tsx";
 import { navigate, type Route, route } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import {
@@ -33,6 +34,7 @@ import {
 import { Home } from "./desktop/Home.tsx";
 import { SideResizer } from "./desktop/SideResizer.tsx";
 import { SessionHeaderSkeleton } from "./desktop/skeletons.tsx";
+import { Toasts } from "./Toasts.tsx";
 import { Tree } from "./Tree.tsx";
 import { DesktopRow } from "./TreeDesktop.tsx";
 
@@ -103,6 +105,11 @@ function MainPaneImpl({ r }: { r: Route }) {
 			return <IdsView ids={r.ids} mobile={false} />;
 		case "needs":
 			return <NeedsList mobile={false} />;
+		case "page": {
+			// A feature's page (lib/registry.tsx); Home when it has no desktop view.
+			const Page = pageFor(r)?.desktop;
+			return Page ? <Page {...pageProps(r)} /> : <Home />;
+		}
 		default:
 			return <Home />;
 	}
@@ -206,6 +213,7 @@ function DesktopImpl() {
 						<span className="d-brand-name">Pulsar</span>
 						<span className="d-brand-sub">{h.machine}</span>
 					</div>
+					<Slot name="sidebar.header" mobile={false} />
 					<button
 						type="button"
 						className="d-btn ghost sm icon"
@@ -295,6 +303,7 @@ function DesktopImpl() {
 				<Builder selector={r.selector} mobile={false} />
 			)}
 			{menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
+			<Toasts mobile={false} />
 		</div>
 	);
 }

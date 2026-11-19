@@ -13,7 +13,49 @@ export type Route =
 	| { view: "changes"; id: string; file?: string }
 	/** Phone only: settings and Ask are screens of their own. */
 	| { view: "settings" }
-	| { view: "ask" };
+	| { view: "ask" }
+	/**
+	 * A page a feature registered (lib/registry.tsx `registerPage`):
+	 * `#/<name>/<arg>?<params>`.
+	 */
+	| {
+			view: "page";
+			name: string;
+			arg?: string;
+			params?: Record<string, string>;
+	  };
+
+/** First path segments the app itself routes; pages can't take them. */
+const BUILT_IN = new Set([
+	"a",
+	"s",
+	"n",
+	"ids",
+	"broadcast",
+	"needs",
+	"approval",
+	"changes",
+	"settings",
+	"ask",
+]);
+const pageNames = new Set<string>();
+const pageListeners = new Set<() => void>();
+
+/** Lets `#/<name>` parse as a page route (lib/registry.tsx calls it). */
+export function registerPageName(name: string) {
+	if (!/^[a-z][a-z0-9-]{0,31}$/.test(name) || BUILT_IN.has(name))
+		throw new Error(`not a page name: ${name}`);
+	pageNames.add(name);
+	for (const fn of pageListeners) fn();
+}
+
+/** Called when a page name is registered (the router re-reads the first URL). */
+export function onPageName(fn: () => void): () => void {
+	pageListeners.add(fn);
+	return () => {
+		pageListeners.delete(fn);
+	};
+}
 
 export function parseHash(hash: string): Route {
 	const h = hash.replace(/^#/, "");
@@ -55,8 +97,17 @@ export function parseHash(hash: string): Route {
 			return { view: "settings" };
 		case "ask":
 			return { view: "ask" };
-		default:
-			return { view: "home" };
+		default: {
+			const name = parts[0] ?? "";
+			if (!pageNames.has(name)) return { view: "home" };
+			const p = Object.fromEntries(params);
+			return {
+				view: "page",
+				name,
+				...(arg ? { arg } : {}),
+				...(Object.keys(p).length ? { params: p } : {}),
+			};
+		}
 	}
 }
 
@@ -85,5 +136,9 @@ export function hrefFor(r: Route): string {
 			return "#/settings";
 		case "ask":
 			return "#/ask";
+		case "page": {
+			const qs = new URLSearchParams(r.params ?? {}).toString();
+			return `#/${e(r.name)}${r.arg ? `/${e(r.arg)}` : ""}${qs ? `?${qs}` : ""}`;
+		}
 	}
 }

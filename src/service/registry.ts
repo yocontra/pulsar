@@ -237,7 +237,7 @@ export class Registry {
 		const agent = this.agents.get(id);
 		if (agent?.status !== "busy" || this.closed) return;
 		agent.status = held.status;
-		this.statusAt.set(id, held.at);
+		this.noteStatus(agent, "busy", held.at);
 		traceStatus(`${id} -> ${held.status} (since ${held.at})`);
 		this.waiters.resolveIdle(agent);
 		this.events.emit("agent", { action: "update", agent: toPublic(agent) });
@@ -262,9 +262,19 @@ export class Registry {
 		was: AgentStatus | undefined,
 		at = Date.now(),
 	) {
-		const shown = (s: AgentStatus | undefined) =>
-			s === "unknown" ? "idle" : s;
-		if (shown(was) !== shown(agent.status)) this.statusAt.set(agent.id, at);
+		if (shown(was) === shown(agent.status)) return;
+		this.statusAt.set(agent.id, at);
+		if (was !== undefined) this.emitStatus(agent, was, at);
+	}
+
+	/** Announces a status change (`agent:status`); see ServiceEvents. */
+	private emitStatus(agent: Agent, from: AgentStatus, at: number) {
+		this.events.emit("agent:status", {
+			agentId: agent.id,
+			from,
+			to: agent.status,
+			at,
+		});
 	}
 
 	/** When a local agent's status last changed: true even when no view was built in between. */
@@ -677,15 +687,17 @@ export class Registry {
 		this.store.reassign(old.id, current.id);
 		this.waiters.reassign(old.id, current.id);
 		if (old.registered) current.registered = true;
-		for (const key of ["acks", "resumeKey"])
+		for (const key of ["acks", "resumeKey", "tmux"])
 			if (old.meta[key] && !current.meta[key])
 				current.meta[key] = old.meta[key]!;
 		if (current.inbound === "accept" && old.inbound !== "accept")
 			current.inbound = old.inbound;
 		current.reach = this.reachOf(current);
 		this.delete(old.id);
+		const was = old.status;
 		old.status = "gone";
 		old.lastSeen = Date.now();
+		if (was !== "gone") this.emitStatus(old, was, old.lastSeen);
 		this.events.emit("agent", { action: "gone", agent: toPublic(old) });
 		this.events.emit("agent", { action: "update", agent: toPublic(current) });
 		// A wait for the old session to finish ends now if the process is idle.
@@ -1298,12 +1310,17 @@ export class Registry {
 		}
 		agent.status = status;
 		// `unknown` shows as idle, but now we know when it went idle.
-		if (was === "unknown") this.statusAt.set(agent.id, at);
-		else this.noteStatus(agent, was, at);
+		if (was === "unknown") {
+			this.statusAt.set(agent.id, at);
+			if (status === "busy") this.emitStatus(agent, was, at);
+		} else this.noteStatus(agent, was, at);
 		if (status === "idle") this.waiters.resolveIdle(agent);
 		this.events.emit("agent", { action: "update", agent: toPublic(agent) });
 	}
 }
+
+/** The status as shown: `unknown` reads as idle. */
+const shown = (s: AgentStatus | undefined) => (s === "unknown" ? "idle" : s);
 
 function idleSettleDefault(): number {
 	const env = Number(process.env.PULSAR_IDLE_SETTLE_MS);

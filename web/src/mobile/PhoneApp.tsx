@@ -9,6 +9,7 @@ import "@ionic/react/css/typography.css";
 import "../styles/ionic-theme.css";
 import "./theme.css";
 import { useEffect } from "react";
+import { Toasts } from "../components/Toasts.tsx";
 import { lazy } from "../lib/lazy.tsx";
 import { effect, observer } from "../lib/signals.ts";
 import { failure, hello, toast } from "../lib/store.ts";
@@ -89,6 +90,7 @@ function PhoneAppImpl() {
 		<IonApp>
 			<PhoneNav />
 			<Overlays />
+			<Toasts mobile />
 		</IonApp>
 	);
 }

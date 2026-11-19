@@ -26,6 +26,7 @@ import {
 	type Selector,
 	withoutKey,
 } from "../../src/selector.ts";
+import { actDigest } from "../../src/service/acting.ts";
 import {
 	type AgentWork,
 	parseQuestion,
@@ -1917,6 +1918,47 @@ function requireSession(req: Request) {
 			"prove you're human first (Prove Human, Face ID / Touch ID)",
 		);
 }
+/**
+ * Acting ops (src/service/acting.ts), as the daemon checks them: an agent
+ * on this machine (no `/` in its id) or no `machine` needs the passkey
+ * session; one on "another machine" (an address, or a `machine`) needs an
+ * assertion over this mock's `/acting/options` challenge for exactly that
+ * op, target and params. Feature routes call it before acting.
+ */
+async function requireActing(
+	req: Request,
+	op: string,
+	target: { agent?: string; machine?: string },
+	params: unknown,
+	assertion: unknown,
+) {
+	const remote = target.agent ? target.agent.includes("/") : !!target.machine;
+	if (!remote) return requireSession(req);
+	if (assertion === undefined)
+		throw new ApiError(
+			401,
+			"session_required",
+			"this action on another machine needs Face ID / Touch ID for that action",
+		);
+	const url = new URL(req.url);
+	try {
+		await passkeys.verifyAct(
+			LOGIN,
+			{ rpId: url.hostname, origins: [url.origin] },
+			{ op, target: actTarget(target), digest: actDigest(params) },
+			assertion,
+		);
+	} catch (e) {
+		if (e instanceof RpcError)
+			throw new ApiError(RPC_STATUS[e.code] ?? 400, e.code, e.message);
+		throw e;
+	}
+}
+
+/** The target an acting challenge names (the home node's local id, or `machine:`). */
+const actTarget = (t: { agent?: string }) =>
+	t.agent ? t.agent.slice(t.agent.indexOf("/") + 1) : "machine:";
+
 const RPC_STATUS: Record<string, number> = {
 	bad_assertion: 403,
 	no_passkey: 409,
@@ -2312,6 +2354,11 @@ async function route(
 		const me = deviceOf(req);
 		return json({
 			...hello(),
+			// Which mock this is: the e2e worker that started it checks it
+			// (e2e/infra.ts), so a port collision fails loudly.
+			...(process.env.PULSAR_E2E_TOKEN
+				? { e2eToken: process.env.PULSAR_E2E_TOKEN }
+				: {}),
 			you: { login: LOGIN, node: me.node, name: me.name },
 			session: sessionOf(req),
 			canSession: passkeys.has(LOGIN, rp),
@@ -2493,6 +2540,50 @@ async function route(
 			if (!d) throw notFound(`no change to ${path}`);
 			return json(d);
 		}
+	}
+	// Mock only: a stand-in acting op (the web client's api.acting flow).
+	if (POST && path === "/__mock/acting") {
+		const b = (await jsonBody(req)) as {
+			op: string;
+			agent?: string;
+			machine?: string;
+			params?: unknown;
+			assertion?: unknown;
+		};
+		await requireActing(
+			req,
+			b.op,
+			{
+				...(b.agent ? { agent: b.agent } : {}),
+				...(b.machine ? { machine: b.machine } : {}),
+			},
+			b.params ?? null,
+			b.assertion,
+		);
+		return json({ ok: true, op: b.op });
+	}
+	// The home node's challenge for an acting op on another machine.
+	if (POST && path === "/acting/options") {
+		const body = (await jsonBody(req)) as {
+			op?: string;
+			agent?: string;
+			machine?: string;
+			params?: unknown;
+		};
+		if (!body.op) throw badRequest("op: required");
+		const remote = body.agent ? body.agent.includes("/") : !!body.machine;
+		if (!remote)
+			throw badRequest(
+				"an action on this machine uses your passkey session; no options needed",
+			);
+		const rp = { rpId: url.hostname, origins: [url.origin] };
+		return json(
+			await passkeys.actOptions(LOGIN, rp, {
+				op: body.op,
+				target: actTarget(body),
+				digest: actDigest(body.params ?? null),
+			}),
+		);
 	}
 	if (POST && seg[0] === "agents" && seg[2] === "stop" && seg.length === 3) {
 		if (!has("stop"))

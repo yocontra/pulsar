@@ -72,6 +72,11 @@ export interface AgentRow extends PublicAgent {
 	/** Stop (interrupt the current turn) can reach this agent. */
 	canStop: boolean;
 	/**
+	 * The tmux pane it runs in (`%12`), when Pulsar started it there or was
+	 * told (`agent.meta.tmux`); absent otherwise and from older daemons.
+	 */
+	tmux?: string;
+	/**
 	 * Its subagents, counted: present once Pulsar found at least one (absent
 	 * from older daemons and peers, and for agents with none).
 	 */

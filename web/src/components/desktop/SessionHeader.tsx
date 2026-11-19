@@ -16,6 +16,7 @@ import {
 } from "../../ds/index.ts";
 import { shortModel, stateLabel, tagValue, timer } from "../../lib/format.ts";
 import { branchLink, prLink, repoLink } from "../../lib/links.ts";
+import { Slot } from "../../lib/registry.tsx";
 import { observer } from "../../lib/signals.ts";
 import { can, showToast } from "../../lib/store.ts";
 
@@ -152,6 +153,7 @@ function DesktopSessionHeaderImpl({
 			</div>
 			<div className="d-sh-actions">
 				{extra}
+				<Slot name="session.header" agent={agent} mobile={false} />
 				<span className="d-sh-model" title="Harness and model">
 					{harnessName(agent.harness)}
 					{model && (

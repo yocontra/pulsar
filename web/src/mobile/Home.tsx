@@ -19,6 +19,7 @@ import {
 	OFFLINE,
 	type Row,
 } from "../components/treeRows.ts";
+import { Slot } from "../lib/registry.tsx";
 import { navigate } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import {
@@ -641,6 +642,7 @@ function HomeImpl() {
 					</IonButtons>
 					<IonTitle>{HOME_TITLE}</IonTitle>
 					<IonButtons slot="end">
+						<Slot name="sidebar.header" mobile />
 						<IonButton
 							aria-label="Ask"
 							onClick={() => navigate({ view: "ask" })}

@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { focusPrompt } from "../approval/focus.ts";
 import { ChangesButton } from "../changes/ChangesButton.tsx";
 import { shortModel } from "../lib/format.ts";
+import { Slot } from "../lib/registry.tsx";
 import { route } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import { approvalItem, findAgent, showToast } from "../lib/store.ts";
@@ -134,6 +135,7 @@ function AgentPageImpl({ id }: { id: string }) {
 						</span>
 					</IonTitle>
 					<IonButtons slot="end">
+						{a && <Slot name="session.header" agent={a} mobile />}
 						<ChangesButton id={id} />
 						<IonButton
 							aria-label="More"

@@ -245,7 +245,27 @@ export type FedAction =
 			answer?: unknown;
 	  }
 	| { op: "stop.options"; agent: string }
-	| { op: "stop"; agent: string; assertion: unknown };
+	| { op: "stop"; agent: string; assertion: unknown }
+	/*
+	 * Acting ops (src/service/acting.ts), the same ceremony for every one:
+	 * `name` is the op (`git.commit`, ...), `agent` the receiver's local
+	 * agent id (null: the machine itself), `params` the op's own JSON. The
+	 * challenge covers name, agent and a digest of params. Features add a
+	 * handler, never a frame.
+	 */
+	| {
+			op: "acting.options";
+			name: string;
+			agent: string | null;
+			params: unknown;
+	  }
+	| {
+			op: "acting.run";
+			name: string;
+			agent: string | null;
+			params: unknown;
+			assertion: unknown;
+	  };
 
 /** Up frames, batched in `POST /fed/v1/frames`. */
 export type UpFrame =

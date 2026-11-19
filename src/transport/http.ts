@@ -25,6 +25,7 @@ import {
 import type { UserSessionInfo } from "../http/wire.ts";
 import { operatorName } from "../human-tag.ts";
 import { RpcError } from "../rpc.ts";
+import { ACTING_OPS } from "../service/authorize.ts";
 import {
 	type Principal,
 	principalLabel,
@@ -307,6 +308,15 @@ const SubscriptionBody = z
 
 const Decision = z.enum(["allow-once", "allow-session", "deny", "answer"]);
 const StopBody = z.object({ assertion: z.unknown().optional() }).strict();
+/** `POST /acting/options`: the home node's challenge for one acting op (src/service/acting.ts). */
+const ActingOptionsBody = z
+	.object({
+		op: z.enum(ACTING_OPS),
+		agent: z.string().max(600).optional(),
+		machine: z.string().max(200).optional(),
+		params: z.unknown().optional(),
+	})
+	.strict();
 // The answer is checked against its prompt by the approvals service.
 const Answer = z.record(z.string(), z.unknown()).optional();
 const ApprovalOptionsBody = z
@@ -926,6 +936,20 @@ export class HttpTransport {
 			const body = parse(StopBody, raw);
 			return c.json(
 				await this.service.stopAgent(who(c), c.req.param("id"), body.assertion),
+			);
+		});
+		// Acting ops on another machine (attachments, launch, git): its home
+		// node's challenge for this exact act. The op's own route then sends
+		// the assertion, which the home node verifies (src/service/acting.ts).
+		api.post("/acting/options", async (c) => {
+			const body = parse(ActingOptionsBody, await jsonBody(c));
+			return c.json(
+				await this.service.acting.options(
+					who(c),
+					body.op,
+					{ agent: body.agent ?? null, machine: body.machine ?? null },
+					body.params ?? null,
+				),
 			);
 		});
 		// Approvals: the passkey signs one prompt and one answer.

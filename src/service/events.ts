@@ -1,5 +1,5 @@
 import type { Approval, SecurityNotice, SubagentCounts } from "../http/wire.ts";
-import type { Message, PublicAgent } from "../types.ts";
+import type { AgentStatus, Message, PublicAgent } from "../types.ts";
 import type { NeedsYou } from "./registry.ts";
 
 /** Everything the service announces. Names and payloads are the socket `tail` frames. */
@@ -16,6 +16,20 @@ export interface ServiceEvents {
 	subagents: { agentId: string; counts: SubagentCounts | undefined };
 	/** Remote agents or a machine's link changed (federation; not a `tail` frame). */
 	pool: { machineId: string | null };
+	/**
+	 * A local agent's status changed, as shown: busy, idle, gone (not a
+	 * `tail` frame). `unknown` shows as idle, so unknown <-> idle is no
+	 * change, but `from`/`to` carry the raw values. An idle after busy comes
+	 * only once it held for the settle time. A new agent's first status is
+	 * not a change; a gone agent that comes back is (`from: "gone"`).
+	 * `at`: when the change happened (ms), not when it was read.
+	 */
+	"agent:status": {
+		agentId: string;
+		from: AgentStatus;
+		to: AgentStatus;
+		at: number;
+	};
 }
 
 export type ServiceEvent = keyof ServiceEvents;

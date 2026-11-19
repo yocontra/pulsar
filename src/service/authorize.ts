@@ -50,6 +50,20 @@ export const OPS = [
 ] as const;
 
 /**
+ * Acting ops: the operator changes something on an agent's machine (files,
+ * processes, git). Only the human operator, with a passkey session on this
+ * node; on a remote agent the home node verifies its own passkey assertion
+ * for the exact action (src/service/acting.ts). Each run is audited.
+ */
+export const ACTING_OPS = [
+	"attachments.upload",
+	"agents.launch",
+	"git.commit",
+	"git.push",
+	"git.pr",
+] as const;
+
+/**
  * Operations only the HTTP transport serves (the app's pool views). They are
  * not socket methods: `isOp` rejects them, so `handle` never runs them.
  */
@@ -68,6 +82,9 @@ export const HTTP_OPS = [
 	"passkeys.register",
 	/** Web Push: the VAPID key, subscribing and unsubscribing this browser. */
 	"push.subscribe",
+	/** Request options for an acting op on a remote agent (its home node's challenge). */
+	"acting.options",
+	...ACTING_OPS,
 ] as const;
 
 /**
@@ -147,10 +164,25 @@ const USER_OPS: ReadonlySet<Op> = new Set<Op>([
 	"transcript.read",
 	"stop",
 	"lookup",
+	"acting.options",
+	...ACTING_OPS,
 ]);
 
 /** What the human operator may do only with a passkey session (`verified`, Prove Human). */
-const SESSION_OPS: ReadonlySet<Op> = new Set<Op>(["stop", "passkeys.remove"]);
+const SESSION_OPS: ReadonlySet<Op> = new Set<Op>([
+	"stop",
+	"passkeys.remove",
+	...ACTING_OPS,
+]);
+
+const ACTING_SET: ReadonlySet<Op> = new Set<Op>(ACTING_OPS);
+
+export type ActingOp = (typeof ACTING_OPS)[number];
+
+/** True for an acting op name (a federation frame names one as a string). */
+export function isActingOp(op: unknown): op is ActingOp {
+	return typeof op === "string" && ACTING_SET.has(op as Op);
+}
 
 /** True for a socket RPC method name. */
 export function isOp(method: string): method is SocketOp {
@@ -176,6 +208,14 @@ export function authorize(principal: Principal, op: Op, target?: string) {
 			principal.kind === "peer"
 				? `a linked node may not call ${op}`
 				: `${op} is for linked Pulsar nodes only`,
+		);
+	if (
+		(ACTING_SET.has(op) || op === "acting.options") &&
+		principal.kind !== "human"
+	)
+		throw new RpcError(
+			"forbidden",
+			`only the human operator may call ${op}, from the app after Prove Human`,
 		);
 	if (op === "approve" && principal.kind !== "human")
 		throw new RpcError(

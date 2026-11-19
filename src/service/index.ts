@@ -28,6 +28,7 @@ import {
 	type Registration,
 } from "../types.ts";
 import { VERSION } from "../version.ts";
+import { Acting } from "./acting.ts";
 import { AppApi } from "./app.ts";
 import {
 	type ApprovalRequest,
@@ -70,6 +71,14 @@ import { Views } from "./views.ts";
 import { Waiters } from "./waiters.ts";
 
 export {
+	Acting,
+	type ActingHandler,
+	type ActTarget,
+	actDigest,
+} from "./acting.ts";
+export {
+	ACTING_OPS,
+	type ActingOp,
 	ALL_OPS,
 	authorize,
 	authorizeForwarded,
@@ -153,6 +162,8 @@ export class PulsarService {
 	readonly subagents: Subagents;
 	/** Stop: interrupting agents' turns. */
 	readonly interrupts: Interrupts;
+	/** Acting ops (attachments, launch, git): Prove Human here, home-node proof for remote agents. */
+	readonly acting: Acting;
 	/** This node's passkeys (approvals and passkey sessions share them). */
 	readonly passkeys: Passkeys;
 	/** Passkey sessions: what the app shows to act as the user. */
@@ -273,6 +284,14 @@ export class PulsarService {
 			registry: this.registry,
 			sessions: this.sessions,
 			store: this.store,
+		});
+		this.acting = new Acting({
+			registry: this.registry,
+			store: this.store,
+			passkeys: this.passkeys,
+			machineId: () => this.machineId,
+			machine: () => this.machine,
+			relay: () => this.registry.pool,
 		});
 		this.presence = new Presence({
 			native:

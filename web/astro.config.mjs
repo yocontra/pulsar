@@ -88,6 +88,28 @@ function ionicIosOnly() {
 	};
 }
 
+/**
+ * Sonner (toasts, src/lib/toast.ts) adds its stylesheet as a <style> in
+ * <head> when its module loads, which the CSP (style-src 'self') blocks.
+ * Drop that call; the toaster chunk imports `sonner/dist/styles.css`
+ * instead (a real stylesheet). The build fails if Sonner's code changes shape.
+ */
+function sonnerNoInlineStyle() {
+	return {
+		name: "sonner-no-inline-style",
+		enforce: "pre",
+		transform(code, id) {
+			if (!/node_modules\/sonner\/dist\/index\.mjs$/.test(id)) return null;
+			const calls = code.match(/^__insertCSS\("(?:[^"\\]|\\.)*"\);$/gm) ?? [];
+			if (calls.length !== 1)
+				throw new Error(
+					`sonner-no-inline-style: expected one __insertCSS call in ${id}, found ${calls.length}`,
+				);
+			return code.replace(calls[0], "");
+		},
+	};
+}
+
 // Static build into the npm package's dist/web. The page mounts React from a
 // bundled module script (no `client:*` islands), so the output needs no inline
 // scripts and runs under `script-src 'self'`; scripts/check-dist.ts enforces it.
@@ -103,6 +125,7 @@ export default defineConfig({
 			stencilConstructableStyles(),
 			ionicReactPure(),
 			ionicIosOnly(),
+			sonnerNoInlineStyle(),
 			// KaTeX fonts as woff2 only (every browser the app supports): drops
 			// the woff and ttf copies, ~0.8 MB of the package.
 			{

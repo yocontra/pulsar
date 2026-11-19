@@ -22,8 +22,9 @@ import {
 	tryCli,
 	which,
 } from "../setup/files.ts";
+import { isPane, panePid as panePidOf, sendKeys } from "../tmux.ts";
 import type { AgentStatus } from "../types.ts";
-import { lastModel, run, statAsync, tailAsync } from "../util.ts";
+import { lastModel, statAsync, tailAsync } from "../util.ts";
 import { claudeLocalAnswer } from "./claude-approvals.ts";
 import {
 	type ClaudeSessionRecord,
@@ -95,7 +96,7 @@ function cachedClaudeSession(pid: number): ClaudeSessionRecord | null {
 /** The tmux pane id (`%9`) in a session record's `tmux` field. */
 function tmuxPane(rec: ClaudeSessionRecord | null): string | null {
 	const m = /(%\d+)$/.exec(rec?.tmux ?? "");
-	return m ? m[1]! : null;
+	return m && isPane(m[1]) ? m[1] : null;
 }
 
 /**
@@ -111,22 +112,8 @@ async function interruptClaude(pid: number): Promise<InterruptOutcome> {
 	if (!rec || !pane)
 		return { result: "unsupported", via, detail: "the session is not in tmux" };
 	if (rec.status !== "busy") return { result: "not-running", via };
-	let panePid: number;
-	try {
-		panePid = Number(
-			(
-				await run(
-					"tmux",
-					["display-message", "-p", "-t", pane, "#{pane_pid}"],
-					3000,
-				)
-			).trim(),
-		);
-	} catch (e) {
-		return { result: "unsupported", via, detail: (e as Error).message };
-	}
-	// tmux prints nothing (and exits 0) for a pane that doesn't exist.
-	if (!Number.isInteger(panePid) || panePid <= 0)
+	const panePid = await panePidOf(pane);
+	if (panePid === null)
 		return { result: "unsupported", via, detail: `no tmux pane ${pane}` };
 	const table = await processSnapshot(0, "user");
 	let p: number | undefined = pid;
@@ -148,11 +135,8 @@ async function interruptClaude(pid: number): Promise<InterruptOutcome> {
 	// dialog would do something else.
 	if ((await readClaudeSessionAsync(pid))?.status !== "busy")
 		return { result: "not-running", via };
-	try {
-		await run("tmux", ["send-keys", "-t", pane, "Escape"], 3000);
-	} catch (e) {
-		return { result: "unsupported", via, detail: (e as Error).message };
-	}
+	const sent = await sendKeys(pane, { keys: ["Escape"] });
+	if (!sent.ok) return { result: "unsupported", via, detail: sent.error };
 	return { result: "interrupted", via };
 }
 
@@ -426,6 +410,11 @@ export const claude: HarnessDriver = {
 	...claudeIdent,
 
 	scan: { intervalMs: 4000, sessions: scanClaude, tracksPid: true },
+
+	async tmuxPane(agent) {
+		if (agent.harness !== claude.id || agent.pid === null) return null;
+		return tmuxPane(await readClaudeSessionAsync(agent.pid));
+	},
 
 	canInterrupt(agent) {
 		return (

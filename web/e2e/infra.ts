@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
 	closeSync,
 	mkdirSync,
@@ -89,7 +90,10 @@ export function workerPort(name: string): number {
  * usually busy with other work.
  */
 export function e2eWorkers(): number | string {
-	return process.env.PULSAR_E2E_WORKERS ?? (process.env.CI ? "100%" : "50%");
+	const env = process.env.PULSAR_E2E_WORKERS?.trim();
+	if (!env) return process.env.CI ? "100%" : "50%";
+	// Playwright takes a number or a percentage string, not "2".
+	return /^\d+$/.test(env) ? Number(env) : env;
 }
 
 /** One worker's server process, as the `server` worker option describes it. */
@@ -103,6 +107,15 @@ export interface ServerSpec {
 	env?: Record<string, string>;
 	/** A log line that says it is fully up (else `/api/v1/hello` answering is enough). */
 	readyLine?: string;
+	/**
+	 * How the worker knows the port answers with its own server, not another
+	 * worker's (a port collision): by default `/api/v1/hello` echoes the
+	 * worker's PULSAR_E2E_TOKEN as `e2eToken` (the mock). With
+	 * `controlPortEnv`, the server's control port answers `/e2e-identity`
+	 * with that token and its machine id, which `/hello` must report (the
+	 * real daemon, whose /hello stays as in production).
+	 */
+	identity?: { controlPortEnv: string };
 }
 
 /** The worker options the e2e configs set (see fixtures.ts). */
@@ -114,8 +127,9 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const READY_MS = 30_000;
 
 /**
- * Starts one worker's server and waits until it answers `/api/v1/hello`
- * (and logged `readyLine`). Returns a function that stops it.
+ * Starts one worker's server and waits until it answers `/api/v1/hello` as
+ * this worker's own server (ServerSpec.identity; another server on the port
+ * fails at once) and logged `readyLine`. Returns a function that stops it.
  *
  * The server's stdin is a pipe from this worker; with PULSAR_E2E_PIPE=1 the
  * mock and the real daemon exit when it closes, so a worker that is killed
@@ -129,9 +143,15 @@ export async function startServer(
 	if (!port) throw new Error(`${spec.portEnv} is not set in this worker`);
 	const log = serverLog(`${spec.name}-w${worker}`);
 	const out = openSync(log, "w");
+	const token = randomUUID();
 	const child = spawn("bun", [spec.script], {
 		cwd: ROOT,
-		env: { ...process.env, ...spec.env, PULSAR_E2E_PIPE: "1" },
+		env: {
+			...process.env,
+			...spec.env,
+			PULSAR_E2E_PIPE: "1",
+			PULSAR_E2E_TOKEN: token,
+		},
 		stdio: ["pipe", out, out],
 	});
 	closeSync(out);
@@ -146,11 +166,17 @@ export async function startServer(
 		new Error(
 			`${spec.name} server (worker ${worker}) ${why}; log:\n${tail(log)}`,
 		);
-	const url = `http://127.0.0.1:${port}/api/v1/hello`;
 	const deadline = Date.now() + READY_MS;
 	for (;;) {
 		if (exited) throw fail(`exited (${exited}) before it was ready`);
-		if (await ready(url, log, spec.readyLine)) break;
+		const up = await check(spec, port, log, token);
+		if (up === "other") {
+			child.kill("SIGKILL");
+			throw fail(
+				`is not the server answering on port ${port}: another process holds the port`,
+			);
+		}
+		if (up === "ours") break;
 		if (Date.now() > deadline) {
 			child.kill("SIGKILL");
 			throw fail(`was not ready in ${READY_MS / 1000} s`);
@@ -166,14 +192,41 @@ export async function startServer(
 	};
 }
 
-async function ready(url: string, log: string, line?: string) {
+/**
+ * "ours" once the server on `port` proves it is the one this worker started
+ * (see ServerSpec.identity) and logged its ready line; "other" when a server
+ * answers there but is not ours (a port collision); null while not up yet.
+ */
+async function check(
+	spec: ServerSpec,
+	port: number,
+	log: string,
+	token: string,
+): Promise<"ours" | "other" | null> {
+	const hello = await getJson(`http://127.0.0.1:${port}/api/v1/hello`);
+	if (!hello) return null;
+	if (spec.identity) {
+		const control = Number(process.env[spec.identity.controlPortEnv]);
+		const id = await getJson(`http://127.0.0.1:${control}/e2e-identity`);
+		if (!id) return null;
+		if (id.token !== token || hello.machineId !== id.machineId) return "other";
+	} else if (hello.e2eToken !== token) return "other";
+	if (spec.readyLine && !readFileSync(log, "utf8").includes(spec.readyLine))
+		return null;
+	return "ours";
+}
+
+async function getJson(url: string): Promise<Record<string, unknown> | null> {
 	try {
 		const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
-		if (!res.ok) return false;
+		if (!res.ok) return null;
+		const body = (await res.json()) as unknown;
+		return body && typeof body === "object"
+			? (body as Record<string, unknown>)
+			: null;
 	} catch {
-		return false;
+		return null;
 	}
-	return !line || readFileSync(log, "utf8").includes(line);
 }
 
 function tail(file: string, lines = 40): string {

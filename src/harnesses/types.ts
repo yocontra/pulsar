@@ -330,6 +330,12 @@ export interface HarnessDriver {
 	interrupt?(agent: Agent): Promise<InterruptOutcome>;
 
 	/**
+	 * The tmux pane (`%12`) the session runs in, when the harness records it
+	 * (src/tmux.ts `paneOf`, after `agent.meta.tmux`); null when not in tmux.
+	 */
+	tmuxPane?(agent: Agent): Promise<string | null>;
+
+	/**
 	 * pi-style hosts that load pulsar's extension, which pushes from inside the
 	 * session (the daemon talks to it directly).
 	 */

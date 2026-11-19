@@ -16,6 +16,8 @@ export type ProveReason =
 	| "notifications"
 	| "remove"
 	| "signout"
+	/** An acting op (attach, start an agent, commit, push, PR): api.acting. */
+	| "act"
 	| "manual";
 
 export type ProveResult = "proven" | "skipped" | "cancelled";

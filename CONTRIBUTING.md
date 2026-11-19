@@ -46,6 +46,19 @@ The source runs directly with Node 22.13+ or Bun (`node src/cli.ts ls`). It uses
 
 Nothing else should need to change.
 
+## Building blocks for features
+
+Use these instead of building your own, so features don't collide in the same files.
+
+- **UI slots** (`web/src/lib/registry.tsx`): `registerSlot(name, { id, order?, component })` for `sidebar.header` (desktop sidebar header and phone Home header), `session.header` (desktop session header and phone agent header), `composer.left` (attach) and `composer.right` (before Send). An empty slot renders nothing. Each `register*` returns its unregister.
+- **Settings, Cmd-K, pages** (same file): `registerSettingsSection({ id, title, desktop?, phone?, when? })` renders after the built-in sections (phone bodies are IonItems in an inset list). `registerCommand({ id, label, keys?, keywords?, run })` lists a command in Cmd-K; `registerPaletteProvider({ id, group, search(q, signal) })` adds a results group as the operator types. `registerPage({ name, desktop?, phone? })` routes `#/<name>/<arg>?<params>` in both layouts (`{ view: "page", name }` for `navigate`); no edit to `hash.ts` or the layouts' switches.
+- **Where to register:** `web/src/features/<name>/register.tsx`, loaded at start by `web/src/features.ts` (no list to edit). Keep it to metadata and `lazy()` components: it counts toward the first-load budget (`web/scripts/check-dist.ts`).
+- **Toasts** (`web/src/lib/toast.ts`): `toast(message, { tone, description, action, duration, id })` and `undoToast(message, onUndo)` on desktop and phone; Sonner loads with the first toast and is CSP-safe (`astro.config.mjs`). Not the store's older `toast` signal.
+- **Acting ops** (`src/service/acting.ts`): an action that changes an agent's machine (`attachments.upload`, `agents.launch`, `git.commit`, `git.push`, `git.pr`) registers its handler with `service.acting.register(op, handler)` and its route calls `service.acting.run(principal, op, target, params, assertion?)`. Here that needs a passkey session; on another machine the home node verifies its own passkey challenge for exactly that op, target and params (`POST /acting/options`, then the assertion in the op's request; `api.acting(...)` in the web client does both). Every run is audited. No new federation frame is needed.
+- **Git** (`src/git-write.ts`): `runGit(cwd, args, opts)` and `runGh(...)` run argv-only in the worktree holding `cwd`, with locks, hooks and a timeout, but no prompt, editor or pager (ssh in batch mode); a failure returns `{ code, message, exitCode, stderr }`. `mode: "read"` for reads next to a working agent.
+- **tmux** (`src/tmux.ts`): `paneOf(agent)` (`agent.meta.tmux`, else the harness's `tmuxPane`), `sendKeys(pane, { text } | { keys })`, `capture(pane, { lines })`, `panePid(pane)`. `AgentRow.tmux` shows the pane to the app.
+- **Status changes** (`src/service/events.ts`): `service.events.on("agent:status", ({ agentId, from, to, at }) => …)` fires once per shown change (busy, idle after the settle time, gone).
+
 ## Memory
 
 One MCP server runs per agent session and the extension runs inside pi/omp, so their startup imports stay small: `test/import-graph.test.ts` fails when something heavy (an SDK, `node:crypto`, setup or transcript code, full drivers) reaches them. `bun run mem` prints each process's footprint and heap from `dist/`; `bun run test:mem` runs the slower soak tests (MCP session, daemon churn with transcripts, federation churn) after a build. If it does, the missing piece belongs in the driver interface.
