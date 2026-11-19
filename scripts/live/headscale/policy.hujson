@@ -1,0 +1,9 @@
+// The test tailnet's policy, as docs/headscale.md shows it: only the app
+// port between user ada's devices and the tagged server.
+{
+	"tagOwners": { "tag:server": ["ada@"] },
+	"acls": [
+		{ "action": "accept", "src": ["ada@"], "dst": ["ada@:7337", "tag:server:7337"] },
+		{ "action": "accept", "src": ["tag:server"], "dst": ["ada@:7337"] }
+	]
+}

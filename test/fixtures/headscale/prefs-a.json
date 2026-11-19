@@ -1,0 +1,5 @@
+{
+	"ControlURL": "https://pulsar-hs-control",
+	"WantRunning": true,
+	"LoggedOut": false
+}

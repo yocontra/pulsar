@@ -1,0 +1,49 @@
+# Headscale for the live test. Everything stays in the private Docker
+# network: TLS from the test CA, the embedded DERP relay only (no
+# Tailscale-run relays), MagicDNS under a base domain of our own.
+server_url: https://pulsar-hs-control:443
+listen_addr: 0.0.0.0:443
+metrics_listen_addr: 127.0.0.1:9090
+grpc_listen_addr: 127.0.0.1:50443
+grpc_allow_insecure: false
+tls_cert_path: /etc/headscale/tls/control.crt
+tls_key_path: /etc/headscale/tls/control.key
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: "pulsar-hs"
+    region_name: "Embedded DERP"
+    verify_clients: true
+    stun_listen_addr: "0.0.0.0:3478"
+    private_key_path: /var/lib/headscale/derp_server_private.key
+    automatically_add_embedded_derp_region: true
+  urls: []
+  paths: []
+  auto_update_enabled: false
+disable_check_updates: true
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+log:
+  level: info
+policy:
+  mode: file
+  path: /etc/headscale/policy.hujson
+dns:
+  magic_dns: true
+  base_domain: mesh.corp.example
+  override_local_dns: false
+  nameservers:
+    global: []
+unix_socket: /var/run/headscale/headscale.sock
+unix_socket_permission: "0770"
+logtail:
+  enabled: false

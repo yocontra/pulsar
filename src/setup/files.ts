@@ -3,10 +3,11 @@ import {
 	copyFileSync,
 	existsSync,
 	mkdirSync,
+	readdirSync,
 	readFileSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import type { ModificationOptions } from "jsonc-parser/lib/esm/main.js";
 
 export type JsoncParser = typeof import("jsonc-parser/lib/esm/main.js");
@@ -17,6 +18,29 @@ let jsonc: JsoncParser | null = null;
  * drivers import this module, so it never imports the parser itself: the MCP
  * server, daemon and extension load the drivers but never edit configs.
  */
+/** Absolute path of a command on PATH, or null (setup's harness detection). */
+export function which(cmd: string): string | null {
+	for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+		const full = join(dir, cmd);
+		if (dir && existsSync(full)) return full;
+	}
+	return null;
+}
+
+/** True when a path exists (setup's harness detection). */
+export function exists(path: string): boolean {
+	return existsSync(path);
+}
+
+/** A folder's entries; [] when it is missing (setup). */
+export function listDir(path: string): string[] {
+	try {
+		return readdirSync(path);
+	} catch {
+		return [];
+	}
+}
+
 export function useJsonc(parser: JsoncParser) {
 	jsonc = parser;
 }
