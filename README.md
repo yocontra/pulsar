@@ -137,6 +137,7 @@ Every machine in the mesh serves the Pulsar app. Any machine's address shows the
 
 - A live list of machines, projects and agents, with a "needs you" inbox.
 - Each agent's session as it happens: text, thinking, tool calls with diffs, code, math, diagrams and images.
+- Start a new agent on any machine, in its folder or a new git worktree, with a first message.
 - Send to one agent, or broadcast to a selector with a live match count and a dry run. Ask "who is editing this file?" and then ask them directly. Stop an agent's turn.
 - Answer prompts remotely, signed with Face ID or Touch ID. The prompt stays on the machine too, and the first answer wins.
 - Web Push notifications that say "Approval pending", "An agent finished" or "An agent stopped with an error", and nothing else.

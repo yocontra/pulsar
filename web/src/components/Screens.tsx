@@ -257,6 +257,7 @@ const KEYS: [string, [string[][], string][]][] = [
 		[
 			[[["mod", "K"]], "Search or ask"],
 			[[["mod", "shift", "B"]], "Broadcast"],
+			[[["mod", "alt", "N"]], "New agent"],
 			[[["N"]], "Next agent waiting on you"],
 			[[["?"]], "Keyboard shortcuts"],
 			[[["esc"]], "Close or go back"],

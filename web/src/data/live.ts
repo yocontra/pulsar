@@ -56,6 +56,7 @@ type Listeners = {
 	ready: ServerEvents["ready"];
 	query: ServerEvents["query"];
 	notify: ServerEvents["notify"];
+	launch: ServerEvents["launch"];
 };
 
 export interface LiveOptions {
@@ -99,6 +100,7 @@ export class LiveSync {
 		ready: new Set(),
 		query: new Set(),
 		notify: new Set(),
+		launch: new Set(),
 	};
 	private transcriptBatch = new Map<string, TranscriptEvent[]>();
 	private frameQueued = false;
@@ -392,6 +394,10 @@ export class LiveSync {
 				break;
 			case "notify":
 				this.emit("notify", e.data);
+				break;
+			case "launch":
+				// A launch from the app moved on (features/launch).
+				this.emit("launch", e.data);
 				break;
 			case "security":
 				void c.invalidateQueries({ queryKey: keys.passkeys() });

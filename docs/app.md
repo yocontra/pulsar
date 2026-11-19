@@ -70,6 +70,12 @@ Pulsar reads the worktree with git and never writes to it: it takes no index loc
 
 In a session's header (on a computer), a short line shows the session's cost so far and, when the harness reports its context window (Codex), "Context: 42% used".
 
+## New agent
+
+Start an agent on any machine from the app: the pen button in the sidebar header (on a phone, + on Home), Cmd-Option-N, Cmd-K "New agent", "New agent in…" in Cmd-K or a project's right-click menu. A draft opens where a session would: pick the project and machine in the headline ("Add path…" takes any folder there), then the harness and the workspace under the message box. Harnesses that machine doesn't have are marked "Not found". **New worktree** makes a git worktree next to the repo on a new branch from the base branch you pick. Send says why it can't start yet ("Choose a base branch before creating a worktree.").
+
+Starting needs a proven human (another machine asks for its own passkey check). Pulsar starts the harness in a new tmux session on that machine through your login shell, with its normal command and no extra flags, then shows each step: setting up the worktree, starting, waiting for the agent. Your first message goes out once the agent is connected and ready; nothing is typed earlier. If the new terminal asks something first (Claude Code's or Codex's "trust this folder"), the draft shows **Waiting in the terminal**: answer it on that machine (`tmux attach -t pulsar-…`), and the message goes out after that. Once the agent is up, its session replaces the draft, and Stop works on it. If it can't start, the draft says why and keeps your message.
+
 ## Approvals
 
 An agent's permission prompt shows in Needs you and in its session as a card: the tool, every argument exactly as the agent sent it (spaces, tabs, newlines and hidden characters are marked), the folder and branch, and a countdown. Choose Allow once, Allow for session (the rules it adds are listed) or Deny with a note. The prompt also stays on the machine; whichever answer comes first wins, and the card says where it was answered.
@@ -111,6 +117,7 @@ The gear button opens Settings:
 | `x` / Space | Select an agent |
 | `b` | Message the selection |
 | Cmd-Shift-B | Broadcast |
+| Cmd-Option-N | New agent |
 | Cmd-. | Stop the open agent |
 | Cmd-\ | Show or hide the changes panel |
 | Cmd-U | Usage |

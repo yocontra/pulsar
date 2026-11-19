@@ -112,6 +112,7 @@ import {
 	rng,
 } from "./data.ts";
 import { CHART, SAMPLE_PDF, SCREENSHOT } from "./images.ts";
+import { launchRoute } from "./launch.ts";
 import {
 	forParentBody,
 	subagentById,
@@ -159,6 +160,7 @@ const FEATURES: Feature[] = [
 		"push",
 		"ask",
 		"usage",
+		"launch",
 		...((process.env.PULSAR_MOCK_FEATURES ?? "")
 			.split(",")
 			.map((f) => f.trim())
@@ -2570,6 +2572,17 @@ async function route(
 			return json(d);
 		}
 	}
+	// New agent (features/launch): web/mock/launch.ts.
+	const launched = await launchRoute(req, url, seg, {
+		requireActing,
+		broadcast: (s) => {
+			for (const st of streams.values()) write(st, "launch", s);
+		},
+		local: LOCAL,
+		error: (status, code, message) => new ApiError(status, code, message),
+		stepMs: Number(process.env.PULSAR_MOCK_LAUNCH_MS ?? 600),
+	});
+	if (launched !== null) return json(launched);
 	// Mock only: a stand-in acting op (the web client's api.acting flow).
 	if (POST && path === "/__mock/acting") {
 		const b = (await jsonBody(req)) as {
