@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -247,5 +247,58 @@ describe("idempotent messages", () => {
 				.get(),
 		).toEqual({ origin_machine: "machine-2", received_at: 5000 });
 		store.close();
+	});
+});
+
+describe("file modes", () => {
+	const mode = (p: string) => statSync(p).mode & 0o777;
+
+	test("secure() makes the database, its WAL and -shm 0600; SQLite makes new ones the same", async () => {
+		const path = tempDb();
+		const store = new Store(path);
+		store.audit({
+			at: 1,
+			principal: "t",
+			op: "x",
+			target: null,
+			detail: null,
+			ok: true,
+		});
+		for (const s of ["", "-wal", "-shm"]) {
+			expect(existsSync(`${path}${s}`)).toBe(true);
+			chmodSync(`${path}${s}`, 0o644);
+		}
+		await store.secure();
+		for (const s of ["", "-wal", "-shm"])
+			expect(mode(`${path}${s}`)).toBe(0o600);
+		store.db.close();
+		// Closing checkpoints and removes the WAL; the next open makes it anew.
+		rmSync(`${path}-wal`, { force: true });
+		rmSync(`${path}-shm`, { force: true });
+		const again = new Store(path);
+		again.audit({
+			at: 2,
+			principal: "t",
+			op: "y",
+			target: null,
+			detail: null,
+			ok: true,
+		});
+		for (const s of ["", "-wal", "-shm"])
+			expect(mode(`${path}${s}`)).toBe(0o600);
+		again.db.close();
+	});
+
+	test("secure() on a database without WAL files yet, or in memory, does not throw", async () => {
+		await new Store(":memory:").secure();
+		const path = tempDb();
+		const store = new Store(path);
+		store.db.close();
+		rmSync(`${path}-wal`, { force: true });
+		rmSync(`${path}-shm`, { force: true });
+		const reopened = new Store(path);
+		await reopened.secure();
+		expect(mode(path)).toBe(0o600);
+		reopened.db.close();
 	});
 });

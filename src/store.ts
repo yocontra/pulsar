@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { chmod } from "node:fs/promises";
 import { createRequire } from "node:module";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
 import { daemonLog } from "./log.ts";
@@ -448,7 +449,11 @@ export class Store {
 		return this.writes;
 	}
 
+	/** The database file (`:memory:` for none). */
+	readonly path: string;
+
 	constructor(path: string) {
+		this.path = path;
 		this.db = new DatabaseSync(path);
 		this.db.exec(PRAGMAS);
 		this.migrate();
@@ -458,6 +463,23 @@ export class Store {
 				"INSERT OR IGNORE INTO meta (key, value) VALUES ('machine_id', ?)",
 			)
 			.run(randomUUID());
+	}
+
+	/**
+	 * Makes the database and its WAL and shared-memory files readable by this
+	 * user only (0600): they hold message and transcript text. SQLite creates
+	 * later WAL and -shm files with the database file's mode.
+	 */
+	async secure(): Promise<void> {
+		if (this.path === ":memory:" || this.path === "") return;
+		await Promise.all(
+			["", "-wal", "-shm"].map((suffix) =>
+				chmod(`${this.path}${suffix}`, 0o600).catch((e) => {
+					if ((e as NodeJS.ErrnoException).code !== "ENOENT")
+						daemonLog(`chmod ${this.path}${suffix}: ${(e as Error).message}`);
+				}),
+			),
+		);
 	}
 
 	/** The schema version on disk. */
