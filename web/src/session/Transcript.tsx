@@ -417,6 +417,8 @@ function MessageView({
 				<div
 					className="assistant-msg ds-turn ds-turn--assistant"
 					data-msg-id={m.id}
+					// The events this turn shows (find in messages lands on them).
+					data-ev-ids={m.parts.map((p) => p.key).join(" ")}
 				>
 					{showAuthor && (
 						<div className="ds-author">
@@ -471,6 +473,7 @@ function PartView({ part, next }: { part: Item; next?: Item }) {
 			return (
 				<div
 					className={`ev msg r-${part.ev.role} ds-prose${live ? " streaming" : ""}`}
+					data-ev-id={part.ev.id}
 				>
 					{text && (
 						<MessageResponse

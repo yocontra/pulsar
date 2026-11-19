@@ -1,5 +1,5 @@
 import { ArrowDownIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 import { SkeletonText } from "../components/ui/skeleton.tsx";
 import type { Variant } from "./Transcript.tsx";
@@ -36,8 +36,26 @@ export function ConversationView({
 				{children}
 			</StickToBottom.Content>
 			{pill ?? <JumpToLatest />}
+			<StopFollowing />
 		</StickToBottom>
 	);
+}
+
+/**
+ * Stops following the end when something inside asks (a `pulsar:stop-follow`
+ * event, e.g. find in messages landing on an older message), as a scroll up
+ * by the operator would; Jump to latest follows again.
+ */
+function StopFollowing() {
+	const { stopScroll, scrollRef } = useStickToBottomContext();
+	useEffect(() => {
+		const el = scrollRef.current;
+		if (!el) return;
+		const stop = () => stopScroll();
+		el.addEventListener("pulsar:stop-follow", stop);
+		return () => el.removeEventListener("pulsar:stop-follow", stop);
+	}, [scrollRef, stopScroll]);
+	return null;
 }
 
 /** The floating "Jump to latest" pill; shows only when scrolled up. */
