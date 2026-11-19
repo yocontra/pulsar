@@ -30,7 +30,11 @@ The composer at the bottom sends to this agent. Choose how urgent it is:
 
 Receipts follow each send: handed over, in its conversation, read, replied. Replies show under the message.
 
-**Stop** (in the header, or Cmd-.) interrupts the agent's current turn after you confirm. It shows only when Pulsar can reach the agent this way; see [Stop](../README.md#stop) for each harness.
+**Attach files** with the paperclip (on the phone: Photo Library or Choose Files), by dropping files on the composer, or by pasting an image. A paste of 32 KB of text or more becomes a `.txt` file. Up to 10 files per message: images up to 10 MB, other files up to 25 MB. Each file uploads when you add it, after one Face ID / Touch ID check for the batch. Its tile shows its progress, and Retry if the upload fails. Send waits until every file is uploaded. Pulsar saves the files on the agent's own machine, readable only by your user, and deletes them after 7 days. The message names each file by its path, and the agent opens the files from there. Your message shows the files as chips.
+
+**Mention a file**: type `@` to search the files in the agent's folder (what git tracks, plus new files it doesn't ignore). Use the arrow keys and Enter or Tab to insert `@path`. Mentions show as chips above the field, and Backspace deletes a mention in one step.
+
+**Stop** (in the header, or Cmd-.) interrupts the agent's current turn after you confirm. While the agent works and your draft is empty, the composer's Send button turns into a red Stop button. Stop shows only when Pulsar can reach the agent this way; see [Stop](../README.md#stop) for each harness.
 
 ## Subagents
 
