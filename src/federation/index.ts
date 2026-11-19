@@ -541,6 +541,23 @@ export class Federation implements PoolView {
 		return { answers, missing };
 	}
 
+	/** Message search in one remote agent's transcript, on its home node. */
+	async searchAgentMessages(
+		address: string,
+		q: string,
+		limit: number,
+		as?: Principal,
+	): Promise<MessageHit[]> {
+		const agent = address.slice(address.indexOf("/") + 1);
+		const r = await this.act(
+			address,
+			{ op: "search.messages", q, limit, agent },
+			as,
+		);
+		if (!Array.isArray(r.hits)) throw new RpcError("unreachable", "no answer");
+		return r.hits as MessageHit[];
+	}
+
 	/** Relayed Stop, step 1: the agent's home node issues a challenge for this Stop. */
 	async stopOptions(address: string, as: Principal): Promise<unknown> {
 		if (as.kind !== "human")
@@ -2519,10 +2536,17 @@ export class Federation implements PoolView {
 			}
 			case "search.messages": {
 				// Transcript text: the transcript.read rule, like a page read.
-				authorize(user, "transcript.read");
+				const agent =
+					typeof action.agent === "string" ? action.agent : undefined;
+				authorize(user, "transcript.read", agent);
+				if (agent !== undefined && !this.knows(agent))
+					return fail("not_found", `no agent ${agent}`);
 				const found = this.service.messages.local(
 					String(action.q ?? "").slice(0, 200),
-					{ limit: Math.max(1, Math.min(Number(action.limit) || 20, 20)) },
+					{
+						limit: Number(action.limit) || 20,
+						...(agent !== undefined ? { agentId: agent } : {}),
+					},
 				);
 				return { ok: true, hits: found.hits };
 			}

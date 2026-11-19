@@ -108,6 +108,13 @@ export interface PoolView extends ActingRelay {
 		answers: { machineId: string; hits: MessageHit[] }[];
 		missing: string[];
 	}>;
+	/** Message search in one remote agent's transcript, on its home node (ids are pool addresses). */
+	searchAgentMessages?(
+		address: string,
+		q: string,
+		limit: number,
+		as?: Principal,
+	): Promise<MessageHit[]>;
 	/** Transcripts of remote agents, read through their home node. */
 	readonly transcripts: RemoteTranscripts;
 	/**

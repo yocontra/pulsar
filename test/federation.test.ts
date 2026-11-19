@@ -1199,6 +1199,15 @@ describe("pool-wide attention, idle waits and stop", () => {
 			expect.objectContaining({ id: address, machine: "c" }),
 		]);
 		expect(r.body.partial).toBeUndefined();
+		// The find bar: one remote agent's hits, searched on its home node.
+		const one = await api<{ hits: { agentId: string; eventId: string }[] }>(
+			"b",
+			`/search/messages?q=axolotl&agent=${encodeURIComponent(address)}`,
+		);
+		expect(one.status).toBe(200);
+		expect(one.body.hits.map((h) => [h.agentId, h.eventId])).toEqual([
+			[address, "msg-axolotl"],
+		]);
 	});
 
 	test("Ask answers without a slow machine and says it is partial", async () => {
@@ -1239,6 +1248,23 @@ describe("pool-wide attention, idle waits and stop", () => {
 			},
 		]);
 		expect(r).toMatchObject({ ok: false, code: "forbidden" });
+	});
+
+	test("a forwarded message search from a non-owner user or an agent is refused at the home node", async () => {
+		const peer = b.fed.state.peers.get(c.service.machineId)!;
+		const action = { op: "search.messages", q: "axolotl", limit: 20 } as const;
+		const [eve, agentAsk, owner] = await b.fed.post(peer, [
+			{
+				type: "act",
+				as: { kind: "user", login: "eve@example.com", node: "b" },
+				action,
+			},
+			{ type: "act", as: { kind: "agent" } as never, action },
+			{ type: "act", as: { kind: "user", login: OWNER, node: "b" }, action },
+		]);
+		expect(eve).toMatchObject({ ok: false, code: "forbidden" });
+		expect(agentAsk).toMatchObject({ ok: false, code: "forbidden" });
+		expect(owner).toMatchObject({ ok: true });
 	});
 });
 
