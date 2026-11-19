@@ -63,24 +63,29 @@ describe("MCP server", () => {
 		const a = await mcpClient("codex", "/tmp", "mcp-a");
 		const tools = (await a.listTools()).tools.map((t) => t.name).sort();
 		expect(tools).toEqual([
-			"ask",
-			"history",
 			"inbox",
 			"list_agents",
-			"reply",
+			"respond",
 			"send",
 			"set_identity",
 			"wait",
-			"whoami",
 		]);
-		expect(a.getInstructions()).toContain("pulsar connects you");
+		expect(a.getInstructions()).toContain("Pulsar connects you");
+		// `list_agents question=` looks up without sending anything.
+		const who = (await a.callTool({
+			name: "list_agents",
+			arguments: { question: "who is editing src/nowhere.ts" },
+		})) as { content: Array<{ text: string }> };
+		expect(who.content[0]!.text).toContain("Nobody matches");
 	});
 
 	test("two harnesses find each other, tag, multicast and reply", async () => {
 		const codex = await mcpClient("codex", "/tmp", "mcp-codex");
 		const gemini = await mcpClient("gemini", "/tmp", "mcp-gemini");
 
-		const who = textOf(await codex.callTool({ name: "whoami", arguments: {} }));
+		const who = textOf(
+			await codex.callTool({ name: "set_identity", arguments: {} }),
+		);
 		expect(who).toContain("codex@");
 
 		await gemini.callTool({
@@ -113,8 +118,8 @@ describe("MCP server", () => {
 		expect(inbox).toContain("can you review the README?");
 
 		await gemini.callTool({
-			name: "reply",
-			arguments: { message_id: id, body: "on it" },
+			name: "respond",
+			arguments: { message_id: id, state: "reply", text: "on it" },
 		});
 		const back = textOf(await codex.callTool({ name: "inbox", arguments: {} }));
 		expect(back).toContain("on it");
@@ -143,7 +148,7 @@ describe("MCP server", () => {
 		const listed = textOf(
 			await pull.callTool({ name: "list_agents", arguments: {} }),
 		);
-		expect(listed).toContain("1 unread pulsar message");
+		expect(listed).toContain("1 unread Pulsar message");
 	});
 
 	test("OpenCode: one shared server, one agent per session (from _meta)", async () => {

@@ -1,8 +1,16 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+	chmodSync,
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	rmSync,
+	statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonClient } from "../src/client.ts";
-import { Daemon } from "../src/daemon.ts";
+import { Daemon, type DaemonOptions } from "../src/daemon.ts";
 import type {
 	DeliveredMessage,
 	PublicAgent,
@@ -21,7 +29,7 @@ export function restoreEnv(name: string, value: string | undefined) {
  * PULSAR_HOME points at it until `cleanup` restores the old value and removes
  * the directory; stop the daemon first.
  */
-export async function startDaemon() {
+export async function startDaemon(opts: DaemonOptions = {}) {
 	const home = mkdtempSync(join(tmpdir(), "pulsar-test-"));
 	const previous = process.env.PULSAR_HOME;
 	process.env.PULSAR_HOME = home;
@@ -33,6 +41,8 @@ export async function startDaemon() {
 		socket: join(home, "bus.sock"),
 		db: join(home, "pulsar.db"),
 		scan: false,
+		remote: { mode: "off" },
+		...opts,
 	});
 	if (!(await daemon.start())) {
 		cleanup();
@@ -107,4 +117,50 @@ export async function until(
 		await new Promise((r) => setTimeout(r, 10));
 	}
 	throw new Error("condition not met in time");
+}
+
+/** Newest modification time of any file under `dir` (ms). */
+function newestMtime(dir: string): number {
+	let newest = 0;
+	for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		const p = join(dir, entry.name);
+		newest = Math.max(
+			newest,
+			entry.isDirectory() ? newestMtime(p) : statSync(p).mtimeMs,
+		);
+	}
+	return newest;
+}
+
+/**
+ * Tests that run the built CLI (`dist/cli.js`) must not run an old build: a
+ * checkout that moved since the last `bun run build` would test old code.
+ * Rebuilds the CLI bundle (not the web app) when it is missing or older than
+ * any source file. Returns the CLI path.
+ */
+export function builtCli(): string {
+	const root = join(import.meta.dir, "..");
+	const cli = join(root, "dist", "cli.js");
+	const stale =
+		!existsSync(cli) ||
+		statSync(cli).mtimeMs < newestMtime(join(root, "src")) ||
+		statSync(cli).mtimeMs < statSync(join(root, "package.json")).mtimeMs;
+	if (stale) {
+		execFileSync(
+			"bun",
+			[
+				"build",
+				"src/cli.ts",
+				"src/extension.ts",
+				"--target=node",
+				"--format=esm",
+				"--splitting",
+				"--outdir",
+				"dist",
+			],
+			{ cwd: root, stdio: "ignore" },
+		);
+		chmodSync(cli, 0o755);
+	}
+	return cli;
 }
