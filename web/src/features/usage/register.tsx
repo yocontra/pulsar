@@ -62,7 +62,10 @@ registerSlot("sidebar.header", {
 registerSlot("session.header", {
 	id: "usage",
 	component: observer(({ agent, mobile }: SlotProps["session.header"]) =>
-		!mobile && offered() ? <AgentUsage agentId={agent.id} /> : null,
+		// Subagents count toward their parent's session.
+		!mobile && offered() && !agent.id.includes("/sub:") ? (
+			<AgentUsage agentId={agent.id} />
+		) : null,
 	),
 });
 
@@ -76,12 +79,14 @@ registerCommand({
 	run: open,
 });
 
-// mod+U opens the page from anywhere (not while typing in a field).
+// mod+U opens the page from anywhere, also while typing (like Cmd-K).
 if (typeof window !== "undefined")
 	window.addEventListener("keydown", (e) => {
 		if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
 		if (e.key !== "u" && e.key !== "U") return;
 		if (!offered()) return;
+		// A dialog or menu is open: leave the key to it.
+		if (document.querySelector('.d-pop, .d-menu, [role="dialog"]')) return;
 		e.preventDefault();
 		open();
 	});

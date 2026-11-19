@@ -34,8 +34,10 @@ function anthropic(input: number, output: number, cacheRead = input * 0.1) {
 }
 
 /**
- * First-party API list prices (Anthropic, November 2026). Other providers'
- * models have no default: the operator sets them from the model dialog.
+ * First-party API list prices (Anthropic, November 2026) for the models
+ * listed then. Older models and other providers' have no default: the
+ * operator sets them from the model sheet. Claude Haiku 5.5's higher rate
+ * for prompts over 100K tokens is not modeled.
  */
 export const DEFAULT_PRICES: Record<string, Price> = {
 	"claude-fable-5-2": anthropic(8, 40, 0.2),
@@ -45,12 +47,14 @@ export const DEFAULT_PRICES: Record<string, Price> = {
 	"claude-fable-5": anthropic(10, 50),
 	"claude-opus-5-5": anthropic(4, 20, 0.2),
 	"claude-opus-5": anthropic(5, 25),
-	"claude-opus-4": anthropic(5, 25),
+	"claude-opus-4-8": anthropic(5, 25),
+	"claude-opus-4-7": anthropic(5, 25),
+	"claude-opus-4-6": anthropic(5, 25),
 	"claude-sonnet-5-5": anthropic(2, 10, 0.1),
 	"claude-sonnet-5": anthropic(2, 10),
-	"claude-sonnet-4": anthropic(3, 15),
+	"claude-sonnet-4-6": anthropic(3, 15),
 	"claude-haiku-5-5": anthropic(0.1, 0.5),
-	"claude-haiku-4": anthropic(1, 5),
+	"claude-haiku-4-5": anthropic(1, 5),
 };
 
 /** Price fields, for validating an edit. */

@@ -543,8 +543,15 @@ export class PulsarService {
 					});
 				}
 		jobs.every("sweep", INTERVALS.sweepMs, () => this.registry.sweep());
-		// Token usage: new lines of the harnesses' session files.
-		if (this.usageOpts?.scan ?? this.scan)
+		// Token usage: new lines of the harnesses' session files. Never under
+		// a test runner unless a test asks (it would read the real HOME's
+		// session folders); PULSAR_USAGE_SCAN=0 turns it off.
+		if (
+			this.usageOpts?.scan ??
+			(this.scan &&
+				process.env.NODE_ENV !== "test" &&
+				process.env.PULSAR_USAGE_SCAN !== "0")
+		)
 			jobs.every(
 				"usage",
 				this.usageOpts?.intervalMs ?? INTERVALS.usageMs,

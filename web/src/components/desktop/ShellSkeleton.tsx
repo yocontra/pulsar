@@ -5,6 +5,7 @@ import {
 	ShieldAlertIcon,
 } from "lucide-react";
 import { Kbd, Skeleton } from "../../ds/index.ts";
+import { slotEntries } from "../../lib/registry.tsx";
 import { D_H, TOP_SKELETON_ROWS } from "../Tree.tsx";
 
 const WIDTHS = [0.42, 0.3, 0.5, 0.36, 0.46, 0.28, 0.4, 0.34];
@@ -34,6 +35,10 @@ export function ShellSkeleton() {
 							/>
 						</span>
 					</div>
+					{/* Features' header buttons (lib/registry.tsx), then the QR button. */}
+					{slotEntries("sidebar.header").map((e) => (
+						<span key={e.id} className="d-btn ghost sm icon d-skel-slot" />
+					))}
 					<span className="d-btn ghost sm icon d-skel-slot" />
 				</header>
 				<nav className="d-nav">
