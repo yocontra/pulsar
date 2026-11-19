@@ -100,6 +100,27 @@ function SessionViewImpl({
 	useEffect(() => {
 		if (atEnd.current) setStart(Math.max(0, events.length - WINDOW));
 	}, [events.length]);
+	// Find in messages (features/search) asks to show one event: move the
+	// window to it once the transcript holds it.
+	const [show, setShow] = useState<string | null>(null);
+	useEffect(() => {
+		const on = (e: Event) => {
+			const d = (e as CustomEvent<{ agentId: string; eventId: string }>).detail;
+			if (d?.agentId === id) setShow(d.eventId);
+		};
+		addEventListener("pulsar:show-event", on);
+		return () => removeEventListener("pulsar:show-event", on);
+	}, [id]);
+	useEffect(() => {
+		if (!show) return;
+		const i = events.findIndex((e) => e.id === show);
+		if (i < 0) return;
+		setShow(null);
+		atEnd.current = false;
+		setStart(
+			Math.max(0, Math.min(i - Math.floor(WINDOW / 2), events.length - WINDOW)),
+		);
+	}, [show, events]);
 	useLiveEvent("transcript", ({ agentId, events: batch }) => {
 		if (agentId !== id) return;
 		const grew = batch

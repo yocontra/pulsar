@@ -112,6 +112,14 @@ Cmd-Shift-B (or Broadcast… on a phone) opens the builder. Pick values in the f
 
 Cmd-K, then type `?` (or pick Ask): "who is editing src/auth/session.ts", "who has PR 1402", "what is codex@apparish doing", "who is idle on apparish". Answers come from what Pulsar already knows, with the evidence ("Edited src/auth/session.ts 4m ago", "branch fix-1378"); nobody is woken. Tick the agents to ask and press **Ask them directly** to send them your question and watch the replies, with who hasn't answered yet.
 
+## Search messages
+
+Cmd-K searches what you and your agents wrote, on every machine: type a word of 3 letters or more and matching messages show under **In messages**, each with the agent, a snippet ("You:" for your own words, "Agent:" for the agent's) and when it was written. On a phone, tap the search button on the Agents screen. Choosing a message opens its session at that message, with the find bar open.
+
+In a session, **Find** opens the find bar: it searches the whole session, not only what is on screen. Enter or the down arrow goes to the next match, Shift-Enter or the up arrow to the previous one, and Esc closes it. Older messages load as needed.
+
+Search covers prompts, replies, messages between agents and the titles of tool calls from the last 30 days. It doesn't cover tool output, thinking or subagents. To keep it from storing a copy of your transcripts, see `PULSAR_NO_SEARCH` in the README.
+
 ## Settings
 
 The gear button opens Settings:
@@ -126,7 +134,8 @@ The gear button opens Settings:
 
 | Key | Does |
 | --- | --- |
-| Cmd-K | Search the pool; `?` switches to Ask |
+| Cmd-K | Search the pool and messages; `?` switches to Ask |
+| Enter / Shift-Enter | Next / previous match (in the find bar) |
 | `/` | Filter the tree |
 | `j` / `k` | Move down / up |
 | `h` / `l` | Collapse / expand |
