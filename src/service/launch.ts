@@ -88,6 +88,32 @@ export function terminalDialog(text: string): string | null {
 /** The operator's home folder (`~`): HOME, as their shell sees it. */
 const homedir = () => process.env.HOME || osHome();
 
+/**
+ * Lists the harnesses a login shell finds, one marked line each
+ * (`PULSAR_BIN:<id>:<path>`), so what rc files print (a banner, a
+ * terminal's escape codes on the same line) can't hide one. Constant: no
+ * input goes in.
+ */
+const PROBE_SCRIPT = `for c in ${HARNESS_IDS.map((h) => LAUNCH_HARNESSES[h].bin).join(" ")}; do p=$(command -v "$c" 2>/dev/null) && printf '\\nPULSAR_BIN:%s:%s\\n' "$c" "$p"; done; exit 0`;
+
+/** Terminal escapes: OSC (`ESC ] ... BEL` or `ESC \\`) and CSI sequences. */
+const ESCAPES =
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: escape codes are control characters
+	/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-_]/g;
+
+/** The harnesses a probe's output lists with an absolute path. */
+export function parseProbe(stdout: string): Set<string> {
+	const ids = new Set<string>();
+	const text = stdout.replace(ESCAPES, "");
+	for (const m of text.matchAll(/PULSAR_BIN:([a-z]+):(\/[^\r\n]*)/g)) {
+		const bin = m[1]!;
+		for (const h of HARNESS_IDS)
+			if (LAUNCH_HARNESSES[h].bin === bin && isAbsolute(m[2]!.trim()))
+				ids.add(h);
+	}
+	return ids;
+}
+
 /** Folder names safe in a path: a branch `feat/x` becomes `feat-x`. */
 function slug(s: string): string {
 	return (
@@ -185,6 +211,8 @@ export interface LaunchTiming {
 	followMs: number;
 	/** How long the login shell may take to list installed harnesses. */
 	probeMs: number;
+	/** How long a read waits for it (under a relayed read's time limit). */
+	probeWaitMs: number;
 }
 
 const TIMING: LaunchTiming = {
@@ -194,7 +222,8 @@ const TIMING: LaunchTiming = {
 	quietPolls: 4,
 	keepMs: 30 * 60_000,
 	followMs: 1500,
-	probeMs: 5000,
+	probeMs: 30_000,
+	probeWaitMs: 5000,
 };
 
 /** A read the home node answers for another node (federation `launch.*`). */
@@ -256,7 +285,7 @@ export class Launches {
 	private nonces = new Map<string, string>();
 	private starting = new Map<string, Promise<LaunchState>>();
 	private harnessCache: { at: number; ids: Set<string> } | null = null;
-	private probing: Promise<Set<string>> | null = null;
+	private probing: Promise<Set<string> | null> | null = null;
 	private seq = 0;
 
 	constructor(deps: LaunchDeps) {
@@ -279,6 +308,18 @@ export class Launches {
 		return this.d.command?.(h) ?? harnessCommand(h);
 	}
 
+	/**
+	 * True when `m` names this machine: empty, its id, or its name (any
+	 * case, with or without the tailnet's domain).
+	 */
+	isHere(m: string | null | undefined): boolean {
+		if (!m) return true;
+		if (m === this.d.machineId()) return true;
+		const name = this.d.machine().toLowerCase();
+		const want = m.toLowerCase();
+		return want === name || want.split(".")[0] === name;
+	}
+
 	/** A launch by id: this node's, or one it follows on another machine. */
 	get(id: string): LaunchState | null {
 		return this.runs.get(id)?.state ?? null;
@@ -294,18 +335,16 @@ export class Launches {
 		params: unknown,
 		assertion?: unknown,
 	): Promise<LaunchState> {
+		const here = this.isHere(machine);
 		const result = (await this.d.acting.run(
 			principal,
 			"agents.launch",
-			{ machine },
+			{ machine: here ? null : machine },
 			params,
 			assertion,
 		)) as LaunchState;
 		const pool = this.d.registry.pool;
-		const remoteId =
-			machine && machine !== this.d.machineId() && machine !== this.d.machine()
-				? pool?.machineIdOf(machine)
-				: null;
+		const remoteId = !here && machine ? pool?.machineIdOf(machine) : null;
 		if (!remoteId || !pool) return result;
 		return this.follow(remoteId, result, principal);
 	}
@@ -770,8 +809,7 @@ export class Launches {
 		if (principal.kind !== "human")
 			throw new RpcError("forbidden", "only the human operator starts agents");
 		const m = machine ?? "";
-		if (!m || m === this.d.machineId() || m === this.d.machine())
-			return this.readHere(principal, req);
+		if (this.isHere(m)) return this.readHere(principal, req);
 		const pool = this.d.registry.pool;
 		const id = pool?.machineIdOf(m);
 		if (!pool || !id) throw new RpcError("not_found", `no machine ${m}`);
@@ -839,10 +877,11 @@ export class Launches {
 			machine: this.d.machine(),
 			home: homedir(),
 			projects,
+			checked: installed !== null,
 			harnesses: HARNESS_IDS.map((id) => ({
 				id,
 				label: LAUNCH_HARNESSES[id].label,
-				installed: installed.has(id),
+				installed: installed?.has(id) ?? false,
 			})),
 		};
 	}
@@ -851,36 +890,40 @@ export class Launches {
 	 * Harnesses a login shell finds (the daemon's own PATH is not the
 	 * operator's). Cached for a few minutes.
 	 */
-	private installed(): Promise<Set<string>> {
+	/**
+	 * What a login shell finds, or null while it is still looking. A read
+	 * waits up to `probeWaitMs`; the shell itself may take `probeMs` (a
+	 * cold rc file), and its answer is kept once it finishes.
+	 */
+	private async installed(): Promise<Set<string> | null> {
 		const c = this.harnessCache;
-		if (c && Date.now() - c.at < 5 * 60_000) return Promise.resolve(c.ids);
+		if (c && Date.now() - c.at < 5 * 60_000) return c.ids;
 		// One login shell at a time: concurrent reads share its answer.
 		this.probing ??= this.probe().finally(() => {
 			this.probing = null;
 		});
-		return this.probing;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const wait = new Promise<null>((resolve) => {
+			timer = setTimeout(() => resolve(null), this.t.probeWaitMs);
+		});
+		try {
+			return await Promise.race([this.probing, wait]);
+		} finally {
+			clearTimeout(timer);
+		}
 	}
 
-	private async probe(): Promise<Set<string>> {
-		const bins = HARNESS_IDS.map((h) => LAUNCH_HARNESSES[h].bin);
-		const script = `for c in ${bins.join(" ")}; do command -v "$c" 2>/dev/null; done; exit 0`;
-		const r = await exec(this.shell(), ["-lic", script], {
+	private async probe(): Promise<Set<string> | null> {
+		const r = await exec(this.shell(), ["-lic", PROBE_SCRIPT], {
 			lane: "user",
-			// Under a relayed read's time limit: a slow rc file shows as "not found".
 			timeoutMs: this.t.probeMs,
 			cwd: homedir(),
 		});
-		const ids = new Set<string>();
-		for (const line of r.stdout.split("\n")) {
-			const path = line.trim();
-			if (!isAbsolute(path)) continue;
-			const bin = basename(path);
-			for (const h of HARNESS_IDS)
-				if (LAUNCH_HARNESSES[h].bin === bin) ids.add(h);
-		}
-		// Only a probe that finished is kept: a timed-out or failed one (a
-		// slow rc file, a cold start) is asked again next time.
-		if (r.ok && !r.timedOut) this.harnessCache = { at: Date.now(), ids };
+		// Only a probe that finished is kept: a timed-out or failed one is
+		// asked again next time.
+		if (!r.ok || r.timedOut) return null;
+		const ids = parseProbe(r.stdout);
+		this.harnessCache = { at: Date.now(), ids };
 		return ids;
 	}
 

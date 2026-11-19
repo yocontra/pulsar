@@ -36,6 +36,7 @@ import {
 	type LaunchDeps,
 	Launches,
 	parseLaunchParams,
+	parseProbe,
 	terminalDialog,
 } from "../src/service/launch.ts";
 import { Store } from "../src/store.ts";
@@ -671,52 +672,137 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 });
 
 describe("the installed-harness probe", () => {
-	/** A fake login shell: counts runs; slow while `slow` exists, else lists codex. */
+	/**
+	 * A fake login shell like an operator's zsh: a banner, stderr noise and a
+	 * terminal's escape codes with no newline before the probe's own output,
+	 * then the real probe script, with claude and codex on its PATH. Counts
+	 * its runs; sleeps `slow` seconds first while that file holds a number.
+	 */
 	function fakeShell() {
 		const dir = mkdtempSync(join(root, "probe-"));
+		const bin = join(dir, "bin");
+		mkdirSync(bin);
+		for (const b of ["claude", "codex"])
+			writeFileSync(join(bin, b), "#!/bin/sh\n", { mode: 0o755 });
 		const count = join(dir, "runs");
 		const slow = join(dir, "slow");
 		const sh = join(dir, "fake-sh");
 		writeFileSync(count, "");
 		writeFileSync(
 			sh,
-			`#!/bin/sh\necho run >> '${count}'\nif [ -e '${slow}' ]; then sleep 2; fi\necho /opt/bin/codex\n`,
+			[
+				"#!/bin/sh",
+				`echo run >> '${count}'`,
+				`if [ -s '${slow}' ]; then sleep "$(cat '${slow}')"; fi`,
+				'echo "Welcome back!"',
+				'echo "rc: compinit: insecure directories" >&2',
+				"printf '\\033]1337;RemoteHost=me@mac\\007\\033]1337;CurrentDir=/Users/me\\007\\033[?2004h'",
+				`PATH='${bin}:/usr/bin:/bin'; export PATH`,
+				"shift",
+				'exec /bin/sh -c "$1"',
+				"",
+			].join("\n"),
 			{ mode: 0o755 },
 		);
 		const runs = () =>
 			readFileSync(count, "utf8").split("\n").filter(Boolean).length;
 		return { sh, slow, runs };
 	}
-	const launches = (shell: string) =>
+	const launches = (shell: string, timing: Record<string, number>) =>
 		new Launches({
 			registry: { all: () => [], pool: null },
 			machineId: () => "m1",
 			machine: () => "m1",
 			shell,
-			timing: { probeMs: 300 },
+			timing,
 		} as unknown as LaunchDeps);
 	const installed = (o: LaunchOptions) =>
 		o.harnesses.filter((h) => h.installed).map((h) => h.id);
 
+	test("escape codes, a banner and stderr noise hide no harness", async () => {
+		const f = fakeShell();
+		const o = await launches(f.sh, {}).options();
+		expect(o.checked).toBe(true);
+		expect(installed(o)).toEqual(["claude", "codex"]);
+	});
+
+	test("the marked lines are read anywhere in the output, escapes stripped", () => {
+		const out =
+			"\x1b]1337;RemoteHost=a@b\x07\x1b]1337;CurrentDir=/x\x1b\\PULSAR_BIN:claude:/u/bin/claude\n" +
+			"\x1b[1mPULSAR_BIN:pi:/u/bin/pi\x1b[0m\nPULSAR_BIN:omp:alias omp=x\n/u/bin/codex\n";
+		expect([...parseProbe(out)]).toEqual(["claude", "pi"]);
+	});
+
+	test("a slow login shell: reads say not checked yet, then its answer is kept", async () => {
+		const f = fakeShell();
+		writeFileSync(f.slow, "1");
+		const l = launches(f.sh, { probeMs: 5000, probeWaitMs: 200 });
+		const first = await l.options();
+		expect(first.checked).toBe(false);
+		expect(installed(first)).toEqual([]);
+		await until(async () => (await l.options()).checked === true, 4000);
+		expect(installed(await l.options())).toEqual(["claude", "codex"]);
+		expect(f.runs()).toBe(1);
+	});
+
 	test("a probe that timed out is not kept; the next read asks again", async () => {
 		const f = fakeShell();
+		writeFileSync(f.slow, "2");
+		const l = launches(f.sh, { probeMs: 300, probeWaitMs: 1000 });
+		expect((await l.options()).checked).toBe(false);
 		writeFileSync(f.slow, "");
-		const l = launches(f.sh);
-		expect(installed(await l.options())).toEqual([]);
-		rmSync(f.slow);
-		expect(installed(await l.options())).toEqual(["codex"]);
+		const o = await l.options();
+		expect(o.checked).toBe(true);
+		expect(installed(o)).toEqual(["claude", "codex"]);
 		expect(f.runs()).toBe(2);
 		// A finished probe is kept.
-		expect(installed(await l.options())).toEqual(["codex"]);
+		await l.options();
 		expect(f.runs()).toBe(2);
 	});
 
 	test("reads at the same time share one login shell", async () => {
 		const f = fakeShell();
-		const l = launches(f.sh);
+		const l = launches(f.sh, {});
 		const all = await Promise.all([l.options(), l.options(), l.options()]);
-		for (const o of all) expect(installed(o)).toEqual(["codex"]);
+		for (const o of all) expect(installed(o)).toEqual(["claude", "codex"]);
 		expect(f.runs()).toBe(1);
+	});
+});
+
+describe("this machine by name", () => {
+	test("its name (any case, with a domain) reads and launches here, like its id", async () => {
+		const l = home.service.launches;
+		for (const m of [
+			home.service.machineId,
+			"home",
+			"HOME",
+			"home.tail-fake.ts.net",
+		]) {
+			const o = (await l.read(VERIFIED, m, {
+				op: "launch.options",
+			})) as LaunchOptions;
+			expect(o.machineId).toBe(home.service.machineId);
+			const r = (await l.read(VERIFIED, m, {
+				op: "launch.refs",
+				cwd: project,
+			})) as LaunchRefs;
+			expect(r.root).toBeNull();
+		}
+		expect(
+			await code(l.read(VERIFIED, "elsewhere", { op: "launch.options" })),
+		).toBe("not_found");
+		if (!HAS_TMUX) return;
+		mode = "plain";
+		const s = await l.launch(VERIFIED, "HOME", {
+			nonce: nonce(),
+			cwd: project,
+			harness: "pi",
+			workspace: "current",
+		});
+		expect(s.machineId).toBe(home.service.machineId);
+		expect(s.id.includes("/")).toBe(false);
+		await until(() => now(home, s.id).step === "waiting", 5000);
+		tmux("kill-session", "-t", `=${s.session}`);
 	});
 });
 

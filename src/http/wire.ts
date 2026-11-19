@@ -1261,6 +1261,11 @@ export interface LaunchOptions {
 	home: string;
 	projects: LaunchProject[];
 	harnesses: { id: LaunchHarness; label: string; installed: boolean }[];
+	/**
+	 * False while the login shell is still looking (a slow rc file): then
+	 * `installed` means nothing yet. Absent from older daemons.
+	 */
+	checked?: boolean;
 }
 
 /** `GET /machines/:m/refs?cwd=`: branches to start a worktree from. */

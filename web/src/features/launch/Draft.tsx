@@ -235,7 +235,10 @@ function DraftImpl({
 		value: x.id,
 		label: x.label,
 		icon: <HarnessGlyph harness={x.id} size={14} />,
-		...(x.installed ? {} : { sub: `Not found on ${machine}` }),
+		// Marked only once that machine's login shell answered.
+		...(x.installed || opts?.checked === false
+			? {}
+			: { sub: `Not found on ${machine}` }),
 	}));
 
 	const branchOptions: PickerOption[] = (refs?.branches ?? []).map((b) => ({

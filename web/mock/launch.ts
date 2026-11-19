@@ -70,6 +70,7 @@ function options(machine: string): LaunchOptions {
 		machine,
 		home: h,
 		projects,
+		checked: true,
 		harnesses: HARNESSES.map((x) => ({
 			...x,
 			// The mock's machines lack omp, to show the mark.
