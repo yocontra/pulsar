@@ -83,6 +83,13 @@ function idFromName(name: string, harness: UsageHarness): string {
  * transaction, so a re-scan only reads what was appended and never counts
  * a line twice. Provider message ids are counted once across all files.
  */
+/** Read sizes, and a hook after each commit (tests: small chunks, a crash mid-file). */
+export interface ScanTuning {
+	chunkBytes?: number;
+	commitBytes?: number;
+	onCommit?: () => void;
+}
+
 export class UsageScanner {
 	private readonly store: Store;
 	private readonly roots: () => UsageRoots;
@@ -90,9 +97,20 @@ export class UsageScanner {
 	/** When the last full scan finished (ms), null before the first. */
 	scannedAt: number | null = null;
 
-	constructor(store: Store, roots: () => UsageRoots = defaultRoots) {
+	private readonly chunk: number;
+	private readonly commitBytes: number;
+	private readonly onCommit: (() => void) | undefined;
+
+	constructor(
+		store: Store,
+		roots: () => UsageRoots = defaultRoots,
+		tuning: ScanTuning = {},
+	) {
 		this.store = store;
 		this.roots = roots;
+		this.chunk = tuning.chunkBytes ?? CHUNK;
+		this.commitBytes = tuning.commitBytes ?? COMMIT_BYTES;
+		this.onCommit = tuning.onCommit;
 	}
 
 	get scanning(): boolean {
@@ -212,7 +230,7 @@ export class UsageScanner {
 		const fh = await open(f.path, "r").catch(() => null);
 		if (!fh) return;
 		try {
-			const buf = Buffer.alloc(CHUNK);
+			const buf = Buffer.alloc(this.chunk);
 			let carry: Buffer[] = [];
 			let carryLen = 0;
 			let pos = offset;
@@ -220,7 +238,7 @@ export class UsageScanner {
 			let sinceCommit = 0;
 			for (;;) {
 				const chunkAt = pos;
-				const { bytesRead } = await fh.read(buf, 0, CHUNK, pos);
+				const { bytesRead } = await fh.read(buf, 0, this.chunk, pos);
 				if (bytesRead === 0) break;
 				pos += bytesRead;
 				let start = 0;
@@ -245,7 +263,7 @@ export class UsageScanner {
 					carryLen += bytesRead - start;
 				}
 				sinceCommit += bytesRead;
-				if (sinceCommit >= COMMIT_BYTES) {
+				if (sinceCommit >= this.commitBytes) {
 					// Not done: a size of -1 makes the next scan read on from here.
 					this.commit(f, offset, state, batch, -1);
 					batch = new Batch();
@@ -345,6 +363,7 @@ ON CONFLICT (path) DO UPDATE SET
 			db.exec("ROLLBACK");
 			throw e;
 		}
+		this.onCommit?.();
 	}
 
 	private prune(now: number) {

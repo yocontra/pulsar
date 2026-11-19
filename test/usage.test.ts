@@ -149,6 +149,96 @@ describe("parsers", () => {
 });
 
 describe("scanner", () => {
+	test("a file rewritten shorter is read again from the start; old ids stay counted once", async () => {
+		const a = claudeFile("s-rw");
+		write(a, [
+			claudeLine({ id: "msg_1", t: T, input: 10 }),
+			claudeLine({ id: "msg_2", t: T, input: 20 }),
+			claudeLine({ id: "msg_3", t: T, input: 40 }),
+		]);
+		await usage.scanner.scan();
+		expect(totals()).toMatchObject({ input: 70, records: 3 });
+		// Replaced by a shorter file: one old message and one new one.
+		write(a, [
+			claudeLine({ id: "msg_1", t: T, input: 10 }),
+			claudeLine({ id: "msg_4", t: T, input: 80 }),
+		]);
+		await usage.scanner.scan();
+		expect(totals()).toMatchObject({ input: 150, records: 4 });
+		const row = store.db
+			.prepare("SELECT offset, size FROM usage_files WHERE path = ?")
+			.get(a) as { offset: number; size: number };
+		expect(row.offset).toBe(row.size);
+		// Nothing new: nothing added.
+		await usage.scanner.scan();
+		expect(totals()).toMatchObject({ input: 150, records: 4 });
+	});
+
+	test("a scan stopped after a partial commit resumes with no line skipped or counted twice", async () => {
+		// Lines of mixed length, some longer than a read chunk.
+		const lines: string[] = [];
+		for (let i = 0; i < 60; i++)
+			lines.push(
+				claudeLine({
+					id: `msg_${i}`,
+					t: T,
+					input: 1,
+					output: i,
+					block: "y".repeat((i * 97) % 900),
+				}),
+			);
+		write(claudeFile("s-resume"), lines);
+		const day = new Date(T).toISOString().slice(0, 10).split("-");
+		const thread = "01a1f571-0000-7000-8000-000000000001";
+		const steps: [number, number, number][] = [];
+		for (let i = 1; i <= 40; i++) steps.push([i * 1000, i * 600, i * 7]);
+		write(
+			join(dir, "codex", "sessions", ...day, `rollout-x-${thread}.jsonl`),
+			codexLines(T, "gpt-6.2", steps),
+		);
+		const expected = {
+			input: 60 + (40_000 - 24_000),
+			cacheRead: 24_000,
+			output: (59 * 60) / 2 + 280,
+			records: 100,
+		};
+		// Small chunks and commits; the scan dies after its third commit.
+		let commits = 0;
+		const crashing = new Usage(store, {
+			roots: () => rootsIn(dir),
+			tuning: {
+				chunkBytes: 256,
+				commitBytes: 1024,
+				onCommit: () => {
+					if (++commits === 3) throw new Error("crash");
+				},
+			},
+		});
+		await expect(crashing.scanner.scan()).rejects.toThrow("crash");
+		const partial = totals();
+		expect(partial.records).toBeGreaterThan(0);
+		expect(partial.records).toBeLessThan(100);
+		const sizes = store.db.prepare("SELECT size FROM usage_files").all() as {
+			size: number;
+		}[];
+		expect(sizes.some((r) => r.size === -1)).toBe(true);
+		// The next scan (small chunks again) picks up where the commit left off.
+		const resumed = new Usage(store, {
+			roots: () => rootsIn(dir),
+			tuning: { chunkBytes: 256, commitBytes: 1024 },
+		});
+		await resumed.scanner.scan();
+		expect(totals()).toMatchObject(expected);
+		await resumed.scanner.scan();
+		expect(totals()).toMatchObject(expected);
+		const codex = resumed.localAgent(agent("codex", thread));
+		expect(codex.tokens).toMatchObject({
+			input: 16_000,
+			cacheRead: 24_000,
+			output: 280,
+		});
+	});
+
 	test("duplicate message ids count once: in one file, across scans and across files", async () => {
 		const a = claudeFile("s-a");
 		// Claude writes one line per content block, same id and usage.

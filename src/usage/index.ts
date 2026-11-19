@@ -18,7 +18,7 @@ import {
 	priceFor,
 	priceTable,
 } from "./prices.ts";
-import { type UsageRoots, UsageScanner } from "./scan.ts";
+import { type ScanTuning, type UsageRoots, UsageScanner } from "./scan.ts";
 
 export const USAGE_PERIODS: readonly UsagePeriod[] = [
 	"24h",
@@ -168,6 +168,8 @@ export function cleanAgentUsage(v: unknown): LocalAgentUsage {
 export interface UsageOptions {
 	/** Session folders to read (tests point them at fixtures). */
 	roots?: () => UsageRoots;
+	/** Read sizes and a commit hook (tests). */
+	tuning?: ScanTuning;
 }
 
 /**
@@ -181,7 +183,7 @@ export class Usage {
 
 	constructor(store: Store, opts: UsageOptions = {}) {
 		this.store = store;
-		this.scanner = new UsageScanner(store, opts.roots);
+		this.scanner = new UsageScanner(store, opts.roots, opts.tuning);
 	}
 
 	// --- Prices ---
