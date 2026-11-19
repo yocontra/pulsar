@@ -123,6 +123,21 @@ async function openEvents(lastEventId?: string) {
 	return { events, streamId, subscribe, close: () => ac.abort() };
 }
 
+/**
+ * Subscribes a stream to an agent's transcript and waits until its watcher
+ * is attached. The watcher starts at the end of the file on its first tick,
+ * which runs after the PUT returns: a line appended before that tick is
+ * history, never a live event. The app pages after subscribing (the page
+ * waits for the watcher); a test that appends at once must wait too.
+ */
+async function follow(
+	s: { subscribe: (session: string | null) => Promise<Response> },
+	agentId: string,
+) {
+	expect((await s.subscribe(agentId)).status).toBe(200);
+	await service.transcripts.ready(agentId);
+}
+
 const transcripts = (events: SseEvent[], agent: string) =>
 	events.filter((e) => e.event === "transcript" && e.data.agent === agent);
 
@@ -288,7 +303,7 @@ describe("live transcripts over SSE", () => {
 		const s = await openEvents();
 		await s.subscribe(a.id);
 		expect(service.transcripts.tailer.subscribers(a.id)).toBe(1);
-		await s.subscribe(b.id);
+		await follow(s, b.id);
 		expect(service.transcripts.tailer.subscribers(a.id)).toBe(0);
 		expect(service.transcripts.tailer.subscribers(b.id)).toBe(1);
 		appendFileSync(files.get("switch-a")!, line("old-1", "nobody watches"));
@@ -305,8 +320,8 @@ describe("live transcripts over SSE", () => {
 		const agent = addAgent("shared-1", true);
 		const one = await openEvents();
 		const two = await openEvents();
-		await one.subscribe(agent.id);
-		await two.subscribe(agent.id);
+		await follow(one, agent.id);
+		await follow(two, agent.id);
 		expect(service.transcripts.tailer.subscribers(agent.id)).toBe(1);
 		appendFileSync(files.get("shared-1")!, line("both-1", "to both"));
 		await until(
@@ -325,7 +340,7 @@ describe("live transcripts over SSE", () => {
 	test("a resume from before the topic was made again gets a gap, not a partial replay", async () => {
 		const agent = addAgent("refloor-1", true);
 		const phone = await openEvents();
-		await phone.subscribe(agent.id);
+		await follow(phone, agent.id);
 		appendFileSync(files.get("refloor-1")!, line("seen-0", "before"));
 		await until(() => transcripts(phone.events, agent.id).length > 0, 2000);
 		const lastId = transcripts(phone.events, agent.id).at(-1)!.id;
@@ -335,7 +350,7 @@ describe("live transcripts over SSE", () => {
 		appendFileSync(files.get("refloor-1")!, line("unseen-1", "while away"));
 		// A desktop opens the same session: the topic is made again, empty.
 		const desk = await openEvents();
-		await desk.subscribe(agent.id);
+		await follow(desk, agent.id);
 		appendFileSync(files.get("refloor-1")!, line("seen-1", "after"));
 		await until(() => transcripts(desk.events, agent.id).length > 0, 2000);
 		const back = await openEvents(lastId);
@@ -439,7 +454,7 @@ describe("transcript images", () => {
 	test("live events over SSE carry image URLs that fetch", async () => {
 		const agent = addAgent("img-live", true);
 		const s = await openEvents();
-		await s.subscribe(agent.id);
+		await follow(s, agent.id);
 		appendFileSync(
 			files.get("img-live")!,
 			`${JSON.stringify({
