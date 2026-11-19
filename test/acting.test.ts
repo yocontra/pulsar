@@ -116,6 +116,8 @@ const calls = new Map<
 function dummyHandlers(n: Node) {
 	const got: { op: string; agent: string | null; params: unknown }[] = [];
 	calls.set(n.name, got);
+	// Stand-ins replace the real git handlers.
+	n.service.git.off();
 	for (const op of ["git.commit", "agents.launch"] as const) {
 		// The feature's own handler (launch) makes way for the dummy.
 		n.service.acting.unregister(op);

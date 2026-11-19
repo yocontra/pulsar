@@ -53,6 +53,7 @@ const FEATURES: Feature[] = [
 	"usage",
 	"attachments",
 	"launch",
+	"git",
 ];
 
 interface ResolveToken {

@@ -32,6 +32,7 @@ import {
 	principalLabel,
 	requesterOf,
 } from "../service/caller.ts";
+import { commitParams, prParams, pushParams } from "../service/git.ts";
 import type { PulsarService, RelyingParty } from "../service/index.ts";
 import { LIMITS } from "../service/limits.ts";
 import { decodeCursor, encodeCursor, FACET_KEYS } from "../service/views.ts";
@@ -159,6 +160,12 @@ const STATUS: Record<string, number> = {
 	not_implemented: 501,
 	unreachable: 503,
 	upgrade: 426,
+	// Git actions (src/git-actions.ts): git said no, a guard refused, or the
+	// operator must confirm first (the agent works; the default branch).
+	git_failed: 409,
+	git_refused: 409,
+	confirm_busy: 409,
+	confirm_default: 409,
 };
 
 /** Refuses any bind address that is not loopback or (with TLS) a Tailscale address. */
@@ -1257,6 +1264,40 @@ export class HttpTransport {
 				await this.service.changes.file(id, q.mode, q.path, who(c)),
 			);
 		});
+		// Git actions on the agent's worktree (src/service/git.ts). Reads
+		// follow the diff viewer's rule; commit, push and PR are acting ops.
+		api.get("/agents/:id/git/status", async (c) => {
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			return c.json(await this.service.git.status(id, who(c)));
+		});
+		api.get("/agents/:id/git/pr", async (c) => {
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			return c.json(await this.service.git.pr(id, who(c)));
+		});
+		for (const [path, op, check] of [
+			["commit", "git.commit", commitParams],
+			["push", "git.push", pushParams],
+			["pr", "git.pr", prParams],
+		] as const)
+			api.post(`/agents/:id/git/${path}`, async (c) => {
+				const raw = await jsonBody(c);
+				if (!raw || typeof raw !== "object" || Array.isArray(raw))
+					throw new RpcError("bad_request", "the body must be an object");
+				// The params go on exactly as sent: a remote proof covers them.
+				const { assertion, ...params } = raw as Record<string, unknown>;
+				check(params);
+				return c.json(
+					await this.service.acting.run(
+						who(c),
+						op,
+						{ agent: c.req.param("id") },
+						params,
+						assertion,
+					),
+				);
+			});
 		api.get("/facets", (c) => {
 			const q = parse(Q.facets, c.req.query());
 			return c.json(svc.facets(who(c), q));

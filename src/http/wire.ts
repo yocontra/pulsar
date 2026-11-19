@@ -251,7 +251,9 @@ export type Feature =
 	/** Attachments and the composer's `@` file list. */
 	| "attachments"
 	/** Start agents from the app (`POST /agents/launch`, src/service/launch.ts). */
-	| "launch";
+	| "launch"
+	/** Commit, push and PR from the app (`/agents/:id/git/*`). */
+	| "git";
 
 /** `GET /hello`. */
 export interface Hello {
@@ -859,6 +861,136 @@ export interface FileDiff {
 	patch: string | null;
 	/** The `key` of the summary entry this diff belongs to. */
 	key: string;
+}
+
+// ------------------------------------------------------------ git actions
+
+/** A pull request of the agent's branch, as `gh` reports it. */
+export interface GitPr {
+	number: number;
+	url: string;
+	title: string;
+	state: "open" | "draft" | "merged" | "closed";
+	base: string;
+	head: string;
+}
+
+/**
+ * `GET /agents/:id/git/status`: what commit, push and PR need, read from
+ * the agent's worktree (and `gh` for the PR, cached). `available: false`
+ * says why there is nothing to act on.
+ */
+export interface GitStatus {
+	agent: string;
+	available: boolean;
+	reason?: "no_cwd" | "not_a_repo" | "git_failed" | "unsupported";
+	root: string | null;
+	/** Checked-out branch; null when HEAD is detached. */
+	branch: string | null;
+	/** Short commit id of HEAD; null in a repo with no commits. */
+	head: string | null;
+	/** The repo's default branch (the remote's HEAD, else main / master). */
+	defaultBranch: string | null;
+	onDefault: boolean;
+	/** The remote a push goes to; null when the repo has none. */
+	remote: string | null;
+	/** The branch's upstream (`origin/feat`); null before the first push. */
+	upstream: string | null;
+	/** Commits on the branch / on the upstream only. 0 without an upstream. */
+	ahead: number;
+	behind: number;
+	/** Changed files (staged, unstaged, untracked). */
+	dirty: number;
+	/** Files with merge conflicts. */
+	conflicted: number;
+	/** A merge, rebase, cherry-pick or revert in progress. */
+	operation: "merge" | "rebase" | "cherry-pick" | "revert" | null;
+	/** The push remote is on GitHub (PRs through `gh`). */
+	github: boolean;
+	/** `gh` on the agent's machine; null when not asked (no GitHub remote). */
+	gh: "ok" | "missing" | "logged_out" | "error" | null;
+	/** The branch's PR, open or not; null when none (or `gh` can't tell). */
+	pr: GitPr | null;
+}
+
+/** One CI check of a PR. */
+export interface GitCheck {
+	name: string;
+	state: "pass" | "fail" | "pending" | "skipped";
+	url: string | null;
+	workflow: string | null;
+}
+
+/** A review or a review comment on a PR (text from GitHub: untrusted). */
+export interface GitReviewComment {
+	author: string;
+	body: string;
+	/** An inline comment's file and line; null for a review's summary. */
+	path: string | null;
+	line: number | null;
+	/** A review's verdict, for a review's summary. */
+	verdict?: "approved" | "changes_requested" | "commented";
+	url: string | null;
+	at: string | null;
+}
+
+/** `GET /agents/:id/git/pr`: the branch's PR with checks and review comments. */
+export interface GitPrDetails {
+	agent: string;
+	pr: GitPr | null;
+	/** Why there is no PR to show: no GitHub remote, gh missing or logged out. */
+	reason?: "no_github" | "gh_missing" | "gh_logged_out" | "gh_error";
+	message?: string;
+	checks: GitCheck[];
+	review: "approved" | "changes_requested" | "review_required" | null;
+	comments: GitReviewComment[];
+}
+
+/**
+ * `POST /agents/:id/git/commit`. Every field but `assertion` is the acting
+ * op's params (a remote proof covers exactly them). `confirmBusy` and
+ * `confirmDefault` say the operator confirmed a commit while the agent
+ * works, or on the default branch.
+ */
+export interface GitCommitParams {
+	/** Paths from the changes summary (a rename: both paths). */
+	files: string[];
+	message: string;
+	/** Commit on this new branch (switched to first). */
+	newBranch?: string;
+	confirmBusy?: boolean;
+	confirmDefault?: boolean;
+}
+export interface GitCommitResult {
+	sha: string;
+	branch: string | null;
+	subject: string;
+	files: number;
+}
+
+/** `POST /agents/:id/git/push`. */
+export interface GitPushParams {
+	confirmBusy?: boolean;
+	confirmDefault?: boolean;
+}
+export interface GitPushResult {
+	branch: string;
+	remote: string;
+	upstream: string;
+	/** False: the upstream already had every commit. */
+	pushed: boolean;
+}
+
+/** `POST /agents/:id/git/pr`: title and body default to the commits'. */
+export interface GitPrParams {
+	title?: string;
+	body?: string;
+	draft?: boolean;
+}
+export interface GitPrResult {
+	pr: GitPr;
+	/** False: the branch already had this PR. */
+	created: boolean;
 }
 
 /** What a question is about (`POST /ask`), as the parser read it. */

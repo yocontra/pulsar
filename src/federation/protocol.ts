@@ -225,6 +225,8 @@ export type FedAction =
 	/** The agent's worktree changes, and one file's diff (the diff viewer). */
 	| { op: "changes.summary"; agent: string; mode: ChangesMode }
 	| { op: "changes.file"; agent: string; mode: ChangesMode; path: string }
+	/** The agent's git status, or its branch's PR (the app's git actions). */
+	| { op: "git.read"; agent: string; what: "status" | "pr" }
 	/** Ask about the receiver's own agents (`service.ask.local`). */
 	| { op: "ask"; question: string; selector?: string }
 	/*
