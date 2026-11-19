@@ -896,7 +896,18 @@ export interface GitStatus {
 	remote: string | null;
 	/** The branch's upstream (`origin/feat`); null before the first push. */
 	upstream: string | null;
-	/** Commits on the branch / on the upstream only. 0 without an upstream. */
+	/**
+	 * Where a push goes: the same-named branch on the push remote
+	 * (`origin/feat`), whatever the upstream is. Null without a branch or
+	 * a remote.
+	 */
+	pushTo: string | null;
+	/** The upstream is set but its branch is gone (deleted after a merge). */
+	upstreamGone: boolean;
+	/**
+	 * Commits on the branch / on `pushTo` only, when the upstream is
+	 * `pushTo`; 0 otherwise (no upstream, another branch, gone).
+	 */
 	ahead: number;
 	behind: number;
 	/** Changed files (staged, unstaged, untracked). */

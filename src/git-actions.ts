@@ -55,6 +55,8 @@ function unavailable(
 		onDefault: false,
 		remote: null,
 		upstream: null,
+		pushTo: null,
+		upstreamGone: false,
 		ahead: 0,
 		behind: 0,
 		dirty: 0,
@@ -68,6 +70,8 @@ function unavailable(
 
 /** What `git status --porcelain=v2 --branch` says, plus the files it counts. */
 interface Porcelain {
+	/** `# branch.ab` was there: the upstream's branch exists. */
+	ab: boolean;
 	branch: string | null;
 	head: string | null;
 	upstream: string | null;
@@ -79,6 +83,7 @@ interface Porcelain {
 
 export function parsePorcelain(out: string): Porcelain {
 	const p: Porcelain = {
+		ab: false,
 		branch: null,
 		head: null,
 		upstream: null,
@@ -100,6 +105,7 @@ export function parsePorcelain(out: string): Porcelain {
 		} else if (r.startsWith("# branch.upstream ")) p.upstream = r.slice(18);
 		else if (r.startsWith("# branch.ab ")) {
 			const m = /^\+(\d+) -(\d+)$/.exec(r.slice(12));
+			p.ab = true;
 			if (m) {
 				p.ahead = Number(m[1]);
 				p.behind = Number(m[2]);
@@ -362,6 +368,10 @@ export async function gitStatus(
 		operation(read),
 		p.branch ? prRepos(read, remote, p.branch) : Promise.resolve(null),
 	]);
+	// A push goes to the same-named branch on the push remote, never to an
+	// upstream with another name (`checkout -b feat origin/main` tracks main).
+	const pushTo = remote && p.branch ? `${remote}/${p.branch}` : null;
+	const tracking = !!pushTo && p.upstream === pushTo && p.ab;
 	const status: GitStatus = {
 		agent,
 		available: true,
@@ -372,8 +382,11 @@ export async function gitStatus(
 		onDefault: !!p.branch && p.branch === def,
 		remote,
 		upstream: p.upstream,
-		ahead: p.ahead,
-		behind: p.behind,
+		pushTo,
+		upstreamGone: !!p.upstream && !p.ab,
+		// Counts only against the branch a push goes to (see pushTo).
+		ahead: tracking ? p.ahead : 0,
+		behind: tracking ? p.behind : 0,
 		dirty: p.dirty,
 		conflicted: p.conflicted,
 		operation: op,
@@ -699,6 +712,10 @@ export async function commit(
 	};
 }
 
+/** The upstream is the push target and its branch exists. */
+const isTracking = (s: GitStatus) =>
+	!!s.pushTo && s.upstream === s.pushTo && !s.upstreamGone;
+
 export async function push(
 	cwd: string | null,
 	p: { confirmDefault?: boolean },
@@ -709,41 +726,29 @@ export async function push(
 	const branch = s.branch;
 	if (!branch) refuse("Detached HEAD: check out a branch before pushing.");
 	if (!s.head) refuse("There are no commits to push yet.");
-	if (s.upstream && s.ahead > 0 && s.behind > 0)
-		refuse("Branch has diverged from upstream. Rebase or merge first.");
-	if (s.upstream && s.behind > 0)
-		refuse("Branch is behind upstream. Pull or rebase before pushing.");
-	if (!s.remote) refuse("This repo has no remote to push to.");
+	if (!s.remote || !s.pushTo) refuse("This repo has no remote to push to.");
 	const remote = s.remote;
-	if (s.upstream && s.ahead === 0)
-		return { branch, remote, upstream: s.upstream, pushed: false };
+	// The branch tracks its push target: ahead/behind count against it.
+	const tracking = isTracking(s);
+	if (tracking && s.ahead > 0 && s.behind > 0)
+		refuse("Branch has diverged from upstream. Rebase or merge first.");
+	if (tracking && s.behind > 0)
+		refuse("Branch is behind upstream. Pull or rebase before pushing.");
+	if (tracking && s.ahead === 0)
+		return { branch, remote, upstream: s.pushTo, pushed: false };
+	// The target is the same-named branch: the default branch only when
+	// this is it.
 	if (s.onDefault && !p.confirmDefault)
 		throw new RpcError(
 			"confirm_default",
 			`This pushes the default branch (${branch}).`,
 		);
-	// The upstream's branch when it lives on the push remote, else the same name.
-	let target = `refs/heads/${branch}`;
-	if (s.upstream) {
-		const [upRemote, merge] = await Promise.all([
-			runGit(dir, ["config", "--get", `branch.${branch}.remote`], {
-				mode: "read",
-			}),
-			runGit(dir, ["config", "--get", `branch.${branch}.merge`], {
-				mode: "read",
-			}),
-		]);
-		if (
-			upRemote.ok &&
-			upRemote.stdout.trim() === remote &&
-			merge.ok &&
-			merge.stdout.trim()
-		)
-			target = merge.stdout.trim();
-	}
-	const args = s.upstream
-		? ["push", "--porcelain", remote, `HEAD:${target}`]
-		: ["push", "--porcelain", "--set-upstream", remote, `HEAD:${target}`];
+	// Never to an upstream with another name: to `<remote>/<branch>`, which
+	// becomes the upstream (also when the old upstream's branch is gone).
+	const target = `HEAD:refs/heads/${branch}`;
+	const args = tracking
+		? ["push", "--porcelain", remote, target]
+		: ["push", "--porcelain", "--set-upstream", remote, target];
 	const r = await runGit(dir, args, { timeoutMs: PUSH_TIMEOUT_MS });
 	if (!r.ok) {
 		if (r.code !== "failed") fail(r, "push");
@@ -753,7 +758,7 @@ export async function push(
 	return {
 		branch,
 		remote,
-		upstream: s.upstream ?? `${remote}/${branch}`,
+		upstream: s.pushTo,
 		pushed: true,
 	};
 }
@@ -821,7 +826,7 @@ export async function createPr(
 		refuse("gh is not logged in on the agent's machine. Run gh auth login.");
 	if (existing.pr?.state === "open" || existing.pr?.state === "draft")
 		return { pr: existing.pr, created: false };
-	if (!s.upstream || s.ahead > 0) refuse("Push the branch first.");
+	if (!isTracking(s) || s.ahead > 0) refuse("Push the branch first.");
 	const args = [
 		"pr",
 		"create",

@@ -111,7 +111,9 @@ test.describe("git sheet", () => {
 		const git = await sheetNamed(page, "Git");
 		await expect(git.locator(".g-progress")).toContainText("Committed");
 		await expect(git.locator(".g-rows")).toContainText("pulsar/fix-the-race");
-		await expect(git.locator(".g-rows")).toContainText("Not pushed yet");
+		await expect(git.locator(".g-rows")).toContainText(
+			"Not pushed to origin/pulsar/fix-the-race yet",
+		);
 	});
 
 	test("reasons under the buttons; the PR card and Ask to fix", async ({
