@@ -41,7 +41,9 @@ Subagents are not agents: they are never in the agent list, counts, selectors or
 - **OpenCode**: into the subagent's own session.
 - **Claude Code, Codex, omp**: these harnesses give no way into a subagent, so the message goes to the parent agent, starting `For your subagent "<name>"`. Pulsar never says it reached the subagent.
 
-See [subagents](subagents.md) for how each harness is read.
+The sidebar lists running and idle subagents. To also list finished ones, dimmed, turn on **Show finished subagents** in Settings (saved per device).
+
+Limits: Codex subagents are listed only while Codex's app-server runs, and a Codex subagent with no rollout file has no transcript. OpenCode subagents have no transcript, and only direct children are listed. Claude Code workflow runs are not listed. pi has no subagents.
 
 ## Changes
 
@@ -77,6 +79,7 @@ Cmd-K, then type `?` (or pick Ask): "who is editing src/auth/session.ts", "who h
 
 The gear button opens Settings:
 
+- **Show finished subagents**: list finished subagents too, on this device.
 - **Notifications**: turn on "Approval pending" notifications for this browser.
 - **Passkeys**: every passkey on this machine, with Remove.
 - **Confirmed browsers**: browsers that confirmed with Face ID / Touch ID recently (12 hours on a computer that runs Pulsar, 7 days on a phone or tablet), with Sign out. Sending as you, Stop, answering prompts and removing a passkey need this. Signing out a browser signs out all its open tabs.

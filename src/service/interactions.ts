@@ -10,7 +10,7 @@ import type {
 import { RpcError } from "../rpc.ts";
 
 /**
- * Interactions: prompts that need the operator (docs/interactive-tools.md).
+ * Interactions: prompts that need the operator.
  * Shapes are checked here, once, for every source: a harness hook, the
  * pi/omp extension, a peer's records and the app's answers.
  */

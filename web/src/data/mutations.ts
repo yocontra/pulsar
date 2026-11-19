@@ -4,8 +4,7 @@
  * server refuses, the passkey prompt is cancelled, or `send` asks to
  * confirm again (a 409 resolves with `reconfirm`, it does not throw).
  * Where showing the outcome early would mislead (an approval, Stop), the
- * write shows a pending state until the daemon answers. See
- * docs/optimistic.md for every action and why.
+ * write shows a pending state until the daemon answers.
  */
 import { type QueryClient, useMutation } from "@tanstack/react-query";
 import { api, hasSessionToken, ProveCancelled } from "../api/client.ts";

@@ -5,7 +5,7 @@ import { statAsync, tailAsync } from "../util.ts";
 import type { ServerPrompt } from "./types.ts";
 
 /**
- * Codex: shown, not answered (docs/interactive-tools.md). Codex sends
+ * Codex: shown, not answered. Codex sends
  * approvals and `request_user_input` only to the app-server client that
  * started the turn (its TUI), and no hook covers `request_user_input`, so
  * the app can't answer them. The rollout records the model's call before

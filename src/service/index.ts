@@ -149,7 +149,7 @@ export class PulsarService {
 	readonly transcripts: Transcripts;
 	/** Worktree changes for the diff viewer: `summary`, `file`, `watch`. */
 	readonly changes: Changes;
-	/** Agents' subagents: children kept apart from the registry (docs/subagents.md). */
+	/** Agents' subagents: children kept apart from the registry. */
 	readonly subagents: Subagents;
 	/** Stop: interrupting agents' turns. */
 	readonly interrupts: Interrupts;

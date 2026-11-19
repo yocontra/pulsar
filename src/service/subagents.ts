@@ -22,7 +22,7 @@ import {
 import type { Registry } from "./registry.ts";
 
 /**
- * Subagents (docs/subagents.md): children an agent's harness runs for it
+ * Subagents: children an agent's harness runs for it
  * (Claude Task calls and teammates, Codex spawned threads, omp tasks,
  * OpenCode child sessions). They are not agents: they live here, never in
  * the registry, so selectors, `*`, broadcasts, counts and `list_agents`

@@ -55,8 +55,8 @@ const projectDir = join(
 mkdirSync(projectDir, { recursive: true });
 const transcript = join(projectDir, `${SESSION}.jsonl`);
 copyFileSync(FIXTURE, transcript);
-// A finished subagent of fixer's session, as Claude Code writes it
-// (docs/subagents.md): its own log and a meta file.
+// A finished subagent of fixer's session, as Claude Code writes it: its
+// own log and a meta file.
 const subagents = join(projectDir, SESSION, "subagents");
 mkdirSync(subagents, { recursive: true });
 const subRecord = (o: object) =>

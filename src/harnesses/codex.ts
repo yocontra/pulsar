@@ -169,7 +169,7 @@ export const codex: HarnessDriver = {
 	serverInteractions: {
 		intervalMs: 2000,
 		pending: (agents) => codexPending(agents, codexRolloutAsync),
-		// Codex answers only in its own TUI (docs/interactive-tools.md).
+		// Codex answers only in its own TUI.
 		reply: async () => false,
 	},
 

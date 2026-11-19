@@ -1,5 +1,5 @@
 /**
- * Durable delivery across machines (docs/delivery.md, "Across machines").
+ * Durable delivery across machines.
  * The home node owns redelivery; the sender's node only sees receipts.
  */
 import {

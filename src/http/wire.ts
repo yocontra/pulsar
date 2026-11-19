@@ -301,7 +301,7 @@ export type ApprovalState =
 	| "expired";
 
 /**
- * What a relayed prompt asks of the operator (docs/interactive-tools.md).
+ * What a relayed prompt asks of the operator.
  * `permission` is a tool permission prompt (the original approvals);
  * the others carry a typed `prompt` and take a typed `answer`.
  */

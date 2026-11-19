@@ -10,7 +10,7 @@ import type { ServerPrompt, ServerReply } from "./types.ts";
 
 /**
  * OpenCode's prompts, read from and answered on its own server (verified
- * with OpenCode 2.2.5 against a scratch server, docs/interactive-tools.md):
+ * with OpenCode 2.2.5 against a scratch server):
  *
  * - Permissions: `GET /api/session/:id/permission` lists pending ones
  *   (`{id, action, resources, save}`); `POST …/permission/:rid/reply

@@ -11,7 +11,7 @@ import { parsePi } from "./pi-transcript.ts";
 import type { FoundSubagent, SubagentTranscript } from "./types.ts";
 
 /**
- * Subagents of omp, Codex and OpenCode (docs/subagents.md). Claude Code's
+ * Subagents of omp, Codex and OpenCode. Claude Code's
  * are in claude-subagents.ts.
  */
 

@@ -447,7 +447,7 @@ export class Federation implements PoolView {
 		return cleanSubagentList(r.list, address.slice(0, slash), localId);
 	}
 
-	/** A local subagent that takes messages directly (docs/subagents.md), as a delivery target. */
+	/** A local subagent that takes messages directly, as a delivery target. */
 	private async subagentTarget(id: string): Promise<Agent | undefined> {
 		if (!isLocalSubagentId(id)) return undefined;
 		const row = await this.service.subagents.row(id);

@@ -253,7 +253,7 @@ CREATE INDEX IF NOT EXISTS receipts_resume ON receipts(resume_key) WHERE resume_
 `);
 		},
 	},
-	// 7: interactions (docs/interactive-tools.md): what a relayed prompt asks
+	// 7: interactions: what a relayed prompt asks
 	// (kind, typed prompt) and the app's typed answer. Additive, ensure-style.
 	{
 		ensure: (db) => {
@@ -528,7 +528,7 @@ export class Store {
 	}
 
 	/**
-	 * Writes a receipt, guarded (docs/delivery.md, "Transitions"): within one
+	 * Writes a receipt, guarded: within one
 	 * attempt a final state never changes and `acked` never falls back to
 	 * sent/delivered/read (a late extension ack after a reply). A higher
 	 * attempt (a redelivery) always applies. `attempt` absent keeps the

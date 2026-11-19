@@ -11,7 +11,7 @@ import {
 } from "./fixtures.ts";
 
 /**
- * Interactions (docs/interactive-tools.md) answered from the app, on the
+ * Interactions answered from the app, on the
  * desktop (dialog) and the phone (sheet): every kind, the passkey gate,
  * and first answer wins against the agent's own screen and another device.
  * Runs in the `interactions-desktop` and `interactions-phone` projects.

@@ -10,7 +10,7 @@ import type {
 } from "./http/wire.ts";
 
 /**
- * Relays pi/omp dialogs to the pulsar app (docs/interactive-tools.md).
+ * Relays pi/omp dialogs to the pulsar app.
  *
  * The extension's `ctx.ui` is the object the host's own tools use too (omp
  * builds one UI context for tools and extensions in TUI mode), so wrapping

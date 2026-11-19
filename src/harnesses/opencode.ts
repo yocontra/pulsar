@@ -224,7 +224,7 @@ export const opencode: HarnessDriver = {
 	},
 
 	// Child sessions. `session.prompt` on a child's own id lands in that
-	// session and starts its turn (verified live, docs/subagents.md).
+	// session and starts its turn (verified live with OpenCode 2.2.5).
 	subagents: { list: listOpencodeSubagents, direct: true },
 
 	push: {

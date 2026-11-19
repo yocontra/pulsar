@@ -283,7 +283,7 @@ export interface HarnessDriver {
 	};
 
 	/**
-	 * Subagents an agent runs (docs/subagents.md). Discovery is lazy and
+	 * Subagents an agent runs. Discovery is lazy and
 	 * incremental: `stamp` is one cheap check the daemon runs on a slow
 	 * timer; `list` runs only when the stamp moved, a child is still running,
 	 * or someone looks; unchanged files are not read again.

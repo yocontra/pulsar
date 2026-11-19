@@ -893,7 +893,7 @@ export class HttpTransport {
 			return c.json(svc.agents(who(c), q));
 		});
 		api.get("/agents/:id", (c) => c.json(svc.agent(who(c), c.req.param("id"))));
-		// Subagents: children of one agent, never in /agents (docs/subagents.md).
+		// Subagents: children of one agent, never in /agents.
 		api.get("/agents/:id/subagents", async (c) => {
 			this.service.authorize(who(c), "agents");
 			return c.json(

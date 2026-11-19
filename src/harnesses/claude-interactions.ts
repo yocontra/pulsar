@@ -8,7 +8,7 @@ import type { HookDecision } from "./types.ts";
 
 /**
  * Claude Code's interactive tools, relayed through the PermissionRequest hook.
- * Verified with Claude Code 2.1.327 in tmux (docs/interactive-tools.md):
+ * Verified with Claude Code 2.1.327 in tmux:
  *
  * - AskUserQuestion: `allow` with `updatedInput: {...input, answers}`, where
  *   `answers` maps each question's text to the picked label, labels joined

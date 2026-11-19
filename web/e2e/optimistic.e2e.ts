@@ -10,7 +10,7 @@ import {
 } from "./fixtures.ts";
 
 /**
- * Optimistic rendering on a slow, failing network (docs/optimistic.md):
+ * Optimistic rendering on a slow, failing network:
  * the mock delays or fails chosen requests (`/__mock/faults`) and echoes
  * sends into the transcript as a harness does. Feedback must be instant,
  * a failure must roll back with Retry, and the echo must never duplicate

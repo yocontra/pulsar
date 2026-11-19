@@ -89,7 +89,7 @@ Agents get `harness`, `model`, `project`, `branch`, `worktree` and `pr` tags on 
 | `inbox` | Messages that were not pushed into the conversation; search history or show a thread |
 | `set_identity` | Activity line, tags, name and inbound policy (`accept`, `hold`, `refuse`) |
 
-A message that waits for an answer is delivered at least once: if the recipient's session restarts before it answers, Pulsar delivers it again. Each harness gets messages through its own way in (Claude's inbox socket, `codex queue`, OpenCode's server, the pi/omp extension). Details: [docs/delivery.md](docs/delivery.md), [docs/adapters.md](docs/adapters.md).
+A message that waits for an answer is delivered at least once: if the recipient's session restarts before it answers, Pulsar delivers it again. Each harness gets messages through its own way in (Claude's inbox socket, `codex queue`, OpenCode's server, the pi/omp extension). After 5 attempts or 24 hours Pulsar gives up and tells the sender. Codex reports no busy or idle state, so `wait idle:` never resolves for a Codex agent. Details: [docs/delivery.md](docs/delivery.md), [docs/adapters.md](docs/adapters.md).
 
 ## Agent mesh
 
@@ -167,7 +167,7 @@ After Prove Human, your messages reach agents as `[human operator - <your Tailsc
 | pi | Extension dialogs (select, confirm, input) |
 | Codex | Shown read-only; answer in the terminal |
 
-Details: [docs/interactive-tools.md](docs/interactive-tools.md).
+MCP elicitation forms, Codex's "Implement this plan?" and pi `custom()` dialogs are not relayed. An unanswered card ends after 9 minutes for a permission prompt and 59 minutes for a question or plan; the terminal prompt stays.
 
 ### Stop
 

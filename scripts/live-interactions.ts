@@ -1,5 +1,5 @@
 /**
- * Live check for interactions (docs/interactive-tools.md): a throwaway
+ * Live check for interactions: a throwaway
  * daemon (run it with a temp PULSAR_HOME and PULSAR_NO_SCAN=1) that answers
  * relayed prompts in-process with a soft passkey, as the app would, and logs
  * every state change to $LIVE/events.log. $LIVE/policy.json steers it:

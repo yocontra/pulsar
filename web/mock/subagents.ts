@@ -1,5 +1,5 @@
 /**
- * Mock subagents (docs/subagents.md), shaped like the daemon's: apparish-auth
+ * Mock subagents, shaped like the daemon's: apparish-auth
  * (Claude Code) runs four: an Explore task still running, a finished task
  * that started a nested one, and an idle teammate. The running and the
  * finished task are linked from Task cards in its transcript. Claude Code subagents

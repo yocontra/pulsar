@@ -9,7 +9,7 @@ import type { Router } from "./router.ts";
 import { newId } from "./util.ts";
 import type { Waiters } from "./waiters.ts";
 
-/** Redelivery timers (docs/delivery.md, "Schedule and limits"). */
+/** Redelivery timers. */
 export interface DeliveryConfig {
 	/** How often the scheduler looks for due receipts. */
 	tickMs: number;
@@ -467,7 +467,7 @@ export class Deliveries {
 		this.store.setDelivery(messageId, me.id, {
 			ackedAt: now,
 			deliveredGen: r.state === "queued" ? (generationOf(me) ?? "") : undefined,
-			// A lease only for a single-recipient ask (level 2); see docs/delivery.md.
+			// A lease only for a single-recipient ask (level 2).
 			dueAt: m?.tracked === 2 ? now + this.config.leaseMs : null,
 		});
 		return { ok: true, state: "acked" as const };
