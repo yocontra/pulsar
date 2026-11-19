@@ -28,6 +28,12 @@ export const test = base.extend<{ errors: string[]; proveSends: boolean }>({
 	errors: [
 		async ({ page }, use) => {
 			const errors: string[] = [];
+			// WebKit reports a request that a navigation (a reload) cancelled
+			// as an access-control failure. Same-origin API calls can't fail
+			// CORS here.
+			const cancelledFetch = (text: string) =>
+				/\/api\/v1\/\S* due to access control checks\.$/.test(text) &&
+				text.includes(new URL(page.url()).host);
 			page.on("console", (m) => {
 				if (m.type() !== "error") return;
 				// Mermaid measures text in a scratch element with a <style> and a
@@ -44,13 +50,8 @@ export const test = base.extend<{ errors: string[]; proveSends: boolean }>({
 				// Linux WebKit doesn't know the viewport's interactive-widget key
 				// (Safari and Chromium do); it says so and ignores it.
 				if (/Viewport argument key "interactive-widget"/.test(m.text())) return;
-				// Linux WebKit reports a request that a navigation cancelled as an
-				// access-control failure. Same-origin API calls can't fail CORS here.
-				if (
-					/\/api\/v1\/\S* due to access control checks\.$/.test(m.text()) &&
-					m.text().includes(new URL(page.url()).host)
-				)
-					return;
+				// Linux WebKit logs a cancelled request as a console error.
+				if (cancelledFetch(m.text())) return;
 				if (
 					/Content Security Policy/.test(m.text()) &&
 					/\/(mermaid|d3-)[^/]*\.js/.test(url)
@@ -58,7 +59,17 @@ export const test = base.extend<{ errors: string[]; proveSends: boolean }>({
 					return;
 				errors.push(m.text());
 			});
-			page.on("pageerror", (e) => errors.push(e.message));
+			page.on("pageerror", (e) => {
+				// macOS WebKit logs the same message as a JavaScript error, which
+				// Playwright reports as a page error split at its first colon
+				// (name "Fetch API cannot load http", message "/127.0.0.1:…").
+				if (
+					e.name.startsWith("Fetch API cannot load") &&
+					cancelledFetch(`${e.name}:${e.message}`)
+				)
+					return;
+				errors.push(e.message);
+			});
 			page.on("dialog", (d) => {
 				errors.push(`dialog: ${d.message()}`);
 				void d.dismiss();
