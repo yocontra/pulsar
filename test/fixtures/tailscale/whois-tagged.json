@@ -1,0 +1,15 @@
+{
+	"Node": {
+		"ID": 55555,
+		"StableID": "nTaG55CNTRL",
+		"Name": "build-01.tail1234.ts.net.",
+		"User": 0,
+		"Tags": ["tag:server"],
+		"Addresses": ["100.70.0.5/32"]
+	},
+	"UserProfile": {
+		"ID": 0,
+		"LoginName": "tagged-devices",
+		"DisplayName": "Tagged Devices"
+	}
+}
