@@ -14,12 +14,14 @@ import {
 	readFileSync,
 	realpathSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Federation } from "../src/federation/index.ts";
 import { PoolMembers } from "../src/federation/members.ts";
+import { StaticIdentity } from "../src/http/identity.ts";
 import type {
 	LaunchHarness,
 	LaunchOptions,
@@ -124,10 +126,6 @@ async function startNode(name: string): Promise<Node> {
 				quietPolls: 3,
 				followMs: 60,
 			},
-			send: async (_user, agentId, body) => {
-				sends.push({ node: name, agentId, body });
-				return "sent";
-			},
 		},
 	});
 	const http = new HttpTransport(service, {
@@ -186,10 +184,19 @@ function register(n: Node, s: LaunchState, harness: LaunchHarness = "pi") {
 		tmux("display-message", "-p", "-t", `=${s.session}:`, "#{pane_pid}").trim(),
 	);
 	const controller = new AbortController();
+	let agentId = "";
+	// The real delivery path: the extension gets the first message pushed.
 	const caller: Caller = {
 		principal: { kind: "terminal" },
 		closed: controller.signal,
-		emit: () => {},
+		emit: (event, data) => {
+			if (event === "push")
+				sends.push({
+					node: n.name,
+					agentId,
+					body: String((data as { text?: unknown }).text ?? ""),
+				});
+		},
 	};
 	n.service.attach(caller);
 	n.service.setRole(caller, "extension");
@@ -197,6 +204,7 @@ function register(n: Node, s: LaunchState, harness: LaunchHarness = "pi") {
 		caller,
 		registration({ harness, pid, cwd: s.cwd, project: "demo" }),
 	);
+	agentId = agent.id;
 	return { agent, close: () => controller.abort() };
 }
 
@@ -382,11 +390,10 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 				sent: true,
 				error: null,
 			});
-			expect(sends.at(-1)).toEqual({
-				node: "home",
-				agentId: agent.id,
-				body: "fix the login bug",
-			});
+			expect(sends.at(-1)).toMatchObject({ node: "home", agentId: agent.id });
+			// As the verified operator, through the extension's push.
+			expect(sends.at(-1)!.body).toContain("fix the login bug");
+			expect(sends.at(-1)!.body).toContain("human operator");
 			// Stop and typing reach it through its pane.
 			const pane = tmux(
 				"display-message",
@@ -459,7 +466,7 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 			tmux("send-keys", "-t", `=${s.session}:`, "-l", "y");
 			tmux("send-keys", "-t", `=${s.session}:`, "Enter");
 			await until(() => now(home, s.id).step === "done", 5000);
-			expect(sends.at(-1)?.body).toBe("hello");
+			expect(sends.at(-1)?.body).toContain("hello");
 			expect(readFileSync(logs.at(-1)!, "utf8")).toContain("trusted:y");
 		} finally {
 			close();
@@ -564,6 +571,87 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 		).toBe("bad_request");
 	});
 
+	test("an agent Pulsar can't push to gets no message; the launch says so", async () => {
+		mode = "plain";
+		const before = sends.length;
+		const s = await home.service.launches.launch(VERIFIED, null, {
+			nonce: nonce(),
+			cwd: project,
+			harness: "pi",
+			workspace: "current",
+			prompt: "x",
+		});
+		await until(() => now(home, s.id).step === "waiting", 5000);
+		const pid = Number(
+			tmux(
+				"display-message",
+				"-p",
+				"-t",
+				`=${s.session}:`,
+				"#{pane_pid}",
+			).trim(),
+		);
+		// Found by a scan only: idle, but nothing reaches its session.
+		const agent = home.service.registry.upsert({
+			harness: "pi",
+			sessionId: `scan-${pid}`,
+			pid,
+			cwd: project,
+			project: "proj",
+			branch: null,
+			tags: [],
+			meta: {},
+			registered: false,
+			status: "idle",
+		});
+		expect(agent.reach).toBe("pull");
+		await until(() => now(home, s.id).step === "failed", 8000);
+		expect(now(home, s.id).error).toContain("can't reach its session");
+		expect(sends.length).toBe(before);
+		home.service.registry.markGone(agent);
+		tmux("kill-session", "-t", `=${s.session}`);
+	});
+
+	test("a folder reached through a symlink: the worktree lands next to the real repo", async () => {
+		mode = "plain";
+		const repo = join(HOME, "repo2");
+		mkdirSync(join(repo, "sub"), { recursive: true });
+		git(repo, "init", "-q", "-b", "main");
+		writeFileSync(join(repo, "sub", "a.txt"), "a");
+		git(repo, "add", ".");
+		git(repo, "commit", "-q", "-m", "one");
+		const link = join(root, "linked-repo");
+		symlinkSync(repo, link);
+		const s = await home.service.launches.launch(VERIFIED, null, {
+			nonce: nonce(),
+			cwd: join(link, "sub"),
+			harness: "pi",
+			workspace: "worktree",
+			branch: "via-link",
+		});
+		expect(s.cwd).toBe(join(HOME, "repo2-via-link", "sub"));
+		await until(() => now(home, s.id).step === "waiting", 8000);
+		expect(existsSync(join(HOME, "repo2-via-link", "sub", "a.txt"))).toBe(true);
+		tmux("kill-session", "-t", `=${s.session}`);
+	});
+
+	test("two presses at once start one launch", async () => {
+		mode = "plain";
+		const p = {
+			nonce: nonce(),
+			cwd: project,
+			harness: "pi",
+			workspace: "current",
+		};
+		const [a, b] = await Promise.all([
+			home.service.launches.launch(VERIFIED, null, p),
+			home.service.launches.launch(VERIFIED, null, p),
+		]);
+		expect(b.id).toBe(a.id);
+		await until(() => now(home, a.id).step === "waiting", 5000);
+		tmux("kill-session", "-t", `=${a.session}`);
+	});
+
 	test("a missing folder is refused before anything starts", async () => {
 		expect(
 			await code(
@@ -655,11 +743,10 @@ describe.skipIf(!HAS_TMUX)("launching on another machine", () => {
 			await until(() => now(relay, s.id).step === "done", 8000);
 			expect(now(relay, s.id).agentId).toBe(`${hid}/${agent.id}`);
 			// Sent on the home node, as the verified operator.
-			expect(sends.at(-1)).toEqual({
-				node: "home",
-				agentId: agent.id,
-				body: "remote hello",
-			});
+			expect(sends.at(-1)).toMatchObject({ node: "home", agentId: agent.id });
+			expect(sends.at(-1)!.body).toContain("remote hello");
+			// The app opens its session next: this node's pool has it.
+			expect(relay.service.registry.find(`${hid}/${agent.id}`)).toBeDefined();
 			// The relay's own stream carried the steps.
 			expect(states.get(s.id)!.at(-1)!.step).toBe("done");
 			// Reads go to the home node too.
@@ -701,5 +788,149 @@ describe.skipIf(!HAS_TMUX)("launching on another machine", () => {
 				relay.service.launches.launch(USER, "home", { ...bad, cwd: project }),
 			),
 		).toBe("session_required");
+	});
+});
+
+describe.skipIf(!HAS_TMUX)("over HTTP", () => {
+	let http: HttpTransport;
+	let base: string;
+	let origin: string;
+	let key: SoftAuthenticator;
+	const api = async <T = Record<string, unknown>>(
+		method: string,
+		path: string,
+		body?: unknown,
+		token?: string,
+	) => {
+		const res = await fetch(`${base}/api/v1${path}`, {
+			method,
+			headers: {
+				"X-Pulsar": "1",
+				Origin: origin,
+				...(token ? { Authorization: `Bearer ${token}` } : {}),
+				...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+			},
+			...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+		});
+		return { status: res.status, body: (await res.json()) as T };
+	};
+
+	beforeAll(async () => {
+		http = new HttpTransport(home.service, {
+			identity: new StaticIdentity(OWNER, "phone"),
+			owner: OWNER,
+			hosts: ["127.0.0.1"],
+			port: 0,
+			webRoot: null,
+			hub: { coalesceMs: 30 },
+		});
+		await http.listen();
+		base = `http://127.0.0.1:${http.port}`;
+		origin = `http://localhost:${http.port}`;
+		key = new SoftAuthenticator({ origin, rpId: "localhost" });
+		const o = await api<{ options: never }>(
+			"POST",
+			"/passkeys/register/options",
+			{
+				label: "Mac",
+			},
+		);
+		expect(
+			(
+				await api("POST", "/passkeys/register/verify", {
+					response: key.register(o.body.options),
+				})
+			).status,
+		).toBe(200);
+	});
+	afterAll(() => http.close());
+
+	test("routes, the session gate, and launch events on the stream", async () => {
+		mode = "plain";
+		const hello = await api<{ features: string[] }>("GET", "/hello");
+		expect(hello.body.features).toContain("launch");
+		const mid = home.service.machineId;
+		const opts = await api<LaunchOptions>("GET", `/machines/${mid}/projects`);
+		expect(opts.status).toBe(200);
+		expect(opts.body.machine).toBe("home");
+		const refs = await api<LaunchRefs>(
+			"GET",
+			`/machines/home/refs?cwd=${encodeURIComponent(join(HOME, "repo"))}`,
+		);
+		expect(refs.body.current).toBe("main");
+		expect((await api("GET", "/machines/nowhere/projects")).status).toBe(404);
+
+		// The stream hears launch events.
+		const ac = new AbortController();
+		const res = await fetch(`${base}/api/v1/events`, {
+			headers: { "X-Pulsar": "1", Origin: origin },
+			signal: ac.signal,
+		});
+		let text = "";
+		void (async () => {
+			const reader = res.body!.getReader();
+			const dec = new TextDecoder();
+			try {
+				for (;;) {
+					const { value, done } = await reader.read();
+					if (done) break;
+					text += dec.decode(value);
+				}
+			} catch {}
+		})();
+		await until(() => text.includes("event: ready") || text.length > 0, 3000);
+
+		const params = {
+			nonce: nonce(),
+			cwd: project,
+			harness: "pi",
+			workspace: "current",
+		};
+		const refused = await api<{ error: { code: string } }>(
+			"POST",
+			"/agents/launch",
+			{
+				params,
+			},
+		);
+		expect(refused.status).toBe(401);
+		expect(refused.body.error.code).toBe("session_required");
+
+		const so = await api<{ requestId: string; options: never }>(
+			"POST",
+			"/session/options",
+			{
+				device: "Mac",
+			},
+		);
+		const sv = await api<{ token: string }>("POST", "/session/verify", {
+			requestId: so.body.requestId,
+			assertion: key.assert(so.body.options),
+		});
+		const token = sv.body.token;
+		const bad = await api(
+			"POST",
+			"/agents/launch",
+			{ params: { ...params, harness: "sh" } },
+			token,
+		);
+		expect(bad.status).toBe(400);
+		const r = await api<LaunchState>(
+			"POST",
+			"/agents/launch",
+			{ params },
+			token,
+		);
+		expect(r.status).toBe(200);
+		await until(
+			() => text.includes("event: launch") && text.includes(r.body.id),
+			5000,
+		);
+		const got = await api<LaunchState>("GET", `/launches/${r.body.id}`);
+		expect(got.body.id).toBe(r.body.id);
+		expect((await api("GET", "/launches/nope")).status).toBe(404);
+		ac.abort();
+		await until(() => now(home, r.body.id).step === "waiting", 5000);
+		tmux("kill-session", "-t", `=${r.body.session}`);
 	});
 });
