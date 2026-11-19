@@ -1,0 +1,85 @@
+---
+import "../styles/globals.css";
+import "../styles/app.css";
+import "../styles/ios.css";
+import "../styles/desktop.css";
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+		/>
+		<meta name="color-scheme" content="light dark" />
+		<meta name="theme-color" content="#f2f2f7" media="(max-width: 1023px) and (prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#000000" media="(max-width: 1023px) and (prefers-color-scheme: dark)" />
+		<meta name="theme-color" content="#f7f7f5" media="(min-width: 1024px) and (prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#151517" media="(min-width: 1024px) and (prefers-color-scheme: dark)" />
+		<meta name="referrer" content="no-referrer" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<!-- "default", not black-translucent: black-translucent forces white status-bar
+		     text, unreadable in light mode, and WebKit marks it deprecated. Expected:
+		     iOS tints the bar from theme-color (not yet checked on a device). -->
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<meta name="apple-mobile-web-app-title" content="Pulsar" />
+		<title>Pulsar</title>
+		<!-- Data preload: starts the first screen's API reads while the CSS and JS
+		     download (async: it never blocks parsing). src/api/client.ts takes them. -->
+		<script is:inline src="/preload.js" async></script>
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+		<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+		<!-- Per-device prefs (Appearance, sidebar width): blocking on purpose, so they
+		     apply before first paint. After the theme-color metas it updates. -->
+		<script is:inline src="/prefs.js"></script>
+		<!-- Boot guard: runs before the module entry (document order) and turns a
+		     failed download into a reload or the error screen below. -->
+		<script is:inline src="/boot.js" defer></script>
+	</head>
+	<body>
+		<!-- Visible before any JS runs (styled by the external stylesheet; the
+		     CSP allows no inline styles or scripts). React replaces it. -->
+		<div id="app">
+			<div class="boot-shell st st-boot" aria-busy="true">
+				<span class="st-mark is-busy" aria-hidden="true">
+					<img src="/icon.svg" alt="" width="64" height="64" />
+				</span>
+				<p class="st-text boot-text">Loading Pulsar…</p>
+				<p class="st-note boot-note" id="boot-slow" hidden>Slow connection. Still loading.</p>
+				<noscript><p class="st-note boot-note">Pulsar needs JavaScript.</p></noscript>
+			</div>
+		</div>
+		<div class="boot-error" id="boot-error" role="alert" hidden>
+			<div class="boot-error-card st">
+				<span class="st-mark is-error" aria-hidden="true">
+					<img src="/icon.svg" alt="" width="64" height="64" />
+				</span>
+				<p class="st-title boot-error-title">Pulsar didn&apos;t load</p>
+				<p class="st-text">The app didn&apos;t finish downloading. Check your connection, then retry.</p>
+				<button type="button" class="st-btn boot-retry" id="boot-retry"><span class="st-l-desk">Retry</span><span class="st-l-phone">Try Again</span></button>
+				<details class="st-more">
+					<summary><span class="st-l-desk">What to check</span><span class="st-l-phone">What to Check</span></summary>
+					<ul>
+						<li>Pulsar already tried again once on its own.</li>
+						<li>Make sure Tailscale is connected on this device.</li>
+						<li>If a laptop served this page, it may be asleep. Open another machine&apos;s address.</li>
+					</ul>
+				</details>
+			</div>
+		</div>
+		{
+			/* Dev only: React Fast Refresh needs its preamble, which Astro adds
+			   only for `client:*` islands. The production build has no inline scripts. */
+			import.meta.env.DEV && (
+				<script is:inline type="module" set:html={`import RefreshRuntime from "/@react-refresh";RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>(t)=>t;window.__vite_plugin_react_preamble_installed__=true;`} />
+			)
+		}
+		<script>
+			import "../main.tsx";
+		</script>
+	</body>
+</html>

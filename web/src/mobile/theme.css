@@ -1,0 +1,1339 @@
+/*
+ * Pulsar phone (Ionic, iOS mode). Colors and type read the design tokens
+ * (--ds-*, styles/tokens.css) with iOS system values as fallbacks. Ionic is
+ * themed only through its --ion-* variables: its component styles are
+ * adopted stylesheets, which come after this file in the cascade.
+ */
+
+:root {
+	--p-bg: var(--ds-bg-sunken, #f2f2f7);
+	--p-plain: var(--ds-bg, #ffffff);
+	--p-cell: var(--ds-surface, #ffffff);
+	--p-cell-2: var(--ds-surface-2, #f2f2f7);
+	--p-cell-pressed: var(--ds-surface-active, #e5e5ea);
+	--p-label: var(--ds-text, #000000);
+	--p-label-2: var(--ds-text-2, #6c6c70);
+	--p-label-3: var(--ds-text-3, #8e8e93);
+	--p-sep: var(--ds-hairline, rgba(60, 60, 67, 0.29));
+	--p-fill: var(--ds-surface-3, rgba(118, 118, 128, 0.12));
+	/* Tint for text and glyphs (links, bar buttons); fills use --p-tint-fill
+	   (white text on it). Light: the same blue; dark: a lighter link blue
+	   that reads on black (the fill blue is 4:1 there). */
+	--p-tint: var(--ds-link, #0068da);
+	--p-tint-fill: var(--ds-primary, #0068da);
+	--p-needs: var(--ds-needs, #ff9500);
+	--p-needs-soft: var(--ds-needs-soft, rgba(255, 149, 0, 0.14));
+	--p-needs-text: var(--ds-needs-text, #b25000);
+	--p-busy: var(--ds-busy, #0a84ff);
+	--p-idle: var(--ds-idle, #8e8e93);
+	--p-offline: var(--ds-offline, #aeaeb2);
+	--p-danger: var(--ds-danger, #d70015);
+	--p-success: var(--ds-success, #248a3d);
+	--p-material: var(--ds-material, rgba(249, 249, 249, 0.8));
+	--p-skeleton: var(--ds-skeleton, rgba(118, 118, 128, 0.16));
+	--p-font: var(
+		--ds-font-sans,
+		-apple-system,
+		BlinkMacSystemFont,
+		"SF Pro Text",
+		"Inter",
+		"Segoe UI",
+		Roboto,
+		sans-serif
+	);
+	--p-mono: var(--ds-font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+	/* iOS type scale in rem: 1rem follows Dynamic Type (17px by default). */
+	--p-body: 1rem;
+	--p-body-lh: 1.294rem; /* 22 */
+	--p-sub: 0.882rem; /* 15 */
+	--p-sub-lh: 1.176rem; /* 20 */
+	--p-foot: 0.765rem; /* 13 */
+	--p-foot-lh: 1.059rem; /* 18 */
+	--p-cap: 0.706rem; /* 12 */
+
+	--ion-font-family: var(--p-font);
+	--ion-background-color: var(--p-bg);
+	--ion-text-color: var(--p-label);
+	--ion-item-background: var(--p-cell);
+	--ion-item-border-color: var(--p-sep);
+	--ion-border-color: var(--p-sep);
+	--ion-toolbar-background: var(--p-material);
+	--ion-toolbar-border-color: var(--p-sep);
+	--ion-placeholder-color: var(--p-label-3);
+	--ion-color-step-50: var(--p-bg);
+	--ion-color-step-150: var(--p-cell-pressed);
+	--ion-safe-area-top: var(--sat, env(safe-area-inset-top));
+	--ion-safe-area-bottom: var(--sab, env(safe-area-inset-bottom));
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--p-bg: var(--ds-bg-sunken, #000000);
+		--p-plain: var(--ds-bg, #000000);
+		--p-cell: var(--ds-surface, #1c1c1e);
+		--p-cell-2: var(--ds-surface-2, #2c2c2e);
+		--p-cell-pressed: var(--ds-surface-active, #3a3a3c);
+		--p-label: var(--ds-text, #ffffff);
+		--p-label-2: var(--ds-text-2, rgba(235, 235, 245, 0.6));
+		--p-label-3: var(--ds-text-3, rgba(235, 235, 245, 0.38));
+		--p-sep: var(--ds-hairline, rgba(84, 84, 88, 0.65));
+		--p-fill: var(--ds-surface-3, rgba(118, 118, 128, 0.24));
+		--p-tint: var(--ds-link, #0a84ff);
+		--p-tint-fill: var(--ds-primary, #0a72e8);
+		--p-needs: var(--ds-needs, #ff9f0a);
+		--p-needs-soft: var(--ds-needs-soft, rgba(255, 159, 10, 0.2));
+		--p-needs-text: var(--ds-needs-text, #ff9f0a);
+		--p-danger: var(--ds-danger, #ff453a);
+		--p-success: var(--ds-success, #30d158);
+		--p-material: var(--ds-material, rgba(29, 29, 31, 0.78));
+		--p-skeleton: var(--ds-skeleton, rgba(118, 118, 128, 0.26));
+	}
+}
+:root[data-theme="dark"] {
+	--p-bg: var(--ds-bg-sunken, #000000);
+	--p-plain: var(--ds-bg, #000000);
+	--p-cell: var(--ds-surface, #1c1c1e);
+	--p-cell-2: var(--ds-surface-2, #2c2c2e);
+	--p-cell-pressed: var(--ds-surface-active, #3a3a3c);
+	--p-label: var(--ds-text, #ffffff);
+	--p-label-2: var(--ds-text-2, rgba(235, 235, 245, 0.6));
+	--p-label-3: var(--ds-text-3, rgba(235, 235, 245, 0.38));
+	--p-sep: var(--ds-hairline, rgba(84, 84, 88, 0.65));
+	--p-fill: var(--ds-surface-3, rgba(118, 118, 128, 0.24));
+	--p-tint: var(--ds-link, #0a84ff);
+	--p-tint-fill: var(--ds-primary, #0a72e8);
+	--p-needs: var(--ds-needs, #ff9f0a);
+	--p-needs-soft: var(--ds-needs-soft, rgba(255, 159, 10, 0.2));
+	--p-needs-text: var(--ds-needs-text, #ff9f0a);
+	--p-danger: var(--ds-danger, #ff453a);
+	--p-success: var(--ds-success, #30d158);
+	--p-material: var(--ds-material, rgba(29, 29, 31, 0.78));
+	--p-skeleton: var(--ds-skeleton, rgba(118, 118, 128, 0.26));
+}
+
+/* ------------------------------------------------------------ base */
+
+html.ios {
+	-webkit-text-size-adjust: 100%;
+}
+body {
+	background: var(--p-bg);
+	color: var(--p-label);
+	font-family: var(--p-font);
+	-webkit-font-smoothing: antialiased;
+}
+ion-content {
+	--background: var(--p-bg);
+}
+ion-content.p-plain {
+	--background: var(--p-plain);
+}
+ion-toolbar {
+	--color: var(--p-label);
+}
+ion-title.title-large {
+	font-weight: 700;
+	letter-spacing: 0.01em;
+}
+/* Text-colored Ionic controls take the text tint, not the fill blue. */
+ion-back-button {
+	--color: var(--p-tint);
+}
+ion-label.ion-color-primary,
+ion-text.ion-color-primary {
+	--ion-color-base: var(--p-tint) !important;
+}
+ion-buttons ion-button {
+	--color: var(--p-tint);
+	min-width: 44px;
+	min-height: 44px;
+}
+ion-buttons ion-button svg {
+	width: 1.35rem;
+	height: 1.35rem;
+	stroke-width: 1.9;
+}
+ion-searchbar.p-search {
+	--background: var(--p-fill);
+	--placeholder-color: var(--p-label-3);
+	--icon-color: var(--p-label-3);
+	--color: var(--p-label);
+	padding-inline: 12px;
+}
+.p-nav-sub {
+	display: block;
+	font-size: var(--p-foot);
+	line-height: 1.1;
+	font-weight: 400;
+	color: var(--p-label-2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.p-nav-sub.is-needs {
+	color: var(--p-needs-text);
+}
+
+/* Live/connection status: a dot whose shape (ring, solid) carries meaning too. */
+.p-live {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--p-foot);
+	color: var(--p-label-2);
+}
+
+/* ------------------------------------------------------------ segment */
+
+/* ------------------------------------------------------------ list */
+
+.p-list {
+	position: relative;
+	padding-bottom: calc(24px + var(--ion-safe-area-bottom, 0px));
+}
+.p-vrow {
+	position: relative;
+	padding-inline: 16px;
+	/* Rows far off screen skip layout and paint (cheap long lists). */
+	content-visibility: auto;
+	contain-intrinsic-size: auto 2.706rem;
+}
+.p-vrow.is-node,
+.p-vrow.is-attn,
+.p-vrow.is-section {
+	contain-intrinsic-size: auto 3.882rem;
+}
+
+/* Section header (prominent, iOS 17 grouped style). */
+.p-section {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 3.059rem; /* 52 */
+	padding: 0 4px 8px;
+	box-sizing: border-box;
+}
+.p-section.is-first {
+	min-height: 2.353rem; /* 40 */
+}
+.p-section h2 {
+	margin: 0;
+	font-size: 1.176rem; /* 20 */
+	line-height: 1.471rem; /* 25 */
+	font-weight: 700;
+	color: var(--p-label);
+	letter-spacing: 0.01em;
+}
+.p-section h2 .p-count {
+	margin-left: 6px;
+	color: var(--p-needs-text);
+	font-weight: 600;
+}
+/* "See All": a text button that never changes the header's height; its
+   44 pt touch target comes from an invisible ::after. */
+.p-section button {
+	appearance: none;
+	position: relative;
+	border: 0;
+	background: none;
+	padding: 0 0 0 12px;
+	font: inherit;
+	font-size: var(--p-body);
+	line-height: 1.471rem;
+	color: var(--p-tint);
+	cursor: pointer;
+}
+.p-section button::after {
+	content: "";
+	position: absolute;
+	inset: -12px -8px -10px 0;
+}
+
+/* A cell in an inset group. The group's first and last cells round. */
+.p-cell {
+	position: relative;
+	background: var(--p-cell);
+	overflow: hidden;
+}
+.p-vrow.gf .p-cell {
+	border-top-left-radius: 12px;
+	border-top-right-radius: 12px;
+}
+.p-vrow.gl .p-cell {
+	border-bottom-left-radius: 12px;
+	border-bottom-right-radius: 12px;
+}
+.p-cell ion-item-sliding,
+.p-cell ion-item {
+	display: block;
+}
+.p-cell ion-item {
+	--background: var(--p-cell);
+	--background-activated: var(--p-cell-pressed);
+	--background-activated-opacity: 1;
+	--background-focused: var(--p-cell-pressed);
+	--background-hover: transparent;
+	--border-color: var(--p-sep);
+	--padding-start: 16px;
+	--inner-padding-end: 12px;
+	--min-height: 2.588rem; /* 44 */
+	--detail-icon-color: var(--p-label-3);
+	--detail-icon-opacity: 1;
+	--color: var(--p-label);
+}
+
+/* Row layout: leading icon, two text lines, trailing accessories. The
+   skeleton renders the same boxes (data-sk) with placeholder bars. */
+.p-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-width: 0;
+	padding-block: 8px;
+	box-sizing: border-box;
+}
+.p-row.is-agent,
+.p-row.is-needs {
+	min-height: 3.882rem; /* 66 */
+	padding-block: 10px;
+}
+.p-lead {
+	flex: none;
+	display: grid;
+	place-items: center;
+}
+.p-icon {
+	width: 1.765rem; /* 30 */
+	height: 1.765rem;
+	border-radius: 7px;
+	display: grid;
+	place-items: center;
+	color: #fff;
+}
+.p-icon svg {
+	width: 1.06rem;
+	height: 1.06rem;
+	stroke-width: 2;
+}
+.p-icon.is-machine {
+	background: linear-gradient(180deg, #5ac8fa, #0a84ff);
+}
+.p-icon.is-project {
+	background: linear-gradient(180deg, #a78bfa, #7c5ce0);
+}
+.p-icon.is-offline {
+	background: #aeaeb2;
+}
+.p-icon.is-pin {
+	background: linear-gradient(180deg, #ffd60a, #ff9f0a);
+}
+.p-icon.is-needs {
+	width: 2.353rem; /* 40 */
+	height: 2.353rem;
+	border-radius: 10px;
+	background: linear-gradient(180deg, #ffb340, #ff8a00);
+}
+.p-icon.is-needs svg {
+	width: 1.3rem;
+	height: 1.3rem;
+}
+.p-icon.is-asked {
+	background: linear-gradient(180deg, #5ac8fa, #0a84ff);
+}
+.p-avatar {
+	width: 2.353rem; /* 40 */
+	height: 2.353rem;
+	border-radius: 11px;
+	display: grid;
+	place-items: center;
+	font-size: 0.824rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	position: relative;
+	background: var(--h-bg, var(--ds-h-other-bg, #e5e5ea));
+	color: var(--h-fg, var(--ds-h-other-fg, #3a3a3c));
+}
+.p-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+.p-title {
+	display: block;
+	height: var(--p-body-lh);
+	font-size: var(--p-body);
+	line-height: var(--p-body-lh);
+	color: var(--p-label);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.p-row.is-agent .p-title,
+.p-row.is-needs .p-title {
+	font-weight: 600;
+}
+.p-sub {
+	display: block;
+	height: var(--p-sub-lh);
+	margin-top: 1px;
+	font-size: var(--p-sub);
+	line-height: var(--p-sub-lh);
+	color: var(--p-label-2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.p-sub code,
+.p-title code {
+	font-family: var(--p-mono);
+	font-size: 0.86em;
+	letter-spacing: -0.01em;
+}
+.p-tool {
+	color: var(--p-needs-text);
+	font-weight: 600;
+}
+.p-mark {
+	color: var(--p-danger);
+	font-family: var(--p-mono);
+	font-size: 0.85em;
+}
+.p-trail {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--p-label-2);
+	font-size: var(--p-sub);
+	line-height: var(--p-sub-lh);
+	font-variant-numeric: tabular-nums;
+}
+/* Mail style: the 40 pt avatar centres on the two-line row; time and
+   status share the title's line and baseline. */
+.p-line1 {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+	height: var(--p-body-lh);
+}
+.p-line1 > .p-title {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.p-line1 > .p-trail {
+	align-items: baseline;
+}
+.p-trail .p-state.is-needs {
+	color: var(--p-needs-text);
+	font-weight: 600;
+}
+.p-trail .p-state.is-busy {
+	color: var(--p-busy);
+}
+.p-trail .p-state.is-offline,
+.p-trail .p-quiet {
+	color: var(--p-label-3);
+}
+/* Disclosure for expandable groups: room on both sides (the chevrons
+   "need more space" defect). */
+.p-disclose {
+	width: 20px;
+	height: 20px;
+	margin-left: 2px;
+	display: grid;
+	place-items: center;
+	color: var(--p-label-3);
+	transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.p-disclose svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 2.5;
+}
+[data-expanded="true"] .p-disclose {
+	transform: rotate(90deg);
+}
+
+/* The ds needs-you badge beside a 17 pt row label: 18 pt tall, bold, so
+   it reads as a quiet count, not a button. Scales with Dynamic Type. */
+.p-trail .ds-needs-badge {
+	--ds-nb: 1.059rem; /* 18 */
+}
+
+/* Amber "needs you" badge: the only count a row shows. */
+.p-badge {
+	min-width: 1.35rem;
+	height: 1.35rem;
+	padding: 0 6px;
+	box-sizing: border-box;
+	border-radius: 999px;
+	display: inline-grid;
+	place-items: center;
+	background: var(--p-needs);
+	color: #fff;
+	font-size: var(--p-foot);
+	font-weight: 700;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Status dot on avatars: busy pulses, needs-you is a filled amber
+   triangle-ish badge, idle is hollow, offline is grey. */
+.p-dot {
+	position: absolute;
+	right: -3px;
+	bottom: -3px;
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	border: 2.5px solid var(--p-cell);
+	box-sizing: content-box;
+	background: var(--p-idle);
+}
+.p-dot.is-busy {
+	background: var(--p-busy);
+}
+.p-dot.is-needs {
+	background: var(--p-needs);
+}
+.p-dot.is-offline {
+	background: var(--p-offline);
+}
+.p-dot.is-idle {
+	background: var(--p-cell);
+	box-shadow: inset 0 0 0 2px var(--p-idle);
+}
+.p-pulse {
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: currentColor;
+	margin-right: 5px;
+	vertical-align: 1px;
+	animation: p-pulse 1.6s ease-in-out infinite;
+}
+@keyframes p-pulse {
+	0%,
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.35;
+		transform: scale(0.8);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.p-pulse {
+		animation: none;
+	}
+	.p-disclose {
+		transition: none;
+	}
+}
+
+/* Indent nested rows (projects under machines, agents under projects). */
+.p-row[data-depth="1"] {
+	padding-left: 18px;
+}
+.p-row[data-depth="2"] {
+	padding-left: 36px;
+}
+.p-row[data-depth="3"] {
+	padding-left: 54px;
+}
+
+/* A plain action row ("Show 40 more"). */
+.p-more {
+	color: var(--p-tint);
+	font-size: var(--p-body);
+}
+
+/* ------------------------------------------------------------ skeleton */
+
+.p-sk {
+	display: inline-block;
+	vertical-align: middle;
+	border-radius: 5px;
+	background: var(--p-skeleton);
+	--background: var(--p-skeleton);
+	--background-rgb: 118, 118, 128;
+	margin: 0;
+}
+ion-skeleton-text.p-sk {
+	line-height: 1;
+}
+.p-sk-line {
+	height: 0.82em;
+}
+
+/* ------------------------------------------------------------ tip */
+
+.p-tip {
+	margin: 4px 16px 4px;
+	padding: 14px 44px 14px 14px;
+	position: relative;
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	border-radius: 14px;
+	background: var(--p-cell);
+}
+.p-tip img {
+	width: 44px;
+	height: 44px;
+	border-radius: 10px;
+	flex: none;
+}
+.p-tip strong {
+	display: block;
+	font-size: var(--p-body);
+	line-height: var(--p-body-lh);
+	font-weight: 600;
+}
+.p-tip span {
+	display: block;
+	margin-top: 2px;
+	font-size: var(--p-sub);
+	line-height: var(--p-sub-lh);
+	color: var(--p-label-2);
+}
+.p-tip button {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	width: 44px;
+	height: 44px;
+	display: grid;
+	place-items: center;
+	border: 0;
+	background: none;
+	color: var(--p-label-3);
+}
+
+/* ------------------------------------------------------------ banners */
+
+.p-banner {
+	margin: 4px 16px 8px;
+	padding: 12px 14px;
+	border-radius: 12px;
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	background: var(--p-cell);
+	font-size: var(--p-sub);
+	line-height: var(--p-sub-lh);
+	color: var(--p-label-2);
+}
+.p-banner svg {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	color: var(--p-label-3);
+}
+.p-banner strong {
+	color: var(--p-label);
+	font-weight: 600;
+}
+
+/* ------------------------------------------------------------ empty */
+
+.p-empty {
+	padding: 64px 32px;
+	text-align: center;
+	color: var(--p-label-2);
+}
+.p-empty svg {
+	width: 44px;
+	height: 44px;
+	color: var(--p-label-3);
+	stroke-width: 1.5;
+}
+.p-empty h3 {
+	margin: 12px 0 4px;
+	font-size: 1.176rem;
+	line-height: 1.471rem;
+	font-weight: 700;
+	color: var(--p-label);
+}
+.p-empty p {
+	margin: 0 auto;
+	max-width: 18rem;
+	font-size: var(--p-sub);
+	line-height: var(--p-sub-lh);
+}
+
+.p-list.is-static,
+.p-vrow.is-static {
+	position: relative;
+}
+.p-list.is-static {
+	height: auto;
+}
+.p-sk-item {
+	pointer-events: none;
+}
+.p-avatar.p-sk,
+.p-icon.p-sk {
+	background: var(--p-skeleton);
+}
+
+/* ------------------------------------------------------------ status screens */
+
+.p-status-hero {
+	padding: calc(56px + var(--ion-safe-area-top, 0px)) 28px 8px;
+	text-align: center;
+}
+
+.p-status-app {
+	width: 84px;
+	height: 84px;
+	border-radius: 20px;
+	margin: 0 auto 16px;
+	display: block;
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.p-status-hero h1:not(.st-title) {
+	margin: 0 0 8px;
+	font-size: 1.647rem; /* 28 */
+	line-height: 2rem;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+}
+.p-status-hero > p:not(.st-text) {
+	margin: 0 auto 8px;
+	max-width: 20rem;
+	font-size: var(--p-body);
+	line-height: var(--p-body-lh);
+	color: var(--p-label-2);
+}
+/* Failure: the state pattern (app.css .st), from the top of the page. */
+.p-status-hero.st {
+	justify-content: flex-start;
+	padding: calc(64px + var(--ion-safe-area-top, 0px)) 24px 8px;
+}
+.p-status-hero .st-badge {
+	right: -8px;
+	bottom: -8px;
+	width: 30px;
+	height: 30px;
+	box-shadow: 0 0 0 3px var(--p-bg, var(--m-bg));
+}
+.p-status-hero .st-badge svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 2.4;
+}
+.p-status-more > :first-child {
+	margin-top: 0;
+}
+.p-status-more p {
+	margin: 8px 0 0;
+}
+.p-status-more ul {
+	margin: 0;
+	padding-left: 20px;
+}
+.p-status-more pre {
+	margin: 8px 0 0;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: var(--p-fill);
+	color: var(--p-label);
+	font: var(--p-foot) / 1.45 var(--p-mono);
+}
+
+.p-status ion-list-header {
+	font-size: var(--p-foot);
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	color: var(--p-label-2);
+	font-weight: 400;
+}
+.p-step {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	background: var(--p-tint-fill);
+	color: #fff;
+	font-size: var(--p-foot);
+	font-weight: 700;
+}
+.p-status code {
+	font-family: var(--p-mono);
+	font-size: 0.9em;
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: var(--p-fill);
+}
+.p-status-foot {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	justify-content: center;
+	margin: 16px 32px calc(32px + var(--ion-safe-area-bottom, 0px));
+	font-size: var(--p-foot);
+	color: var(--p-label-3);
+}
+.p-status-foot svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* ------------------------------------------------------------ preflight
+ * Tailwind's preflight (`* { padding: 0; margin: 0 }`) is a document style,
+ * which beats the :host styles inside Ionic's shadow roots. Restore the iOS
+ * host boxes it flattens (found by diffing computed styles with and
+ * without preflight).
+ */
+ion-title {
+	padding-inline: 90px;
+	padding-top: var(--padding-top);
+	padding-bottom: var(--padding-bottom);
+}
+ion-title.title-large {
+	padding: 2px 12px 4px;
+}
+ion-segment-button {
+	margin-block: 2px;
+}
+ion-badge {
+	padding: var(--padding-top) var(--padding-end) var(--padding-bottom)
+		var(--padding-start);
+}
+ion-toggle {
+	box-sizing: content-box;
+}
+
+/* ------------------------------------------------------------ agent page */
+
+.p-agent-header ion-title {
+	padding-inline: 96px;
+}
+.p-nav-title {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	min-width: 0;
+	text-align: center;
+	line-height: 1.15;
+}
+.p-nav-title h1 {
+	margin: 0;
+	max-width: 100%;
+	font-size: var(--p-body);
+	font-weight: 600;
+	color: var(--p-label);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.p-nav-sub .p-state {
+	font-size: inherit;
+}
+.p-nav-sub .p-state.is-needs {
+	color: var(--p-needs-text);
+	font-weight: 600;
+}
+.p-nav-sub .p-state.is-busy {
+	color: var(--p-busy);
+}
+.p-approval-bar {
+	--background: transparent;
+	--border-width: 0;
+	--min-height: 0;
+	padding: 0 12px 8px;
+}
+.p-approval-banner {
+	appearance: none;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	border: 0;
+	border-radius: 14px;
+	background: var(--p-needs-soft);
+	color: var(--p-label);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.p-approval-banner .p-icon.is-needs {
+	width: 34px;
+	height: 34px;
+	border-radius: 9px;
+}
+.p-ab-text {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+.p-ab-text strong {
+	font-size: var(--p-sub);
+	line-height: var(--p-sub-lh);
+	font-weight: 600;
+}
+.p-ab-text span {
+	font-size: var(--p-foot);
+	line-height: var(--p-foot-lh);
+	color: var(--p-label-2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.p-ab-cta {
+	flex: none;
+	padding: 7px 14px;
+	border-radius: 999px;
+	/* The AA amber pair (white on the light amber is 2:1 in dark mode). */
+	background: var(--ds-needs-badge, #b25000);
+	color: var(--ds-on-needs, #fff);
+	font-size: var(--p-sub);
+	font-weight: 600;
+}
+.p-agent .session {
+	height: 100%;
+}
+
+/* ------------------------------------------------------------ grouped lists */
+
+.p-group-head,
+.p-set-head {
+	margin: 0;
+	padding: 20px 20px 6px;
+	font-size: var(--p-foot);
+	line-height: var(--p-foot-lh);
+	font-weight: 400;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	color: var(--p-label-2);
+}
+ion-list.p-group,
+ion-list.p-set-list {
+	margin: 0 16px 8px;
+	border-radius: 12px;
+	--ion-item-background: var(--p-cell);
+}
+ion-list.p-group {
+	margin-top: 0;
+	margin-bottom: 8px;
+	background: transparent;
+	overflow: visible;
+}
+ion-list.p-group .p-group-head {
+	padding: 12px 4px 6px;
+}
+ion-list.p-group ion-item:first-of-type {
+	border-top-left-radius: 12px;
+	border-top-right-radius: 12px;
+}
+ion-list.p-group ion-item:last-of-type {
+	border-bottom-left-radius: 12px;
+	border-bottom-right-radius: 12px;
+}
+ion-list.p-group ion-item,
+ion-list.p-set-list ion-item {
+	--background: var(--p-cell);
+	--background-activated: var(--p-cell-pressed);
+	--background-activated-opacity: 1;
+	--padding-start: 16px;
+	--inner-padding-end: 12px;
+	--detail-icon-color: var(--p-label-3);
+	--detail-icon-opacity: 1;
+	--min-height: 2.588rem;
+	font-size: var(--p-body);
+}
+.p-set-foot {
+	margin: 0;
+	padding: 6px 20px 4px;
+	font-size: var(--p-foot);
+	line-height: var(--p-foot-lh);
+	color: var(--p-label-2);
+}
+.p-set-foot code,
+.p-settings code {
+	font-family: var(--p-mono);
+	font-size: 0.92em;
+}
+.p-set-icon {
+	width: 29px;
+	height: 29px;
+	margin-inline-end: 14px;
+	border-radius: 7px;
+	display: grid;
+	place-items: center;
+	color: #fff;
+	background: #8e8e93;
+}
+.p-set-icon svg {
+	width: 17px;
+	height: 17px;
+	stroke-width: 2;
+}
+.p-set-icon.is-red {
+	background: #ff3b30;
+}
+.p-set-icon.is-green {
+	background: #34c759;
+}
+.p-set-icon.is-blue {
+	background: #0a84ff;
+}
+.p-set-icon.is-gray {
+	background: #8e8e93;
+}
+.p-set-check {
+	width: 1.2rem;
+	height: 1.2rem;
+	color: var(--p-tint);
+	stroke-width: 2.4;
+}
+.p-set-title {
+	display: block;
+	font-size: var(--p-body);
+	line-height: var(--p-body-lh);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.p-set-sub {
+	display: block;
+	font-size: var(--p-foot);
+	line-height: var(--p-foot-lh);
+	color: var(--p-label-2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.p-set-action {
+	appearance: none;
+	border: 0;
+	background: none;
+	min-height: 44px;
+	padding: 0 4px 0 12px;
+	font: inherit;
+	font-size: var(--p-body);
+	color: var(--p-tint);
+}
+.p-set-action.is-danger {
+	color: var(--p-danger);
+}
+.p-settings ion-note {
+	font-size: var(--p-body);
+	color: var(--p-label-2);
+}
+.p-settings {
+	--padding-bottom: calc(32px + var(--ion-safe-area-bottom, 0px));
+}
+
+/* ------------------------------------------------------------ ask */
+
+.p-ask-empty {
+	padding: 36px 32px 20px;
+}
+.p-ask-results {
+	padding: 4px 16px calc(24px + var(--ion-safe-area-bottom, 0px));
+}
+
+/* ------------------------------------------------------------ toast */
+
+ion-toast.p-toast {
+	--background: var(--p-material);
+	--color: var(--p-label);
+	--border-radius: 14px;
+	--box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+	--start: 16px;
+	--end: 16px;
+	font-size: var(--p-sub);
+}
+ion-toast.p-toast.is-warn {
+	--color: var(--p-danger);
+}
+
+/* ------------------------------------------------------------ sheets */
+
+ion-modal {
+	--border-radius: 12px;
+}
+/* A tap above a card sheet closes it, like every other modal's backdrop
+   (Ionic makes a phone card's backdrop untappable). */
+ion-modal.modal-card::part(backdrop) {
+	pointer-events: auto;
+}
+.p-sheet-content {
+	--background: var(--p-bg);
+}
+.p-sheet-content > * {
+	height: 100%;
+}
+.p-sheet-content .m-approval,
+.p-sheet-content .m-builder,
+.p-sheet-content .m-scope {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+.p-sheet-content .m-sheet-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+}
+.p-sheet-content .m-ap-actions {
+	padding-bottom: calc(12px + var(--ion-safe-area-bottom, 0px));
+}
+
+/* iOS back button: chevron + previous title, tint colored. */
+ion-button.p-back {
+	--padding-start: 0;
+	--padding-end: 8px;
+	margin-inline-start: 0;
+	font-size: var(--p-body);
+	text-transform: none;
+	letter-spacing: 0;
+}
+ion-button.p-back svg {
+	width: 1.65rem;
+	height: 1.65rem;
+	margin-inline: -4px -1px;
+	stroke-width: 2.4;
+}
+ion-button.p-back span {
+	max-width: 7.5rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Status screens: step numbers keep their distance from the text. */
+.p-step {
+	margin-inline-end: 14px;
+	flex: none;
+}
+.p-status ion-item {
+	--padding-top: 10px;
+	--padding-bottom: 10px;
+}
+
+/* Action sheets and alerts: iOS materials in both themes. */
+:root {
+	--p-overlay: rgba(249, 249, 249, 0.94);
+	--p-overlay-pressed: rgba(222, 222, 226, 0.94);
+	--ion-overlay-background-color: var(--p-cell);
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--p-overlay: rgba(44, 44, 46, 0.92);
+		--p-overlay-pressed: rgba(72, 72, 74, 0.92);
+	}
+}
+:root[data-theme="dark"] {
+	--p-overlay: rgba(44, 44, 46, 0.92);
+	--p-overlay-pressed: rgba(72, 72, 74, 0.92);
+}
+ion-action-sheet {
+	--background: var(--p-overlay);
+	--background-selected: var(--p-overlay);
+	--button-background: transparent;
+	--button-background-activated: var(--p-overlay-pressed);
+	--button-background-activated-opacity: 1;
+	--button-background-selected: var(--p-overlay);
+	--button-color: var(--p-tint);
+	--color: var(--p-label-2);
+}
+
+/* Titles leave room for the back button at every text size. */
+.p-agent-header ion-title {
+	padding-inline: 5.7rem;
+}
+
+/* Ask answers (shared AskPanel) as an inset group on the phone. */
+.p-ask-results .ask-results {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	border-radius: 12px;
+	background: var(--p-cell);
+	overflow: hidden;
+}
+.p-ask-results .ask-match {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 12px 16px;
+}
+.p-ask-results .ask-match + .ask-match {
+	border-top: 0.5px solid var(--p-sep);
+}
+/* iOS selection circle (the shared checkbox is styled for the desktop). */
+.p-ask-results .ask-match > .d-check {
+	flex: none;
+	width: 22px;
+	height: 22px;
+	margin: 0;
+	border: 1.5px solid var(--p-label-3);
+	border-radius: 50%;
+	background: transparent;
+}
+.p-ask-results .ask-match > .d-check:checked {
+	border-color: var(--p-tint-fill);
+	background: var(--p-tint-fill);
+}
+.p-ask-results .ask-match > .d-check:checked::after {
+	content: "";
+	width: 10px;
+	height: 5px;
+	border-left: 2px solid var(--ds-on-primary, #fff);
+	border-bottom: 2px solid var(--ds-on-primary, #fff);
+	transform: translateY(-1px) rotate(-45deg);
+}
+.p-ask-results .ask-match .row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 22px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--p-label);
+	font: inherit;
+	font-size: var(--p-body);
+	text-align: left;
+}
+.p-ask-results .ask-match .row .name {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.p-ask-results .ask-match .sub {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--p-label-2);
+	font-size: var(--p-sub);
+}
+.p-ask-results .ask-match .row .ds-status {
+	flex: none;
+	margin-left: auto;
+}
+.p-ask-results .evidence {
+	margin: 4px 0 0;
+	padding: 0;
+	list-style: none;
+	color: var(--p-label-2);
+	font-size: var(--p-foot);
+	line-height: var(--p-foot-lh);
+}
+/* A docked bar under the answers: material, clear of the home indicator. */
+.p-ask-results .ask-actions {
+	position: sticky;
+	bottom: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 16px -16px calc(-24px - var(--ion-safe-area-bottom, 0px));
+	padding: 10px calc(16px + var(--ion-safe-area-right, 0px))
+		calc(10px + var(--ion-safe-area-bottom, 0px))
+		calc(16px + var(--ion-safe-area-left, 0px));
+	border-top: 0.5px solid var(--p-sep);
+	background: var(--p-material);
+	-webkit-backdrop-filter: saturate(180%) blur(20px);
+	backdrop-filter: saturate(180%) blur(20px);
+}
+.p-ask-results .ask-actions .btn.primary {
+	flex: none;
+	min-height: 44px;
+	padding: 0 18px;
+	border: 0;
+	border-radius: 12px;
+	background: var(--p-tint-fill);
+	color: var(--ds-on-primary, #fff);
+	font-size: var(--p-body);
+	font-weight: 600;
+}
+.p-ask-results .ask-actions .btn.primary:disabled {
+	opacity: 0.4;
+}
+.p-ask-results .ask-actions .muted {
+	min-width: 0;
+	color: var(--p-label-2);
+	font-size: var(--p-foot);
+	line-height: var(--p-foot-lh);
+}
+
+/* The agent page's bars don't overlay the conversation (IonContent isn't
+   fullscreen there), so the ds column needs no insets. */
+.p-agent {
+	--ds-conv-inset-top: 0px;
+	--ds-conv-inset-bottom: 0px;
+}
+
+/* Bars: solid. Content scrolls under the header and never shows through it
+   or through the status-bar area above it (no ghosted titles under the
+   bar's buttons); a hairline marks the edge once content is beneath. */
+:root {
+	--p-material: #f9f9f9;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--p-material: #161618;
+	}
+}
+:root[data-theme="dark"] {
+	--p-material: #161618;
+}
+ion-toolbar {
+	--background: var(--p-material);
+	--opacity: 1;
+}
+ion-header.header-translucent ion-toolbar {
+	--opacity: 1;
+	--background: var(--p-material);
+}
+/* The large title's own toolbar stays clear: it sits on the page. */
+ion-header.header-collapse-condense ion-toolbar {
+	--background: transparent;
+	--border-width: 0;
+}
+.p-agent-header ion-toolbar {
+	--background: var(--p-plain);
+}
+.p-agent-header {
+	box-shadow: 0 0.5px 0 var(--p-sep);
+}
+
+/* Messages: actions live in a long-press menu, not a row under each turn. */
+.p-agent-body {
+	height: 100%;
+	-webkit-touch-callout: none;
+}
+.p-agent .p-pressed > :is(.ds-parts, .ds-bubble, .ds-peer-body) {
+	border-radius: 12px;
+	background: var(--p-fill);
+	transition: background-color 0.15s ease-out;
+}
+
+/* A search that matched nothing: under the Machines header. */
+.p-empty.is-search {
+	padding: 24px 32px;
+}
+.p-empty.is-search h3 {
+	margin-top: 0;
+}

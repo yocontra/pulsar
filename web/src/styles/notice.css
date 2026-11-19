@@ -1,0 +1,144 @@
+/*
+ * Agent-team messages and background-task results (NoticeCard.tsx). The
+ * card reuses the peer bubble (.ds-peer-body); this file adds the teammate
+ * color dot, the "what happened" label, the title, the clamp and the quiet
+ * one-line idle row.
+ */
+.ds-notice-dot {
+	flex: none;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--tm, var(--ds-peer));
+}
+.ds-notice-icon {
+	flex: none;
+	width: 13px;
+	height: 13px;
+	color: var(--ds-text-3);
+}
+:where(.ds-notice-dot, .ds-notice-card)[data-color="red"] {
+	--tm: #e5484d;
+}
+:where(.ds-notice-dot, .ds-notice-card)[data-color="blue"] {
+	--tm: #3e7bfa;
+}
+:where(.ds-notice-dot, .ds-notice-card)[data-color="green"] {
+	--tm: #2f9e5b;
+}
+:where(.ds-notice-dot, .ds-notice-card)[data-color="yellow"] {
+	--tm: #d6a20a;
+}
+:where(.ds-notice-dot, .ds-notice-card)[data-color="purple"] {
+	--tm: #8e4ec6;
+}
+:where(.ds-notice-dot, .ds-notice-card)[data-color="orange"] {
+	--tm: #f0782a;
+}
+:where(.ds-notice-dot, .ds-notice-card)[data-color="pink"] {
+	--tm: #d6409f;
+}
+:where(.ds-notice-dot, .ds-notice-card)[data-color="cyan"] {
+	--tm: #0fa4b8;
+}
+.ds-notice-card[data-color] {
+	box-shadow: inset 3px 0 0 var(--tm, var(--ds-peer));
+}
+
+.ds-notice-label {
+	padding: 0 6px;
+	border-radius: var(--ds-radius-xs);
+	background: var(--ds-surface-active);
+	color: var(--ds-text-2);
+	font-size: var(--ds-text-caption);
+	line-height: var(--ds-text-caption-lh);
+	white-space: nowrap;
+}
+.ds-notice-label.is-ok {
+	background: var(--ds-success-soft);
+	color: var(--ds-success-text);
+}
+.ds-notice-label.is-error {
+	background: var(--ds-danger-soft);
+	color: var(--ds-danger-text);
+}
+.ds-notice-label + .ds-time::before {
+	content: "·";
+	margin-right: 7px;
+	color: var(--ds-text-4);
+}
+
+.ds-notice-title {
+	margin-bottom: 4px;
+	font-weight: var(--ds-weight-semibold);
+	color: var(--ds-text);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ds-notice-body {
+	min-width: 0;
+}
+.ds-notice-body > div > :first-child {
+	margin-top: 0;
+}
+.ds-notice-body > div > :last-child {
+	margin-bottom: 0;
+}
+.ds-notice-body.is-clamped {
+	max-height: 12.5em;
+	overflow: hidden;
+	mask-image: linear-gradient(to bottom, #000 65%, transparent);
+}
+.ds-notice-more {
+	margin-top: 6px;
+	padding: 2px 0;
+	border: 0;
+	background: none;
+	color: var(--ds-peer-text);
+	font: inherit;
+	font-size: var(--ds-text-secondary);
+	cursor: pointer;
+}
+.ds-notice-more:hover {
+	text-decoration: underline;
+}
+.ds-notice-more:focus-visible {
+	outline: 2px solid var(--ds-peer);
+	outline-offset: 2px;
+	border-radius: var(--ds-radius-xs);
+}
+
+/* An idle notice with nothing to say: one quiet line. */
+.ds-notice-quiet {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	padding: 2px 0;
+	color: var(--ds-text-3);
+	font:
+		var(--ds-text-secondary) / var(--ds-text-secondary-lh) var(--ds-font-sans);
+}
+.ds-notice-quiet .ds-notice-name {
+	color: var(--ds-text-2);
+	font-weight: var(--ds-weight-medium, 500);
+}
+.ds-notice-quiet .ds-notice-sub {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ds-notice-quiet .ds-notice-label {
+	background: none;
+	padding: 0;
+	font-size: inherit;
+	line-height: inherit;
+	color: inherit;
+}
+.ds-notice-quiet .ds-time::before {
+	content: "·";
+	margin-right: 7px;
+	color: var(--ds-text-4);
+}

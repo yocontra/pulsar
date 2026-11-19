@@ -1,0 +1,184 @@
+/* Subagent rows in the desktop sidebar (SubagentRows.tsx), and the
+   subagent page (session/SubagentView.tsx). Built on the sidebar's row
+   tokens; nothing here restyles the agent rows. */
+
+/* The disclosure under an agent: small, quiet, a live dot when one runs. */
+.d-row.d-subs {
+	gap: 6px;
+	color: var(--d-fg-3);
+	font-size: 12px;
+}
+.d-row.d-subs .chev svg {
+	width: 12px;
+	height: 12px;
+}
+.d-row.d-subs[aria-expanded="true"] .chev svg {
+	transform: rotate(90deg);
+}
+.d-row.d-subs:hover {
+	color: var(--d-fg-2);
+}
+.d-subs-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.d-subs-live {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--d-busy, var(--status-busy, oklch(0.72 0.15 150)));
+}
+
+/* One subagent: the agent row's two lines, a smaller avatar. */
+.d-row.d-sub .d-line1 .d-name {
+	flex: 0 1 auto;
+	font-weight: 450;
+}
+.d-row.d-sub .d-line2 {
+	font-size: 12px;
+	line-height: 16px;
+}
+.d-sub-state {
+	white-space: nowrap;
+}
+/* Finished ones (listed only with "Show finished subagents"): dimmed. */
+.d-row.d-sub.s-done,
+.p-sa-row.s-done {
+	opacity: 0.6;
+}
+.d-sub-state.s-running {
+	color: var(--d-fg-2);
+}
+
+/* The subagent page. */
+.sub-crumbs {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-size: 13px;
+	color: var(--d-fg-3, var(--muted-foreground));
+}
+.sub-crumbs button {
+	border: 0;
+	background: transparent;
+	color: inherit;
+	padding: 0;
+	font: inherit;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.sub-crumbs button:hover {
+	color: var(--d-fg, var(--foreground));
+	text-decoration: underline;
+}
+.sub-crumbs svg {
+	flex: none;
+	width: 12px;
+	height: 12px;
+}
+.sub-head {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px 16px 10px;
+	border-bottom: 1px solid var(--d-border, var(--border));
+}
+.sub-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.sub-title h1 {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.sub-meta {
+	font-size: 12px;
+	color: var(--d-fg-3, var(--muted-foreground));
+}
+.sub-note {
+	margin: 0 12px 8px;
+	font-size: 12px;
+	color: var(--d-fg-2, var(--muted-foreground));
+}
+
+/* The phone agent page's Subagents section. */
+.p-sa {
+	padding: 4px 16px 8px;
+}
+.p-sa-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: 40vh;
+	overflow-y: auto;
+}
+.p-subs-bar {
+	--min-height: 0;
+}
+.p-sa-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	min-height: 44px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	padding: 4px 0;
+	font: inherit;
+}
+.p-sa-lines {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1;
+}
+.p-sa-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.p-sa-line {
+	font-size: 13px;
+	color: var(--muted-foreground, #888);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* A subagent card's way to the subagent's own page (parent transcript). */
+.ds-task-open {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 4px 0 6px;
+	border: 0;
+	background: transparent;
+	padding: 0;
+	font: inherit;
+	font-size: 12px;
+	color: var(--d-fg-2, var(--muted-foreground));
+	cursor: pointer;
+}
+.ds-task-open:hover {
+	color: var(--d-fg, var(--foreground));
+	text-decoration: underline;
+}
+.ds-task-open svg {
+	width: 12px;
+	height: 12px;
+}

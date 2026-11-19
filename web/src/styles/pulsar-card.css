@@ -1,0 +1,289 @@
+/*
+ * Pulsar's own tool calls (send, respond, wait, list_agents, inbox,
+ * set_identity): PulsarHead.tsx and PulsarBody.tsx. Same card as other
+ * tools; this file adds agent chips, the priority label, nested message
+ * bubbles and the quoted message a reply answers.
+ */
+.ds-pulsar-main {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+/* Narrow heads: the object keeps room, facts and extra chips give way. */
+.ds-tool.is-pulsar .ds-tool-main {
+	min-width: 4.5rem;
+}
+.ds-tool.is-pulsar .ds-tool-meta {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+}
+.ds-tool.is-pulsar .ds-tool-meta .ds-tool-sum {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ds-pulsar-text {
+	flex: 0 1 auto;
+	min-width: 3rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ds-pulsar-main .ds-pulsar-chip {
+	flex: 0 1 auto;
+	min-width: 2.75rem;
+}
+.ds-pulsar-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex: none;
+	max-width: 14rem;
+	min-width: 0;
+	height: 22px;
+	padding: 0 8px 0 3px;
+	border: 0;
+	border-radius: var(--ds-radius-full);
+	background: var(--ds-surface-2);
+	color: var(--ds-text);
+	font: inherit;
+	font-size: var(--ds-text-secondary);
+	line-height: 1;
+	text-decoration: none;
+	white-space: nowrap;
+}
+.ds-pulsar-chip:not(:has(.ds-avatar, svg)) {
+	padding-left: 8px;
+}
+.ds-pulsar-chip .ds-avatar {
+	width: 16px;
+	height: 16px;
+	border-radius: 5px;
+}
+.ds-pulsar-chip > svg {
+	width: 13px;
+	height: 13px;
+	margin-left: 4px;
+	color: var(--ds-text-3);
+}
+.ds-pulsar-chip-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ds-pulsar-chip.is-tag {
+	font-family: var(--ds-font-mono);
+	font-size: calc(var(--ds-text-code) - 1px);
+	color: var(--ds-text-2);
+}
+.ds-pulsar-chip.is-link {
+	cursor: pointer;
+	transition: background var(--ds-dur-fast) ease;
+}
+.ds-pulsar-chip.is-link:hover {
+	background: var(--ds-surface-hover);
+}
+.ds-pulsar-chip.is-link:focus-visible,
+.ds-pulsar-id:focus-visible,
+.ds-pulsar-details:focus-visible,
+.ds-pulsar-more.is-button:focus-visible {
+	outline: none;
+	box-shadow: var(--ds-focus-ring);
+}
+.ds-pulsar-chip.is-link:disabled {
+	cursor: default;
+	color: var(--ds-text-3);
+}
+.ds-pulsar-more {
+	flex: none;
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-secondary);
+}
+.ds-pulsar-more.is-button {
+	align-self: flex-start;
+	padding: 2px 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--ds-text-footnote);
+}
+.ds-pulsar-label {
+	padding: 1px 6px;
+	border-radius: 5px;
+	background: var(--ds-surface-2);
+	color: var(--ds-text-2);
+	font-size: var(--ds-text-footnote);
+	font-weight: var(--ds-weight-medium);
+}
+.ds-pulsar-id {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--ds-text-3);
+	font-family: var(--ds-font-mono);
+	font-size: calc(var(--ds-text-code) - 1.5px);
+	cursor: pointer;
+}
+button.ds-pulsar-id:hover {
+	color: var(--ds-text-2);
+	text-decoration: underline;
+}
+
+/* Body */
+.ds-pulsar {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+}
+.ds-pulsar-to {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	padding: 0 2px;
+}
+.ds-pulsar-k {
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-footnote);
+}
+.ds-pulsar-sent {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.ds-pulsar-msgs {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.ds-pulsar-msg {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 12px 8px 12px;
+	border-radius: var(--ds-radius-lg);
+	background: var(--ds-peer-soft);
+	box-shadow: inset 3px 0 0 var(--ds-peer);
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.ds-pulsar-msg-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.ds-pulsar-msg .ds-pulsar-chip {
+	background: var(--ds-surface);
+}
+.ds-pulsar-msg-meta {
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-footnote);
+}
+.ds-pulsar-receipts,
+.ds-pulsar-agents {
+	list-style: none;
+	margin: 0;
+	padding: 0 2px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.ds-pulsar-receipts li,
+.ds-pulsar-agents li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.ds-pulsar-state {
+	color: var(--ds-text-2);
+	font-size: var(--ds-text-footnote);
+}
+.ds-pulsar-state:is(.s-failed, .s-refused, .s-dead, .s-nacked, .s-expired) {
+	color: var(--ds-danger-text);
+}
+.ds-pulsar-state:is(.s-delivered, .s-read, .s-replied, .s-done) {
+	color: var(--ds-success-text);
+}
+.ds-pulsar-doing {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--ds-text-2);
+	font-size: var(--ds-text-secondary);
+}
+.ds-pulsar-quote {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 0;
+	padding: 2px 0 2px 12px;
+	box-shadow: inset 2px 0 0 var(--ds-border-strong, var(--ds-text-4));
+	min-width: 0;
+}
+.ds-pulsar-quote-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.ds-pulsar-quote-text {
+	color: var(--ds-text-2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ds-pulsar-error {
+	margin: 0 2px;
+	color: var(--ds-danger-text);
+}
+.ds-pulsar .ds-chips li.is-new {
+	background: var(--ds-peer-soft);
+	color: var(--ds-peer-text);
+}
+.ds-pulsar-details {
+	display: inline-flex;
+	align-self: flex-start;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 6px 2px 2px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--ds-text-3);
+	font: inherit;
+	font-size: var(--ds-text-footnote);
+	cursor: pointer;
+}
+.ds-pulsar-details:hover {
+	color: var(--ds-text-2);
+}
+.ds-pulsar-details svg {
+	width: 13px;
+	height: 13px;
+	transition: transform var(--ds-dur) var(--ds-ease-out);
+}
+.ds-pulsar-details[aria-expanded="true"] svg {
+	transform: rotate(90deg);
+}
+.ds-pulsar-raw {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+/* Phone: chips stay tappable, the head keeps one line. */
+.ds-conv--phone .ds-pulsar-chip.is-link {
+	height: 30px;
+	padding-right: 10px;
+}
+.ds-conv--phone .ds-tool.is-pulsar .ds-pulsar-main .ds-pulsar-chip {
+	max-width: 9rem;
+}
+/* The body names the priority; the phone's head keeps to who and what came back. */
+.ds-conv--phone .ds-tool.is-pulsar .ds-tool-head .ds-pulsar-label {
+	display: none;
+}
