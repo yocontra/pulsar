@@ -23,6 +23,8 @@ export interface DraftFile {
 	progress: number;
 	error: string | null;
 	saved: AttachmentSaved | null;
+	/** Cancels its upload in flight (set while the bytes go). */
+	abort?: AbortController | null;
 }
 
 export class ComposerDraft {
@@ -42,14 +44,17 @@ export class ComposerDraft {
 
 	remove(key: string) {
 		const f = this.files.value.find((x) => x.key === key);
+		f?.abort?.abort();
 		if (f?.preview && !f.saved) URL.revokeObjectURL(f.preview);
 		this.files.value = this.files.value.filter((x) => x.key !== key);
 	}
 
 	/** Empties the draft once its files went out with a message. */
 	clear() {
-		for (const f of this.files.value)
+		for (const f of this.files.value) {
+			f.abort?.abort();
 			if (f.preview && !f.saved) URL.revokeObjectURL(f.preview);
+		}
 		this.files.value = [];
 		this.mentions.value = [];
 	}

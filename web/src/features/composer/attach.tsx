@@ -186,19 +186,38 @@ async function putFile(draft: ComposerDraft, key: string) {
 	const u = uploads.get(key);
 	const f = draft.files.value.find((x) => x.key === key);
 	if (!u || !f) return;
-	draft.update(key, { state: "uploading", progress: 0, error: null });
+	const abort = new AbortController();
+	draft.update(key, { state: "uploading", progress: 0, error: null, abort });
+	// Removed (or the draft cleared) while it uploaded: nothing more to show.
+	const gone = () =>
+		abort.signal.aborted || !draft.files.value.some((x) => x.key === key);
 	try {
-		const r = await uploadAttachment(u.agent, u.upload, u.index, f.file, (p) =>
-			draft.update(key, { progress: p }),
+		const r = await uploadAttachment(
+			u.agent,
+			u.upload,
+			u.index,
+			f.file,
+			(p) => !gone() && draft.update(key, { progress: p }),
+			abort.signal,
 		);
 		uploads.delete(key);
+		if (gone()) return;
 		if (f.preview) attachedPreviews.set(r.file.path, f.preview);
-		draft.update(key, { state: "done", progress: 1, saved: r.file });
+		draft.update(key, {
+			state: "done",
+			progress: 1,
+			saved: r.file,
+			abort: null,
+		});
 	} catch (e) {
+		if (gone()) {
+			uploads.delete(key);
+			return;
+		}
 		// The upload is gone (expired, or the daemon restarted): Retry opens a new one.
 		if (e instanceof ApiError && (e.code === "gone" || e.code === "not_found"))
 			uploads.delete(key);
-		draft.update(key, { state: "failed", error: errorText(e) });
+		draft.update(key, { state: "failed", error: errorText(e), abort: null });
 	}
 }
 
@@ -606,6 +625,7 @@ function useMentions(
 	const [loading, setLoading] = useState(false);
 	const [active, setActive] = useState(0);
 	const [reason, setReason] = useState<string | null>(null);
+	const [truncated, setTruncated] = useState(false);
 	const state = useRef({ open, items, active });
 	state.current = { open, items, active };
 	const list = useRef<HTMLDivElement>(null);
@@ -725,6 +745,7 @@ function useMentions(
 				(r) => {
 					setItems(r.items);
 					setReason(r.available ? null : (r.reason ?? null));
+					setTruncated(r.truncated === true);
 					setActive(0);
 					setLoading(false);
 				},
@@ -767,11 +788,13 @@ function useMentions(
 	const empty =
 		reason === "not_git"
 			? "No git repository in this agent's folder."
-			: reason === "no_cwd"
-				? "This agent has no folder."
-				: reason === "unsupported"
-					? "That machine runs an older Pulsar."
-					: (reason ?? "No matching files or folders.");
+			: reason === "unavailable"
+				? "Couldn't list the files in this agent's folder."
+				: reason === "no_cwd"
+					? "This agent has no folder."
+					: reason === "unsupported"
+						? "That machine runs an older Pulsar."
+						: (reason ?? "No matching files or folders.");
 	// Docked above the whole composer (the field's box clips what overflows it).
 	const root = p.textarea.current?.closest<HTMLElement>(".composer");
 	const el = (
@@ -789,30 +812,37 @@ function useMentions(
 			) : !items.length ? (
 				<p className="mention-empty">{empty}</p>
 			) : (
-				items.map((h, i) => (
-					<div
-						key={h.path}
-						id={`${MENU_ID}-${i}`}
-						role="option"
-						tabIndex={-1}
-						aria-selected={i === active}
-						className="mention-item"
-						// Keep the field's focus and caret.
-						onMouseDown={(e) => {
-							e.preventDefault();
-							pick(h);
-						}}
-						onMouseEnter={() => setActive(i)}
-					>
-						{h.kind === "dir" ? (
-							<FolderIcon aria-hidden="true" />
-						) : (
-							<FileTextIcon aria-hidden="true" />
-						)}
-						<span className="mention-name">{baseName(h.path)}</span>
-						<span className="mention-path">{dirName(h.path)}</span>
-					</div>
-				))
+				<>
+					{items.map((h, i) => (
+						<div
+							key={h.path}
+							id={`${MENU_ID}-${i}`}
+							role="option"
+							tabIndex={-1}
+							aria-selected={i === active}
+							className="mention-item"
+							// Keep the field's focus and caret.
+							onMouseDown={(e) => {
+								e.preventDefault();
+								pick(h);
+							}}
+							onMouseEnter={() => setActive(i)}
+						>
+							{h.kind === "dir" ? (
+								<FolderIcon aria-hidden="true" />
+							) : (
+								<FileTextIcon aria-hidden="true" />
+							)}
+							<span className="mention-name">{baseName(h.path)}</span>
+							<span className="mention-path">{dirName(h.path)}</span>
+						</div>
+					))}
+					{truncated && (
+						<p className="mention-empty">
+							This folder is large: only its first 200,000 files are searched.
+						</p>
+					)}
+				</>
 			)}
 		</div>
 	);

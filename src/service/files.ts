@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import { relative, sep } from "node:path";
 import { insideRepo } from "../changes/read.ts";
 import { runGit } from "../git-write.ts";
@@ -13,12 +13,19 @@ export const FILES_MAX = 50;
 /** A listing is reused this long (typing a query asks once per keystroke). */
 const CACHE_MS = 10_000;
 /** Paths read from one worktree at most. */
-const MAX_PATHS = 200_000;
+export const MAX_PATHS = 200_000;
 
 interface Listing {
 	at: number;
 	items: FileHit[];
+	/** Cut at MAX_PATHS. */
+	truncated: boolean;
 }
+
+type Listed =
+	| { ok: true; base: string; items: FileHit[]; truncated: boolean }
+	/** `not_git`: no worktree here; `unavailable`: git timed out, overflowed, or is missing. */
+	| { ok: false; reason: "not_git" | "unavailable" };
 
 /**
  * The `@` menu's files: what git tracks plus untracked files it doesn't
@@ -34,12 +41,17 @@ export class Files {
 	private cache = new Map<string, Listing>();
 	private readonly now: () => number;
 
+	private readonly git: typeof runGit;
+
 	constructor(
 		lookup: (agentId: string) => Agent | undefined,
 		now: () => number = Date.now,
+		/** The git runner (tests pass a fake one). */
+		git: typeof runGit = runGit,
 	) {
 		this.lookup = lookup;
 		this.now = now;
+		this.git = git;
 	}
 
 	async search(
@@ -56,47 +68,59 @@ export class Files {
 		if (!agent.cwd)
 			return { agent: agentId, available: false, reason: "no_cwd", items: [] };
 		const listed = await this.list(agent.cwd);
-		if (!listed)
-			return { agent: agentId, available: false, reason: "not_git", items: [] };
+		if (!listed.ok)
+			return {
+				agent: agentId,
+				available: false,
+				reason: listed.reason,
+				items: [],
+			};
 		const ranked = rankFiles(listed.items, q).slice(0, FILES_MAX * 2);
 		// Only what stays in the agent's folder, links resolved.
 		const safe = await Promise.all(
 			ranked.map(async (h) =>
-				(await insideRepo(listed.base, h.path)) ? h : null,
+				(await staysIn(listed.base, h.path)) ? h : null,
 			),
 		);
 		return {
 			agent: agentId,
 			available: true,
 			items: safe.filter((h): h is FileHit => h !== null).slice(0, FILES_MAX),
+			...(listed.truncated ? { truncated: true } : {}),
 		};
 	}
 
-	private async list(
-		cwd: string,
-	): Promise<{ base: string; items: FileHit[] } | null> {
+	private async list(cwd: string): Promise<Listed> {
 		let base: string;
 		try {
 			base = await realpath(cwd);
 		} catch {
-			return null;
+			return { ok: false, reason: "not_git" };
 		}
 		const hit = this.cache.get(base);
 		if (hit && this.now() - hit.at < CACHE_MS)
-			return { base, items: hit.items };
-		const r = await runGit(
+			return { ok: true, base, items: hit.items, truncated: hit.truncated };
+		const r = await this.git(
 			base,
 			["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
 			{ mode: "read", lane: "user" },
 		);
-		if (!r.ok) return null;
+		if (!r.ok)
+			return {
+				ok: false,
+				reason: r.code === "not_a_worktree" ? "not_git" : "unavailable",
+			};
 		const prefix = relative(r.root, base);
-		if (prefix.startsWith("..")) return null;
+		if (prefix.startsWith("..")) return { ok: false, reason: "not_git" };
 		const lead = prefix ? `${prefix.split(sep).join("/")}/` : "";
 		const files = new Set<string>();
 		const dirs = new Set<string>();
+		let truncated = false;
 		for (const raw of r.stdout.split("\0")) {
-			if (files.size >= MAX_PATHS) break;
+			if (files.size >= MAX_PATHS) {
+				truncated = true;
+				break;
+			}
 			if (!raw?.startsWith(lead)) continue;
 			const p = raw.slice(lead.length);
 			// biome-ignore lint/suspicious/noControlCharactersInRegex: refusing them is the point
@@ -111,10 +135,27 @@ export class Files {
 			...[...dirs].map((path) => ({ path, kind: "dir" as const })),
 			...[...files].map((path) => ({ path, kind: "file" as const })),
 		];
-		this.cache.set(base, { at: this.now(), items });
+		this.cache.set(base, { at: this.now(), items, truncated });
 		if (this.cache.size > 8)
 			this.cache.delete(this.cache.keys().next().value as string);
-		return { base, items };
+		return { ok: true, base, items, truncated };
+	}
+}
+
+/**
+ * True when the path stays in `base`: its folders (insideRepo) and, for a
+ * symbolic link, what the link itself resolves to (a link to ~/.ssh is dropped).
+ */
+async function staysIn(base: string, path: string): Promise<boolean> {
+	const abs = await insideRepo(base, path);
+	if (!abs) return false;
+	try {
+		if (!(await lstat(abs)).isSymbolicLink()) return true;
+		const real = await realpath(abs);
+		const root = await realpath(base);
+		return real === root || real.startsWith(root + sep);
+	} catch {
+		return false;
 	}
 }
 
