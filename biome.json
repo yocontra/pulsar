@@ -1,7 +1,16 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
 	"files": {
-		"includes": ["**", "!dist", "!node_modules", "!**/*.md"]
+		"includes": [
+			"**",
+			"!dist",
+			"!node_modules",
+			"!**/*.md",
+			"!web/.astro",
+			"!web/test-results",
+			"!web/playwright-report",
+			"!web/screenshots"
+		]
 	},
 	"linter": {
 		"rules": {
@@ -15,5 +24,41 @@
 	},
 	"formatter": {
 		"indentStyle": "tab"
+	},
+	"overrides": [
+		{
+			"includes": ["web/src/**"],
+			"linter": {
+				"rules": {
+					"a11y": {
+						"useKeyWithClickEvents": "off",
+						"noStaticElementInteractions": "off",
+						"noSvgWithoutTitle": "off",
+						"useSemanticElements": "off",
+						"useGenericFontNames": "off"
+					},
+					"style": {
+						"noDescendingSpecificity": "off"
+					},
+					"complexity": {
+						"noImportantStyles": "off"
+					},
+					"suspicious": {
+						"noDuplicateProperties": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["web/public/**"],
+			"linter": {
+				"enabled": false
+			}
+		}
+	],
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
 	}
 }

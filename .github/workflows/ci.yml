@@ -34,3 +34,25 @@ jobs:
           node dist/cli.js ls
           node dist/cli.js doctor || true
           node dist/cli.js stop
+
+  e2e:
+    # The app's Playwright suites: mock API (desktop + mobile) and a real daemon.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bunx playwright install --with-deps chromium webkit
+      - run: bun run test:e2e
+        env:
+          PULSAR_NO_SCAN: "1"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: web/test-results
+          retention-days: 7

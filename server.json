@@ -2,18 +2,18 @@
 	"$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
 	"name": "io.github.yocontra/pulsar",
 	"title": "pulsar",
-	"description": "Let AI coding agents in any harness find and message each other: one list, tags, multicast, * bus.",
+	"description": "Let your AI agents talk to each other - cross-harness, cross-machine. Remote control from anywhere.",
 	"repository": {
 		"url": "https://github.com/yocontra/pulsar",
 		"source": "github",
 		"id": "1460848622"
 	},
-	"version": "1.4.0",
+	"version": "2.0.0",
 	"packages": [
 		{
 			"registryType": "npm",
 			"identifier": "pulsar",
-			"version": "1.4.0",
+			"version": "2.0.0",
 			"transport": {
 				"type": "stdio"
 			},
