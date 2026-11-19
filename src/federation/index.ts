@@ -212,6 +212,9 @@ function fail(code: string, message: string): FrameResult {
  * It is the service's `PoolView`, and its `handle` serves `/fed/v1` on the
  * daemon's HTTPS server.
  */
+/** How long a relayed acting op (commit, push, PR, launch, upload) may run on the home node. */
+const ACTING_RUN_TIMEOUT_MS = 180_000;
+
 export class Federation implements PoolView {
 	readonly state = new PoolState();
 	readonly feed: LocalFeed;
@@ -567,6 +570,9 @@ export class Federation implements PoolView {
 				assertion: act.assertion,
 			},
 			as,
+			// Commit hooks, a push or `gh pr create` can run for minutes; timing out
+			// here would report "unreachable" after the work succeeded.
+			ACTING_RUN_TIMEOUT_MS,
 		);
 		return r.result;
 	}
