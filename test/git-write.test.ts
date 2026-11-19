@@ -134,16 +134,32 @@ describe("writes", () => {
 
 	test("a hook past the timeout stops, with its children, and leaves no lock", async () => {
 		const repo = gitRepo();
-		script(join(repo, ".git", "hooks"), "pre-commit", "sleep 30");
+		const held = join(tmpFolder(), "held");
+		// Notes that git holds the index lock while the hook runs, then hangs.
+		script(
+			join(repo, ".git", "hooks"),
+			"pre-commit",
+			`[ -e .git/index.lock ] && echo yes > '${held}'; sleep 30`,
+		);
 		writeFileSync(join(repo, "a.txt"), "slow\n");
-		g(repo, "add", "a.txt");
 		const t0 = Date.now();
+		// A commit of named files (what the app sends) takes the index lock.
 		const r = await runGit(
 			repo,
-			["-c", "commit.gpgsign=false", "commit", "-q", "-m", "slow"],
+			[
+				"-c",
+				"commit.gpgsign=false",
+				"commit",
+				"-q",
+				"-m",
+				"slow",
+				"--",
+				"a.txt",
+			],
 			{ env: ID, timeoutMs: 1500 },
 		);
 		expect(r).toMatchObject({ ok: false, code: "timeout" });
+		expect(readFileSync(held, "utf8").trim()).toBe("yes");
 		// The hook's `sleep` held git's output open: it was stopped too.
 		expect(Date.now() - t0).toBeLessThan(15_000);
 		expect(existsSync(join(repo, ".git", "index.lock"))).toBe(false);

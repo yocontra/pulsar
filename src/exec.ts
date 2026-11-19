@@ -205,9 +205,12 @@ function runGroup(
 			timedOut = true;
 			stop(signal);
 		}, timeoutMs);
-		const take = (which: "out" | "err") => (chunk: Buffer) => {
-			if (which === "out") stdout += chunk.toString("utf8");
-			else stderr += chunk.toString("utf8");
+		// Decoded per stream, so a character split across chunks stays whole.
+		child.stdout?.setEncoding("utf8");
+		child.stderr?.setEncoding("utf8");
+		const take = (which: "out" | "err") => (chunk: string) => {
+			if (which === "out") stdout += chunk;
+			else stderr += chunk;
 			if (!overflow && stdout.length + stderr.length > max) {
 				overflow = true;
 				stop("SIGKILL");
