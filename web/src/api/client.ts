@@ -37,6 +37,8 @@ import {
 	type PasskeyRegisterOptionsRequest,
 	type PasskeyRegisterResponse,
 	type PushKey,
+	type PushSettings,
+	type PushSettingsRequest,
 	type PushSubscribeRequest,
 	type ReceiptsPage,
 	type ReconfirmCode,
@@ -628,6 +630,9 @@ export const api = {
 				}),
 			"notifications",
 		),
+	/** This browser's finish/fail settings, kept with its subscription (read when none given). */
+	pushSettings: (body: PushSettingsRequest) =>
+		request<PushSettings>("/push/settings", { method: "POST", body }),
 	pushUnsubscribe: (endpoint: string) =>
 		withSession(
 			() =>

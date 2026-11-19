@@ -8,6 +8,7 @@
  * stylesheet stay out of the first load). CSP-safe: no injected <style>
  * (astro.config.mjs), styled from our tokens (styles/toasts.css).
  */
+import type { ReactNode } from "react";
 import type { toast as SonnerToast } from "sonner";
 import { signal } from "./signals.ts";
 
@@ -29,6 +30,8 @@ export interface ToastOptions {
 	duration?: number;
 	/** Reuse an id to update a toast in place (progress, then a result). */
 	id?: string;
+	/** A leading icon in place of the tone's own (size-4). */
+	icon?: ReactNode;
 }
 
 export type ToastId = string | number;
@@ -59,6 +62,7 @@ export async function toast(
 		...(opts.description ? { description: opts.description } : {}),
 		...(opts.duration !== undefined ? { duration: opts.duration } : {}),
 		...(opts.id !== undefined ? { id: opts.id } : {}),
+		...(opts.icon !== undefined ? { icon: opts.icon } : {}),
 		...(opts.action
 			? {
 					action: {

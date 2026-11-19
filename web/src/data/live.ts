@@ -55,6 +55,7 @@ type Listeners = {
 	approval: Approval;
 	ready: ServerEvents["ready"];
 	query: ServerEvents["query"];
+	notify: ServerEvents["notify"];
 };
 
 export interface LiveOptions {
@@ -97,6 +98,7 @@ export class LiveSync {
 		approval: new Set(),
 		ready: new Set(),
 		query: new Set(),
+		notify: new Set(),
 	};
 	private transcriptBatch = new Map<string, TranscriptEvent[]>();
 	private frameQueued = false;
@@ -387,6 +389,9 @@ export class LiveSync {
 				c.setQueryData(keys.changes(e.data.agent, e.data.mode), e.data);
 				if (e.data.mode === "worktree")
 					c.setQueryData(keys.changesPeek(e.data.agent), e.data);
+				break;
+			case "notify":
+				this.emit("notify", e.data);
 				break;
 			case "security":
 				void c.invalidateQueries({ queryKey: keys.passkeys() });
