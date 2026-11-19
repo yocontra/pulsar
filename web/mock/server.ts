@@ -124,7 +124,6 @@ import {
 } from "./git.ts";
 import { CHART, SAMPLE_PDF, SCREENSHOT } from "./images.ts";
 import { launchRoute } from "./launch.ts";
-import { searchMessages } from "./search.ts";
 import { searchMessages, warmSearch } from "./search.ts";
 import {
 	forParentBody,
