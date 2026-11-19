@@ -904,3 +904,92 @@ describe("remote transcripts", () => {
 		expect(seen).toEqual(["e1", "gap", "e2"]);
 	}, 10_000);
 });
+
+describe("remote turns: only a newer, fresh turn of a known agent is announced", () => {
+	function pool() {
+		const state = new PoolState();
+		const peer = state.upsert(
+			{
+				nodeId: "n",
+				name: "b",
+				dnsName: "b.x.ts.net",
+				userId: "u",
+				login: "me",
+				tags: [],
+				online: true,
+			},
+			{
+				fedProtocol: [1, 1],
+				features: [],
+				pulsarVersion: "x",
+				machineId: "mb",
+				name: "b",
+			},
+			1,
+		);
+		const turns: Array<{ address: string; kind: string; at: number }> = [];
+		state.onTurn = (address, t) => turns.push({ address, ...t });
+		let seq = 1;
+		const rec = (turn?: unknown) => ({
+			id: "x",
+			name: "x",
+			harness: "pi",
+			status: "idle",
+			...(turn !== undefined ? { turn } : {}),
+		});
+		const send = (turn?: unknown) => {
+			expect(state.delta(peer, "boot", ++seq, [rec(turn)], [])).toBe(true);
+		};
+		const flush = () => new Promise((r) => queueMicrotask(() => r(null)));
+		return { state, peer, turns, rec, send, flush };
+	}
+
+	test("a first sighting carrying a turn announces nothing", async () => {
+		const p = pool();
+		p.state.snapshot(p.peer, "boot", 1, [
+			p.rec({ kind: "finished", at: Date.now() }),
+		]);
+		await p.flush();
+		expect(p.turns).toEqual([]);
+	});
+
+	test("a newer turn of a known agent is announced once; an older or equal one is not", async () => {
+		const p = pool();
+		p.state.snapshot(p.peer, "boot", 1, [p.rec()]);
+		const at = Date.now();
+		p.send({ kind: "failed", at });
+		await p.flush();
+		expect(p.turns).toEqual([{ address: "mb/x", kind: "failed", at }]);
+		p.send({ kind: "failed", at }); // the same turn again
+		p.send({ kind: "finished", at: at - 1000 }); // older than the one held
+		await p.flush();
+		expect(p.turns).toHaveLength(1);
+	});
+
+	test("a turn older than ten minutes when it arrives is not announced", async () => {
+		const p = pool();
+		p.state.snapshot(p.peer, "boot", 1, [p.rec()]);
+		p.send({ kind: "finished", at: Date.now() - 11 * 60_000 });
+		await p.flush();
+		expect(p.turns).toEqual([]);
+	});
+
+	test("a malformed turn is dropped from the record", () => {
+		const turn = (t: unknown) =>
+			cleanFedAgent({ id: "a", name: "a", harness: "h", turn: t })?.turn;
+		expect(turn({ kind: "finished", at: 5 })).toEqual({
+			kind: "finished",
+			at: 5,
+		});
+		for (const bad of [
+			{ kind: "exploded", at: 5 },
+			{ kind: "failed", at: "soon" },
+			{ kind: "failed", at: 0 },
+			{ kind: "failed", at: -3 },
+			{ kind: "failed" },
+			"failed",
+			null,
+		])
+			expect(turn(bad)).toBeUndefined();
+	});
+});
