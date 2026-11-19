@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./ds.css";
+@import "./conversation.css";
+@import "./notice.css";
+@import "./command.css";
+@import "./interactive.css";
+@import "./subagents.css";
+@import "./pulsar-card.css";
+@source "../../../node_modules/streamdown/dist/*.js";
+@source "../../../node_modules/@streamdown/code/dist/*.js";
+@source "../../../node_modules/@streamdown/math/dist/*.js";
+
+@custom-variant dark {
+	&:where([data-theme="dark"], [data-theme="dark"] *) {
+		@slot;
+	}
+	@media (prefers-color-scheme: dark) {
+		&:where(:root:not([data-theme="light"]) *) {
+			@slot;
+		}
+	}
+}
+
+/* shadcn/ui variables, read from the Pulsar tokens (tokens.css). */
+:root {
+	--radius: 0.5rem;
+	--background: var(--ds-bg);
+	--foreground: var(--ds-text);
+	--card: var(--ds-surface);
+	--card-foreground: var(--ds-text);
+	--popover: var(--ds-surface);
+	--popover-foreground: var(--ds-text);
+	--primary: var(--ds-primary);
+	--primary-foreground: var(--ds-on-primary);
+	--secondary: var(--ds-surface-3);
+	--secondary-foreground: var(--ds-text);
+	--muted: var(--ds-surface-2);
+	--muted-foreground: var(--ds-text-3);
+	--accent: var(--ds-surface-hover);
+	--accent-foreground: var(--ds-text);
+	--destructive: var(--ds-danger);
+	--border: var(--ds-border);
+	--input: var(--ds-border-strong);
+	--ring: var(--ds-focus);
+	--needs: var(--ds-needs);
+	--peer: var(--ds-peer);
+	--brand: var(--ds-accent);
+}
+
+@theme inline {
+	--radius-sm: calc(var(--radius) - 2px);
+	--radius-md: var(--radius);
+	--radius-lg: calc(var(--radius) + 2px);
+	--radius-xl: calc(var(--radius) + 4px);
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-needs: var(--needs);
+	--color-peer: var(--peer);
+	--font-sans: var(--ds-font-sans);
+	--font-mono: var(--ds-font-mono);
+	--color-brand: var(--brand);
+	--color-success: var(--ds-success);
+	--color-busy: var(--ds-busy);
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+}

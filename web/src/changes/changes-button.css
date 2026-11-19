@@ -1,0 +1,25 @@
+/* The phone agent page's Changes button and its count. */
+.p-changes-btn {
+	position: relative;
+}
+.p-changes-btn svg {
+	width: 22px;
+	height: 22px;
+}
+.p-changes-n {
+	position: absolute;
+	top: 2px;
+	right: 0;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	border-radius: 8px;
+	/* The badge pair: AA in both themes (white on --ds-accent is 2.8:1). */
+	background: var(--ds-needs-badge);
+	color: var(--ds-on-needs);
+	font-size: 10.5px;
+	font-weight: 600;
+	line-height: 16px;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}

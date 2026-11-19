@@ -1,0 +1,2451 @@
+/*
+ * The phone layout (below 1024px): iOS look and feel. Tokens and rules are in
+ * web/DESIGN.md. Every rule here is either inside the phone media query or
+ * uses an `m-` class that only the phone layout renders.
+ */
+
+:root {
+	/* Safe areas, through variables so screenshots can emulate a notch. */
+	--sat: env(safe-area-inset-top, 0px);
+	--sab: env(safe-area-inset-bottom, 0px);
+	--sal: env(safe-area-inset-left, 0px);
+	--sar: env(safe-area-inset-right, 0px);
+	--hair: 1px;
+}
+
+@media (min-resolution: 2dppx) {
+	:root {
+		--hair: 0.5px;
+	}
+}
+
+@media (min-resolution: 3dppx) {
+	:root {
+		--hair: 0.334px;
+	}
+}
+
+@media (max-width: 1023px) {
+	:root {
+		--m-bg: #f2f2f7;
+		--m-cell: #fff;
+		--m-cell-2: #f2f2f7;
+		--m-plain: #fff;
+		--m-label: #000;
+		--m-label-2: #6c6c70;
+		--m-label-3: rgb(60 60 67 / 30%);
+		--m-sep: rgb(60 60 67 / 29%);
+		--m-fill: rgb(120 120 128 / 20%);
+		--m-fill-2: rgb(120 120 128 / 16%);
+		--m-fill-3: rgb(118 118 128 / 12%);
+		--m-tint: #0068da;
+		--m-tint-fill: #0068da;
+		--m-tint-soft: rgb(0 122 255 / 12%);
+		--m-orange: #ff9500;
+		--m-orange-text: #b25000;
+		--m-orange-soft: rgb(255 149 0 / 14%);
+		--m-red: #d70015;
+		--m-red-fill: #ff3b30;
+		--m-red-soft: rgb(255 59 48 / 12%);
+		--m-green: #248a3d;
+		--m-green-fill: #34c759;
+		--m-green-soft: rgb(52 199 89 / 15%);
+		--m-blue: #007aff;
+		--m-purple: #8944ab;
+		--m-purple-soft: rgb(175 82 222 / 10%);
+		--m-indigo: #5856d6;
+		--m-gray: #8e8e93;
+		--m-gray-2: #aeaeb2;
+		--m-bar: rgb(249 249 249 / 92%);
+		--m-bar-solid: #f9f9f9;
+		--m-thumb: #fff;
+		--m-shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 4px 16px rgb(0 0 0 / 6%);
+		--m-pressed: rgb(0 0 0 / 8%);
+		--m-dim: rgb(0 0 0 / 40%);
+		--m-clear-x: var(--m-cell);
+		--m-ease: cubic-bezier(0.32, 0.72, 0, 1);
+		--m-nav: calc(var(--sat) + 44px);
+		--m-toolbar: calc(var(--sab) + 49px);
+		--m-gutter: 16px;
+		--m-code-bg: #f2f2f7;
+
+		/* The shared palette, in iOS colors, for shared components on the phone. */
+		--bg: var(--m-bg);
+		--bg-2: var(--m-cell);
+		--bg-3: var(--m-cell-2);
+		--fg: var(--m-label);
+		--fg-2: var(--m-label-2);
+		--fg-3: var(--m-gray);
+		--line: var(--m-sep);
+		--focus: var(--m-tint);
+		--needs: var(--m-orange-text);
+		--needs-bg: var(--m-orange-soft);
+		--busy: var(--m-blue);
+		--idle: var(--m-gray);
+		--danger: var(--m-red);
+		--danger-bg: var(--m-red-soft);
+		--peer: var(--m-purple);
+		--sel: var(--m-tint-soft);
+		--radius: 10px;
+	}
+}
+
+@media (max-width: 1023px) and (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--m-bg: #000;
+		--m-cell: #1c1c1e;
+		--m-cell-2: #2c2c2e;
+		--m-plain: #000;
+		--m-label: #fff;
+		--m-label-2: rgb(235 235 245 / 60%);
+		--m-label-3: rgb(235 235 245 / 30%);
+		--m-sep: rgb(84 84 88 / 65%);
+		--m-fill: rgb(120 120 128 / 36%);
+		--m-fill-2: rgb(120 120 128 / 32%);
+		--m-fill-3: rgb(118 118 128 / 24%);
+		--m-tint: #0a84ff;
+		--m-tint-fill: #0a72e8;
+		--m-tint-soft: rgb(10 132 255 / 18%);
+		--m-orange: #ff9f0a;
+		--m-orange-text: #ff9f0a;
+		--m-orange-soft: rgb(255 159 10 / 16%);
+		--m-red: #ff453a;
+		--m-red-fill: #ff453a;
+		--m-red-soft: rgb(255 69 58 / 16%);
+		--m-green: #30d158;
+		--m-green-fill: #30d158;
+		--m-green-soft: rgb(48 209 88 / 18%);
+		--m-blue: #0a84ff;
+		--m-purple: #bf5af2;
+		--m-purple-soft: rgb(191 90 242 / 14%);
+		--m-indigo: #5e5ce6;
+		--m-gray-2: #636366;
+		--m-bar: rgb(22 22 24 / 92%);
+		--m-bar-solid: #161618;
+		--m-thumb: #636366;
+		--m-shadow: none;
+		--m-pressed: rgb(255 255 255 / 10%);
+		--m-dim: rgb(0 0 0 / 55%);
+		--m-code-bg: #1c1c1e;
+	}
+}
+@media (max-width: 1023px) {
+	:root[data-theme="dark"] {
+		--m-bg: #000;
+		--m-cell: #1c1c1e;
+		--m-cell-2: #2c2c2e;
+		--m-plain: #000;
+		--m-label: #fff;
+		--m-label-2: rgb(235 235 245 / 60%);
+		--m-label-3: rgb(235 235 245 / 30%);
+		--m-sep: rgb(84 84 88 / 65%);
+		--m-fill: rgb(120 120 128 / 36%);
+		--m-fill-2: rgb(120 120 128 / 32%);
+		--m-fill-3: rgb(118 118 128 / 24%);
+		--m-tint: #0a84ff;
+		--m-tint-fill: #0a72e8;
+		--m-tint-soft: rgb(10 132 255 / 18%);
+		--m-orange: #ff9f0a;
+		--m-orange-text: #ff9f0a;
+		--m-orange-soft: rgb(255 159 10 / 16%);
+		--m-red: #ff453a;
+		--m-red-fill: #ff453a;
+		--m-red-soft: rgb(255 69 58 / 16%);
+		--m-green: #30d158;
+		--m-green-fill: #30d158;
+		--m-green-soft: rgb(48 209 88 / 18%);
+		--m-blue: #0a84ff;
+		--m-purple: #bf5af2;
+		--m-purple-soft: rgb(191 90 242 / 14%);
+		--m-indigo: #5e5ce6;
+		--m-gray-2: #636366;
+		--m-bar: rgb(22 22 24 / 92%);
+		--m-bar-solid: #161618;
+		--m-thumb: #636366;
+		--m-shadow: none;
+		--m-pressed: rgb(255 255 255 / 10%);
+		--m-dim: rgb(0 0 0 / 55%);
+		--m-code-bg: #1c1c1e;
+	}
+}
+
+/* ------------------------------------------------------------------ base */
+
+@media (max-width: 1023px) {
+	html {
+		font-family:
+			-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+		font-size: 17px;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	body {
+		background: var(--m-bg);
+		color: var(--m-label);
+		line-height: 1.294;
+		overscroll-behavior: none;
+		overflow: hidden;
+		-webkit-font-smoothing: antialiased;
+		font-feature-settings: "kern";
+	}
+
+	button,
+	[role="button"],
+	a,
+	label,
+	input,
+	select,
+	textarea {
+		touch-action: manipulation;
+	}
+
+	button {
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
+	}
+
+	:focus:not(:focus-visible) {
+		outline: none;
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--m-tint);
+		outline-offset: 2px;
+	}
+
+	.hide-mobile {
+		display: none !important;
+	}
+
+	h1,
+	h2,
+	h3 {
+		letter-spacing: 0;
+	}
+}
+
+/* Dynamic Type: the root follows the iOS text-size setting (17px default). */
+@supports (font: -apple-system-body) {
+	@media (max-width: 1023px) and (pointer: coarse) {
+		html {
+			font: -apple-system-body;
+			font-family:
+				-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+		}
+	}
+}
+
+/* -------------------------------------------------------- stack and layers */
+
+.m-app {
+	position: fixed;
+	inset: 0;
+	overflow: hidden;
+	background: var(--m-bg);
+}
+
+@keyframes m-push-in {
+	from {
+		transform: translate3d(100%, 0, 0);
+	}
+}
+
+@keyframes m-push-out {
+	to {
+		transform: translate3d(100%, 0, 0);
+	}
+}
+
+/* Edge swipe: the strip that starts a swipe-back on pushed screens. */
+
+/* ---------------------------------------------------------------- screens */
+
+.m-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior-y: contain;
+	-webkit-overflow-scrolling: touch;
+	padding-top: var(--m-nav);
+	scroll-padding-top: var(--m-nav);
+}
+
+/* ---------------------------------------------------------------- nav bar */
+
+.m-text-btn:active {
+	opacity: 0.35;
+	transition: none;
+}
+
+.m-text-btn {
+	height: 44px;
+	padding: 0 8px;
+	border: 0;
+	background: none;
+	color: var(--m-tint);
+	font-size: 1rem;
+	transition: opacity 0.2s ease;
+}
+
+.m-text-btn.strong {
+	font-weight: 600;
+}
+
+.m-text-btn:disabled {
+	color: var(--m-label-3);
+}
+
+/* ------------------------------------------------------------ large title */
+
+/* ------------------------------------------------------------ controls */
+
+.m-search,
+.mobile-home .search-box {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 36px;
+	margin: 6px calc(var(--m-gutter) + var(--sar)) 10px
+		calc(var(--m-gutter) + var(--sal));
+	padding: 0 8px;
+	border: 0;
+	border-radius: 10px;
+	background: var(--m-fill-3);
+	color: var(--m-label-2);
+	flex: 1;
+	min-width: 0;
+}
+
+.m-search input,
+.mobile-home .search-box input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	outline: none;
+	background: transparent;
+	font-size: 1rem;
+	color: var(--m-label);
+	padding: 0;
+	height: 100%;
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.m-search input::placeholder,
+.mobile-home .search-box input::placeholder {
+	color: var(--m-label-2);
+}
+
+.m-search input::-webkit-search-cancel-button,
+.mobile-home .search-box input::-webkit-search-cancel-button {
+	display: none;
+}
+
+.m-clear {
+	display: inline-flex;
+	border: 0;
+	background: none;
+	padding: 4px;
+	margin-right: -4px;
+	color: var(--m-gray-2);
+}
+
+.m-search-row {
+	display: flex;
+	align-items: center;
+}
+
+.m-search-row .search-box {
+	margin-right: 8px;
+}
+
+.m-cancel {
+	flex: none;
+	border: 0;
+	background: none;
+	color: var(--m-tint);
+	font-size: 1rem;
+	height: 36px;
+	padding: 0 calc(var(--m-gutter) + var(--sar)) 0 0;
+	margin-bottom: 4px;
+	animation: m-fade-in 0.2s ease;
+}
+
+@keyframes m-fade-in {
+	from {
+		opacity: 0;
+	}
+}
+
+/* Segmented control with a sliding thumb. */
+.mobile-home .seg {
+	position: relative;
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 1fr;
+	height: 32px;
+	padding: 2px;
+	border: 0;
+	border-radius: 9px;
+	background: var(--m-fill-3);
+	overflow: visible;
+	isolation: isolate;
+}
+
+.mobile-home .seg {
+	margin: 0 calc(var(--m-gutter) + var(--sar)) 4px
+		calc(var(--m-gutter) + var(--sal));
+}
+
+.mobile-home .seg::before {
+	content: "";
+	position: absolute;
+	top: 2px;
+	bottom: 2px;
+	left: 2px;
+	width: calc((100% - 4px) / var(--n, 2));
+	transform: translateX(calc(100% * var(--i, 0)));
+	border-radius: 7px;
+	background: var(--m-thumb);
+	box-shadow:
+		0 3px 8px rgb(0 0 0 / 12%),
+		0 3px 1px rgb(0 0 0 / 4%);
+	transition: transform 0.3s var(--m-ease);
+	z-index: -1;
+}
+
+.mobile-home .seg button {
+	border: 0;
+	background: none;
+	min-height: 0;
+	padding: 0 6px;
+	font-size: 0.765rem;
+	font-weight: 500;
+	color: var(--m-label);
+	border-radius: 7px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.mobile-home .seg button + button {
+	border-left: 0;
+}
+
+.mobile-home .seg button.on {
+	background: none;
+	color: var(--m-label);
+	font-weight: 600;
+}
+
+/* Switch: 51 × 31. */
+
+/* Buttons: filled, tinted, plain, destructive. */
+.m-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 50px;
+	padding: 0 20px;
+	border: 0;
+	border-radius: 12px;
+	font-size: 1rem;
+	font-weight: 600;
+	background: var(--m-tint-fill);
+	color: #fff;
+	transition:
+		opacity 0.2s ease,
+		transform 0.2s ease;
+}
+
+.m-btn:active:not(:disabled) {
+	opacity: 0.7;
+	transition: none;
+}
+
+.m-btn:disabled {
+	background: var(--m-fill-3);
+	color: var(--m-label-3);
+}
+
+.m-btn.tinted {
+	background: var(--m-tint-soft);
+	color: var(--m-tint);
+}
+
+.m-btn.danger {
+	background: var(--m-red-soft);
+	color: var(--m-red);
+}
+
+.m-btn.danger.filled {
+	background: var(--m-red-fill);
+	color: #fff;
+}
+
+.m-btn.gray {
+	background: var(--m-fill-3);
+	color: var(--m-label);
+}
+
+.m-btn.small {
+	min-height: 34px;
+	padding: 0 14px;
+	border-radius: 17px;
+	font-size: 0.882rem;
+}
+
+.m-btn.wide {
+	width: 100%;
+}
+
+/* ---------------------------------------------------------- grouped lists */
+
+/* ---------------------------------------------------------------- skeleton */
+
+.sk {
+	display: block;
+	border-radius: 6px;
+	background:
+		linear-gradient(
+			90deg,
+			transparent 0,
+			rgb(255 255 255 / 45%) 50%,
+			transparent 100%
+		)
+		0 0 / 200% 100% no-repeat,
+		var(--m-fill-3);
+	animation: m-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .sk {
+		background-image: linear-gradient(
+			90deg,
+			transparent 0,
+			rgb(255 255 255 / 6%) 50%,
+			transparent 100%
+		);
+	}
+}
+
+:root[data-theme="dark"] .sk {
+	background-image: linear-gradient(
+		90deg,
+		transparent 0,
+		rgb(255 255 255 / 6%) 50%,
+		transparent 100%
+	);
+}
+
+.sk-1 {
+	height: 14px;
+	width: 46%;
+}
+
+.sk-2 {
+	height: 11px;
+	width: 68%;
+	margin-top: 7px;
+}
+
+@keyframes m-shimmer {
+	from {
+		background-position: 150% 0;
+	}
+	to {
+		background-position: -50% 0;
+	}
+}
+
+/* ------------------------------------------------------------------ home */
+
+.mobile-home .tree {
+	padding-top: var(--m-nav);
+	padding-bottom: calc(var(--m-toolbar) + 16px);
+	font-size: 1rem;
+	contain: strict;
+}
+
+.mobile-home .vrow {
+	padding: 0 calc(var(--m-gutter) + var(--sar)) 0
+		calc(var(--m-gutter) + var(--sal));
+}
+
+/* A grouped row: a slice of a rounded section. */
+
+/* Separators start where the text starts. */
+
+.tree-mobile .row-main {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex: 1;
+	min-width: 0;
+	height: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+}
+
+.tree-mobile .bcast {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 0;
+	border-radius: 20px;
+	background: none;
+	/* Quiet on every row; swipe and long-press carry the same action. */
+	color: var(--m-gray);
+}
+
+.tree-mobile .bcast:active {
+	background: var(--m-tint-soft);
+}
+
+.tree-mobile .pin,
+.tree-mobile .offline-group {
+	gap: 12px;
+}
+
+/* Agent rows. */
+
+.tree-mobile .more {
+	justify-content: center;
+	padding: 0;
+	color: var(--m-tint);
+}
+
+/* Prominent section headers (Title 3) with a trailing See All. */
+.tree-mobile .m-head {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	height: 100%;
+	padding: 0 4px 8px;
+	border: 0;
+	background: none;
+	font-size: 1.176rem;
+}
+
+.tree-mobile .m-head .section-more {
+	margin-left: auto;
+	padding: 0;
+	border: 0;
+	background: none;
+	font-size: 1rem;
+	color: var(--m-tint);
+	line-height: 1.3;
+}
+
+/* Needs-you cards. */
+
+/* Install tip (TipKit style). */
+
+/* ---------------------------------------------------------------- toolbar */
+
+/* ------------------------------------------------------- pull to refresh */
+
+/* --------------------------------------------------------------- sheets */
+
+.m-sheet {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	flex-direction: column;
+	max-height: calc(100% - var(--sat) - 10px);
+	margin-bottom: var(--kb, 0px);
+	border-radius: 12px 12px 0 0;
+	background: var(--m-bg);
+	box-shadow: 0 -1px 20px rgb(0 0 0 / 12%);
+	overflow: hidden;
+	outline: none;
+	animation: m-sheet-in 0.5s var(--m-ease) both;
+	transition: transform 0.35s var(--m-ease);
+	will-change: transform;
+}
+
+.m-sheet.dragging {
+	transition: none;
+}
+
+.m-sheet.dismissing {
+	transition: transform 0.3s var(--m-ease);
+}
+
+@keyframes m-sheet-in {
+	from {
+		transform: translate3d(0, 100%, 0);
+	}
+}
+
+@keyframes m-sheet-out {
+	to {
+		transform: translate3d(0, 100%, 0);
+	}
+}
+
+@keyframes m-fade-out {
+	to {
+		opacity: 0;
+	}
+}
+
+.m-sheet-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding-bottom: var(--sab);
+}
+
+.m-sheet-head {
+	position: relative;
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	min-height: 56px;
+	padding: 8px 8px 0;
+	touch-action: none;
+}
+
+.m-sheet-head > :last-child {
+	justify-self: end;
+}
+
+.m-sheet-head h2 {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+/* ----------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+	.m-sheet,
+	.mobile-home .seg::before {
+		transition-duration: 0.01s !important;
+	}
+
+	.m-sheet {
+		animation-name: m-fade-in !important;
+		animation-duration: 0.2s !important;
+	}
+
+	.sk {
+		animation: none;
+	}
+}
+
+/* --------------------------------------------------------------- session */
+
+.session.mobile {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	height: auto;
+	background: var(--m-plain);
+	font-size: 1rem;
+	/* The nav bar overlays the conversation (see conversation.css). */
+	--ds-conv-inset-top: var(--m-nav);
+}
+
+.session.mobile .ds-scroller {
+	background: var(--ds-bg);
+}
+
+@keyframes m-pulse {
+	50% {
+		opacity: 0.35;
+		transform: scale(0.8);
+	}
+}
+
+@keyframes m-pop {
+	from {
+		opacity: 0;
+		transform: scale(0.92);
+	}
+}
+
+/* Transcript: a chat, not a log. */
+
+.session.mobile .text-sm {
+	font-size: 1rem;
+	line-height: 1.412;
+}
+
+.session.mobile .text-xs {
+	font-size: 0.765rem;
+}
+
+/* Outgoing bubbles (your messages). */
+
+/* Peer messages: a received bubble with a violet edge. */
+
+/* Assistant text: full width, no bubble. */
+
+/* Tool calls: compact rows that expand. */
+
+/* Thinking: quiet and collapsed. */
+
+/* Code blocks: readable on 375px; scroll sideways, never wrap. */
+.session.mobile pre,
+.session.mobile [data-streamdown="code-block"] {
+	font-size: 0.706rem;
+	line-height: 1.55;
+}
+
+/* The Markdown table scrolls in its wrapper; the table itself stays a table
+   (display: block shrank it inside its frame). */
+.session.mobile table {
+	font-size: 0.882rem;
+}
+
+.session.mobile .banner {
+	border: 0;
+	border-radius: 12px;
+	padding: 12px 14px;
+	font-size: 0.882rem;
+	background: var(--m-cell-2);
+	color: var(--m-label);
+}
+
+.session.mobile .banner.warn {
+	background: var(--m-orange-soft);
+}
+
+.session.mobile .banner.error {
+	background: var(--m-red-soft);
+}
+
+.session.mobile .banner.approval-banner {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: auto;
+	margin: 0 calc(10px + var(--sar)) 8px calc(10px + var(--sal));
+	padding: 10px 12px;
+	border-radius: 14px;
+	background: var(--m-cell);
+	box-shadow: 0 4px 20px rgb(0 0 0 / 14%);
+	text-align: left;
+	color: var(--m-label);
+}
+
+.session.mobile .approval-banner:active {
+	transform: scale(0.98);
+}
+
+.m-ab-icon {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+	background: linear-gradient(180deg, #ffb340, #ff9500);
+	color: #fff;
+	font-weight: 800;
+}
+
+.m-ab-text {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	font-size: 0.882rem;
+}
+
+.m-ab-text strong {
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+.m-ab-text .mono {
+	font-size: 0.765rem;
+	color: var(--m-label-2);
+}
+
+.m-ab-cta {
+	flex: none;
+	padding: 6px 14px;
+	border-radius: 15px;
+	background: var(--m-tint-fill);
+	color: #fff;
+	font-size: 0.882rem;
+	font-weight: 600;
+}
+
+/* Jump to latest. */
+
+/* --------------------------------------------------------------- composer */
+
+.m-composer {
+	position: relative;
+	flex: none;
+	padding: 6px calc(10px + var(--sar))
+		max(calc(var(--sab) + 2px), calc(var(--kb, 0px) + 8px))
+		calc(10px + var(--sal));
+	border-top: var(--hair) solid var(--m-sep);
+	background: var(--m-bar);
+	-webkit-backdrop-filter: saturate(180%) blur(20px);
+	backdrop-filter: saturate(180%) blur(20px);
+}
+
+.m-composer .m-prompt {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	width: 100%;
+}
+
+.m-composer .m-prompt > div {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	flex: 1;
+	min-width: 0;
+	height: auto;
+	border: 0;
+	border-radius: 0;
+	background: none;
+	box-shadow: none;
+	padding: 0;
+}
+
+.m-composer .m-prompt > div:focus-within {
+	box-shadow: none;
+	border: 0;
+}
+
+.m-composer .composer-input {
+	flex: 1;
+	min-width: 0;
+	min-height: 36px;
+	max-height: 132px;
+	padding: 7px 40px 7px 14px;
+	border: var(--hair) solid var(--m-sep);
+	border-radius: 18px;
+	background: var(--m-plain);
+	font-size: 1rem;
+	line-height: 1.3;
+	color: var(--m-label);
+	box-shadow: none;
+	resize: none;
+}
+
+.m-composer .composer-input:focus,
+.m-composer .composer-input:focus-visible {
+	outline: none;
+	box-shadow: none;
+	border-color: var(--m-sep);
+}
+
+.m-composer .composer-input::placeholder {
+	color: var(--m-label-3);
+}
+
+.m-send {
+	position: relative;
+	z-index: 1;
+	flex: none;
+	align-self: flex-end;
+	/* Over the field's right end, 3px in: the 8px gap + 30px + 3px. */
+	margin: 0 3px 3px -41px;
+	width: 30px;
+	height: 30px;
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: var(--m-tint-fill);
+	color: #fff;
+	transition:
+		transform 0.2s var(--m-ease),
+		opacity 0.2s ease;
+}
+
+/* Beats the shadcn button's own colors (white in dark mode). */
+.m-send:disabled,
+.m-prompt .m-send:disabled {
+	background: var(--m-fill);
+	color: var(--m-label-3);
+	opacity: 1;
+}
+
+.m-send:active:not(:disabled) {
+	transform: scale(0.88);
+}
+
+.m-prio {
+	position: relative;
+	flex: none;
+}
+
+.m-prio-btn {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border: 0;
+	border-radius: 50%;
+	background: var(--m-fill-3);
+	color: var(--m-label-2);
+}
+
+.m-prio-btn.p-urgent {
+	color: var(--m-orange-text);
+	background: var(--m-orange-soft);
+}
+
+.m-prio-btn.p-fyi {
+	color: var(--m-indigo);
+}
+
+.m-prio-btn:active {
+	opacity: 0.6;
+}
+
+.m-prio-dot {
+	position: absolute;
+	top: 3px;
+	right: 3px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--m-tint-fill);
+	box-shadow: 0 0 0 2px var(--m-bar-solid);
+}
+
+.m-menu-shade {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+}
+
+.m-menu {
+	position: absolute;
+	left: -2px;
+	bottom: 46px;
+	z-index: 41;
+	width: 260px;
+	padding: 0;
+	border-radius: 14px;
+	background: var(--m-bar);
+	-webkit-backdrop-filter: saturate(180%) blur(30px);
+	backdrop-filter: saturate(180%) blur(30px);
+	box-shadow: 0 10px 50px rgb(0 0 0 / 22%);
+	overflow: hidden;
+	animation: m-menu-in 0.28s var(--m-ease) both;
+	transform-origin: 18px 100%;
+}
+
+@keyframes m-menu-in {
+	from {
+		opacity: 0;
+		transform: scale(0.6);
+	}
+}
+
+.m-menu-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 48px;
+	padding: 8px 16px 8px 10px;
+	border: 0;
+	background: none;
+	color: var(--m-label);
+	font-size: 1rem;
+	text-align: left;
+}
+
+.m-menu-item + .m-menu-item {
+	border-top: var(--hair) solid var(--m-sep);
+}
+
+.m-menu-item:active {
+	background: var(--m-fill-3);
+}
+
+.m-menu-check {
+	width: 18px;
+	flex: none;
+	display: inline-flex;
+	justify-content: center;
+}
+
+.m-menu-text {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	line-height: 1.25;
+}
+
+.m-menu-text small {
+	font-size: 0.765rem;
+	color: var(--m-label-2);
+}
+
+.m-menu-sep {
+	height: 8px;
+	background: var(--m-fill-3);
+}
+
+.m-wake-note {
+	margin: 0 4px 6px;
+	font-size: 0.765rem;
+	color: var(--m-label-2);
+}
+
+.m-composer .receipt-line,
+.m-composer > .muted,
+.m-composer > .error {
+	margin: 6px 6px 0;
+	font-size: 0.765rem;
+}
+
+.m-composer .receipt-line .mono {
+	font-family: inherit;
+	font-weight: 600;
+}
+
+/* ----------------------------------------------------------- action sheet */
+
+/* -------------------------------------------------------------- approval */
+
+.m-approval {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: var(--m-bg);
+	font-size: 1rem;
+}
+
+.m-countdown {
+	justify-self: start;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: 8px;
+	padding: 4px 10px;
+	border-radius: 14px;
+	background: var(--m-fill-3);
+	/* Secondary text on a fill: the AA secondary (iOS's grey is 4:1 here). */
+	color: var(--ds-text-2, var(--m-label-2));
+	font-size: 0.765rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.m-countdown.soon {
+	background: var(--ds-danger-soft, var(--m-red-soft));
+	color: var(--ds-danger-text, var(--m-red));
+}
+
+.m-countdown.done {
+	visibility: hidden;
+}
+
+.m-ap-body {
+	padding-bottom: 12px;
+}
+
+.m-ap-actions {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px calc(var(--m-gutter) + var(--sar))
+		max(calc(var(--sab) + 4px), 16px) calc(var(--m-gutter) + var(--sal));
+	border-top: var(--hair) solid var(--m-sep);
+	background: var(--m-bar);
+	-webkit-backdrop-filter: saturate(180%) blur(20px);
+	backdrop-filter: saturate(180%) blur(20px);
+}
+
+.m-ap-row {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+}
+
+.m-ap-row .m-btn {
+	padding: 0 10px;
+}
+
+.m-ap-note {
+	margin: 0;
+	font-size: 0.824rem;
+	line-height: 1.4;
+	color: var(--m-label-2);
+	text-align: center;
+}
+
+.m-ap-note.warn {
+	color: var(--m-orange-text);
+}
+
+.m-faceid {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	font-size: 0.882rem;
+	color: var(--m-tint);
+}
+
+.m-faceid svg {
+	animation: m-pulse 1.4s ease-in-out infinite;
+}
+
+/* While the Face ID step shows its glyph, the buttons below drop theirs:
+   one Face ID mark on screen, not two stacked. */
+.m-approval:has(.m-faceid) .m-btn > .faceid-mark {
+	display: none;
+}
+
+.m-deny {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.m-deny textarea {
+	width: 100%;
+	min-height: 44px;
+	padding: 10px 12px;
+	border: 0;
+	border-radius: 10px;
+	background: var(--m-cell);
+	color: var(--m-label);
+	font-size: 1rem;
+	resize: none;
+}
+
+.m-outcome {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	color: var(--m-green);
+	animation: m-pop 0.35s var(--m-ease) both;
+}
+
+.m-outcome.denied {
+	color: var(--m-red);
+}
+
+.m-outcome .outcome {
+	margin: 0 0 6px;
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--m-label);
+	text-align: center;
+}
+
+.m-sheet.bare {
+	background: var(--m-bg);
+}
+
+.m-approval > .m-sheet-head {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	gap: 0;
+	margin: 0;
+	padding: 10px 8px 4px;
+	color: var(--m-label);
+}
+
+.m-approval > .m-sheet-head h2 {
+	color: var(--m-label);
+}
+
+/* --------------------------------------------------------------- builder */
+
+.m-builder {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	height: auto;
+	border: 0;
+	border-radius: 0;
+	background: var(--m-bg);
+	box-shadow: none;
+	font-size: 1rem;
+}
+
+.m-builder > .builder-header {
+	display: grid;
+	border: 0;
+	padding: 10px 8px 2px;
+}
+
+.m-builder > .builder-header h1 {
+	font-size: 1rem;
+	font-weight: 600;
+	margin: 0;
+}
+
+/* Scrolling body: everything between the header and the compose dock. */
+
+.m-builder .chip {
+	min-height: 28px;
+	padding: 0 4px 0 10px;
+	border-radius: 14px;
+	background: var(--m-tint-soft);
+	color: var(--m-tint);
+	font-size: 0.882rem;
+	font-weight: 500;
+}
+
+.m-builder .chip .mono {
+	font-family: inherit;
+	font-size: inherit;
+}
+
+.m-builder .chip.all {
+	padding: 0 12px;
+	background: var(--m-fill-3);
+	color: var(--m-label);
+}
+
+.m-builder .match-count {
+	flex-basis: 100%;
+	margin-top: 4px;
+	font-size: 0.765rem;
+	font-weight: 500;
+	color: var(--m-label-2);
+}
+
+.m-builder .advanced input {
+	min-height: 36px;
+	border: 0;
+	border-radius: 10px;
+	padding: 0 10px;
+	background: var(--m-fill-3);
+	font-size: 1rem;
+	color: var(--m-label);
+}
+
+.m-builder .facets {
+	overflow: visible;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.m-builder .facet {
+	padding: 0;
+	border: 0;
+}
+
+.m-builder .facet header {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	padding: 0 calc(var(--m-gutter) + 16px + var(--sar)) 6px
+		calc(var(--m-gutter) + 16px + var(--sal));
+}
+
+.m-builder .facet-name {
+	font-size: 0.765rem;
+	font-weight: 400;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--m-label-2);
+}
+
+.m-builder .facet header .link {
+	border: 0;
+	background: none;
+	padding: 0;
+	font-size: 0.882rem;
+	color: var(--m-tint);
+}
+
+/* Facet values: one row of chips that scrolls sideways. */
+.m-builder .facet-values {
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 8px;
+	overflow-x: auto;
+	padding: 0 calc(var(--m-gutter) + var(--sar)) 2px
+		calc(var(--m-gutter) + var(--sal));
+	scrollbar-width: none;
+	-webkit-overflow-scrolling: touch;
+}
+
+.m-builder .facet-values::-webkit-scrollbar {
+	display: none;
+}
+
+.m-builder .fchip {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 34px;
+	padding: 0 14px;
+	border: 0;
+	border-radius: 17px;
+	background: var(--m-cell);
+	color: var(--m-label);
+	font-size: 0.882rem;
+	white-space: nowrap;
+}
+
+.m-builder .fchip.on {
+	background: var(--m-tint-fill);
+	color: #fff;
+}
+
+.m-builder .fchip .fcount {
+	color: var(--m-label-2);
+	font-variant-numeric: tabular-nums;
+}
+
+.m-builder .fchip.on .fcount {
+	color: rgb(255 255 255 / 80%);
+}
+
+.m-builder .fchip:active {
+	opacity: 0.6;
+}
+
+.m-builder .facet-values > .muted {
+	flex: none;
+	align-self: center;
+	font-size: 0.765rem;
+	color: var(--m-label-2);
+	padding-right: 16px;
+}
+
+.m-builder .prow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	height: 44px !important;
+	padding: 0 16px;
+	font-size: 0.941rem;
+	border-bottom: var(--hair) solid var(--m-sep);
+}
+
+.m-builder .prow .name {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	background: none;
+	padding: 0;
+	text-align: left;
+	color: var(--m-label);
+	font-size: inherit;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.m-builder .prow .muted {
+	font-size: 0.824rem;
+	color: var(--m-label-2);
+}
+
+.m-builder .wake {
+	order: 9;
+	min-width: 0;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 0.706rem;
+	font-weight: 600;
+	background: var(--m-fill-3);
+	color: var(--m-label-2);
+}
+
+.m-builder .wake.w-wakes {
+	background: rgb(52 199 89 / 15%);
+	color: var(--m-green);
+}
+
+.m-builder .advanced {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+	margin: 0 calc(var(--m-gutter) + var(--sar)) 0
+		calc(var(--m-gutter) + var(--sal));
+	padding: 10px 0 12px;
+	border: 0;
+	font-size: 0.765rem;
+}
+
+.m-builder .advanced > .muted {
+	padding: 0 16px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	color: var(--m-label-2);
+}
+
+.m-builder .advanced input {
+	background: var(--m-cell);
+	font-family: var(--mono);
+	font-size: 0.882rem;
+	min-height: 44px;
+	border-radius: 12px;
+	padding: 0 16px;
+}
+
+.m-builder .validity {
+	padding: 0 16px;
+	color: var(--m-label-2);
+}
+
+.m-builder .validity.bad {
+	color: var(--m-red);
+}
+
+/* Compose dock. */
+
+/* iOS segmented control for the shared priority picker on the phone. */
+@media (max-width: 1023px) {
+	.seg[aria-label="Priority"] {
+		display: grid;
+		grid-auto-flow: column;
+		grid-auto-columns: 1fr;
+		height: 32px;
+		padding: 2px;
+		border: 0;
+		border-radius: 9px;
+		background: var(--m-fill-3);
+		gap: 0;
+	}
+
+	.seg[aria-label="Priority"] button {
+		min-height: 0;
+		border: 0;
+		border-radius: 7px;
+		background: none;
+		color: var(--m-label);
+		font-size: 0.765rem;
+		font-weight: 500;
+		padding: 0 4px;
+	}
+
+	.seg[aria-label="Priority"] button.on {
+		background: var(--m-thumb);
+		color: var(--m-label);
+		font-weight: 600;
+		box-shadow:
+			0 3px 8px rgb(0 0 0 / 12%),
+			0 3px 1px rgb(0 0 0 / 4%);
+	}
+
+	.seg[aria-label="Priority"] button + button {
+		border-left: 0;
+	}
+
+	/* Checkboxes in shared forms read as iOS switches. */
+	.check input[type="checkbox"] {
+		-webkit-appearance: none;
+		appearance: none;
+		position: relative;
+		flex: none;
+		width: 51px;
+		height: 31px;
+		margin: 0;
+		border-radius: 16px;
+		background: var(--m-fill);
+		transition: background 0.25s ease;
+	}
+
+	.check input[type="checkbox"]::after {
+		content: "";
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 27px;
+		height: 27px;
+		border-radius: 50%;
+		background: #fff;
+		box-shadow:
+			0 3px 8px rgb(0 0 0 / 15%),
+			0 3px 1px rgb(0 0 0 / 6%);
+		transition: transform 0.3s var(--m-ease);
+	}
+
+	.check input[type="checkbox"]:checked {
+		background: var(--m-green-fill);
+	}
+
+	.check input[type="checkbox"]:checked::after {
+		transform: translateX(20px);
+	}
+}
+
+/* Facet picker: a pushed page inside the sheet, iOS selection list. */
+.m-builder .facet-picker {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: flex;
+	flex-direction: column;
+	background: var(--m-bg);
+	animation: m-push-in 0.45s var(--m-ease) both;
+}
+
+.m-builder .facet-picker .builder-header {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	border: 0;
+	padding: 10px 8px 2px;
+}
+
+.m-builder .facet-picker .builder-header h1 {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+.m-builder .facet-picker .search-box {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 36px;
+	margin: 8px calc(var(--m-gutter) + var(--sar)) 12px
+		calc(var(--m-gutter) + var(--sal));
+	padding: 0 8px;
+	border: 0;
+	border-radius: 10px;
+	background: var(--m-fill-3);
+	color: var(--m-label-2);
+}
+
+.m-builder .facet-picker .search-box input {
+	flex: 1;
+	border: 0;
+	background: none;
+	outline: none;
+	font-size: 1rem;
+	color: var(--m-label);
+}
+
+.m-builder .picker-list {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	margin: 0 calc(var(--m-gutter) + var(--sar)) 0
+		calc(var(--m-gutter) + var(--sal));
+	padding: 0 0 calc(var(--sab) + 16px);
+	list-style: none;
+}
+
+.m-builder .picker-list li {
+	background: var(--m-cell);
+}
+
+.m-builder .picker-list li:first-child {
+	border-radius: 12px 12px 0 0;
+}
+
+.m-builder .picker-list li:last-child {
+	border-radius: 0 0 12px 12px;
+}
+
+.m-builder .picker-row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 44px;
+	padding: 0 16px;
+	border: 0;
+	font-size: 1rem;
+}
+
+.m-builder .picker-list li + li .picker-row::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 16px;
+	right: 0;
+	border-top: var(--hair) solid var(--m-sep);
+}
+
+.m-builder .picker-row:active {
+	background: var(--m-fill-3);
+}
+
+.m-builder .picker-row input {
+	order: 3;
+	-webkit-appearance: none;
+	appearance: none;
+	width: 22px;
+	height: 22px;
+	margin: 0;
+	border: 0;
+	background: none;
+}
+
+.m-builder .picker-row input:checked {
+	background: var(--m-tint);
+	-webkit-mask:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E")
+		center / 20px no-repeat;
+	mask:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E")
+		center / 20px no-repeat;
+}
+
+.m-builder .picker-row .name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.m-builder .picker-row .fcount {
+	color: var(--m-label-2);
+	font-variant-numeric: tabular-nums;
+	font-size: 0.941rem;
+}
+
+/* Results. */
+.m-builder .results {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 12px calc(var(--m-gutter) + var(--sar)) calc(var(--sab) + 16px)
+		calc(var(--m-gutter) + var(--sal));
+	font-size: 0.941rem;
+}
+
+.m-builder .results > p {
+	margin: 0 4px 14px;
+	color: var(--m-label-2);
+	font-size: 0.882rem;
+}
+
+.m-builder .results > p .mono {
+	font-size: 0.824rem;
+	color: var(--m-label);
+}
+
+@media (max-width: 1023px) {
+	.receipts.full {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.receipts .progress {
+		height: 8px;
+		border-radius: 4px;
+		background: var(--m-fill-3);
+		overflow: hidden;
+	}
+
+	.receipt-summary {
+		margin: 0;
+		font-size: 0.882rem;
+		font-weight: 600;
+		color: var(--m-label);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.receipt-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.receipt-actions .btn {
+		min-height: 32px;
+		border: 0;
+		border-radius: 16px;
+		padding: 0 14px;
+		background: var(--m-tint-soft);
+		color: var(--m-tint);
+		font-size: 0.824rem;
+		font-weight: 600;
+	}
+
+	.receipt-rows,
+	.replies {
+		list-style: none;
+		margin: 6px 0 0;
+		padding: 0;
+		border-radius: 12px;
+		background: var(--m-cell);
+		overflow: hidden;
+	}
+
+	.receipt-rows li,
+	.replies li {
+		position: relative;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 6px;
+		padding: 11px 16px;
+		font-size: 0.882rem;
+	}
+
+	.receipt-rows li + li::before,
+	.replies li + li::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		left: 16px;
+		right: 0;
+		border-top: var(--hair) solid var(--m-sep);
+	}
+
+	.receipt-rows .mono,
+	.replies .mono {
+		font-family: inherit;
+		font-size: 0.941rem;
+		font-weight: 500;
+		color: var(--m-label);
+	}
+
+	.receipt-rows .rstate {
+		margin-left: auto;
+		font-size: 0.824rem;
+	}
+
+	.replies .reply {
+		flex-basis: 100%;
+		color: var(--m-label);
+	}
+
+	/* Confirm dialog as an iOS alert. */
+	.modal-backdrop:has(.confirm-dialog) {
+		align-items: center;
+		justify-content: center;
+		background: var(--m-dim);
+		padding: 24px;
+	}
+
+	.modal.confirm-dialog {
+		width: 300px;
+		max-width: 100%;
+		padding: 18px 16px 0;
+		border: 0;
+		border-radius: 14px;
+		background: var(--m-bar-solid);
+		box-shadow: none;
+		text-align: center;
+		animation: m-alert-in 0.3s var(--m-ease) both;
+	}
+
+	.modal.confirm-dialog h2 {
+		margin: 0 0 6px;
+		font-size: 1rem;
+		font-weight: 600;
+	}
+
+	.modal.confirm-dialog .warn,
+	.modal.confirm-dialog .wake-summary {
+		font-size: 0.765rem;
+		color: var(--m-label-2);
+	}
+
+	.modal.confirm-dialog .breakdown {
+		width: 100%;
+		margin: 10px 0;
+		font-size: 0.824rem;
+		text-align: left;
+	}
+
+	.modal.confirm-dialog .breakdown td {
+		padding: 4px 0;
+		border-bottom: var(--hair) solid var(--m-sep);
+	}
+
+	.confirm-inline {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 12px;
+		border: 0;
+		border-radius: 12px;
+		background: var(--m-cell);
+		font-size: 0.882rem;
+	}
+
+	.confirm-inline .btn {
+		min-height: 34px;
+		border: 0;
+		border-radius: 17px;
+		padding: 0 14px;
+		background: var(--m-fill-3);
+		color: var(--m-tint);
+		font-weight: 600;
+	}
+
+	.confirm-inline .btn.primary {
+		background: var(--m-tint-fill);
+		color: #fff;
+	}
+}
+
+@keyframes m-alert-in {
+	from {
+		opacity: 0;
+		transform: scale(1.15);
+	}
+}
+
+/* ------------------------------------------- needs you, empty, failure */
+
+@media (max-width: 1023px) {
+	/* Empty states: a symbol, a Title 2, one calm sentence. */
+
+	/* Failure and first-run: full screen, centered, calm. */
+	.failure,
+	.first-run {
+		justify-content: flex-start;
+		gap: 0;
+		min-height: 100dvh;
+		padding: calc(var(--sat) + 72px) calc(var(--m-gutter) + var(--sar))
+			calc(var(--sab) + 24px) calc(var(--m-gutter) + var(--sal));
+		background: var(--m-bg);
+		color: var(--m-label);
+		overflow-y: auto;
+	}
+
+	/* Steps: an inset-grouped list with numbered circles. */
+
+	.last-known {
+		width: 100%;
+		max-width: 420px;
+		margin-top: 32px;
+	}
+
+	.last-known h2 {
+		margin: 0;
+		padding: 0 16px 6px;
+		font-size: 0.765rem;
+		font-weight: 400;
+		color: var(--m-label-2);
+	}
+
+	.last-known ul {
+		border-radius: 12px;
+		background: var(--m-cell);
+		overflow: hidden;
+	}
+
+	.last-known li {
+		position: relative;
+		min-height: 44px;
+		padding: 10px 16px;
+		border: 0;
+		font-size: 1rem;
+	}
+
+	.last-known li + li::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		right: 0;
+		left: 40px;
+		border-top: var(--hair) solid var(--m-sep);
+	}
+
+	.last-known .muted {
+		font-size: 0.882rem;
+		color: var(--m-label-2);
+	}
+}
+
+@media (max-width: 1023px) {
+	/* Settings: desktop list rules must not reach the grouped cells. */
+}
+
+/* --------------------------------------------------------------- gestures */
+
+@media (max-width: 1023px) {
+	/* Swipe-back: the finger drives the layers; release springs them. */
+
+	/* Rows: no callout or selection on long-press. */
+	.tree-mobile [data-swipe] {
+		-webkit-touch-callout: none;
+		-webkit-user-select: none;
+		user-select: none;
+	}
+
+	/* Long-press feedback before the menu opens. */
+
+	/* Swipe actions: revealed behind the row from the trailing edge. */
+
+	/* Past the full-swipe point the primary action takes the whole width. */
+
+	/* Context menu: blurred backdrop, lifted row, a rounded menu. */
+
+	/* Pull to refresh: the list follows the finger; the spinner fills in. */
+}
+
+@keyframes m-lift {
+	from {
+		transform: scale(0.97);
+		box-shadow: none;
+	}
+	50% {
+		transform: scale(1.03);
+	}
+}
+
+@keyframes m-menu-in {
+	from {
+		opacity: 0;
+		transform: scale(0.6);
+	}
+}
+
+@keyframes m-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* -------------------------------------------- scope sheet, Ask, first run */
+
+@media (max-width: 1023px) {
+	.m-scope {
+		display: flex;
+		flex-direction: column;
+		min-height: 100%;
+		padding: 0;
+		background: var(--m-bg);
+	}
+
+	.m-scope-head {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		padding: 0 8px 8px;
+		background: var(--m-bg);
+	}
+
+	.m-scope-title {
+		min-width: 0;
+		max-width: 220px;
+		text-align: center;
+	}
+
+	.m-scope-title h1 {
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 600;
+		line-height: 1.3;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.m-scope-title p {
+		margin: 0;
+		font-size: 0.765rem;
+		color: var(--m-label-2);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.m-scope-reason {
+		margin: 0 calc(var(--m-gutter) + var(--sar)) 12px
+			calc(var(--m-gutter) + var(--sal));
+		padding: 10px 14px;
+		border-radius: 12px;
+		background: var(--m-orange-soft);
+		color: var(--m-orange-text);
+		font-size: 0.882rem;
+	}
+
+	.m-scope .scope-toggle {
+		margin: 0 calc(var(--m-gutter) + var(--sar)) 16px
+			calc(var(--m-gutter) + var(--sal));
+	}
+
+	/* The selector reads as the section header of the recipients. */
+	.m-scope .selector-line {
+		margin: 4px calc(var(--m-gutter) + var(--sar)) 0
+			calc(var(--m-gutter) + var(--sal));
+		padding: 0 16px 6px;
+		font-size: 0.765rem;
+		color: var(--m-label-2);
+	}
+
+	.m-scope .wake-summary {
+		order: 3;
+		margin: 0 calc(var(--m-gutter) + var(--sar)) 16px
+			calc(var(--m-gutter) + var(--sal));
+		padding: 6px 16px 0;
+		font-size: 0.765rem;
+		line-height: 1.385;
+		color: var(--m-label-2);
+	}
+
+	.m-scope .preview {
+		order: 2;
+		margin: 0 calc(var(--m-gutter) + var(--sar)) 0
+			calc(var(--m-gutter) + var(--sal));
+		padding: 0;
+		border: 0;
+		background: none;
+	}
+
+	.m-scope .preview.loading {
+		height: 264px;
+		border-radius: 12px;
+		background: var(--m-cell);
+	}
+
+	.m-scope .preview-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		border-radius: 12px;
+		background: var(--m-cell);
+		overflow: hidden;
+	}
+
+	.m-scope .preview-list li {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 44px;
+		padding: 0 16px;
+		font-size: 1rem;
+	}
+
+	.m-scope .preview-list li + li::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		right: 0;
+		left: 40px;
+		border-top: var(--hair) solid var(--m-sep);
+	}
+
+	.m-scope .preview-list .glyph {
+		flex: none;
+		width: 14px;
+	}
+
+	.m-scope .preview-list .name {
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--m-label);
+		font-size: 1rem;
+		text-decoration: none;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.m-scope .preview-list .muted {
+		flex: 1;
+		min-width: 0;
+		font-size: 0.882rem;
+		color: var(--m-label-2);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.m-scope .preview-list .wake {
+		flex: none;
+		font-family: inherit;
+		font-size: 0.882rem;
+		color: var(--m-label-2);
+	}
+
+	.m-scope .preview-list .wake.w-queued {
+		color: var(--m-orange-text);
+	}
+
+	.m-scope .preview-list .wake.w-refuses {
+		color: var(--m-red);
+	}
+
+	.m-scope .preview > .muted {
+		margin: 0;
+		padding: 6px 16px 0;
+		font-size: 0.765rem;
+		color: var(--m-label-2);
+	}
+
+	.m-scope .m-composer {
+		order: 4;
+		margin-top: auto;
+		position: sticky;
+		bottom: 0;
+	}
+
+	/* Ask: answers as an inset-grouped list with iOS selection circles. */
+
+	/* First-run steps: text flows; the number sits in the margin. */
+}
+
+/* ----------------------------------------- state screens (app.css .st) */
+
+/* Boot shell, boot error, a chunk that didn't load: the same pattern as on
+   desktop, in iOS type and colors. Only looks here; never set display on
+   these, so [hidden] keeps working. */
+@media (max-width: 1023px) {
+	.st {
+		gap: 8px;
+		padding: calc(var(--sat) + 24px) calc(var(--m-gutter) + var(--sar))
+			calc(var(--sab) + 24px) calc(var(--m-gutter) + var(--sal));
+		color: var(--m-label);
+		font:
+			400 1rem / 1.35 -apple-system,
+			BlinkMacSystemFont,
+			system-ui,
+			sans-serif;
+	}
+
+	.st-l-desk {
+		display: none;
+	}
+
+	.st-l-phone {
+		display: inline;
+	}
+
+	.boot-shell,
+	.boot-error,
+	#app > .st-fail {
+		background: var(--m-bg);
+	}
+
+	/* In a page: under where the bar would be, centered in what's left. */
+	.st-fail {
+		height: 100%;
+		min-height: 0;
+		overflow-y: auto;
+		background: var(--m-bg);
+	}
+
+	.st-mark,
+	.st-fail .st-mark {
+		width: 76px;
+		height: 76px;
+		margin-bottom: 16px;
+	}
+
+	.st-mark img {
+		box-shadow: var(--m-shadow);
+	}
+
+	.st-mark.is-error::after {
+		width: 28px;
+		height: 28px;
+		box-shadow: 0 0 0 3px var(--m-bg);
+		font-size: 16px;
+	}
+
+	.st-title {
+		color: var(--m-label);
+		font:
+			700 1.294rem / 1.27 -apple-system,
+			BlinkMacSystemFont,
+			system-ui,
+			sans-serif;
+		letter-spacing: 0;
+	}
+
+	.st-text {
+		max-width: 300px;
+		color: var(--m-label-2);
+		font-size: 0.941rem;
+	}
+
+	.st-boot .st-text {
+		color: var(--m-label-2);
+		font-size: 0.882rem;
+	}
+
+	.st-note {
+		color: var(--m-label-2);
+		font-size: 0.765rem;
+	}
+
+	.st-btn {
+		width: 100%;
+		max-width: 360px;
+		height: auto;
+		min-height: 50px;
+		margin-top: 20px;
+		border-radius: 12px;
+		background: var(--m-tint-fill);
+		color: #fff;
+		font:
+			600 1rem / 1 -apple-system,
+			BlinkMacSystemFont,
+			system-ui,
+			sans-serif;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.st-btn:hover {
+		background: var(--m-tint-fill);
+	}
+
+	.st-btn:active {
+		opacity: 0.7;
+	}
+
+	/* iOS gray button: the system fill, tinted label. */
+	.st-btn.is-secondary,
+	.st-btn.is-secondary:hover {
+		margin-top: 8px;
+		border: 0;
+		background: var(--m-fill-3);
+		color: var(--m-tint);
+	}
+
+	.st-fail.is-layer {
+		height: auto;
+		background: color-mix(in srgb, var(--m-bg) 82%, transparent);
+	}
+
+	.st-more {
+		margin-top: 4px;
+	}
+
+	/* iOS: a plain tinted text button, 44 pt tall. */
+	.st-more summary {
+		height: 44px;
+		padding: 0 12px;
+		border: 0;
+		background: transparent;
+		color: var(--m-tint);
+		font-size: 0.941rem;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.st-more summary:hover {
+		background: transparent;
+	}
+
+	.st-more > :not(summary) {
+		margin-top: 2px;
+		border-radius: 12px;
+		background: var(--m-cell);
+		color: var(--m-label-2);
+		font-size: 0.882rem;
+		line-height: 1.35;
+	}
+
+	/* The iOS 8-spoke activity indicator. */
+	.loading::after,
+	.st-spin {
+		width: 18px;
+		height: 18px;
+		border: 0;
+		border-radius: 50%;
+		background: conic-gradient(
+			from 0deg,
+			var(--m-gray) 0 4%,
+			transparent 4% 12.5%,
+			var(--m-gray) 12.5% 16.5%,
+			transparent 16.5% 25%,
+			var(--m-gray) 25% 29%,
+			transparent 29% 37.5%,
+			var(--m-gray) 37.5% 41.5%,
+			transparent 41.5% 50%,
+			var(--m-gray) 50% 54%,
+			transparent 54% 62.5%,
+			var(--m-gray) 62.5% 66.5%,
+			transparent 66.5% 75%,
+			var(--m-gray) 75% 79%,
+			transparent 79% 87.5%,
+			var(--m-gray) 87.5% 91.5%,
+			transparent 91.5% 100%
+		);
+		-webkit-mask: radial-gradient(circle, transparent 38%, #000 40%);
+		mask: radial-gradient(circle, transparent 38%, #000 40%);
+		animation: m-spin 0.8s steps(8) infinite;
+		vertical-align: middle;
+	}
+
+	.st-spin {
+		width: 22px;
+		height: 22px;
+		animation:
+			m-spin 0.8s steps(8) infinite,
+			st-in 0.2s ease-out 0.4s forwards;
+	}
+}
+
+/* ------------------------------------------------ floating controls' lanes */
+
+@media (max-width: 1023px) {
+	/* Jump to latest: a lane at the trailing edge, above the composer, and
+	   room under the last message so nothing sits beneath it at the end. */
+	/* "Jump to latest" sits left of the round arrow when both show. */
+	/* Mermaid: the zoom stack gets its own lane at the left edge. */
+}
+
+/* Bars without backdrop blur (older engines, Low Power, some WebViews):
+   near-opaque, so content under them never reads through. */
+@supports not (
+		(backdrop-filter: blur(1px)) or
+		(-webkit-backdrop-filter: blur(1px))
+	) {
+	@media (max-width: 1023px) {
+		:root {
+			--m-bar: rgb(249 249 249 / 96%);
+		}
+	}
+
+	@media (max-width: 1023px) and (prefers-color-scheme: dark) {
+		:root:not([data-theme="light"]) {
+			--m-bar: rgb(22 22 24 / 96%);
+		}
+	}
+	@media (max-width: 1023px) {
+		:root[data-theme="dark"] {
+			--m-bar: rgb(22 22 24 / 96%);
+		}
+	}
+}
+
+@media (max-width: 1023px) {
+	/* Transcript widgets (Mermaid zoom and actions, code toolbars) use z-index
+	   10; contain them so they never paint over the nav bar or composer. */
+}

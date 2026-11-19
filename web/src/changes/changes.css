@@ -1,0 +1,426 @@
+/* The changes viewer: desktop panel (cv-split, cv-panel) and phone pages
+   (cv-phone). Colors come from the design tokens, so both themes follow. */
+
+.cv-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ desktop split */
+.cv-split {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+}
+.cv-main {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+}
+.cv-resizer {
+	flex: none;
+	width: 6px;
+	margin: 0 -3px;
+	position: relative;
+	z-index: 2;
+	cursor: col-resize;
+	touch-action: none;
+}
+.cv-resizer::after {
+	content: "";
+	position: absolute;
+	inset: 0 2px;
+	background: transparent;
+	transition: background 120ms;
+}
+.cv-resizer:hover::after,
+.cv-resizer:focus-visible::after {
+	background: var(--ds-accent);
+}
+.cv-resizer:focus-visible {
+	outline: none;
+}
+.cv-panel {
+	flex: none;
+	width: var(--cv-w, 560px);
+	max-width: 60vw;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	border-left: 1px solid var(--ds-border);
+	background: var(--ds-bg);
+	color: var(--ds-text);
+}
+
+.cv-toggle.on {
+	background: var(--ds-surface-active);
+	border-color: var(--ds-border-strong);
+}
+.cv-badge {
+	min-width: 18px;
+	height: 18px;
+	padding: 0 5px;
+	border-radius: 9px;
+	background: var(--ds-surface-active);
+	color: var(--ds-text);
+	font-size: 11.5px;
+	font-weight: 600;
+	line-height: 18px;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ panel header */
+.cv-head {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 12px 10px 16px;
+	border-bottom: 1px solid var(--ds-border);
+}
+.cv-head-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.cv-title {
+	flex: 1;
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+	min-width: 0;
+}
+.cv-total {
+	display: inline-flex;
+	gap: 6px;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: var(--ds-text-2);
+	font-variant-numeric: tabular-nums;
+}
+.cv-branch {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	margin: 0;
+	min-width: 0;
+	font-size: 12.5px;
+	color: var(--ds-text-2);
+}
+.cv-branch svg {
+	width: 13px;
+	height: 13px;
+	flex: none;
+}
+.cv-repo {
+	font-weight: 500;
+	color: var(--ds-text);
+}
+.cv-ref {
+	font-family: var(--ds-font-mono);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.cv-ab {
+	font-variant-numeric: tabular-nums;
+	color: var(--ds-text-2);
+}
+.cv-tools {
+	flex-wrap: wrap;
+}
+.cv-spacer {
+	flex: 1;
+}
+.cv-modes {
+	display: inline-flex;
+	padding: 2px;
+	border-radius: 8px;
+	background: var(--ds-surface-hover);
+}
+.cv-mode {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 24px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--ds-text-2);
+	font: inherit;
+	font-size: 12.5px;
+	font-weight: 500;
+	cursor: pointer;
+}
+.cv-mode.on {
+	background: var(--ds-surface);
+	color: var(--ds-text);
+	box-shadow: 0 0 0 1px var(--ds-border);
+}
+.cv-mode:focus-visible {
+	outline: 2px solid var(--ds-focus);
+	outline-offset: 1px;
+}
+.cv-mode-n {
+	font-size: 11px;
+	color: var(--ds-text-2);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ file list */
+.cv-list {
+	flex: none;
+	max-height: 34%;
+	overflow-y: auto;
+	border-bottom: 1px solid var(--ds-border);
+	padding: 4px 0;
+}
+.cv-files {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.cv-file {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 28px;
+	padding: 3px 12px 3px 14px;
+	border: 0;
+	background: transparent;
+	color: var(--ds-text);
+	font: inherit;
+	font-size: 13px;
+	text-align: left;
+	cursor: pointer;
+}
+.cv-file:hover {
+	background: var(--ds-surface-hover);
+}
+.cv-file.current {
+	background: var(--ds-surface-active);
+}
+.cv-file:focus-visible {
+	outline: 2px solid var(--ds-focus);
+	outline-offset: -2px;
+}
+.cv-name {
+	flex: 1;
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+}
+.cv-base {
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	flex: none;
+	max-width: 100%;
+}
+.cv-dir {
+	color: var(--ds-text-2);
+	font-size: 12px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	direction: rtl;
+	text-align: left;
+	min-width: 0;
+}
+.cv-status {
+	flex: none;
+	width: 16px;
+	font: 600 11.5px / 1 var(--ds-font-mono);
+	text-align: center;
+	color: var(--ds-text-2);
+}
+.cv-status.s-added,
+.cv-status.s-untracked {
+	color: var(--ds-diff-add-text);
+}
+.cv-status.s-deleted,
+.cv-status.s-conflicted {
+	color: var(--ds-diff-del-text);
+}
+.cv-status.s-modified,
+.cv-status.s-renamed,
+.cv-status.s-copied,
+.cv-status.s-typechange {
+	color: var(--ds-needs-text);
+}
+.cv-counts {
+	flex: none;
+	display: inline-flex;
+	gap: 6px;
+	font: 12px / 1 var(--ds-font-mono);
+	font-variant-numeric: tabular-nums;
+}
+.cv-counts.muted {
+	color: var(--ds-text-2);
+	font-family: var(--ds-font-sans);
+}
+:is(.cv-counts, .cv-total) .add {
+	color: var(--ds-diff-add-text);
+}
+:is(.cv-counts, .cv-total) .del {
+	color: var(--ds-diff-del-text);
+}
+.cv-more {
+	margin: 4px 14px;
+	font-size: 12px;
+	color: var(--ds-text-2);
+}
+
+/* ------------------------------------------------------------ diffs */
+.cv-body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.cv-body:focus-visible {
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--ds-focus);
+}
+.cv-section-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 8px 14px;
+	font-size: 13px;
+	font-weight: 500;
+	background: var(--ds-bg);
+	border-bottom: 1px solid var(--ds-border);
+}
+.cv-section-head.sticky,
+.cv-section .cv-section-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+}
+.cv-section + .cv-section {
+	border-top: 1px solid var(--ds-border);
+}
+.cv-section.current .cv-section-head {
+	box-shadow: inset 3px 0 0 var(--ds-accent);
+}
+/* The panel scrolls, not the diff: no inner height cap, no rounded box. */
+.cv-diff.ds-diff {
+	border-radius: 0;
+	box-shadow: none;
+	background: var(--ds-code-bg);
+}
+.cv-diff .ds-diff-scroll,
+.cv-diff.split .ds-diff-grid {
+	max-height: none;
+	overflow-y: visible;
+}
+.ds-diff-hunk {
+	grid-column: 1 / -1;
+	padding: 4px 14px 4px 26px;
+	background: var(--ds-surface-hover);
+	color: var(--ds-text-2);
+	font: 12px / 1.5 var(--ds-font-mono);
+	white-space: pre;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ds-diff-hunk:first-child {
+	margin-top: -6px;
+}
+.cv-notes {
+	margin: 0;
+	padding: 6px 14px;
+	font-size: 12.5px;
+	color: var(--ds-text-2);
+}
+.cv-placeholder,
+.cv-empty {
+	margin: 0;
+	padding: 20px 16px;
+	font-size: 13px;
+	color: var(--ds-text-2);
+}
+.cv-empty {
+	text-align: center;
+	padding-top: 48px;
+}
+.cv-loading {
+	height: 80px;
+	margin: 12px 14px;
+	border-radius: 8px;
+	background: linear-gradient(
+		90deg,
+		var(--ds-surface-hover) 0%,
+		var(--ds-surface-active) 50%,
+		var(--ds-surface-hover) 100%
+	);
+	background-size: 200% 100%;
+	animation: cv-shimmer 1.4s linear infinite;
+}
+@keyframes cv-shimmer {
+	to {
+		background-position: -200% 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.cv-loading {
+		animation: none;
+	}
+}
+
+/* ------------------------------------------------------------ phone */
+.cv-phone {
+	padding-bottom: env(safe-area-inset-bottom);
+}
+.cv-phone .cv-head {
+	border-bottom: 0;
+	padding: 12px 16px 4px;
+}
+.cv-phone .cv-file {
+	min-height: 48px;
+	padding: 8px 16px;
+	font-size: 15px;
+	border-bottom: 0.5px solid var(--ds-border);
+}
+.cv-phone .cv-dir {
+	font-size: 13px;
+}
+.cv-phone .cv-counts {
+	font-size: 13px;
+}
+.cv-phone .cv-mode {
+	height: 30px;
+	font-size: 14px;
+	flex: 1;
+	justify-content: center;
+}
+.cv-phone .cv-modes {
+	display: flex;
+	width: 100%;
+}
+.cv-phone-file .cv-section-head {
+	padding: 10px 16px;
+	font-size: 14px;
+}
+.cv-phone-file .ds-diff {
+	font-size: 12px;
+}

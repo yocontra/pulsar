@@ -1,0 +1,489 @@
+/*
+ * Pulsar design tokens: the one source for color, type, space, radius,
+ * depth and motion. Every other stylesheet (app.css, ios.css, the Ionic
+ * theme, the shadcn variables in globals.css) reads these.
+ *
+ * Theme: follows the system; `<html data-theme="light|dark">` forces one.
+ * Platform: desktop values by default; `[data-platform="phone"]` (or the
+ * `.ds-phone` class on any subtree) switches to the iOS type scale.
+ *
+ * Naming: --ds-<group>-<role>. Colors are semantic (text, surface, status),
+ * never literal (no --ds-blue-500 in components).
+ */
+
+:root {
+	/* ---------------------------------------------------------- type */
+	--ds-font-sans:
+		-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI",
+		Roboto, "Helvetica Neue", sans-serif;
+	--ds-font-display:
+		-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI",
+		Roboto, "Helvetica Neue", sans-serif;
+	--ds-font-mono:
+		ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
+		"Liberation Mono", monospace;
+
+	/* Desktop scale (px): body 14/20, prose 15/23, code 13/20. Never < 12. */
+	--ds-text-caption: 12px;
+	--ds-text-caption-lh: 16px;
+	--ds-text-footnote: 12.5px;
+	--ds-text-footnote-lh: 17px;
+	--ds-text-secondary: 13px;
+	--ds-text-secondary-lh: 18px;
+	--ds-text-body: 14px;
+	--ds-text-body-lh: 20px;
+	--ds-text-prose: 15px;
+	--ds-text-prose-lh: 1.55;
+	--ds-text-code: 13px;
+	--ds-text-code-lh: 20px;
+	--ds-text-headline: 15px;
+	--ds-text-title3: 17px;
+	--ds-text-title2: 20px;
+	--ds-text-title1: 24px;
+	--ds-text-large: 28px;
+	--ds-weight-regular: 400;
+	--ds-weight-medium: 510;
+	--ds-weight-semibold: 600;
+	--ds-weight-bold: 700;
+	--ds-tracking-tight: -0.011em;
+	--ds-tracking-title: -0.021em;
+
+	/* ---------------------------------------------------------- space (4 pt grid) */
+	--ds-space-1: 4px;
+	--ds-space-2: 8px;
+	--ds-space-3: 12px;
+	--ds-space-4: 16px;
+	--ds-space-5: 20px;
+	--ds-space-6: 24px;
+	--ds-space-8: 32px;
+	--ds-space-10: 40px;
+	--ds-space-12: 48px;
+	--ds-gutter: 24px;
+	--ds-measure: 760px; /* conversation column */
+	--ds-hit: 28px; /* min control height (desktop) */
+
+	/* ---------------------------------------------------------- radius */
+	--ds-radius-xs: 4px;
+	--ds-radius-sm: 6px;
+	--ds-radius-md: 8px;
+	--ds-radius-lg: 12px;
+	--ds-radius-xl: 16px;
+	--ds-radius-bubble: 18px;
+	--ds-radius-full: 999px;
+
+	/* ---------------------------------------------------------- motion */
+	--ds-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+	--ds-ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+	--ds-dur-fast: 120ms;
+	--ds-dur: 180ms;
+	--ds-dur-slow: 320ms;
+
+	/* ---------------------------------------------------------- color: light */
+	color-scheme: light dark;
+
+	/* Neutrals: warm greys (stone), never pure #000 text on #fff. */
+	--ds-bg: #fafaf9;
+	--ds-bg-sunken: #f4f3f1;
+	--ds-surface: #ffffff;
+	--ds-surface-2: #f6f5f3;
+	--ds-surface-3: #eeedea;
+	--ds-surface-hover: rgba(41, 37, 36, 0.045);
+	--ds-surface-active: rgba(41, 37, 36, 0.08);
+	--ds-surface-selected: #ecebe8;
+	/* Secondary controls (buttons that aren't the primary action): a tinted
+	   fill and a border, so they read as buttons on every surface, white
+	   cards and dialogs included, not as text. */
+	--ds-control: rgba(41, 37, 36, 0.055);
+	--ds-control-hover: rgba(41, 37, 36, 0.095);
+	--ds-control-border: rgba(41, 37, 36, 0.14);
+	--ds-overlay: rgba(28, 25, 23, 0.32);
+
+	--ds-text: #1c1917;
+	--ds-text-2: #57534e; /* 7.4:1 on white */
+	--ds-text-3: #6b6560; /* AA (≥4.5) on every light surface */
+	--ds-text-4: #a8a29e; /* decorative / disabled only */
+	--ds-text-inverse: #fafaf9;
+
+	--ds-border: rgba(41, 37, 36, 0.1);
+	--ds-border-strong: rgba(41, 37, 36, 0.17);
+	--ds-hairline: rgba(41, 37, 36, 0.08);
+
+	/* Brand: Pulsar amber-orange (the icon). Brand moments + "needs you". */
+	--ds-accent: #f27a1a;
+	--ds-accent-hover: #e06c0e;
+	--ds-accent-text: #b4530a; /* 4.9:1 on white */
+	--ds-accent-soft: #fff1e3;
+	--ds-accent-soft-2: #ffe3c7;
+	--ds-on-accent: #ffffff;
+
+	/* Action / links: system blue. */
+	--ds-primary: #0a66d8;
+	--ds-primary-hover: #0857bd;
+	--ds-primary-soft: #e8f1fd;
+	--ds-on-primary: #ffffff;
+	--ds-link: #0a66d8;
+	--ds-focus: #3b82f6;
+	--ds-focus-ring:
+		0 0 0 2px var(--ds-bg),
+		0 0 0 4px color-mix(in srgb, var(--ds-focus) 70%, transparent);
+
+	/* Status: always paired with a shape and a word. */
+	--ds-busy: #2f6fde;
+	--ds-busy-soft: #e9f0fd;
+	--ds-busy-text: #2259c2;
+	--ds-idle: #8a837d;
+	--ds-idle-soft: #f1f0ee;
+	--ds-needs: #e8730c;
+	--ds-needs-text: #9c4a06; /* AA on surface-active (selected rows), not only on white */
+	--ds-needs-soft: #fff1e3;
+	--ds-needs-badge: #b9560a;
+	--ds-on-needs: #ffffff;
+	--ds-offline: #a8a29e;
+	--ds-danger: #d92d20;
+	--ds-danger-text: #b42318;
+	--ds-danger-soft: #fdecea;
+	--ds-success: #16a34a;
+	--ds-success-text: #137337;
+	--ds-success-soft: #e8f6ed;
+	--ds-peer: #7c4ddb;
+	--ds-peer-text: #6936c9;
+	--ds-peer-soft: #f3eefd;
+
+	/* Conversation */
+	--ds-bubble-user: #eeedea;
+	--ds-bubble-user-text: var(--ds-text);
+	--ds-bubble-mine: var(--ds-primary); /* phone composer echo, iMessage-like */
+	--ds-bubble-mine-text: #ffffff;
+
+	/* Code + terminal */
+	--ds-code-bg: #f7f6f4;
+	--ds-code-border: rgba(41, 37, 36, 0.09);
+	--ds-code-head: #efeeeb;
+	--ds-code-inline-bg: rgba(41, 37, 36, 0.06);
+	--ds-code-inline-text: #9a3412;
+	--ds-term-bg: #1c1b1a;
+	--ds-term-text: #e7e5e4;
+	--ds-term-dim: #a8a29e;
+
+	/* Diff */
+	--ds-diff-add-bg: #e9f7ee;
+	--ds-diff-add-strong: #c8edd4;
+	--ds-diff-add-text: #166534;
+	--ds-diff-del-bg: #fdeeee;
+	--ds-diff-del-strong: #f9d1d1;
+	--ds-diff-del-text: #a01d1d;
+	--ds-diff-gutter: #a8a29e;
+
+	/* Syntax (Shiki "pulsar-light" uses the same values) */
+	--ds-syn-fg: #292524;
+	--ds-syn-comment: #736d68;
+	--ds-syn-keyword: #a626a4;
+	--ds-syn-string: #2f7d32;
+	--ds-syn-number: #b45309;
+	--ds-syn-function: #1d5fc9;
+	--ds-syn-type: #0e7490;
+	--ds-syn-constant: #b45309;
+	--ds-syn-variable: #b42318;
+	--ds-syn-punct: #716a65;
+
+	/* Depth */
+	--ds-shadow-xs: 0 1px 1px rgba(28, 25, 23, 0.04);
+	--ds-shadow-sm:
+		0 1px 2px rgba(28, 25, 23, 0.06), 0 1px 1px rgba(28, 25, 23, 0.04);
+	--ds-shadow-md:
+		0 4px 12px -2px rgba(28, 25, 23, 0.08),
+		0 2px 4px -2px rgba(28, 25, 23, 0.06);
+	--ds-shadow-lg:
+		0 16px 40px -8px rgba(28, 25, 23, 0.18),
+		0 4px 12px -4px rgba(28, 25, 23, 0.08);
+	--ds-material: rgba(250, 250, 249, 0.78);
+	--ds-material-filter: saturate(180%) blur(20px);
+
+	/* Skeleton */
+	--ds-skeleton: rgba(41, 37, 36, 0.07);
+	--ds-skeleton-shine: rgba(255, 255, 255, 0.6);
+
+	/* Harness marks: tinted square fill + glyph color */
+	--ds-h-claude-bg: #f6e3d9;
+	--ds-h-claude-fg: #b5502b;
+	--ds-h-codex-bg: #e7e6e3;
+	--ds-h-codex-fg: #1c1917;
+	--ds-h-opencode-bg: #e3e8ef;
+	--ds-h-opencode-fg: #334155;
+	--ds-h-pi-bg: #e6e4fb;
+	--ds-h-pi-fg: #4f46e5;
+	--ds-h-omp-bg: #dcf1ee;
+	--ds-h-omp-fg: #0f766e;
+	--ds-h-cursor-bg: #e5e5e5;
+	--ds-h-cursor-fg: #262626;
+	--ds-h-gemini-bg: #e2ecfd;
+	--ds-h-gemini-fg: #2563eb;
+	--ds-h-other-bg: #ecebe8;
+	--ds-h-other-fg: #57534e;
+}
+
+/* ---------------------------------------------------------- color: dark
+   Designed, not inverted: surfaces step up in lightness, borders are light
+   at low alpha, saturated colors are lifted for contrast on dark. */
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--ds-bg: #111110;
+		--ds-bg-sunken: #0b0b0a;
+		--ds-surface: #191918;
+		--ds-surface-2: #201f1e;
+		--ds-surface-3: #2a2927;
+		--ds-surface-hover: rgba(255, 250, 240, 0.05);
+		--ds-surface-active: rgba(255, 250, 240, 0.09);
+		--ds-surface-selected: #2c2b29;
+		--ds-control: rgba(255, 250, 240, 0.08);
+		--ds-control-hover: rgba(255, 250, 240, 0.12);
+		--ds-control-border: rgba(255, 250, 240, 0.13);
+		--ds-overlay: rgba(0, 0, 0, 0.55);
+		--ds-text: #f2f1ef;
+		--ds-text-2: #bdb9b4;
+		--ds-text-3: #94908a;
+		--ds-text-4: #66625d;
+		--ds-text-inverse: #1c1917;
+		--ds-border: rgba(255, 250, 240, 0.09);
+		--ds-border-strong: rgba(255, 250, 240, 0.15);
+		--ds-hairline: rgba(255, 250, 240, 0.07);
+		--ds-accent: #ff8a2a;
+		--ds-accent-hover: #ff9a45;
+		--ds-accent-text: #ffaa5c;
+		--ds-accent-soft: rgba(255, 138, 42, 0.14);
+		--ds-accent-soft-2: rgba(255, 138, 42, 0.22);
+		--ds-on-accent: #1c1206;
+		--ds-primary: #2b6fd6;
+		--ds-primary-hover: #3a7de6;
+		--ds-primary-soft: rgba(61, 139, 253, 0.16);
+		--ds-on-primary: #ffffff;
+		--ds-link: #6aa8ff;
+		--ds-focus: #6aa8ff;
+		--ds-busy: #5b9dff;
+		--ds-busy-soft: rgba(91, 157, 255, 0.15);
+		--ds-busy-text: #8dbaff;
+		--ds-idle: #8f8a84;
+		--ds-idle-soft: rgba(255, 250, 240, 0.06);
+		--ds-needs: #ff9a3c;
+		--ds-needs-text: #ffb066;
+		--ds-needs-soft: rgba(255, 154, 60, 0.14);
+		--ds-needs-badge: #ff9a3c;
+		--ds-on-needs: #1c1206;
+		--ds-offline: #66625d;
+		--ds-danger: #ff5f52;
+		--ds-danger-text: #ff8a80;
+		--ds-danger-soft: rgba(255, 95, 82, 0.14);
+		--ds-success: #3ccf7a;
+		--ds-success-text: #6ee09c;
+		--ds-success-soft: rgba(60, 207, 122, 0.13);
+		--ds-peer: #a98bff;
+		--ds-peer-text: #c0a8ff;
+		--ds-peer-soft: rgba(169, 139, 255, 0.13);
+		--ds-bubble-user: #2a2927;
+		--ds-bubble-mine: #2f7bf0;
+		--ds-code-bg: #161615;
+		--ds-code-border: rgba(255, 250, 240, 0.08);
+		--ds-code-head: #1e1d1c;
+		--ds-code-inline-bg: rgba(255, 250, 240, 0.08);
+		--ds-code-inline-text: #ffb38a;
+		--ds-term-bg: #0c0c0b;
+		--ds-term-text: #e7e5e4;
+		--ds-term-dim: #8f8a84;
+		--ds-diff-add-bg: rgba(60, 207, 122, 0.1);
+		--ds-diff-add-strong: rgba(60, 207, 122, 0.24);
+		--ds-diff-add-text: #7ee2a8;
+		--ds-diff-del-bg: rgba(255, 95, 82, 0.1);
+		--ds-diff-del-strong: rgba(255, 95, 82, 0.24);
+		--ds-diff-del-text: #ff9d94;
+		--ds-diff-gutter: #66625d;
+		--ds-syn-fg: #e7e5e4;
+		--ds-syn-comment: #8a857f;
+		--ds-syn-keyword: #d79bf5;
+		--ds-syn-string: #9bd88a;
+		--ds-syn-number: #f7b267;
+		--ds-syn-function: #7fb5ff;
+		--ds-syn-type: #67d4e0;
+		--ds-syn-constant: #f7b267;
+		--ds-syn-variable: #ff9d94;
+		--ds-syn-punct: #a8a29e;
+		--ds-shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.3);
+		--ds-shadow-sm:
+			0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 250, 240, 0.04);
+		--ds-shadow-md:
+			0 6px 16px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 250, 240, 0.05);
+		--ds-shadow-lg:
+			0 20px 48px -8px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 250, 240, 0.06);
+		--ds-material: rgba(25, 25, 24, 0.74);
+		--ds-skeleton: rgba(255, 250, 240, 0.07);
+		--ds-skeleton-shine: rgba(255, 250, 240, 0.06);
+		--ds-h-claude-bg: rgba(217, 119, 87, 0.18);
+		--ds-h-claude-fg: #f0a585;
+		--ds-h-codex-bg: rgba(255, 250, 240, 0.1);
+		--ds-h-codex-fg: #f2f1ef;
+		--ds-h-opencode-bg: rgba(148, 163, 184, 0.16);
+		--ds-h-opencode-fg: #cbd5e1;
+		--ds-h-pi-bg: rgba(129, 140, 248, 0.18);
+		--ds-h-pi-fg: #a5b4fc;
+		--ds-h-omp-bg: rgba(45, 212, 191, 0.15);
+		--ds-h-omp-fg: #5eead4;
+		--ds-h-cursor-bg: rgba(255, 255, 255, 0.1);
+		--ds-h-cursor-fg: #e5e5e5;
+		--ds-h-gemini-bg: rgba(96, 165, 250, 0.16);
+		--ds-h-gemini-fg: #93c5fd;
+		--ds-h-other-bg: rgba(255, 250, 240, 0.08);
+		--ds-h-other-fg: #bdb9b4;
+	}
+}
+
+/* Forced dark: same values as the media block above. Kept in sync by the
+   unit test "tokens: forced dark matches system dark". */
+:root[data-theme="dark"] {
+	color-scheme: dark;
+	--ds-bg: #111110;
+	--ds-bg-sunken: #0b0b0a;
+	--ds-surface: #191918;
+	--ds-surface-2: #201f1e;
+	--ds-surface-3: #2a2927;
+	--ds-surface-hover: rgba(255, 250, 240, 0.05);
+	--ds-surface-active: rgba(255, 250, 240, 0.09);
+	--ds-surface-selected: #2c2b29;
+	--ds-control: rgba(255, 250, 240, 0.08);
+	--ds-control-hover: rgba(255, 250, 240, 0.12);
+	--ds-control-border: rgba(255, 250, 240, 0.13);
+	--ds-overlay: rgba(0, 0, 0, 0.55);
+	--ds-text: #f2f1ef;
+	--ds-text-2: #bdb9b4;
+	--ds-text-3: #94908a;
+	--ds-text-4: #66625d;
+	--ds-text-inverse: #1c1917;
+	--ds-border: rgba(255, 250, 240, 0.09);
+	--ds-border-strong: rgba(255, 250, 240, 0.15);
+	--ds-hairline: rgba(255, 250, 240, 0.07);
+	--ds-accent: #ff8a2a;
+	--ds-accent-hover: #ff9a45;
+	--ds-accent-text: #ffaa5c;
+	--ds-accent-soft: rgba(255, 138, 42, 0.14);
+	--ds-accent-soft-2: rgba(255, 138, 42, 0.22);
+	--ds-on-accent: #1c1206;
+	--ds-primary: #2b6fd6;
+	--ds-primary-hover: #3a7de6;
+	--ds-primary-soft: rgba(61, 139, 253, 0.16);
+	--ds-on-primary: #ffffff;
+	--ds-link: #6aa8ff;
+	--ds-focus: #6aa8ff;
+	--ds-busy: #5b9dff;
+	--ds-busy-soft: rgba(91, 157, 255, 0.15);
+	--ds-busy-text: #8dbaff;
+	--ds-idle: #8f8a84;
+	--ds-idle-soft: rgba(255, 250, 240, 0.06);
+	--ds-needs: #ff9a3c;
+	--ds-needs-text: #ffb066;
+	--ds-needs-soft: rgba(255, 154, 60, 0.14);
+	--ds-needs-badge: #ff9a3c;
+	--ds-on-needs: #1c1206;
+	--ds-offline: #66625d;
+	--ds-danger: #ff5f52;
+	--ds-danger-text: #ff8a80;
+	--ds-danger-soft: rgba(255, 95, 82, 0.14);
+	--ds-success: #3ccf7a;
+	--ds-success-text: #6ee09c;
+	--ds-success-soft: rgba(60, 207, 122, 0.13);
+	--ds-peer: #a98bff;
+	--ds-peer-text: #c0a8ff;
+	--ds-peer-soft: rgba(169, 139, 255, 0.13);
+	--ds-bubble-user: #2a2927;
+	--ds-bubble-mine: #2f7bf0;
+	--ds-code-bg: #161615;
+	--ds-code-border: rgba(255, 250, 240, 0.08);
+	--ds-code-head: #1e1d1c;
+	--ds-code-inline-bg: rgba(255, 250, 240, 0.08);
+	--ds-code-inline-text: #ffb38a;
+	--ds-term-bg: #0c0c0b;
+	--ds-term-text: #e7e5e4;
+	--ds-term-dim: #8f8a84;
+	--ds-diff-add-bg: rgba(60, 207, 122, 0.1);
+	--ds-diff-add-strong: rgba(60, 207, 122, 0.24);
+	--ds-diff-add-text: #7ee2a8;
+	--ds-diff-del-bg: rgba(255, 95, 82, 0.1);
+	--ds-diff-del-strong: rgba(255, 95, 82, 0.24);
+	--ds-diff-del-text: #ff9d94;
+	--ds-diff-gutter: #66625d;
+	--ds-syn-fg: #e7e5e4;
+	--ds-syn-comment: #8a857f;
+	--ds-syn-keyword: #d79bf5;
+	--ds-syn-string: #9bd88a;
+	--ds-syn-number: #f7b267;
+	--ds-syn-function: #7fb5ff;
+	--ds-syn-type: #67d4e0;
+	--ds-syn-constant: #f7b267;
+	--ds-syn-variable: #ff9d94;
+	--ds-syn-punct: #a8a29e;
+	--ds-shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.3);
+	--ds-shadow-sm:
+		0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 250, 240, 0.04);
+	--ds-shadow-md:
+		0 6px 16px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 250, 240, 0.05);
+	--ds-shadow-lg:
+		0 20px 48px -8px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 250, 240, 0.06);
+	--ds-material: rgba(25, 25, 24, 0.74);
+	--ds-skeleton: rgba(255, 250, 240, 0.07);
+	--ds-skeleton-shine: rgba(255, 250, 240, 0.06);
+	--ds-h-claude-bg: rgba(217, 119, 87, 0.18);
+	--ds-h-claude-fg: #f0a585;
+	--ds-h-codex-bg: rgba(255, 250, 240, 0.1);
+	--ds-h-codex-fg: #f2f1ef;
+	--ds-h-opencode-bg: rgba(148, 163, 184, 0.16);
+	--ds-h-opencode-fg: #cbd5e1;
+	--ds-h-pi-bg: rgba(129, 140, 248, 0.18);
+	--ds-h-pi-fg: #a5b4fc;
+	--ds-h-omp-bg: rgba(45, 212, 191, 0.15);
+	--ds-h-omp-fg: #5eead4;
+	--ds-h-cursor-bg: rgba(255, 255, 255, 0.1);
+	--ds-h-cursor-fg: #e5e5e5;
+	--ds-h-gemini-bg: rgba(96, 165, 250, 0.16);
+	--ds-h-gemini-fg: #93c5fd;
+	--ds-h-other-bg: rgba(255, 250, 240, 0.08);
+	--ds-h-other-fg: #bdb9b4;
+}
+
+:root[data-theme="light"] {
+	color-scheme: light;
+}
+
+/* ---------------------------------------------------------- phone scale
+   iOS text styles at the default Dynamic Type size, in rem so they follow
+   the operator's text size (the phone root is `font: -apple-system-body`). */
+[data-platform="phone"],
+.ds-phone,
+.ds-scroller--phone,
+.ds-approval--phone {
+	--ds-text-caption: 0.706rem; /* 12 */
+	--ds-text-caption-lh: 1rem;
+	--ds-text-footnote: 0.765rem; /* 13 */
+	--ds-text-footnote-lh: 1.06rem;
+	--ds-text-secondary: 0.882rem; /* 15 */
+	--ds-text-secondary-lh: 1.18rem;
+	--ds-text-body: 1rem; /* 17 */
+	--ds-text-body-lh: 1.3rem;
+	--ds-text-prose: 1rem;
+	--ds-text-prose-lh: 1.47;
+	--ds-text-code: 0.794rem; /* 13.5 */
+	--ds-text-code-lh: 1.2rem;
+	--ds-text-headline: 1rem;
+	--ds-text-title3: 1.176rem; /* 20 */
+	--ds-text-title2: 1.294rem; /* 22 */
+	--ds-text-title1: 1.647rem; /* 28 */
+	--ds-text-large: 2rem; /* 34 */
+	--ds-gutter: 16px;
+	--ds-hit: 44px;
+	--ds-radius-lg: 12px;
+	--ds-radius-bubble: 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--ds-dur-fast: 0ms;
+		--ds-dur: 0ms;
+		--ds-dur-slow: 0ms;
+	}
+}

@@ -1,0 +1,15 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"types": ["bun", "node"]
+	},
+	"include": [
+		"mock/**/*.ts",
+		"e2e/**/*.ts",
+		"scripts/**/*.ts",
+		"src/api/**/*.ts",
+		"src/env.d.ts",
+		"test/**/*.ts",
+		"playwright.config.ts"
+	]
+}

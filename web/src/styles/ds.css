@@ -1,0 +1,480 @@
+/* Pulsar primitives: avatars, status, badges, skeletons, kbd, icon buttons,
+   banners. Plain CSS on --ds-* tokens, so the Ionic phone and the shadcn
+   desktop draw them the same. */
+
+/* ------------------------------------------------------------ avatar */
+.ds-avatar {
+	--ds-av: 32px;
+	position: relative;
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: var(--ds-av);
+	height: var(--ds-av);
+	border-radius: calc(var(--ds-av) * 0.28);
+	background: var(--ds-h-other-bg);
+	color: var(--ds-h-other-fg);
+	box-shadow: inset 0 0 0 0.5px var(--ds-hairline);
+	vertical-align: middle;
+}
+.ds-avatar--xs {
+	--ds-av: 18px;
+}
+.ds-avatar--sm {
+	--ds-av: 24px;
+}
+.ds-avatar--md {
+	--ds-av: 32px;
+}
+.ds-avatar--lg {
+	--ds-av: 44px;
+}
+.ds-avatar.is-round {
+	border-radius: 50%;
+}
+.ds-avatar svg {
+	display: block;
+}
+.ds-avatar-initial {
+	font:
+		var(--ds-weight-semibold) calc(var(--ds-av) * 0.5) / 1 var(--ds-font-sans);
+	letter-spacing: -0.02em;
+}
+.ds-avatar[data-harness="claude"] {
+	background: var(--ds-h-claude-bg);
+	color: var(--ds-h-claude-fg);
+}
+.ds-avatar[data-harness="codex"] {
+	background: var(--ds-h-codex-bg);
+	color: var(--ds-h-codex-fg);
+}
+.ds-avatar[data-harness="opencode"] {
+	background: var(--ds-h-opencode-bg);
+	color: var(--ds-h-opencode-fg);
+}
+.ds-avatar[data-harness="pi"] {
+	background: var(--ds-h-pi-bg);
+	color: var(--ds-h-pi-fg);
+}
+.ds-avatar[data-harness="omp"] {
+	background: var(--ds-h-omp-bg);
+	color: var(--ds-h-omp-fg);
+}
+.ds-avatar[data-harness="cursor"] {
+	background: var(--ds-h-cursor-bg);
+	color: var(--ds-h-cursor-fg);
+}
+.ds-avatar[data-harness="gemini"] {
+	background: var(--ds-h-gemini-bg);
+	color: var(--ds-h-gemini-fg);
+}
+.ds-avatar-status {
+	position: absolute;
+	right: -2px;
+	bottom: -2px;
+	width: max(8px, calc(var(--ds-av) * 0.32));
+	height: max(8px, calc(var(--ds-av) * 0.32));
+	border-radius: 50%;
+	border: 2px solid var(--ds-surface);
+	background: var(--ds-idle);
+	box-sizing: content-box;
+}
+.ds-avatar-status.s-busy {
+	background: var(--ds-busy);
+}
+.ds-avatar-status.s-needs-you {
+	background: var(--ds-needs);
+}
+.ds-avatar-status.s-offline {
+	background: var(--ds-surface);
+	box-shadow: inset 0 0 0 1.5px var(--ds-offline);
+}
+.ds-avatar-status.s-idle {
+	background: var(--ds-surface);
+	box-shadow: inset 0 0 0 1.5px var(--ds-idle);
+}
+
+/* ------------------------------------------------------------ status */
+.ds-dot {
+	display: inline-block;
+	flex: none;
+	width: 0.75em;
+	height: 0.75em;
+	min-width: 9px;
+	min-height: 9px;
+	vertical-align: -0.05em;
+	color: var(--ds-idle);
+	overflow: visible;
+}
+.ds-dot.s-busy {
+	color: var(--ds-busy);
+}
+.ds-dot.s-needs-you {
+	color: var(--ds-needs);
+}
+.ds-dot.s-offline {
+	color: var(--ds-offline);
+}
+.ds-dot.s-failed {
+	color: var(--ds-danger);
+}
+.ds-dot.s-done {
+	color: var(--ds-success);
+}
+.ds-dot.is-live circle {
+	transform-origin: 6px 6px;
+	animation: ds-pulse 1.6s var(--ds-ease-out) infinite;
+}
+@keyframes ds-pulse {
+	0%,
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.55;
+		transform: scale(0.82);
+	}
+}
+
+.ds-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 22px;
+	padding: 0 8px;
+	border-radius: var(--ds-radius-full);
+	font: var(--ds-weight-medium) var(--ds-text-caption) / 1 var(--ds-font-sans);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	color: var(--ds-text-2);
+	background: var(--ds-idle-soft);
+}
+.ds-status--plain {
+	height: auto;
+	padding: 0;
+	background: none;
+}
+/* Box-centred, the dot sits on the cap-height centre and reads high next
+   to lower-case words; drop it toward the x-height centre. */
+.ds-status > .ds-dot {
+	position: relative;
+	top: 0.05em;
+}
+/* The words, not the dot, give a plain status its baseline, so it lines
+   up with text beside it. The box hugs the words, so nothing moves. */
+.ds-status--plain > .ds-status-text {
+	align-self: baseline;
+}
+.ds-status.s-busy {
+	color: var(--ds-busy-text);
+}
+.ds-status.s-busy.ds-status--soft {
+	background: var(--ds-busy-soft);
+}
+.ds-status.s-needs-you {
+	color: var(--ds-needs-text);
+}
+.ds-status.s-needs-you.ds-status--soft {
+	background: var(--ds-needs-soft);
+}
+.ds-status.s-failed {
+	color: var(--ds-danger-text);
+}
+.ds-status.s-failed.ds-status--soft {
+	background: var(--ds-danger-soft);
+}
+.ds-status.s-done {
+	color: var(--ds-success-text);
+}
+.ds-status.s-done.ds-status--soft {
+	background: var(--ds-success-soft);
+}
+.ds-status.s-offline {
+	color: var(--ds-text-3);
+}
+
+/* The amber "needs you" count: a small bold capsule that sits beside a
+   13-14 px label (16 px tall on desktop; the phone scales it with its text).
+   One digit is a circle, two or more a pill. Line-height equals the box, so
+   the lining numerals land on the optical centre. */
+.ds-needs-badge {
+	--ds-nb: 16px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	box-sizing: border-box;
+	min-width: var(--ds-nb);
+	height: var(--ds-nb);
+	padding: 0 calc(var(--ds-nb) * 0.28);
+	border-radius: var(--ds-radius-full);
+	font:
+		var(--ds-weight-bold, 700) calc(var(--ds-nb) * 0.66) / var(--ds-nb)
+		var(--ds-font-sans);
+	font-variant-numeric: tabular-nums lining-nums;
+	letter-spacing: 0;
+	white-space: nowrap;
+	vertical-align: middle;
+}
+.ds-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 20px;
+	height: 20px;
+	padding: 0 6px;
+	border-radius: var(--ds-radius-full);
+	font: var(--ds-weight-semibold) 12px / 1 var(--ds-font-sans);
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.01em;
+	white-space: nowrap;
+}
+.ds-needs-badge {
+	background: var(--ds-needs-badge);
+	color: var(--ds-on-needs);
+}
+.ds-count {
+	background: var(--ds-surface-3);
+	color: var(--ds-text-2);
+	font-weight: var(--ds-weight-medium);
+}
+
+/* ------------------------------------------------------------ skeleton */
+.ds-sk {
+	display: inline-block;
+	background: var(--ds-skeleton);
+	border-radius: var(--ds-radius-xs);
+	position: relative;
+	overflow: hidden;
+}
+.ds-sk-group .ds-sk::after,
+.ds-sk[data-shine]::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(
+		90deg,
+		transparent 0%,
+		var(--ds-skeleton-shine) 50%,
+		transparent 100%
+	);
+	transform: translateX(-100%);
+	animation: ds-shine 1.6s ease-in-out infinite;
+}
+@keyframes ds-shine {
+	to {
+		transform: translateX(100%);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.ds-sk::after {
+		animation: none !important;
+		display: none;
+	}
+	.ds-dot.is-live circle {
+		animation: none;
+	}
+}
+/* One line box tall (inherits font + line-height), bar ~0.62em high centered:
+   a skeleton line is exactly as tall as the text line it stands for. */
+.ds-sk-line {
+	display: flex;
+	align-items: center;
+	height: 1lh;
+	min-height: 1em;
+}
+.ds-sk-line > .ds-sk {
+	height: 0.62em;
+	border-radius: 999px;
+}
+.ds-w-1 {
+	width: 10%;
+}
+.ds-w-2 {
+	width: 20%;
+}
+.ds-w-3 {
+	width: 30%;
+}
+.ds-w-4 {
+	width: 40%;
+}
+.ds-w-5 {
+	width: 50%;
+}
+.ds-w-6 {
+	width: 60%;
+}
+.ds-w-7 {
+	width: 70%;
+}
+.ds-w-8 {
+	width: 80%;
+}
+.ds-w-9 {
+	width: 90%;
+}
+.ds-w-10 {
+	width: 100%;
+}
+
+/* ------------------------------------------------------------ kbd */
+/* One keycap-style chip per shortcut (⌘⇧B, not three boxes). Colors derive
+   from currentColor, so the chip reads on any surface in both themes,
+   primary buttons included. */
+.ds-kbd {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	gap: 1px;
+	box-sizing: border-box;
+	min-width: 20px;
+	height: 20px;
+	padding: 0 5px;
+	border-radius: 5px;
+	color: var(--ds-text-3);
+	background: color-mix(in srgb, currentColor 7%, transparent);
+	box-shadow:
+		inset 0 0 0 0.5px color-mix(in srgb, currentColor 26%, transparent),
+		inset 0 -1px 0 color-mix(in srgb, currentColor 14%, transparent);
+	font-family: var(--ds-font-sans);
+	font-size: 12px;
+	font-weight: var(--ds-weight-medium);
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+	vertical-align: 0.08em;
+	user-select: none;
+	-webkit-user-select: none;
+}
+.ds-kbd > .ds-key {
+	display: inline-flex;
+	align-items: center;
+	min-width: 0.7em;
+	justify-content: center;
+}
+.ds-key-sep {
+	margin: 0 1px;
+	opacity: 0.6;
+}
+/* Touch-only devices have no keyboard to hint at. */
+@media (hover: none) and (pointer: coarse) {
+	.ds-kbd {
+		display: none;
+	}
+}
+
+/* ------------------------------------------------------------ icon button */
+.ds-icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--ds-hit);
+	height: var(--ds-hit);
+	min-width: 28px;
+	min-height: 28px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--ds-radius-sm);
+	background: transparent;
+	color: var(--ds-text-3);
+	cursor: pointer;
+	transition:
+		background var(--ds-dur-fast) ease,
+		color var(--ds-dur-fast) ease;
+	-webkit-tap-highlight-color: transparent;
+}
+.ds-icon-btn svg {
+	width: 15px;
+	height: 15px;
+	stroke-width: 1.9;
+}
+.ds-icon-btn:hover {
+	background: var(--ds-surface-hover);
+	color: var(--ds-text);
+}
+.ds-icon-btn:active {
+	background: var(--ds-surface-active);
+}
+.ds-icon-btn:focus-visible {
+	outline: none;
+	box-shadow: var(--ds-focus-ring);
+}
+.ds-copy.is-done {
+	color: var(--ds-success-text);
+}
+
+/* ------------------------------------------------------------ banner */
+.ds-banner {
+	display: block;
+	padding: 10px 14px;
+	border-radius: var(--ds-radius-md);
+	background: var(--ds-surface-2);
+	color: var(--ds-text-2);
+	font:
+		var(--ds-text-secondary) / var(--ds-text-secondary-lh) var(--ds-font-sans);
+	box-shadow: inset 0 0 0 1px var(--ds-border);
+}
+.ds-banner.warn {
+	background: var(--ds-needs-soft);
+	color: var(--ds-text);
+	box-shadow: inset 0 0 0 1px
+		color-mix(in srgb, var(--ds-needs) 30%, transparent);
+}
+.ds-banner.error {
+	background: var(--ds-danger-soft);
+	color: var(--ds-text);
+	box-shadow: inset 0 0 0 1px
+		color-mix(in srgb, var(--ds-danger) 30%, transparent);
+}
+.ds-banner strong {
+	font-weight: var(--ds-weight-semibold);
+}
+.ds-banner .link {
+	color: var(--ds-link);
+	font-weight: var(--ds-weight-medium);
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+}
+
+/* ------------------------------------------------------------ spinner */
+.ds-spin {
+	display: inline-block;
+	width: 13px;
+	height: 13px;
+	border-radius: 50%;
+	border: 1.75px solid color-mix(in srgb, currentColor 22%, transparent);
+	border-top-color: currentColor;
+	animation: ds-rot 0.8s linear infinite;
+}
+@keyframes ds-rot {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.ds-spin {
+		animation-duration: 2.4s;
+	}
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+.ds-avatar--list {
+	--ds-av: 40px;
+}
