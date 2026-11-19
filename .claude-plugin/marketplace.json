@@ -5,14 +5,14 @@
 		"url": "https://github.com/yocontra"
 	},
 	"metadata": {
-		"description": "pulsar: cross-harness agent messaging (MCP server + skill)."
+		"description": "Pulsar: cross-harness, cross-machine agent messaging (MCP server + skill)."
 	},
 	"plugins": [
 		{
 			"name": "pulsar",
 			"source": "./",
-			"description": "Let AI coding agents in any harness find and message each other: one machine-wide list, tags, multicast, a * bus, and push delivery that wakes idle sessions.",
-			"version": "1.4.0",
+			"description": "Let your AI agents talk freely to each other - cross-harness, even cross-machine. Remote control them from any device, anywhere.",
+			"version": "2.0.0",
 			"author": {
 				"name": "Eric Schoffstall"
 			},

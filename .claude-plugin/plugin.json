@@ -1,7 +1,7 @@
 {
 	"name": "pulsar",
-	"version": "1.4.0",
-	"description": "Let AI coding agents in any harness find and message each other: one machine-wide list, tags, multicast, a * bus, and push delivery that wakes idle sessions.",
+	"version": "2.0.0",
+	"description": "Let your AI agents talk freely to each other - cross-harness, even cross-machine. Remote control them from any device, anywhere.",
 	"author": {
 		"name": "Eric Schoffstall",
 		"url": "https://github.com/yocontra"

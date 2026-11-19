@@ -1,8 +1,10 @@
 <div align="center">
 
-# pulsar
+<img src="docs/assets/logo.svg" width="120" height="120" alt="Pulsar logo">
 
-**Your AI agents can talk to each other now. In any harness.**
+# Pulsar
+
+**Let your AI agents talk freely to each other - cross-harness, even cross-machine. Remote control them from any device, anywhere.**
 
 [![CI](https://github.com/yocontra/pulsar/actions/workflows/ci.yml/badge.svg)](https://github.com/yocontra/pulsar/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/pulsar.svg)](https://www.npmjs.com/package/pulsar)
@@ -10,17 +12,53 @@
 
 </div>
 
-pulsar is an MCP server that puts every AI coding agent on your machine on one bus: Claude Code, Codex, OpenCode, pi, omp, Cursor, Gemini CLI. Agents can see who else is running, tag themselves by what they work on, and message one agent, a group, or all of them. A message can wake an agent that is sitting idle.
+Pulsar is an MCP server and a small per-machine daemon. Every coding agent you run (Claude Code, Codex, OpenCode, pi, omp, Cursor, Gemini CLI, or any MCP client) can see who else is running, tag itself, and message one agent, a group, or all of them. In most harnesses, a message wakes an idle agent.
+
+With the [agent mesh](#agent-mesh), that works across every machine on your Tailscale network, and the [Pulsar app](#remote-control) lets you watch and steer every agent from your phone or another computer. There is no Pulsar server and no account.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/desktop-session-dark.webp">
+  <img src="docs/assets/screenshots/desktop-session-light.webp" alt="The Pulsar app on a desktop: the agent tree grouped by machine and project on the left, and a live Claude Code session on the right with tool calls, a message from another agent, and a pending Bash approval">
+</picture>
+
+## Install
 
 ```bash
 npx pulsar setup
 ```
 
-That's the whole install. Restart your agents.
+Setup finds your agents, shows which files it will change, asks once, and backs up every file it touches. It copies Pulsar to `~/.local/share/pulsar/<version>` and puts a `pulsar` command in `~/.local/bin`. At the end it asks whether to turn on the agent mesh (off unless you say yes). Restart your agents afterwards.
 
-> **Coming soon:** agents talking across multiple machines, and remote control of your agents over the bus, using [Tailscale](https://tailscale.com).
+No Node? `curl -fsSL https://raw.githubusercontent.com/yocontra/pulsar/main/install.sh | bash` installs a private Node and runs the same setup. To upgrade, run `npx pulsar@latest setup`.
 
-## What it does
+| Flag | Does |
+| --- | --- |
+| `--yes --all-detected` | No questions (scripts, dotfiles) |
+| `--client claude,codex` | Only these harnesses (`--client none`: only the `pulsar` command, e.g. on a server) |
+| `--dry-run` | Show the plan, change nothing |
+| `--no-approvals` | Don't relay Claude Code prompts to the app |
+| `--mesh` | Turn the agent mesh on without asking; takes the `pulsar mesh on` options (`--cert`, `--key`, `--ca`, `--rp-id`, `--prove`) |
+| `--uninstall` | Undo everything setup did |
+
+<details>
+<summary>Harness plugins and manual config</summary>
+
+These install the MCP server and the skill through each harness's own package manager. `pulsar setup` also sets Claude's `crossSessionInbound` and Codex's tool approval, which plugin installs can't.
+
+| Harness | Command |
+| --- | --- |
+| Claude Code | `/plugin install pulsar --marketplace yocontra/pulsar` |
+| Codex | `codex plugin marketplace add yocontra/pulsar && codex plugin add pulsar@pulsar` |
+| omp | `omp install pulsar` |
+| pi | `pi install npm:pulsar` |
+
+Any other MCP client: `{ "command": "npx", "args": ["-y", "pulsar", "mcp"] }`. Without a push path for that client, messages wait in the agent's inbox and every Pulsar tool result says how many are unread.
+
+</details>
+
+## Quick start
+
+Ask any agent in plain words:
 
 ```text
 > list agents on apparish
@@ -38,161 +76,163 @@ Sent m_mwk3jlo0 to 3 agents:
 - omp@apparish: delivered via extension
 ```
 
-- **One list for the whole machine.** Every live agent, whatever harness it runs in, including Claude Code and OpenCode sessions that never loaded pulsar. Claude sessions keep the names Claude gives them; others are `harness@project`.
-- **Tags and activity.** Agents get `harness`, `model`, `project`, `branch` (the branch they push to, even from a randomly named worktree), `worktree` and `pr` (the PR they work on, found offline from local git refs and their session log) on their own. They add their own, like `role:reviewer` or `issue:1378`, and an activity line such as "reviewing PR #1402".
-- **Send to anyone.** Address a name, a selector such as `project=apparish`, `model=fable` or `pr=1402 role=reviewer`, text anywhere (`~1378`), or `*` for every agent on the machine. "Message your reviewer" is one lookup.
-- **Push, not polling.** Messages wake an idle agent, and `urgent` ones land mid-turn where the harness supports it (see [delivery](#how-delivery-works)).
-- **Request and reply.** `reply` keeps threads, `ask` blocks until the answer comes, and `wait` replaces `sleep` loops (wait for a message, a reply, or another agent going idle).
-- **Safe by default.** Messages are marked as coming from a peer, never your user, and can't approve anything. Each agent can accept, hold or refuse messages. There are rate limits, and no telemetry.
-
-## Install
-
-```bash
-npx pulsar setup
-```
-
-Setup finds your agents, shows exactly which files it will change, and asks once. It backs up every file it touches and copies pulsar to a local folder that each agent runs, so no session start waits on npm.
-
-| Flag | Does |
-| --- | --- |
-| `--yes --all-detected` | No questions (for scripts and dotfiles) |
-| `--client claude,codex` | Only these agents |
-| `--dry-run` | Show the plan, change nothing |
-| `--no-mcp` | Install only the extensions and the skill (when you manage MCP config yourself) |
-| `--skills-dir <path>` | Put the skill in one shared folder instead of each agent's |
-| `--uninstall` | Undo everything setup did |
-
-Setup installs to `~/.local/share/pulsar/<version>` and points every agent at the `current` link, so `npx pulsar@latest setup` upgrades in place.
-
-No Node? `curl -fsSL https://raw.githubusercontent.com/yocontra/pulsar/main/install.sh | bash` installs a private Node and runs the same setup.
-
-Prefer your harness's own package manager? These install the MCP server and the skill (push delivery into pi and omp needs the npm package, which carries their extension):
-
-| Harness | Command |
-| --- | --- |
-| Claude Code | `/plugin install pulsar --marketplace yocontra/pulsar` |
-| Codex | `codex plugin marketplace add yocontra/pulsar && codex plugin add pulsar@pulsar` |
-| omp | `omp install pulsar` (extension + skill), or `/marketplace add yocontra/pulsar` |
-| pi | `pi install npm:pulsar` (extension, MCP tools and skill) |
-
-`pulsar setup` also sets Claude's `crossSessionInbound` and Codex's tool approval, which plugin installs cannot.
-
-<details>
-<summary>What setup changes in each harness</summary>
-
-| Harness | Change |
-| --- | --- |
-| Claude Code | `claude mcp add-json pulsar --scope user`; `crossSessionInbound: "accept"` in `~/.claude/settings.json` so pulsar messages reach sessions that skip permission prompts; skill in `~/.claude/skills/pulsar` |
-| Codex | `codex mcp add pulsar`, with pulsar's tools approved and a longer tool timeout (for `ask`/`wait`); skill in `~/.codex/skills/pulsar` |
-| OpenCode | `mcp.servers.pulsar` in `opencode.jsonc` (comments kept); skill in `~/.config/opencode/skills/pulsar` |
-| pi | `pi install` of the pulsar package: an extension for push delivery that also registers the MCP server, plus the skill |
-| omp | `mcpServers.pulsar` in `~/.omp/agent/mcp.json`, plus `omp install` of the extension |
-| Cursor | `mcpServers.pulsar` in `~/.cursor/mcp.json` |
-| Gemini CLI | `mcpServers.pulsar` in `~/.gemini/settings.json` |
-
-</details>
-
-<details>
-<summary>Manual MCP config</summary>
-
-Any MCP client works. Point it at:
-
-```json
-{ "command": "npx", "args": ["-y", "pulsar", "mcp"] }
-```
-
-Without a push path for that client, messages wait in the agent's inbox, and every pulsar tool result says when unread messages are waiting.
-
-</details>
+Agents get `harness`, `model`, `project`, `branch`, `worktree` and `pr` tags on their own, and add their own (`role:reviewer`, `issue:1378`). Address a name, a selector (`project=apparish`, `pr=1402 role=reviewer`, `model=fable`), text anywhere (`~1378`), or `*` for everyone. Messages say they come from a peer, not your operator, and can't approve anything.
 
 ## Tools
 
 | Tool | Use |
 | --- | --- |
-| `list_agents` | Who is online. `selector`: `*`, a name, `key=value` terms (`project=x`, `branch=y`, `pr=1402`, `model=fable`, `harness=codex`, `status=idle`, any tag), or `~text` |
-| `send` | Message a name, a selector, or `*`. `priority`: `urgent` (mid-turn), `normal` (next turn, wakes idle), `fyi` (no wake) |
-| `reply` | Answer a message by id, in its thread |
-| `ask` | Send and block until the first reply |
-| `wait` | Block for `message`, `reply:<id>` or `idle:<agent>` |
-| `inbox` | Messages that were not pushed into the conversation |
-| `set_identity` | Activity ("reviewing PR #1402"), tags (`role:reviewer`), name, model, folder, inbound policy |
-| `whoami`, `history` | Your identity; search messages and threads, with receipts |
+| `list_agents` | Who is online, by selector. `question` answers "who is editing src/auth/session.ts?" from the registry and session logs, without waking anyone |
+| `send` | Message a name, selector or `*`. `priority`: `urgent` (mid-turn), `normal` (next turn, wakes idle), `fyi` (no wake). `await_reply` blocks for the first reply |
+| `respond` | Answer a message by id: `working`, `reply`, `done` or `declined` |
+| `wait` | Block for a `message`, `reply:<id>` or `idle:<agent>` (also ends when that agent's session ends), instead of a sleep loop |
+| `inbox` | Messages that were not pushed into the conversation; search history or show a thread |
+| `set_identity` | Activity line, tags, name and inbound policy (`accept`, `hold`, `refuse`) |
 
-pulsar also installs a short skill that teaches agents when to use these, and the MCP server sends the same guidance as instructions.
+A message that waits for an answer is delivered at least once: if the recipient's session restarts before it answers, Pulsar delivers it again. Each harness gets messages through its own way in (Claude's inbox socket, `codex queue`, OpenCode's server, the pi/omp extension). Details: [docs/delivery.md](docs/delivery.md), [docs/adapters.md](docs/adapters.md).
+
+## Agent mesh
+
+The agent mesh links every machine on your tailnet that runs Pulsar, and serves the app so you can control your agents from your phone. It is off until you turn it on with `pulsar mesh on` (or say yes when setup or `pulsar qr` asks); `pulsar mesh` shows whether it is on. Agents on one machine find and message agents on all the others with the same tools, and selectors span the whole mesh (`machine=<name>` narrows a send). [Tailscale](https://tailscale.com) is the network and the identity: Pulsar serves HTTPS only on each machine's Tailscale address, with a certificate from `tailscale cert`, and identifies every connection with `tailscale whois`. Machines signed in as the same Tailscale user link on their own. There are no pairing codes. How linking works: [docs/federation.md](docs/federation.md).
+
+Can't use Tailscale's hosted service? Host your own control server with Headscale, for internal networks where traffic must stay in. See [docs/headscale.md](docs/headscale.md).
+
+### 1. Set up Tailscale (once per tailnet)
+
+1. Install Tailscale on every machine that runs agents and on your phone: [tailscale.com/download](https://tailscale.com/download). Sign in to the same account everywhere. The free Personal plan works.
+2. In the admin console's DNS page, [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns), check that **MagicDNS** is on (the default) and turn on **HTTPS Certificates** (off by default). A phone installs the app, keeps it running and allows Face ID only on an HTTPS page.
+3. Keep Tailscale connected on each machine: the Tailscale app on a Mac, `tailscale up` on Linux.
+4. On Linux, if `tailscale cert` is denied for your account, allow it to manage Tailscale without root: `sudo tailscale set --operator=$USER`.
+5. If your tailnet requires device approval, approve each new machine at [login.tailscale.com/admin/machines](https://login.tailscale.com/admin/machines).
+
+### 2. Set up Pulsar on each machine
+
+Run `npx pulsar setup` and say yes when it asks about the agent mesh, or run `pulsar mesh on` after setup. It:
+
+1. Checks that Tailscale is installed, running and signed in, and that MagicDNS and HTTPS Certificates are on. If something is off, it prints the fix and checks again when you press Enter.
+2. Gets this machine's certificate with `tailscale cert` (the daemon renews it daily) and turns the app on at `https://<machine>.<tailnet>.ts.net:7337` (`PULSAR_HTTP_PORT` changes the port). With `--cert <file> --key <file> [--ca <root>]` it uses your own certificate instead (required with Headscale).
+3. Installs an always-on background service: a launchd agent on macOS, a systemd user unit on Linux (run `loginctl enable-linger $USER` to keep it running after you log out).
+4. Installs Claude Code's permission hook, so prompts reach the app.
+5. Lists your other devices and which ones run Pulsar, and warns about laptops that sleep with the lid closed.
+6. Offers to set up a passkey (Prove Human, below) and ends with the app's URL and a QR code.
+
+Repeat on every machine. `pulsar doctor --mesh` checks all of this at any time and prints a one-line fix for each problem. `pulsar mesh off` removes the background service and the approvals hook and turns the app off; agents keep working on the machine.
+
+**Tagged devices** (servers with no Tailscale user) don't join on their own. On each machine already in the mesh, run `pulsar mesh allow <server>`; on the server, run `pulsar mesh owner <you@example.com>`. An agent can run these for you: each change waits until you confirm it with Touch ID on that machine or with your passkey in the app ([docs/presence.md](docs/presence.md)).
+
+### 3. Agents on different machines
+
+Once machines link, nothing changes for the agents. An agent on your laptop can run:
+
+```text
+send to="machine=studio project=apparish" body="I'm rebasing main in 5 min, push before then"
+send to="codex@billing" body="Is the invoice migration safe to run twice?" await_reply=true
+```
+
+`list_agents` shows agents on every machine, `wait idle:<agent>` works across machines, and a message for a machine that is asleep waits and goes out when it comes back.
+
+## Remote control
+
+Every machine in the mesh serves the Pulsar app. Any machine's address shows the whole mesh, so you can drive one laptop from another, or everything from your phone.
+
+- A live list of machines, projects and agents, with a "needs you" inbox.
+- Each agent's session as it happens: text, thinking, tool calls with diffs, code, math, diagrams and images.
+- Send to one agent, or broadcast to a selector with a live match count and a dry run. Ask "who is editing this file?" and then ask them directly. Stop an agent's turn.
+- Answer prompts remotely, signed with Face ID or Touch ID. The prompt stays on the machine too, and the first answer wins.
+- Web Push notifications that say "Approval pending" and nothing else.
+
+<p align="center"><img src="docs/assets/screenshots/phone-session.webp" alt="Phone: an agent's live session with tool-call cards, a message from another agent, and a prompt waiting for an answer" width="300"></p>
+
+### Open it
+
+1. Turn Tailscale on on your phone.
+2. Scan the QR code from setup, or run `pulsar qr` on any machine. On a computer, `pulsar ui` opens the same address.
+3. On a phone, add it to the home screen (Safari: Share, then Add to Home Screen). Only the installed app gets notifications.
+
+The app tour and keyboard shortcuts are in [docs/app.md](docs/app.md).
+
+### Prove Human
+
+Tap Prove Human, or do anything that needs it (answer a prompt, send, Stop, turn on notifications). Your device's passkey check runs once (Face ID, Touch ID, Windows Hello or the device PIN) and the action carries on. It works in any browser on a device signed in to your tailnet as you, with no codes. Each machine keeps its own passkeys, so prove once in each machine's app.
+
+After Prove Human, your messages reach agents as `[human operator - <your Tailscale name>]`, and agents follow them as your own prompt. No agent or peer can produce that tag. Without it, agents see "from the Pulsar app (not verified as your operator)". Messages to agents on another machine always arrive unverified there, and each answer or Stop on another machine asks for its own Face ID. Proof lasts 12 hours in a browser on a machine that runs Pulsar and 7 days on a phone or tablet.
+
+### Prompts you can answer from the app
+
+| Harness | Relayed |
+| --- | --- |
+| Claude Code | Permission prompts, AskUserQuestion, plan approval (ExitPlanMode) |
+| OpenCode | Permission prompts, the `question` tool |
+| omp | `ask` forms, tool approvals, plan review, extension dialogs |
+| pi | Extension dialogs (select, confirm, input) |
+| Codex | Shown read-only; answer in the terminal |
+
+Details: [docs/interactive-tools.md](docs/interactive-tools.md).
+
+### Stop
+
+Stop interrupts an agent's current turn; the session keeps running. Use the app (Cmd-.) or `pulsar interrupt <agent>`. The app hides Stop when it can't reach the agent.
+
+| Harness | How |
+| --- | --- |
+| Claude Code | Esc into its tmux pane (only sessions running inside tmux) |
+| Codex | `turn/interrupt` through Codex's app-server daemon |
+| OpenCode | `session.interrupt` on the OpenCode service (not a `--standalone` TUI) |
+| pi, omp | The Pulsar extension aborts the run |
+| Cursor, Gemini CLI | Not supported |
 
 ## CLI
 
 ```bash
-pulsar ls [selector]          # who's online
-pulsar send '*' "main is frozen for the release"
-pulsar send project=apparish --expect-reply "who owns the auth migration?"
-pulsar reply m_123 "on it"    # answer a message in its thread
-pulsar inbox                  # replies sent to you ("operator")
-pulsar tail                   # live feed of joins, leaves and messages
-pulsar doctor                 # check the daemon and every harness
+pulsar ls [selector]                 # who's online
+pulsar send '*' "main is frozen"     # send as "operator"; --await-reply waits for an answer
+pulsar reply m_123 "on it"           # answer in a thread
+pulsar inbox                         # replies sent to you
+pulsar tail                          # live feed of joins, leaves and messages
+pulsar ask "who is editing src/auth/session.ts"   # wakes nobody; --direct then asks them
+pulsar interrupt codex@apparish      # stop an agent's current turn
+pulsar ui                            # open the app in your browser
+pulsar qr                            # QR code of the app, for your phone (offers to turn the mesh on)
+pulsar mesh                          # mesh on or off, app URL, linked machines
+pulsar mesh on | off                 # turn the agent mesh on or off
+pulsar mesh list                     # tagged servers allowed in, pool owner
+pulsar passkeys                      # passkeys on this machine
+pulsar passkeys remove <id>          # asks you first: Touch ID or the app
+pulsar doctor [--mesh]               # check the daemon, harnesses and the mesh
 ```
 
-## How delivery works
+`pulsar --help` lists everything.
 
-One small daemon per machine (started on demand, stops when idle) keeps the registry and a SQLite message log at `~/.local/state/pulsar`. Each agent's MCP server is a thin client of the daemon over a user-only Unix socket. The daemon pushes each message through the harness's own way in:
+## Security
 
-| Harness | Push path | Wakes idle |
-| --- | --- | --- |
-| Claude Code | Claude's per-session inbox socket (the one `SendMessage` uses) | ✓ |
-| Codex | `codex queue --resume` (app-server daemon) | ✓ |
-| OpenCode | the local server's `POST /api/session/{id}/prompt` | ✓ |
-| pi, omp | the pulsar extension's `sendMessage({ triggerTurn })` | ✓ |
-| Anything else | inbox + an "N unread" note on every pulsar tool result | — |
+- On one machine, the trust boundary is your user account: the daemon's socket is in a `0700` folder, and the daemon stamps each sender from its connection.
+- The app listens only on Tailscale addresses and accepts only your Tailscale identity. Other users on a shared tailnet are refused.
+- Answering a prompt needs a passkey signature over that exact prompt and answer, so an agent can't approve its own prompts or speak as you.
+- Limits: 64 KB per message, 60 sends a minute, 6 broadcasts a minute per agent, 50 unread per inbox. No telemetry.
 
-The daemon also scans for live Claude Code and OpenCode sessions that never loaded pulsar, so they show up and can receive messages too. Details and edge cases are in [docs/adapters.md](docs/adapters.md).
-
-## Compared to Claude Code's built-in messaging
-
-| | Claude Code `SendMessage` | pulsar |
-| --- | --- | --- |
-| Harnesses | Claude only | Claude, Codex, OpenCode, pi, omp, Cursor, Gemini, any MCP client |
-| Find by project or role | — | tags + selectors |
-| Send to a group | one call per recipient | `project=x`, any selector |
-| Broadcast | — | `*` |
-| Wait for a reply | — | `ask`, `wait reply:<id>` |
-| Idle notice | ✓ | ✓ (`wait idle:<agent>`; Claude, OpenCode, pi, omp) |
-| Receipts and history | — | per recipient; searchable |
-| Machines | local + Remote Control | one machine (v1) |
-
-## Safety
-
-- The socket is in a `0700` folder and is reachable only by your user. That is the trust boundary: processes running as you are trusted, as they are with your files. The daemon stamps each sender from its connection, so a message can't claim to come from someone else. `pulsar send` from inside an agent speaks as that agent, and no agent can use the name `operator`.
-- Delivered text says it comes from a peer agent, not your user, and that it can't grant permissions. Claude's own guardrails still apply on top.
-- pulsar never claims a permission mode on Claude's behalf. Setup asks you to allow pulsar's messages with Claude's documented `crossSessionInbound` setting instead.
-- Limits: 64 KB per message, 60 sends a minute, 6 broadcasts a minute per agent, and 50 unread per inbox.
-- No telemetry. The only network call is `pulsar doctor`'s npm version check. PR detection is offline: it reads local git refs and the agents' own session logs.
-
-See [SECURITY.md](SECURITY.md) to report a vulnerability.
+Read [SECURITY.md](SECURITY.md) for the full model and to report a vulnerability.
 
 ## Environment
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `PULSAR_HOME` | `$XDG_STATE_HOME/pulsar` | State folder: socket, SQLite log, daemon log |
-| `XDG_STATE_HOME` | `~/.local/state` | Base for the state folder when `PULSAR_HOME` is unset |
-| `PULSAR_INSTALL_ROOT` | `$XDG_DATA_HOME/pulsar` | Where `pulsar setup` installs versions |
-| `XDG_DATA_HOME` | `~/.local/share` | Base for the install root when `PULSAR_INSTALL_ROOT` is unset |
+| `PULSAR_HOME` | `~/.local/state/pulsar` | State folder: socket, message log, certificate |
+| `PULSAR_HTTP_PORT` | `7337` | Port of the app and the mesh |
 | `PULSAR_NAME` | detected | Name this agent registers under |
-| `PULSAR_TAGS` | none | Extra tags for this agent, comma or space separated |
-| `PULSAR_HARNESS` | detected | Force the harness (`claude`, `codex`, `opencode`, `pi`, `omp`, ...) |
-| `PULSAR_SESSION_ID` | detected | Force the harness session id |
-| `PULSAR_DEBUG` | unset | When set, the MCP server logs to `mcp-debug.log` in the state folder |
+| `PULSAR_TAGS` | none | Extra tags for this agent |
+| `PULSAR_NO_MESH` | unset | `pulsar mesh on` refuses to run (tests, sandboxes) |
+| `PULSAR_DEBUG` | unset | Log the MCP server to `mcp-debug.log` |
 
 ## Development
 
 ```bash
 bun install
-bun run check     # typecheck + lint + tests
-bun run build     # bundles dist/cli.js and dist/extension.js
-node src/cli.ts ls   # runs from source, no build step
+bun run check     # typecheck, lint, tests
+bun run build     # dist/cli.js, dist/extension.js and the app
+bun run mock      # the app against a simulated pool
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). README screenshots come from `web/playwright.readme-shots.config.ts`.
 
 ## License
 

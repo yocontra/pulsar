@@ -3,3 +3,7 @@ dist/
 *.tsbuildinfo
 .DS_Store
 coverage/
+web/.astro/
+web/test-results/
+web/e2e-logs/
+web/playwright-report/

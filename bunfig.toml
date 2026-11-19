@@ -1,0 +1,3 @@
+[test]
+# No test may show a real Touch ID / Windows Hello / polkit prompt (test/preload.ts).
+preload = ["./test/preload.ts"]
