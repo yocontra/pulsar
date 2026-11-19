@@ -67,6 +67,12 @@ export type TranscriptResolver = (
  */
 export type TranscriptListener = (events: TranscriptEvent[]) => unknown;
 
+/** Sees every live batch of every watcher (the search index); must not throw. */
+export type TranscriptTap = (
+	agentId: string,
+	events: TranscriptEvent[],
+) => void;
+
 export interface TailerOptions {
 	resolve: TranscriptResolver;
 	/** Size poll interval for file sources (and the default for poll sources). */
@@ -469,11 +475,18 @@ class Watcher {
 	private readonly agentId: string;
 	private readonly opts: Options;
 	private readonly images: ImageIndex;
+	private readonly onEmit: TranscriptTap;
 
-	constructor(agentId: string, opts: Options, images: ImageIndex) {
+	constructor(
+		agentId: string,
+		opts: Options,
+		images: ImageIndex,
+		onEmit: TranscriptTap,
+	) {
 		this.agentId = agentId;
 		this.opts = opts;
 		this.images = images;
+		this.onEmit = onEmit;
 		// The first tick attaches; the poll starts once the source (and its
 		// interval) is known.
 		this.ready = this.tick().then(() => {
@@ -578,6 +591,7 @@ class Watcher {
 	private emit(events: TranscriptEvent[]) {
 		if (events.length === 0) return;
 		for (const sub of this.subs) sub.push(events);
+		this.onEmit(this.agentId, events);
 	}
 
 	/** Reads what is new; resolves when this tick (and any asked for meanwhile) is done. */
@@ -729,6 +743,8 @@ export class TranscriptTailer {
 	private readonly opts: Options;
 	private readonly watchers = new Map<string, Watcher>();
 	private readonly images: ImageIndex;
+	/** Set by the service: every live batch also goes here. */
+	tap: TranscriptTap | null = null;
 
 	constructor(opts: TailerOptions) {
 		this.opts = { ...DEFAULTS, ...opts };
@@ -873,7 +889,13 @@ export class TranscriptTailer {
 	subscribe(agentId: string, fn: TranscriptListener): () => void {
 		let watcher = this.watchers.get(agentId);
 		if (!watcher) {
-			watcher = new Watcher(agentId, this.opts, this.images);
+			watcher = new Watcher(agentId, this.opts, this.images, (id, events) => {
+				try {
+					this.tap?.(id, events);
+				} catch (e) {
+					debugLog(`transcript tap ${id}: ${(e as Error).message}`);
+				}
+			});
 			this.watchers.set(agentId, watcher);
 		}
 		const sub = new Subscriber(fn, this.opts.queueLimit);

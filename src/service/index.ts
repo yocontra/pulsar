@@ -68,6 +68,7 @@ import { type LaunchDeps, Launches } from "./launch.ts";
 import { INTERVALS, LIMITS } from "./limits.ts";
 import { Lookup } from "./lookup.ts";
 import { Mailbox } from "./mailbox.ts";
+import { BACKFILL_MS, MessageSearch } from "./message-search.ts";
 import { SqlitePasskeyStore } from "./passkey-store.ts";
 import { Passkeys } from "./passkeys.ts";
 import { isLocalSubagentId, type PoolView } from "./pool.ts";
@@ -108,6 +109,11 @@ export interface ServiceOptions {
 	store: Store;
 	/** Run the harness scanners (off in most tests). */
 	scan?: boolean;
+	/**
+	 * Message search: off (no index; the stored copy is deleted on start),
+	 * a forced engine (tests), the backfill interval.
+	 */
+	search?: { off?: boolean; engine?: "fts5" | "memory"; backfillMs?: number };
 	/** Owned by launchd/systemd: the `shutdown` RPC is refused. */
 	serviceMode?: boolean;
 	/** A fixed machine name; otherwise detected (Tailscale, else the host name). */
@@ -207,6 +213,8 @@ export class PulsarService {
 	/** Token usage read from harness session files, and its API estimate. */
 	readonly usage: Usage;
 	private readonly usageOpts: ServiceOptions["usage"];
+	/** Full-text search over transcripts (`GET /search/messages`). */
+	readonly messages: MessageSearch;
 	/** Pool views and user sends for the app (HTTP transport). */
 	readonly app: AppApi;
 	/** Permission prompts from harness hooks, decided with a passkey; first answer wins. */
@@ -231,6 +239,7 @@ export class PulsarService {
 	onPoolChange: () => void = () => {};
 	readonly serviceMode: boolean;
 	private readonly scan: boolean;
+	private readonly searchBackfillMs: number;
 	/** Relays prompts kept on harness servers (OpenCode); null when off. */
 	private readonly serverPrompts: ServerInteractions | null;
 	private readonly onShutdown: () => void;
@@ -249,6 +258,7 @@ export class PulsarService {
 	constructor(opts: ServiceOptions) {
 		this.store = opts.store;
 		this.scan = opts.scan ?? true;
+		this.searchBackfillMs = opts.search?.backfillMs ?? BACKFILL_MS;
 		this.serviceMode = opts.serviceMode ?? false;
 		this.onShutdown =
 			opts.onShutdown ?? (() => setTimeout(() => process.exit(0), 50).unref());
@@ -475,6 +485,15 @@ export class PulsarService {
 		});
 		this.usageOpts = opts.usage;
 		this.usage = new Usage(this.store, opts.usage);
+		this.messages = new MessageSearch({
+			store: this.store,
+			transcripts: this.transcripts,
+			registry: this.registry,
+			views: this.app.views,
+			...(opts.search?.engine ? { engine: opts.search.engine } : {}),
+			off: opts.search?.off ?? false,
+		});
+		if (!this.messages.off) this.transcripts.tailer.tap = this.messages.tap;
 	}
 
 	/** The pool's token usage, priced on this node (`GET /usage`). */
@@ -671,6 +690,13 @@ export class PulsarService {
 		jobs.every("prune", INTERVALS.pruneMs, () =>
 			this.store.prune(Date.now(), LIMITS.messageRetentionMs),
 		);
+		// Message search: index what live tails missed, from where it stopped.
+		if (this.messages.off) this.messages.index.clear();
+		else
+			jobs.every("search:backfill", this.searchBackfillMs, () =>
+				this.messages.backfill(),
+			);
+		jobs.every("search:prune", INTERVALS.pruneMs, () => this.messages.prune());
 		if (!this.fixedMachine) {
 			// The host name serves until Tailscale answers; startup never waits for it.
 			this.refreshMachine();

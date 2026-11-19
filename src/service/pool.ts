@@ -11,6 +11,7 @@ import type {
 	FileSearch,
 	InteractionAnswer,
 	Link,
+	MessageHit,
 	NeedsYou,
 	SubagentCounts,
 	SubagentList,
@@ -93,6 +94,18 @@ export interface PoolView extends ActingRelay {
 		as?: Principal,
 	): Promise<{
 		answers: { machineId: string; response: AskResponse }[];
+		missing: string[];
+	}>;
+	/**
+	 * Message search on every reachable peer (`act: search.messages`), as
+	 * `as`; hits name each peer's own agent ids. Absent before message search.
+	 */
+	searchMessages?(
+		q: string,
+		limit: number,
+		as?: Principal,
+	): Promise<{
+		answers: { machineId: string; hits: MessageHit[] }[];
 		missing: string[];
 	}>;
 	/** Transcripts of remote agents, read through their home node. */

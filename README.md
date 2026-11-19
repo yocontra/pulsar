@@ -225,6 +225,7 @@ Read [SECURITY.md](SECURITY.md) for the full model and to report a vulnerability
 | `PULSAR_NAME` | detected | Name this agent registers under |
 | `PULSAR_TAGS` | none | Extra tags for this agent |
 | `PULSAR_NO_MESH` | unset | `pulsar mesh on` refuses to run (tests, sandboxes) |
+| `PULSAR_NO_SEARCH` | unset | No message search: the daemon keeps no copy of transcript text and deletes the copy it has |
 | `PULSAR_DEBUG` | unset | Log the MCP server to `mcp-debug.log` |
 
 ## Development

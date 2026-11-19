@@ -79,6 +79,10 @@ export class Daemon {
 			// PULSAR_NO_SCAN=1: no harness scanners (tests and test kits, so a
 			// throwaway daemon never finds and messages your real sessions).
 			scan: opts.scan ?? process.env.PULSAR_NO_SCAN !== "1",
+			// PULSAR_NO_SEARCH=1: keep no copy of transcript text (and delete it).
+			search: {
+				off: /^(1|true|yes)$/i.test(process.env.PULSAR_NO_SEARCH ?? ""),
+			},
 			serviceMode: opts.serviceMode ?? false,
 			// `pulsar stop`: close the socket and drop the lock before exiting.
 			onShutdown: () =>

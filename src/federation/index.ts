@@ -3,6 +3,7 @@ import type {
 	AskRequest,
 	AskResponse,
 	DecideResponse,
+	MessageHit,
 	NeedsYou,
 	SubagentCounts,
 	SubagentList,
@@ -498,6 +499,41 @@ export class Federation implements PoolView {
 						throw new Error("no answer");
 					answers.push({ machineId: peer.machineId, response });
 				} catch {
+					missing.push(peer.name);
+				}
+			}),
+		);
+		return { answers, missing };
+	}
+
+	/** Message search on every reachable peer, each over its own agents. */
+	async searchMessages(q: string, limit: number, as?: Principal) {
+		const peers = [...this.state.peers.values()].filter(
+			(p) => p.link === "tailnet",
+		);
+		const answers: { machineId: string; hits: MessageHit[] }[] = [];
+		const missing: string[] = [];
+		await Promise.all(
+			peers.map(async (peer) => {
+				try {
+					const r = await this.act(
+						`${peer.machineId}/`,
+						{ op: "search.messages", q, limit },
+						as,
+						this.iv.askTimeoutMs,
+					);
+					if (!Array.isArray(r.hits)) throw new Error("no answer");
+					answers.push({
+						machineId: peer.machineId,
+						hits: r.hits as MessageHit[],
+					});
+				} catch (e) {
+					// An older node has no message search: it is not missing.
+					if (
+						e instanceof RpcError &&
+						(e.code === "unsupported" || e.code === "bad_request")
+					)
+						return;
 					missing.push(peer.name);
 				}
 			}),
@@ -2460,6 +2496,15 @@ export class Federation implements PoolView {
 					{ localOnly: true },
 				);
 				return { ok: true, response };
+			}
+			case "search.messages": {
+				// Transcript text: the transcript.read rule, like a page read.
+				authorize(user, "transcript.read");
+				const found = this.service.messages.local(
+					String(action.q ?? "").slice(0, 200),
+					{ limit: Math.max(1, Math.min(Number(action.limit) || 20, 20)) },
+				);
+				return { ok: true, hits: found.hits };
 			}
 			case "approval.options": {
 				// Only this node's own prompts: never relay on to a third node.

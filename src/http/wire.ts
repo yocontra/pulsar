@@ -678,6 +678,43 @@ export interface SearchResponse {
 	tags: { tag: string; count: number; term: string }[];
 }
 
+/** Who wrote a message hit: the operator, the agent, another agent, or a tool call's title. */
+export type MessageHitRole = "user" | "agent" | "peer" | "tool";
+
+/** One transcript event that matched `GET /search/messages`. */
+export interface MessageHit {
+	/** The agent (a pool address for another machine's agent). */
+	agentId: string;
+	/** The event's id in the agent's transcript. */
+	eventId: string;
+	/** When it was written (ms). */
+	ts: number;
+	role: MessageHitRole;
+	/** Who sent a peer message. */
+	from?: string;
+	/** Plain text around the match; mark `marks` ([start, end) into it) yourself. */
+	snippet: string;
+	marks: [number, number][];
+	/** A transcript page cursor whose page holds the event; null: one of the newest pages. */
+	cursor: string | null;
+	/** Higher first; comparable across machines. */
+	score: number;
+}
+
+/**
+ * `GET /search/messages?q=`: transcript messages with every word of `q` (the
+ * last word may be a prefix). Needs a word of at least 3 letters, else no
+ * hits. `agents` has a row for every agent a hit names.
+ */
+export interface MessageSearchResponse {
+	q: string;
+	hits: MessageHit[];
+	agents: AgentRow[];
+	/** Machines that did not answer in time. */
+	partial?: true;
+	missing?: string[];
+}
+
 /** `POST /send`: `to` (a selector) or `ids` (agent ids), not both. */
 export interface SendRequest {
 	to?: string;

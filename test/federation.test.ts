@@ -1161,6 +1161,46 @@ describe("pool-wide attention, idle waits and stop", () => {
 		expect(viaSocket.matches.some((m) => m.agent.id === address)).toBe(true);
 	});
 
+	test("message search spans the pool: each node searches its own agents, hits carry pool addresses", async () => {
+		const logged = pi(c, "fed-search-1", "searcher");
+		const { appendFileSync } = await import("node:fs");
+		appendFileSync(
+			c.files.get("fed-search-1")!,
+			`${JSON.stringify({
+				type: "message",
+				id: "msg-axolotl",
+				timestamp: new Date().toISOString(),
+				message: { role: "user", content: "migrate the axolotl service" },
+			})}\n`,
+		);
+		await c.service.messages.backfillAgent(logged.id);
+		const address = `${c.service.machineId}/${logged.id}`;
+		await until(() => b.service.registry.find(address) !== undefined, 8000);
+		const r = await api<{
+			hits: {
+				agentId: string;
+				eventId: string;
+				role: string;
+				snippet: string;
+			}[];
+			agents: { id: string; machine: string }[];
+			partial?: boolean;
+		}>("b", `/search/messages?q=${encodeURIComponent("axolotl serv")}`);
+		expect(r.status).toBe(200);
+		expect(r.body.hits).toEqual([
+			expect.objectContaining({
+				agentId: address,
+				eventId: "msg-axolotl",
+				role: "user",
+				snippet: "migrate the axolotl service",
+			}),
+		]);
+		expect(r.body.agents).toEqual([
+			expect.objectContaining({ id: address, machine: "c" }),
+		]);
+		expect(r.body.partial).toBeUndefined();
+	});
+
 	test("Ask answers without a slow machine and says it is partial", async () => {
 		const ask = c.service.ask;
 		const original = ask.local.bind(ask);

@@ -106,6 +106,27 @@ export class Transcripts {
 		}
 	}
 
+	/**
+	 * Where a local agent's transcript is: a log file and its size, or a
+	 * harness API. Null when it has none (the search backfill's view).
+	 */
+	async source(
+		agentId: string,
+	): Promise<
+		{ kind: "file"; path: string; size: number } | { kind: "poll" } | null
+	> {
+		const agent = this.lookup(agentId);
+		const r = agent ? await this.resolve(agent) : null;
+		if (!r) return null;
+		if (r.source.kind === "poll") return { kind: "poll" };
+		try {
+			const st = await stat(r.source.path);
+			return { kind: "file", path: r.source.path, size: st.size };
+		} catch {
+			return null;
+		}
+	}
+
 	/** One page of history (newest first; pass `cursor` for the page before). */
 	async page(
 		agentId: string,
