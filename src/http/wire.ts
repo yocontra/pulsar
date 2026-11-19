@@ -253,8 +253,7 @@ export type Feature =
 	/** Start agents from the app (`POST /agents/launch`, src/service/launch.ts). */
 	| "launch"
 	/** Commit, push and PR from the app (`/agents/:id/git/*`). */
-	| "git";
-	| "launch";
+	| "git"
 	/** Message search (`GET /search/messages`); absent with PULSAR_NO_SEARCH. */
 	| "search";
 
