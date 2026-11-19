@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { homedir as osHome, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { exec } from "../exec.ts";
@@ -229,6 +229,15 @@ interface Running {
 }
 
 const FINAL = new Set(["done", "failed"]);
+/** Receipt states in which a message reached the session. */
+const HANDED: ReadonlySet<ReceiptState> = new Set([
+	"sent",
+	"delivered",
+	"read",
+	"acked",
+	"replied",
+	"done",
+]);
 
 export class Launches {
 	private d: LaunchDeps;
@@ -236,6 +245,7 @@ export class Launches {
 	private runs = new Map<string, Running>();
 	/** `<login> <nonce>` → launch id, so a repeated press starts nothing new. */
 	private nonces = new Map<string, string>();
+	private starting = new Map<string, Promise<LaunchState>>();
 	private harnessCache: { at: number; ids: Set<string> } | null = null;
 	private seq = 0;
 
@@ -291,11 +301,27 @@ export class Launches {
 	}
 
 	/** The acting handler: checks the request, starts the launch, returns at once. */
-	async start(user: VerifiedUser, raw: unknown): Promise<LaunchState> {
+	start(user: VerifiedUser, raw: unknown): Promise<LaunchState> {
 		const p = parseLaunchParams(raw);
 		const key = `${user.login} ${p.nonce}`;
 		const held = this.nonces.get(key);
-		if (held && this.runs.has(held)) return this.runs.get(held)!.state;
+		if (held && this.runs.has(held))
+			return Promise.resolve({ ...this.runs.get(held)!.state });
+		// Two presses at once: the second waits for the first.
+		const busy = this.starting.get(key);
+		if (busy) return busy;
+		const started = this.startOnce(user, p, key).finally(() =>
+			this.starting.delete(key),
+		);
+		this.starting.set(key, started);
+		return started;
+	}
+
+	private async startOnce(
+		user: VerifiedUser,
+		p: LaunchParams,
+		key: string,
+	): Promise<LaunchState> {
 		this.prune();
 
 		const cwd = await this.folder(p.cwd);
@@ -392,7 +418,8 @@ export class Launches {
 		}
 		if (!s.isDirectory())
 			throw new RpcError("bad_request", `${cwd} is not a folder`);
-		return cwd;
+		// Real path: git's worktree root is one, and agents report theirs.
+		return realpath(cwd).catch(() => cwd);
 	}
 
 	private async drive(
@@ -497,19 +524,24 @@ export class Launches {
 				quiet = 0;
 			}
 			this.set(run, { step: "waiting", detail: null, agentId });
+			// Ready: a message would reach the session now (its Pulsar
+			// connection or a push path, not only an inbox), and it is idle.
 			const ready =
 				!!agent &&
 				(!run.params.prompt ||
-					agent.status === "idle" ||
-					(agent.status === "unknown" && quiet >= this.t.quietPolls));
+					(agent.reach === "push" &&
+						(agent.status === "idle" ||
+							(agent.status === "unknown" && quiet >= this.t.quietPolls))));
 			if (ready) break;
 			if (Date.now() - readyFrom > this.t.readyMs)
 				return this.fail(
 					run,
 					user,
-					agent
-						? `${label} didn't become ready${s.prompt ? "; your message was not sent" : ""}`
-						: `${label} started but didn't connect to Pulsar. Run \`pulsar doctor\` on ${s.machine}.`,
+					agent && agent.reach !== "push"
+						? `${label} started, but Pulsar can't reach its session to send your message. Run \`pulsar doctor\` on ${s.machine}.`
+						: agent
+							? `${label} didn't become ready${s.prompt ? "; your message was not sent" : ""}`
+							: `${label} started but didn't connect to Pulsar. Run \`pulsar doctor\` on ${s.machine}.`,
 				);
 		}
 
@@ -526,8 +558,13 @@ export class Launches {
 					`Couldn't send your message: ${(e as Error).message}`,
 				);
 			}
-			if (state === "failed" || state === "refused")
-				return this.fail(run, user, `Couldn't send your message (${state})`);
+			// Only a message handed to the session counts as sent.
+			if (!state || !HANDED.has(state))
+				return this.fail(
+					run,
+					user,
+					`Couldn't send your message (${state ?? "no receipt"})`,
+				);
 			this.set(run, { sent: true });
 		}
 		this.set(run, { step: "done", detail: null });
@@ -662,6 +699,7 @@ export class Launches {
 		const pool = this.d.registry.pool!;
 		void (async () => {
 			let misses = 0;
+			let doneSeen: number | null = null;
 			const until = Date.now() + this.t.readyMs + this.t.terminalMs + 60_000;
 			while (!FINAL.has(run.state.step) && Date.now() < until) {
 				// Every read leaves an audit row there: slower while a dialog waits.
@@ -676,6 +714,16 @@ export class Launches {
 					if (!next) break;
 					misses = 0;
 					const l = local(next);
+					// Done there: shown done here once this node's pool lists the
+					// agent (the app opens its session next), or after a while.
+					if (
+						l.step === "done" &&
+						l.agentId &&
+						!this.d.registry.find(l.agentId)
+					) {
+						doneSeen ??= Date.now();
+						if (Date.now() - doneSeen < 15_000) continue;
+					}
 					const changed =
 						l.updatedAt !== run.state.updatedAt || l.step !== run.state.step;
 					run.state = l;
@@ -797,7 +845,8 @@ export class Launches {
 		const script = `for c in ${bins.join(" ")}; do command -v "$c" 2>/dev/null; done; exit 0`;
 		const r = await exec(this.shell(), ["-lic", script], {
 			lane: "user",
-			timeoutMs: 10_000,
+			// Under a relayed read's time limit: a slow rc file shows as "not found".
+			timeoutMs: 5000,
 			cwd: homedir(),
 		});
 		const ids = new Set<string>();

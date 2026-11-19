@@ -131,7 +131,9 @@ export interface ServiceOptions {
 	/** Pool membership: where to write the display copy (`pool.json`). */
 	pool?: { mirror?: string };
 	/** Launches: a private tmux server, shell and harness command (tests). */
-	launch?: Pick<LaunchDeps, "tmux" | "shell" | "command" | "timing" | "send">;
+	launch?: Partial<
+		Pick<LaunchDeps, "tmux" | "shell" | "command" | "timing" | "send">
+	>;
 	/**
 	 * Presence checks: the OS prompt (this platform's by default; tests pass
 	 * a fake or null) and how long the person has to answer.
