@@ -31,12 +31,12 @@ registerSlot("session.header", { id: "search.find", component: Find });
 const LazyOpen = lazy(() => import("./OpenSearch.tsx"));
 registerSlot("sidebar.header", {
 	id: "search.open",
-	component: ({ mobile }) =>
-		mobile ? (
-			<Suspense fallback={null}>
-				<LazyOpen />
-			</Suspense>
-		) : null,
+	only: "phone",
+	component: () => (
+		<Suspense fallback={null}>
+			<LazyOpen />
+		</Suspense>
+	),
 });
 
 const loadPage = () => import("./SearchPage.tsx");

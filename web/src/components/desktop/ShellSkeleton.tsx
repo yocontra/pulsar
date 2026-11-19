@@ -36,9 +36,11 @@ export function ShellSkeleton() {
 						</span>
 					</div>
 					{/* Features' header buttons (lib/registry.tsx), then the QR button. */}
-					{slotEntries("sidebar.header").map((e) => (
-						<span key={e.id} className="d-btn ghost sm icon d-skel-slot" />
-					))}
+					{slotEntries("sidebar.header")
+						.filter((e) => e.only !== "phone")
+						.map((e) => (
+							<span key={e.id} className="d-btn ghost sm icon d-skel-slot" />
+						))}
 					<span className="d-btn ghost sm icon d-skel-slot" />
 				</header>
 				<nav className="d-nav">
