@@ -1,0 +1,35 @@
+{
+	"Version": "1.90.0",
+	"TUN": true,
+	"BackendState": "Running",
+	"AuthURL": "",
+	"TailscaleIPs": ["100.101.102.103", "fd7a:115c:a1e0::1234:5678"],
+	"Self": {
+		"ID": "nAbCdEf1CNTRL",
+		"PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+		"HostName": "Studio",
+		"DNSName": "studio.tail1234.ts.net.",
+		"OS": "macOS",
+		"UserID": 1234567890,
+		"TailscaleIPs": ["100.101.102.103", "fd7a:115c:a1e0::1234:5678"],
+		"Online": true,
+		"Active": false
+	},
+	"Health": [],
+	"MagicDNSSuffix": "tail1234.ts.net",
+	"CurrentTailnet": {
+		"Name": "me@example.com",
+		"MagicDNSSuffix": "tail1234.ts.net",
+		"MagicDNSEnabled": true
+	},
+	"CertDomains": ["studio.tail1234.ts.net"],
+	"Peer": null,
+	"User": {
+		"1234567890": {
+			"ID": 1234567890,
+			"LoginName": "me@example.com",
+			"DisplayName": "Me",
+			"ProfilePicURL": ""
+		}
+	}
+}

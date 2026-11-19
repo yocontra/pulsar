@@ -1,0 +1,22 @@
+{
+	"Node": {
+		"ID": 987654321,
+		"StableID": "nXyZ12CNTRL",
+		"Name": "iphone.tail1234.ts.net.",
+		"User": 1234567890,
+		"Addresses": ["100.90.80.70/32", "fd7a:115c:a1e0::aaaa:bbbb/128"],
+		"ComputedName": "iphone",
+		"ComputedNameWithHost": "iphone",
+		"Hostinfo": {
+			"OS": "iOS",
+			"Hostname": "iPhone"
+		}
+	},
+	"UserProfile": {
+		"ID": 1234567890,
+		"LoginName": "me@example.com",
+		"DisplayName": "Me",
+		"ProfilePicURL": ""
+	},
+	"CapMap": null
+}
