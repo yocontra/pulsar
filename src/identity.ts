@@ -1,11 +1,11 @@
-import { gitInfo } from "./git.ts";
+import { gitInfoAsync } from "./git.ts";
 import {
-	driverFor,
-	driverForProcess,
 	extensionHostFor,
 	findHarnessAncestor,
 	harnessIds,
-} from "./harnesses/index.ts";
+	identFor,
+	identForProcess,
+} from "./harnesses/ident.ts";
 import { autoTags, envTags } from "./tags.ts";
 import type { Harness, Registration } from "./types.ts";
 
@@ -26,7 +26,9 @@ function forcedHarness(): Harness | undefined {
  * Works out who this MCP server (or extension) is serving: the harness, its
  * session id and folder. Runs once at start.
  */
-export function detectRegistration(role: Registration["role"]): Registration {
+export async function detectRegistration(
+	role: Registration["role"],
+): Promise<Registration> {
 	const cwd = process.cwd();
 	const forced = forcedHarness();
 	const argv = process.argv.join(" ");
@@ -35,12 +37,12 @@ export function detectRegistration(role: Registration["role"]): Registration {
 			? {
 					harness:
 						forced ??
-						driverForProcess(argv)?.id ??
+						identForProcess(argv)?.id ??
 						extensionHostFor(argv)?.id ??
 						"unknown",
 					pid: process.pid,
 				}
-			: findHarnessAncestor(process.pid);
+			: await findHarnessAncestor(process.pid);
 	const harness: Harness =
 		forced ?? ancestor?.harness ?? (role === "cli" ? "cli" : "unknown");
 	const pid = ancestor?.pid ?? null;
@@ -49,7 +51,7 @@ export function detectRegistration(role: Registration["role"]): Registration {
 	let name: string | undefined;
 	let sessionCwd: string | null = cwd;
 
-	const found = driverFor(harness)?.identify?.({
+	const found = await identFor(harness)?.identify?.({
 		pid,
 		cwd,
 		sessionId,
@@ -60,7 +62,7 @@ export function detectRegistration(role: Registration["role"]): Registration {
 	Object.assign(meta, found?.meta);
 	if (process.env.PULSAR_NAME) name = process.env.PULSAR_NAME;
 
-	const git = gitInfo(sessionCwd);
+	const git = await gitInfoAsync(sessionCwd, { lane: "user" });
 	return {
 		harness,
 		sessionId,

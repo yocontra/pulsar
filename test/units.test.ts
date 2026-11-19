@@ -18,8 +18,16 @@ import {
 	findHarnessAncestor,
 	pushFor,
 } from "../src/harnesses/index.ts";
-import { githubSlug, prFromRefs, prFromText, repoSlug } from "../src/prs.ts";
+import {
+	githubSlug,
+	prFromRefs,
+	prFromText,
+	repoOf,
+	repoSlug,
+} from "../src/prs.ts";
+import { cleanRepoUrl, remoteWebUrl } from "../src/repo-url.ts";
 import { type Frame, readFrames } from "../src/rpc.ts";
+import { PulsarService } from "../src/service/index.ts";
 import { setTomlKey } from "../src/setup/files.ts";
 import { Store } from "../src/store.ts";
 import type { Agent, Message, Receipt } from "../src/types.ts";
@@ -77,7 +85,7 @@ describe("Claude envelope", () => {
 	test("strips quote, angle and newline characters from the name and caps it", async () => {
 		const out = await envelope('ev"il<x>\nname', "hi");
 		expect(out.split("\n")[0]).toBe(
-			'<cross-session-message from-name="evilxname via pulsar">',
+			'<cross-session-message from-name="evilxname via Pulsar">',
 		);
 		const long = await envelope("a".repeat(500), "hi");
 		expect(/from-name="([^"]*)"/.exec(long)?.[1]).toHaveLength(120);
@@ -319,7 +327,7 @@ describe("offline PR detection", () => {
 		expect(prFromText("anything", null)).toBeNull();
 	});
 
-	test("prFromRefs finds the PR whose head ref is the checked-out commit; repoSlug reads the push remote", () => {
+	test("prFromRefs finds the PR whose head ref is the checked-out commit; repoSlug reads the push remote", async () => {
 		const repo = mkdtempSync(join(tmpdir(), "pulsar-pr-"));
 		const run = (...args: string[]) =>
 			execFileSync("git", ["-C", repo, ...args], {
@@ -338,11 +346,174 @@ describe("offline PR detection", () => {
 			"-m",
 			"x",
 		);
-		expect(prFromRefs(repo)).toBeNull();
+		expect(await prFromRefs(repo)).toBeNull();
 		run("update-ref", "refs/remotes/origin/pr/1402", "HEAD");
-		expect(prFromRefs(repo)).toBe(1402);
+		expect(await prFromRefs(repo)).toBe(1402);
 		run("remote", "add", "origin", "git@github.com:yocontra/pulsar.git");
-		expect(repoSlug(repo)).toBe("yocontra/pulsar");
+		expect(await repoSlug(repo)).toBe("yocontra/pulsar");
+		expect(await repoOf(repo)).toEqual({
+			slug: "yocontra/pulsar",
+			url: "https://github.com/yocontra/pulsar",
+		});
+		// The branch's push remote wins over origin, credentials never show.
+		run(
+			"remote",
+			"add",
+			"fork",
+			"https://me:tok@GitLab.example.com/g/sub/r.git",
+		);
+		run("config", "branch.wt-random.pushRemote", "fork");
+		expect(await repoOf(repo)).toEqual({
+			slug: null,
+			url: "https://gitlab.example.com/g/sub/r",
+		});
+	});
+});
+
+describe("the registry's repo URL", () => {
+	test("refreshPrs sets it on the agent, announces it, keeps it across a re-register; no remote is null", async () => {
+		const git = (repo: string, ...args: string[]) =>
+			execFileSync("git", ["-C", repo, ...args], {
+				stdio: "ignore",
+				env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null" },
+			});
+		const withRemote = mkdtempSync(join(tmpdir(), "pulsar-repo-"));
+		const bare = mkdtempSync(join(tmpdir(), "pulsar-repo-"));
+		execFileSync("git", ["init", "-q", "-b", "main", withRemote]);
+		execFileSync("git", ["init", "-q", "-b", "main", bare]);
+		git(
+			withRemote,
+			"remote",
+			"add",
+			"origin",
+			"https://u:tok@GitHub.com/o/r.git",
+		);
+		const store = new Store(":memory:");
+		const svc = new PulsarService({ store, scan: false, machine: "t" });
+		try {
+			const reg = (sessionId: string, cwd: string) =>
+				svc.registry.upsert({
+					harness: "pi",
+					sessionId,
+					pid: null,
+					cwd,
+					project: null,
+					branch: null,
+					tags: [],
+					meta: {},
+					registered: true,
+				});
+			const a = reg("s1", withRemote);
+			const b = reg("s2", bare);
+			expect(a.repoUrl).toBeUndefined();
+			const updates: (string | null | undefined)[] = [];
+			svc.events.on("agent", (e) => {
+				if (e.action === "update" && e.agent.id === a.id)
+					updates.push(e.agent.repoUrl);
+			});
+			await svc.registry.refreshPrs();
+			expect(svc.registry.view(a).repoUrl).toBe("https://github.com/o/r");
+			expect(updates).toEqual(["https://github.com/o/r"]);
+			expect(svc.registry.view(b).repoUrl).toBeNull();
+			// Nothing changed: no second update.
+			await svc.registry.refreshPrs();
+			expect(updates).toHaveLength(1);
+			// A re-register replaces the record; the URL stays.
+			expect(reg("s1", withRemote).repoUrl).toBe("https://github.com/o/r");
+		} finally {
+			svc.stop();
+			store.close();
+		}
+	});
+});
+
+describe("repo web URL from a git remote", () => {
+	test.each([
+		[
+			"git@github.com:YoContra/Pulsar.git",
+			"https://github.com/YoContra/Pulsar",
+		],
+		["github.com:o/r", "https://github.com/o/r"],
+		["ssh://git@github.com/o/r.git", "https://github.com/o/r"],
+		[
+			"ssh://git@GHE.corp.example:2222/o/r.git/",
+			"https://ghe.corp.example/o/r",
+		],
+		["git+ssh://git@host.example/o/r", "https://host.example/o/r"],
+		["git://host.example/o/r.git", "https://host.example/o/r"],
+		["https://github.com/o/r.git", "https://github.com/o/r"],
+		["https://github.com/o/r/", "https://github.com/o/r"],
+		["http://gitea.lan:3000/o/r.git", "http://gitea.lan:3000/o/r"],
+		[
+			"https://gitlab.com/group/sub/repo.git",
+			"https://gitlab.com/group/sub/repo",
+		],
+		["git@bitbucket.org:team/repo.git", "https://bitbucket.org/team/repo"],
+		["  https://codeberg.org/o/r.git\n", "https://codeberg.org/o/r"],
+	])("%s -> %s", (remote, url) => {
+		expect(remoteWebUrl(remote)).toBe(url);
+	});
+
+	test("credentials, queries and hashes never reach the URL", () => {
+		expect(remoteWebUrl("https://user:ghp_secret@github.com/o/r.git")).toBe(
+			"https://github.com/o/r",
+		);
+		expect(remoteWebUrl("https://x-access-token:t@github.com/o/r")).toBe(
+			"https://github.com/o/r",
+		);
+		expect(remoteWebUrl("https://github.com/o/r.git?token=x#y")).toBe(
+			"https://github.com/o/r",
+		);
+	});
+
+	test.each([
+		null,
+		"",
+		"/srv/git/repo.git",
+		"./repo",
+		"../repo.git",
+		"~/repos/x.git",
+		"file:///srv/git/o/r.git",
+		"C:\\repos\\x",
+		"C:/repos/x",
+		"https://github.com/onlyowner",
+		"https://github.com/",
+		"https://github.com/o/../r",
+		"https://github.com/o//r",
+		"git@github.com:/abs/path.git",
+		"git@github.com:../o/r",
+		"ftp://host.example/o/r",
+		"javascript://host.example/o/r",
+		"ext::ssh -i key host o/r",
+		"https://bad_host/o/r",
+		"https://host.example/o/r<script>",
+	])("%p -> null", (remote) => {
+		expect(remoteWebUrl(remote)).toBeNull();
+	});
+
+	test("cleanRepoUrl keeps plain http(s) pages and drops the rest", () => {
+		expect(cleanRepoUrl("https://github.com/o/r")).toBe(
+			"https://github.com/o/r",
+		);
+		expect(cleanRepoUrl("https://github.com/o/r/")).toBe(
+			"https://github.com/o/r",
+		);
+		for (const bad of [
+			undefined,
+			42,
+			"",
+			"javascript:alert(1)",
+			"data:text/html,x",
+			"ftp://h.example/o/r",
+			"https://u:p@github.com/o/r",
+			"https://u@github.com/o/r",
+			"https://github.com/o/r?x=1",
+			"https://github.com/o/r#x",
+			"https://github.com/o/r\u0000",
+			"not a url",
+			`https://github.com/${"a".repeat(600)}`,
+		])
+			expect(cleanRepoUrl(bad)).toBeNull();
 	});
 });
 
@@ -371,26 +542,32 @@ describe("harness detection", () => {
 	const table = (rows: Array<[number, number, string]>) =>
 		new Map(rows.map(([pid, ppid, args]) => [pid, { pid, ppid, args }]));
 
-	test("finds the nearest harness ancestor, never the process itself", () => {
+	test("finds the nearest harness ancestor, never the process itself", async () => {
 		const t = table([
 			[1, 0, "launchd"],
 			[50, 1, "claude"],
 			[60, 50, "/bin/zsh"],
 			[70, 60, "codex"],
 		]);
-		expect(findHarnessAncestor(60, t)).toEqual({ harness: "claude", pid: 50 });
-		expect(findHarnessAncestor(70, t)).toEqual({ harness: "claude", pid: 50 });
+		expect(await findHarnessAncestor(60, t)).toEqual({
+			harness: "claude",
+			pid: 50,
+		});
+		expect(await findHarnessAncestor(70, t)).toEqual({
+			harness: "claude",
+			pid: 50,
+		});
 	});
 
-	test("stops at pid 1 and at unknown parents", () => {
+	test("stops at pid 1 and at unknown parents", async () => {
 		const t = table([
 			[1, 0, "claude"],
 			[10, 1, "/bin/zsh"],
 			[20, 999, "/bin/zsh"],
 		]);
-		expect(findHarnessAncestor(10, t)).toBeNull();
-		expect(findHarnessAncestor(20, t)).toBeNull();
-		expect(findHarnessAncestor(404, t)).toBeNull();
+		expect(await findHarnessAncestor(10, t)).toBeNull();
+		expect(await findHarnessAncestor(20, t)).toBeNull();
+		expect(await findHarnessAncestor(404, t)).toBeNull();
 	});
 });
 
@@ -432,5 +609,44 @@ describe("pi/omp session folders and model ids", () => {
 		).toBe("gpt-6-astra");
 		expect(lastModel('{"model":"a"}\n{"model":"b"}')).toBe("b");
 		expect(lastModel("nothing here")).toBeNull();
+	});
+});
+
+describe("socket path", () => {
+	test("a deep PULSAR_HOME gets a short private socket path", async () => {
+		const { mkdtempSync, rmSync, statSync } = await import("node:fs");
+		const { tmpdir } = await import("node:os");
+		const { join } = await import("node:path");
+		const { checkedSocketPath, ensureStateDir, socketPath, MAX_SOCKET_PATH } =
+			await import("../src/paths.ts");
+		const { Daemon } = await import("../src/daemon.ts");
+		const { DaemonClient } = await import("../src/client.ts");
+		const root = mkdtempSync(join(tmpdir(), "pulsar-sock-"));
+		const deep = join(root, "x".repeat(60), "y".repeat(60));
+		const prev = process.env.PULSAR_HOME;
+		process.env.PULSAR_HOME = deep;
+		let daemon: InstanceType<typeof Daemon> | null = null;
+		try {
+			const sock = await checkedSocketPath();
+			expect(socketPath()).toBe(sock);
+			expect(sock).not.toStartWith(deep);
+			expect(Buffer.byteLength(sock)).toBeLessThanOrEqual(MAX_SOCKET_PATH);
+			// Same state folder, same path; another folder, another path.
+			expect(socketPath()).toBe(sock);
+			expect(statSync(join(sock, "..")).mode & 0o777).toBe(0o700);
+			await ensureStateDir();
+			daemon = new Daemon({ scan: false, remote: { mode: "off" } });
+			expect(await daemon.start()).toBe(true);
+			const client = new DaemonClient();
+			await client.connect(false);
+			client.close();
+			process.env.PULSAR_HOME = join(root, "short");
+			expect(socketPath()).toBe(join(root, "short", "bus.sock"));
+		} finally {
+			await daemon?.stop();
+			if (prev === undefined) delete process.env.PULSAR_HOME;
+			else process.env.PULSAR_HOME = prev;
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });
