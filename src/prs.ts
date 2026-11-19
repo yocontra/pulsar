@@ -1,17 +1,9 @@
-import { execFileSync } from "node:child_process";
+import { execText } from "./exec.ts";
+import { remoteWebUrl } from "./repo-url.ts";
 
-const GIT_OPTS = {
-	encoding: "utf8" as const,
-	stdio: ["ignore", "pipe", "ignore"] as ["ignore", "pipe", "ignore"],
-	timeout: 3000,
-};
-
-function git(cwd: string, args: string[]): string | null {
-	try {
-		return execFileSync("git", ["-C", cwd, ...args], GIT_OPTS).trim() || null;
-	} catch {
-		return null;
-	}
+/** One git call for the daemon's PR refresh: async, bounded, null on failure. */
+function git(cwd: string, args: string[]): Promise<string | null> {
+	return execText("git", ["-C", cwd, ...args], { timeoutMs: 4000 });
 }
 
 /** `owner/repo` from a GitHub remote URL (https, ssh or scp form); null for other hosts. */
@@ -23,14 +15,27 @@ export function githubSlug(url: string | null): string | null {
 	return m ? `${m[1]}/${m[2]}`.toLowerCase() : null;
 }
 
-/** The GitHub repo a folder pushes to: the branch's push remote, else `origin`. */
-export function repoSlug(cwd: string): string | null {
-	const branch = git(cwd, ["symbolic-ref", "--short", "-q", "HEAD"]);
+/** The URL of the remote a folder pushes to: the branch's push remote, else `origin`. */
+async function pushRemoteUrl(cwd: string): Promise<string | null> {
+	const branch = await git(cwd, ["symbolic-ref", "--short", "-q", "HEAD"]);
 	const remote =
-		(branch && git(cwd, ["config", `branch.${branch}.pushRemote`])) ||
-		(branch && git(cwd, ["config", `branch.${branch}.remote`])) ||
+		(branch && (await git(cwd, ["config", `branch.${branch}.pushRemote`]))) ||
+		(branch && (await git(cwd, ["config", `branch.${branch}.remote`]))) ||
 		"origin";
-	return githubSlug(git(cwd, ["remote", "get-url", "--push", remote]));
+	return git(cwd, ["remote", "get-url", "--push", remote]);
+}
+
+/** The repo a folder pushes to: its GitHub slug (for PR lookup) and its web page (any host). */
+export async function repoOf(
+	cwd: string,
+): Promise<{ slug: string | null; url: string | null }> {
+	const remote = await pushRemoteUrl(cwd);
+	return { slug: githubSlug(remote), url: remoteWebUrl(remote) };
+}
+
+/** The GitHub repo a folder pushes to: the branch's push remote, else `origin`. */
+export async function repoSlug(cwd: string): Promise<string | null> {
+	return githubSlug(await pushRemoteUrl(cwd));
 }
 
 /**
@@ -38,16 +43,16 @@ export function repoSlug(cwd: string): string | null {
  * repo (`refs/pull/<n>/head`, or `refs/remotes/<remote>/pr/<n>` when fetched).
  * Matches by commit, so it works whatever the local branch is called.
  */
-export function prFromRefs(cwd: string): number | null {
-	const tip = git(cwd, ["rev-parse", "-q", "--verify", "HEAD"]);
+export async function prFromRefs(cwd: string): Promise<number | null> {
+	const tip = await git(cwd, ["rev-parse", "-q", "--verify", "HEAD"]);
 	if (!tip) return null;
 	const refs =
-		git(cwd, [
+		(await git(cwd, [
 			"for-each-ref",
 			"--format=%(objectname) %(refname)",
 			"refs/pull",
 			"refs/remotes",
-		]) ?? "";
+		])) ?? "";
 	for (const line of refs.split("\n")) {
 		const [sha, ref] = line.split(" ");
 		if (sha !== tip || !ref) continue;
