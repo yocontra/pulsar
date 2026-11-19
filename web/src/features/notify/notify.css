@@ -1,0 +1,28 @@
+/* Settings → Agent activity (features/notify/Section.tsx). */
+.d-notify-select {
+	flex: none;
+	width: 14rem;
+	height: 26px;
+	padding: 0 8px;
+	border: 1px solid var(--d-line-strong);
+	border-radius: 6px;
+	background: var(--d-raised);
+	color: var(--d-fg);
+	font: inherit;
+	font-size: 13px;
+}
+.d-notify-select:focus-visible {
+	outline: 2px solid var(--d-focus);
+	outline-offset: 1px;
+}
+.d-notify-select:disabled {
+	opacity: 0.6;
+}
+.d-set-help.d-notify-error,
+.p-notify-error {
+	color: var(--ds-danger);
+}
+.p-notify-error {
+	white-space: normal;
+	font-size: 0.85rem;
+}

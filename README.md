@@ -139,7 +139,7 @@ Every machine in the mesh serves the Pulsar app. Any machine's address shows the
 - Each agent's session as it happens: text, thinking, tool calls with diffs, code, math, diagrams and images.
 - Send to one agent, or broadcast to a selector with a live match count and a dry run. Ask "who is editing this file?" and then ask them directly. Stop an agent's turn.
 - Answer prompts remotely, signed with Face ID or Touch ID. The prompt stays on the machine too, and the first answer wins.
-- Web Push notifications that say "Approval pending" and nothing else.
+- Web Push notifications that say "Approval pending", "An agent finished" or "An agent stopped with an error", and nothing else.
 - Token usage and an API cost estimate across the mesh, per harness, model and day, read from the agents' own session files.
 
 <p align="center"><img src="docs/assets/screenshots/phone-session.webp" alt="Phone: an agent's live session with tool-call cards, a message from another agent, and a prompt waiting for an answer" width="300"></p>

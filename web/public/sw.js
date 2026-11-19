@@ -3,6 +3,8 @@
 // transcripts never live in the cache. It also shows Web Push notifications:
 // the push says only "approval pending" with an opaque id; tapping it opens
 // that approval (details come from this node's API, never from the push).
+// "An agent finished" / "An agent stopped with an error" carry only the
+// agent's opaque id; tapping one opens that agent.
 // The cache belongs to one build: web/scripts/finish-dist.ts writes the build
 // id and that build's shell (HTML, boot.js, CSS, initial-route JS) below, the
 // install step fills the cache with exactly those files, and activate drops
@@ -135,6 +137,13 @@ self.addEventListener("push", (event) => {
 		);
 		return;
 	}
+	if (
+		(data.kind === "finished" || data.kind === "failed") &&
+		typeof data.agentId === "string"
+	) {
+		event.waitUntil(turnNotice(data));
+		return;
+	}
 	if (data.kind !== "approval" || typeof data.id !== "string") return;
 	const badge =
 		typeof data.badge === "number" && self.navigator.setAppBadge
@@ -158,12 +167,44 @@ self.addEventListener("push", (event) => {
 	);
 });
 
+/**
+ * An agent finished its turn or stopped with an error. The payload has only
+ * the agent's opaque id; the app shows its name. A focused Pulsar tab shows
+ * its own toast instead, where the browser allows a push without a
+ * notification (Chromium; Safari and Firefox require one every time).
+ */
+async function turnNotice(data) {
+	const failed = data.kind === "failed";
+	const tabs = await self.clients.matchAll({ type: "window" });
+	const chromium = /Chrome\//.test(self.navigator.userAgent);
+	if (
+		chromium &&
+		tabs.some((c) => c.focused && c.visibilityState === "visible")
+	)
+		return;
+	return self.registration.showNotification(
+		failed ? "An agent stopped with an error" : "An agent finished",
+		{
+			body: failed
+				? "Open Pulsar to see what went wrong."
+				: "Open Pulsar to see what it did.",
+			tag: `turn:${data.agentId}`,
+			icon: "/icon.svg",
+			silent: data.sound !== true,
+			data: { agentId: data.agentId },
+		},
+	);
+}
+
 self.addEventListener("notificationclick", (event) => {
 	event.notification.close();
 	const id = event.notification.data?.id;
+	const agentId = event.notification.data?.agentId;
 	event.waitUntil(
 		(async () => {
 			let target = event.notification.data?.security ? "/" : "/#/needs";
+			if (typeof agentId === "string")
+				target = `/#/a/${encodeURIComponent(agentId)}`;
 			if (typeof id === "string") {
 				try {
 					const res = await fetch(

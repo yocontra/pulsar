@@ -1619,6 +1619,10 @@ function parseSubscription(raw: unknown): Subscription {
 
 type RealtimeChange =
 	| { action: "status"; id: string; status: "busy" | "idle" }
+	/** A finished or failed turn the operator should hear about (`notify`). */
+	| { action: "turn"; id: string; kind: "finished" | "failed" }
+	/** This node holds a push subscription for `endpoint` (no passkey ceremony in tests). */
+	| { action: "push-subscription"; endpoint: string }
 	| { action: "add-agent"; name: string; machine?: string; project?: string }
 	/** A permission prompt for `tool` (Bash when absent). */
 	| { action: "needs-you"; id: string; tool?: string }
@@ -1665,6 +1669,16 @@ function realtime(raw: unknown) {
 			a.lastActive = now;
 			// Keep it where the test put it (no random churn).
 			a.fixed = true;
+			break;
+		}
+		case "turn": {
+			const a = agentOr404(c.id);
+			const n = { kind: c.kind, agentId: a.id, at: now };
+			for (const s of streams.values()) s.push?.(frame(s, "notify", n));
+			break;
+		}
+		case "push-subscription": {
+			pushPrefs.set(c.endpoint, pushPrefs.get(c.endpoint) ?? {});
 			break;
 		}
 		case "add-agent": {
@@ -1983,6 +1997,11 @@ function security(kind: SecurityNotice["kind"], message: string) {
 }
 
 const vapid = generateVapidKeys();
+/** Finish/fail settings by push endpoint (the daemon keeps them on the subscription row). */
+const pushPrefs = new Map<
+	string,
+	{ turns?: "off" | "notify" | "sound" | "both"; inApp?: boolean }
+>();
 
 function findApproval(id: string) {
 	const a = agents.find((x) => x.approval?.requestId === id);
@@ -2662,8 +2681,29 @@ async function route(
 		if (POST && (seg[1] === "subscribe" || seg[1] === "unsubscribe")) {
 			// Like the daemon: notifications on or off take a passkey session.
 			requireSession(req);
-			await jsonBody(req);
+			const b = (await jsonBody(req)) as { endpoint?: string };
+			if (seg[1] === "subscribe" && b.endpoint)
+				pushPrefs.set(b.endpoint, pushPrefs.get(b.endpoint) ?? {});
 			return json({ ok: true });
+		}
+		// This browser's finish/fail settings, kept with its subscription.
+		if (POST && seg[1] === "settings") {
+			const b = (await jsonBody(req)) as {
+				endpoint?: string;
+				turns?: "off" | "notify" | "sound" | "both";
+				inApp?: boolean;
+			};
+			if (typeof b.endpoint !== "string") throw badRequest("endpoint");
+			const held = pushPrefs.get(b.endpoint);
+			if (held) {
+				if (b.turns) held.turns = b.turns;
+				if (typeof b.inApp === "boolean") held.inApp = b.inApp;
+			}
+			return json({
+				subscribed: !!held,
+				turns: held?.turns ?? b.turns ?? "notify",
+				inApp: held?.inApp ?? b.inApp ?? true,
+			});
 		}
 	}
 	if (seg[0] === "approvals" || seg[0] === "passkeys") {
