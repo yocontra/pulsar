@@ -291,6 +291,17 @@ describe("commit", () => {
 		expect(g(d, "status", "--porcelain", "--", "new.txt").trim()).toBe(
 			"?? new.txt",
 		);
+		// On a new branch: back on the old one, the new one gone (a retry works).
+		expect(
+			await code(
+				commit(d, { files: ["new.txt"], message: "m", newBranch: "try/one" }),
+			),
+		).toBe("git_failed");
+		expect(g(d, "branch", "--show-current").trim()).toBe("feat");
+		expect(g(d, "branch", "--list", "try/one")).toBe("");
+		expect(g(d, "status", "--porcelain", "--", "new.txt").trim()).toBe(
+			"?? new.txt",
+		);
 	});
 });
 
@@ -713,6 +724,14 @@ describe("service and routes", () => {
 		expect((await post(`/agents/${id}/git/push`, { force: true })).status).toBe(
 			400,
 		);
+		const op = await fetch(`${base}/agents/cli%3Aoperator/git/status`, {
+			headers: { "X-Pulsar": "1" },
+		});
+		expect(op.status).toBe(200);
+		expect(await op.json()).toMatchObject({
+			available: false,
+			reason: "no_cwd",
+		});
 		expect(
 			(
 				await fetch(`${base}/agents/nope/git/status`, {

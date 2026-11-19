@@ -22,6 +22,7 @@ import { can } from "../../lib/store.ts";
 import { CommitForm } from "./CommitForm.tsx";
 import {
 	commitReason,
+	httpsOnly,
 	prOpen,
 	prReason,
 	pushReason,
@@ -216,7 +217,12 @@ function GitDesktopImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 									{items.map(({ step, label }) => {
 										const Icon = ICON[step];
 										const why = reasons[step];
-										if (step === "pr" && status.pr && prOpen(status))
+										if (
+											step === "pr" &&
+											status.pr &&
+											prOpen(status) &&
+											httpsOnly(status.pr.url)
+										)
 											return (
 												<DropdownMenu.Item key={step} asChild>
 													<a
