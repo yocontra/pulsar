@@ -213,6 +213,12 @@ export interface LaunchDeps {
 		agentId: string,
 		body: string,
 	) => Promise<ReceiptState | null>;
+	/**
+	 * The launched agent showed up (a local id here; a pool address for a
+	 * launch followed on another machine): the operator started it, so its
+	 * finished and failed turns are worth a notification.
+	 */
+	onAgent?: (agentId: string) => void;
 	/** Tests: a private tmux server (`-L`). */
 	tmux?: TmuxOptions;
 	/** Tests: the login shell (default: the operator's, from the passwd entry). */
@@ -489,6 +495,7 @@ export class Launches {
 			if (agent) {
 				// The launcher knows the pane: Stop and typing reach it.
 				if (agent.meta.tmux !== pane) agent.meta.tmux = pane;
+				if (agent.id !== s.agentId) this.d.onAgent?.(agent.id);
 				if (!named && run.params.name) {
 					this.d.registry.setIdentity(agent, { name: run.params.name });
 					named = true;
@@ -714,6 +721,8 @@ export class Launches {
 					if (!next) break;
 					misses = 0;
 					const l = local(next);
+					if (l.agentId && l.agentId !== run.state.agentId)
+						this.d.onAgent?.(l.agentId);
 					// Done there: shown done here once this node's pool lists the
 					// agent (the app opens its session next), or after a while.
 					if (
