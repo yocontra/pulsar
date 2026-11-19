@@ -28,6 +28,8 @@ const GH_TIMEOUT_MS = 30_000;
 /** A PR lookup is kept this long (status polls must not hit GitHub each time). */
 const PR_TTL_MS = 60_000;
 const DETAILS_TTL_MS = 15_000;
+/** How long a status read waits for gh before it answers from the cache. */
+const PR_WAIT_MS = 3000;
 const MAX_COMMENTS = 50;
 const MAX_COMMENT_CHARS = 4000;
 
@@ -260,11 +262,15 @@ interface RawPr {
 
 const PR_FIELDS = "number,url,title,state,isDraft,baseRefName,headRefName";
 
+/** A link from GitHub's data, only when it is https (the app opens it). */
+export const httpsUrl = (u: unknown): string | null =>
+	typeof u === "string" && /^https:\/\/[^\s]+$/.test(u) ? u : null;
+
 function toPr(raw: RawPr): GitPr {
 	const s = String(raw.state).toUpperCase();
 	return {
 		number: Number(raw.number),
-		url: String(raw.url),
+		url: httpsUrl(raw.url) ?? "",
 		title: String(raw.title ?? ""),
 		state:
 			s === "MERGED"
@@ -294,13 +300,16 @@ export function forgetPr(root: string) {
 		for (const k of m.keys()) if (k.startsWith(`${root}\0`)) m.delete(k);
 }
 
+const prKey = (root: string, repos: PrRepos) =>
+	`${root}\0${repos.base}\0${repos.headRef}`;
+
 async function lookupPr(
 	cwd: string,
 	root: string,
 	repos: PrRepos,
 	fresh = false,
 ): Promise<{ gh: GhState; pr: GitPr | null }> {
-	const key = `${root}\0${repos.base}\0${repos.headRef}`;
+	const key = prKey(root, repos);
 	const hit = prCache.get(key);
 	if (!fresh && hit && Date.now() - hit.at < PR_TTL_MS) return hit;
 	const r = await runGh(
@@ -373,9 +382,16 @@ export async function gitStatus(
 		pr: null,
 	};
 	if (repos && opts.pr !== false && !status.onDefault) {
-		const { gh, pr } = await lookupPr(cwd, st.root, repos);
-		status.gh = gh;
-		status.pr = pr;
+		// GitHub may be slow: wait a little, else answer from the last lookup
+		// (the one running fills the cache for the next poll).
+		const lookup = lookupPr(cwd, st.root, repos);
+		const r = await Promise.race([
+			lookup,
+			new Promise<null>((ok) => setTimeout(ok, PR_WAIT_MS, null).unref?.()),
+		]);
+		const got = r ?? prCache.get(prKey(st.root, repos)) ?? null;
+		status.gh = got?.gh ?? null;
+		status.pr = got?.pr ?? null;
 	}
 	return status;
 }
@@ -396,7 +412,7 @@ interface RawCheck {
 
 export function checkOf(c: RawCheck): GitCheck {
 	const name = String(c.name ?? c.context ?? "check");
-	const url = c.detailsUrl ?? c.targetUrl ?? null;
+	const url = httpsUrl(c.detailsUrl ?? c.targetUrl);
 	const workflow = c.workflowName || null;
 	let state: GitCheck["state"];
 	if (c.__typename === "StatusContext" || (c.state && !c.status)) {
@@ -542,7 +558,7 @@ export async function prDetails(
 					body: clip(c.body),
 					path: c.path ? String(c.path) : null,
 					line: Number(c.line ?? c.original_line) || null,
-					url: c.html_url ? String(c.html_url) : null,
+					url: httpsUrl(c.html_url),
 					at: c.created_at ?? null,
 				});
 		} catch {}
@@ -641,12 +657,22 @@ export async function commit(
 		const sw = await runGit(dir, ["switch", "-c", p.newBranch]);
 		if (!sw.ok) fail(sw, "creating the branch");
 	}
+	// A commit that fails leaves the worktree where it was: on its branch
+	// (or detached HEAD), without the new branch, so a retry can create it.
+	const undoBranch = async () => {
+		if (!p.newBranch) return;
+		const back = await runGit(dir, ["switch", "-q", "-"]);
+		if (back.ok) await runGit(dir, ["branch", "-q", "-D", p.newBranch]);
+	};
 	// Stage exactly these paths, then commit only them: what the agent (or
 	// anyone) staged for other files stays staged and out of this commit.
 	// A staged rename's old path is in neither the index nor the worktree
 	// any more: commit it, but don't `add` it (git would not match it).
 	const add = await runGit(dir, ["add", "-A", "--", ...p.files]);
-	if (!add.ok) fail(add, "staging");
+	if (!add.ok) {
+		await undoBranch();
+		fail(add, "staging");
+	}
 	const c = await runGit(
 		dir,
 		["commit", "-q", "--no-edit", "-m", p.message, "--", ...list],
@@ -656,6 +682,7 @@ export async function commit(
 		// Put back what was not staged before (a hook said no, a signing failure).
 		const unstaged = list.filter((f) => known.get(f)?.staged === false);
 		if (unstaged.length) await runGit(dir, ["reset", "-q", "--", ...unstaged]);
+		await undoBranch();
 		fail(c, "commit");
 	}
 	const head = await runGit(dir, ["log", "-1", "--format=%h%x00%s"], {

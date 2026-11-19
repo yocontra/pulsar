@@ -9,17 +9,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api, ProveCancelled } from "../../api/client.ts";
-import type {
-	AgentRow,
-	GitCommitParams,
-	GitCommitResult,
-	GitPrResult,
-	GitPushResult,
-	GitStatus,
-} from "../../api/types.ts";
+import type { AgentRow, GitStatus } from "../../api/types.ts";
 import { keys, queryClient } from "../../data/hooks.ts";
 import { toast } from "../../lib/toast.ts";
 import { type Step, working } from "./model.ts";
+import {
+	type CommitChoice,
+	type Failure,
+	type Phase,
+	runSteps,
+} from "./steps.ts";
 
 const gitKey = (id: string) => ["git", "status", id] as const;
 const prKey = (id: string) => ["git", "pr", id] as const;
@@ -30,7 +29,8 @@ export function useGitStatus(agentId: string) {
 		{
 			queryKey: gitKey(agentId),
 			queryFn: () => api.gitStatus(agentId),
-			refetchInterval: 15_000,
+			// Stops on an error (the agent left; an older daemon): no failing poll.
+			refetchInterval: (q) => (q.state.error ? false : 15_000),
 			staleTime: 5_000,
 			retry: false,
 		},
@@ -45,7 +45,7 @@ export function usePrDetails(agentId: string, open: boolean) {
 			queryKey: prKey(agentId),
 			queryFn: () => api.gitPr(agentId),
 			enabled: open,
-			refetchInterval: open ? 30_000 : false,
+			refetchInterval: (q) => (open && !q.state.error ? 30_000 : false),
 			staleTime: 10_000,
 			retry: false,
 		},
@@ -76,19 +76,6 @@ const STEP_NAME: Record<Step, string> = {
 	pr: "PR",
 };
 
-export type Phase =
-	| { kind: "idle" }
-	| {
-			kind: "running";
-			step: Step;
-			index: number;
-			total: number;
-			since: number;
-	  }
-	/** Another machine: the next step waits for a tap (a fresh passkey prompt). */
-	| { kind: "paused"; step: Step; index: number; total: number }
-	| { kind: "done"; text: string; href?: string };
-
 export interface Confirm {
 	title: string;
 	body: string;
@@ -96,13 +83,18 @@ export interface Confirm {
 	resolve: (ok: boolean) => void;
 }
 
-/** The commit dialog's answer: params for git.commit (without the confirms). */
-export type CommitChoice = Pick<
-	GitCommitParams,
-	"files" | "message" | "newBranch" | "confirmDefault"
->;
+export type { CommitChoice, Phase };
 
 const DONE_MS = 6000;
+
+function classify(e: unknown): Failure {
+	if (e instanceof ProveCancelled) return "cancelled";
+	if (e instanceof ApiError && e.code === "confirm_busy") return "confirm_busy";
+	if (e instanceof ApiError && e.code === "confirm_default")
+		return "confirm_default";
+	if ((e as Error)?.name === "NotAllowedError") return "not_allowed";
+	return "other";
+}
 
 export function useGitRunner(agent: AgentRow, status: GitStatus | undefined) {
 	const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -134,155 +126,53 @@ export function useGitRunner(agent: AgentRow, status: GitStatus | undefined) {
 			}),
 		);
 
-	const askBusy = (what: string) =>
-		ask({
-			title: `${agent.name} is working`,
-			body: `It may be changing files right now. ${what} anyway?`,
-			ok: `${what} anyway`,
-		});
-
-	const askDefault = (branch: string) =>
-		ask({
-			title: "Run on the default branch?",
-			body: `This pushes straight to ${branch}.`,
-			ok: `Push to ${branch}`,
-		});
+	const cancelPaused = useRef<(() => void) | null>(null);
 
 	/** Runs steps in order; the commit's params come from the dialog. */
 	async function run(steps: Step[], commit?: CommitChoice) {
-		const remote = agent.id.includes("/");
-		const flags = { busy: false, onDefault: !!commit?.confirmDefault };
-		if (working(agent)) {
-			const verb =
-				steps[0] === "commit" ? "Commit" : steps[0] === "push" ? "Push" : "";
-			if (verb && !(await askBusy(verb))) return;
-			flags.busy = !!verb;
-		}
-		if (
-			steps[0] === "push" &&
-			status?.onDefault &&
-			!(await askDefault(status.branch ?? "the default branch"))
-		)
-			return;
-		if (steps[0] === "push" && status?.onDefault) flags.onDefault = true;
-		let todo = [...steps];
-		let last: Phase = { kind: "idle" };
-		for (let i = 0; i < todo.length; i++) {
-			const step = todo[i]!;
-			const params =
-				step === "commit"
-					? {
-							files: commit!.files,
-							message: commit!.message,
-							...(commit!.newBranch ? { newBranch: commit!.newBranch } : {}),
-							...(flags.busy ? { confirmBusy: true } : {}),
-							...(commit!.confirmDefault ? { confirmDefault: true } : {}),
-						}
-					: step === "push"
-						? {
-								...(flags.busy ? { confirmBusy: true } : {}),
-								...(flags.onDefault ? { confirmDefault: true } : {}),
-							}
-						: {};
-			setPhase({
-				kind: "running",
-				step,
-				index: i,
-				total: todo.length,
-				since: Date.now(),
-			});
-			let result: unknown;
-			try {
-				result = await api.gitAct(agent.id, step, params);
-			} catch (e) {
-				if (!live.current) return;
-				refreshGit(agent.id);
-				if (e instanceof ProveCancelled) {
-					setPhase({ kind: "idle" });
-					return;
-				}
-				// A race with the status we showed: confirm now, then retry.
-				if (e instanceof ApiError && e.code === "confirm_busy") {
-					if (!(await askBusy(step === "commit" ? "Commit" : "Push")))
-						return setPhase({ kind: "idle" });
-					flags.busy = true;
-					i--;
-					continue;
-				}
-				if (e instanceof ApiError && e.code === "confirm_default") {
-					if (!(await askDefault(status?.branch ?? "the default branch")))
-						return setPhase({ kind: "idle" });
-					flags.onDefault = true;
-					if (commit) commit = { ...commit, confirmDefault: true };
-					i--;
-					continue;
-				}
-				// The browser refused a passkey prompt no tap started: wait for one.
-				if (remote && i > 0 && (e as Error).name === "NotAllowedError") {
-					setPhase({ kind: "paused", step, index: i, total: todo.length });
-					const go = await new Promise<boolean>((r) => {
-						resume.current = () => r(true);
-						cancelPaused.current = () => r(false);
-					});
+		const end = await runSteps(steps, commit, {
+			remote: agent.id.includes("/"),
+			working: working(agent),
+			status,
+			act: (step, params) => api.gitAct(agent.id, step, params),
+			classify,
+			askBusy: (what) =>
+				ask({
+					title: `${agent.name} is working`,
+					body: `It may be changing files right now. ${what} anyway?`,
+					ok: `${what} anyway`,
+				}),
+			askDefault: (branch) =>
+				ask({
+					title: "Run on the default branch?",
+					body: `This pushes straight to ${branch}.`,
+					ok: `Push to ${branch}`,
+				}),
+			waitTap: (p) => {
+				setPhase(p);
+				return new Promise<boolean>((r) => {
+					resume.current = () => r(true);
+					cancelPaused.current = () => r(false);
+				}).finally(() => {
 					resume.current = null;
-					if (!go) return setPhase({ kind: "idle" });
-					i--;
-					continue;
-				}
-				setPhase({ kind: "idle" });
+					cancelPaused.current = null;
+				});
+			},
+			needsTap: needsTap(),
+			progress: setPhase,
+			refresh: () => refreshGit(agent.id),
+			live: () => live.current,
+			failed: (e, f) =>
 				void toast("Action failed", {
 					tone: "error",
 					description:
-						(e as Error).name === "NotAllowedError"
+						f === "not_allowed"
 							? "The passkey check was cancelled."
 							: (e as Error).message,
-				});
-				return;
-			}
-			if (!live.current) return;
-			refreshGit(agent.id);
-			if (step === "commit") {
-				const c = result as GitCommitResult;
-				last = { kind: "done", text: `Committed ${c.sha}` };
-				// Committed on the default branch: no PR from it.
-				if (c.branch && c.branch === status?.defaultBranch)
-					todo = todo.filter((s) => s !== "pr");
-			} else if (step === "push") {
-				const p = result as GitPushResult;
-				last = {
-					kind: "done",
-					text: p.pushed ? `Pushed to ${p.upstream}` : "Already up to date",
-				};
-			} else {
-				const p = result as GitPrResult;
-				last = {
-					kind: "done",
-					text: p.created
-						? `Created PR #${p.pr.number}`
-						: `PR #${p.pr.number} is open`,
-					href: p.pr.url,
-				};
-			}
-			// Another machine: each step after the first is its own passkey
-			// check; give the operator the tap that starts it.
-			if (remote && i + 1 < todo.length && needsTap()) {
-				setPhase({
-					kind: "paused",
-					step: todo[i + 1]!,
-					index: i + 1,
-					total: todo.length,
-				});
-				const go = await new Promise<boolean>((r) => {
-					resume.current = () => r(true);
-					cancelPaused.current = () => r(false);
-				});
-				resume.current = null;
-				if (!go) return setPhase(last);
-			}
-		}
-		setPhase(last);
+				}),
+		});
+		if (live.current) setPhase(end);
 	}
-	const cancelPaused = useRef<(() => void) | null>(null);
 
 	return {
 		phase,

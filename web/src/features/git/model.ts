@@ -21,6 +21,10 @@ const PR_OPEN = new Set(["open", "draft"]);
 
 export const prOpen = (s: GitStatus) => !!s.pr && PR_OPEN.has(s.pr.state);
 
+/** A link from GitHub's data, only when it is https (null otherwise). */
+export const httpsOnly = (u: string | null | undefined) =>
+	u && /^https:\/\/\S+$/.test(u) ? u : null;
+
 /** Why nothing at all can run here, or null. */
 export function blocked(s: GitStatus | undefined): string | null {
 	if (!s) return "Reading the worktree…";
@@ -121,8 +125,12 @@ export function quickAction(
 	if (g.upstream && g.behind > 0)
 		return { label: "Push", steps: [], disabled: pr };
 	if (canPr) return { label: "Create PR", steps: ["pr"] };
-	if (g.pr && prOpen(g))
-		return { label: `View PR #${g.pr.number}`, steps: [], href: g.pr.url };
+	if (g.pr && prOpen(g)) {
+		const href = httpsOnly(g.pr.url);
+		return href
+			? { label: `View PR #${g.pr.number}`, steps: [], href }
+			: { label: `PR #${g.pr.number}`, steps: [], disabled: "The PR is open." };
+	}
 	if (!g.branch)
 		return {
 			label: "Commit",

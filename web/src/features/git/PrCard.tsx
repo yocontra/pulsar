@@ -20,6 +20,7 @@ import type {
 	GitPr,
 	GitPrDetails,
 } from "../../api/types.ts";
+import { ExtLink } from "../../components/ExtLink.tsx";
 import { toast } from "../../lib/toast.ts";
 import { fixRequest } from "./model.ts";
 import { usePrDetails } from "./run.ts";
@@ -96,10 +97,10 @@ export function PrCard({
 					className={`g-pr-ico ${pr.state}`}
 				/>
 				<div className="g-pr-title">
-					<a href={pr.url} target="_blank" rel="noopener noreferrer">
+					<ExtLink href={pr.url || null}>
 						<span className="g-pr-num">#{pr.number}</span> {pr.title}
-						<ExternalLinkIcon aria-hidden="true" />
-					</a>
+						{pr.url && <ExternalLinkIcon aria-hidden="true" />}
+					</ExtLink>
 					<span className="g-pr-sub">
 						<span className={`g-pr-state ${pr.state}`}>
 							{PR_STATE[pr.state]}
@@ -127,13 +128,9 @@ export function PrCard({
 							return (
 								<li key={`${c.name}-${i}`} className={`g-check ${c.state}`}>
 									<Icon aria-label={c.state} />
-									{c.url ? (
-										<a href={c.url} target="_blank" rel="noopener noreferrer">
-											{c.name}
-										</a>
-									) : (
+									<ExtLink href={c.url}>
 										<span>{c.name}</span>
-									)}
+									</ExtLink>
 									{c.workflow && (
 										<span className="g-check-wf">{c.workflow}</span>
 									)}
@@ -195,10 +192,17 @@ export function PrCard({
 export async function sendFix(agent: AgentRow, body: string): Promise<boolean> {
 	const data = await import("../../data/index.ts");
 	try {
-		await data.sendMessage({
+		const r = await data.sendMessage({
 			req: { ids: [agent.id], body, clientId: data.newClientId() },
 			agentId: agent.id,
 		});
+		if (r.drift || r.reconfirm) {
+			void toast(`Not sent to ${agent.name}`, {
+				tone: "warning",
+				description: "Who gets it changed. Try again.",
+			});
+			return false;
+		}
 		void toast(`Asked ${agent.name} to fix`, { tone: "success" });
 		return true;
 	} catch (e) {

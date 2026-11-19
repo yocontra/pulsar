@@ -15,7 +15,7 @@ import type {
 import { RpcError } from "../rpc.ts";
 import type { Agent } from "../types.ts";
 import type { Acting } from "./acting.ts";
-import type { Principal } from "./caller.ts";
+import { OPERATOR_ID, type Principal } from "./caller.ts";
 import type { PoolView } from "./pool.ts";
 import type { Registry } from "./registry.ts";
 
@@ -150,7 +150,10 @@ export class GitOps {
 	}
 
 	private local(id: string): Agent {
-		const a = this.o.registry.get(id);
+		// The operator (a session header in the app) has no folder: no_cwd.
+		const a =
+			this.o.registry.get(id) ??
+			(id === OPERATOR_ID ? this.o.registry.operator() : undefined);
 		if (!a) throw new RpcError("not_found", `no agent ${id}`);
 		return a;
 	}
@@ -168,7 +171,7 @@ export class GitOps {
 
 	/** A remote agent's address (another machine), or null for a local one. */
 	private remote(id: string): string | null {
-		if (this.o.registry.get(id)) return null;
+		if (this.o.registry.get(id) || id === OPERATOR_ID) return null;
 		if (!id.includes("/") || !this.o.pool())
 			throw new RpcError("not_found", `no agent ${id}`);
 		return id;

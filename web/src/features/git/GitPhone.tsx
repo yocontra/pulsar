@@ -184,9 +184,22 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 	const status = useGitStatus(agent.id).data;
 	const run = useGitRunner(agent, status);
 	const [open, setOpen] = useState(false);
+	// Mounted from the first open until it has animated out: no closed
+	// sheet sits in the page.
+	const [mounted, setMounted] = useState(false);
 	const [view, setView] = useState<View>("overview");
 	const [ask, setAsk] = useState("");
 	const modal = useRef<HTMLIonModalElement | null>(null);
+	// The top bar's title keeps clear of a third button (git.css).
+	const button = useRef<HTMLIonButtonElement | null>(null);
+	const shown = !!status?.available && can("git");
+	useEffect(() => {
+		const title = shown
+			? button.current?.closest("ion-toolbar")?.querySelector("ion-title")
+			: null;
+		title?.classList.add("g-has-git");
+		return () => title?.classList.remove("g-has-git");
+	}, [shown]);
 	// A form or the PR card needs the whole height (its buttons sit at the end).
 	useEffect(() => {
 		if (open && view !== "overview")
@@ -194,7 +207,10 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 	}, [open, view]);
 	// A confirm mid-run (the agent started working) needs the sheet open.
 	useEffect(() => {
-		if (run.confirm) setOpen(true);
+		if (run.confirm) {
+			setMounted(true);
+			setOpen(true);
+		}
 	}, [run.confirm]);
 	if (!can("git")) return null;
 	if (!status?.available) return null;
@@ -214,10 +230,12 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 	return (
 		<>
 			<IonButton
+				ref={button}
 				className="g-phone-btn"
 				aria-label={`Git: ${status.branch ?? "detached HEAD"}${status.dirty ? `, ${status.dirty} changed` : ""}`}
 				onClick={() => {
 					setView("overview");
+					setMounted(true);
 					setOpen(true);
 				}}
 			>
@@ -234,6 +252,7 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 			 * portal container they come from.
 			 */}
 			{lz &&
+				mounted &&
 				createPortal(
 					<lz.IonModal
 						ref={modal}
@@ -243,7 +262,10 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 						breakpoints={[0, 0.65, 1]}
 						initialBreakpoint={0.65}
 						handle={false}
-						onIonModalDidDismiss={close}
+						onIonModalDidDismiss={() => {
+							close();
+							setMounted(false);
+						}}
 					>
 						<IonContent className="p-sheet-content" scrollY={false}>
 							<div className="g-sheet">
