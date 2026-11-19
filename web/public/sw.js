@@ -3,8 +3,8 @@
 // transcripts never live in the cache. It also shows Web Push notifications:
 // the push says only "approval pending" with an opaque id; tapping it opens
 // that approval (details come from this node's API, never from the push).
-// "An agent finished" / "An agent stopped with an error" carry only the
-// agent's opaque id; tapping one opens that agent.
+// "An agent finished" / "An agent stopped with an error" carry only an
+// opaque token for the agent; tapping one opens that agent.
 // The cache belongs to one build: web/scripts/finish-dist.ts writes the build
 // id and that build's shell (HTML, boot.js, CSS, initial-route JS) below, the
 // install step fills the cache with exactly those files, and activate drops
@@ -139,7 +139,7 @@ self.addEventListener("push", (event) => {
 	}
 	if (
 		(data.kind === "finished" || data.kind === "failed") &&
-		typeof data.agentId === "string"
+		typeof data.ref === "string"
 	) {
 		event.waitUntil(turnNotice(data));
 		return;
@@ -169,7 +169,7 @@ self.addEventListener("push", (event) => {
 
 /**
  * An agent finished its turn or stopped with an error. The payload has only
- * the agent's opaque id; the app shows its name. A focused Pulsar tab shows
+ * an opaque token for the agent; tapping resolves it to the agent to open. A focused Pulsar tab shows
  * its own toast instead, where the browser allows a push without a
  * notification (Chromium; Safari and Firefox require one every time).
  */
@@ -188,10 +188,10 @@ async function turnNotice(data) {
 			body: failed
 				? "Open Pulsar to see what went wrong."
 				: "Open Pulsar to see what it did.",
-			tag: `turn:${data.agentId}`,
+			tag: `turn:${data.ref}`,
 			icon: "/icon.svg",
 			silent: data.sound !== true,
-			data: { agentId: data.agentId },
+			data: { turn: data.ref },
 		},
 	);
 }
@@ -199,12 +199,24 @@ async function turnNotice(data) {
 self.addEventListener("notificationclick", (event) => {
 	event.notification.close();
 	const id = event.notification.data?.id;
-	const agentId = event.notification.data?.agentId;
+	const turn = event.notification.data?.turn;
 	event.waitUntil(
 		(async () => {
 			let target = event.notification.data?.security ? "/" : "/#/needs";
-			if (typeof agentId === "string")
-				target = `/#/a/${encodeURIComponent(agentId)}`;
+			if (typeof turn === "string") {
+				target = "/";
+				try {
+					const res = await fetch(
+						`/api/v1/push/turns/${encodeURIComponent(turn)}`,
+						{ headers: { "X-Pulsar": "1" } },
+					);
+					if (res.ok) {
+						const t = await res.json();
+						if (typeof t.agentId === "string")
+							target = `/#/a/${encodeURIComponent(t.agentId)}`;
+					}
+				} catch {}
+			}
 			if (typeof id === "string") {
 				try {
 					const res = await fetch(

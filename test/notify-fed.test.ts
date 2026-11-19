@@ -143,10 +143,16 @@ beforeAll(async () => {
 	for (const n of [a, b]) await n.fed.discover();
 	await until(() => a.service.registry.remoteAgents().length === 2, 5000);
 	// The phone subscribed on A (the app A served).
-	a.service.push.subscribe(
-		{ kind: "human", login: OWNER, node: "phone" },
-		{ endpoint: "https://web.push.apple.com/phone", keys: phone.keys },
-	);
+	const operator = { kind: "human" as const, login: OWNER, node: "phone" };
+	a.service.push.subscribe(operator, {
+		endpoint: "https://web.push.apple.com/phone",
+		keys: phone.keys,
+	});
+	// Its app sent the device's choice: "Notifications only".
+	a.service.push.settings(operator, {
+		endpoint: "https://web.push.apple.com/phone",
+		turns: "notify",
+	});
 	await until(() => a.sent.length >= 1, 2000); // "notifications turned on"
 	await new Promise((r) => setTimeout(r, 30));
 	a.sent.length = 0;
@@ -197,7 +203,15 @@ describe("finish and fail notifications across machines", () => {
 		const payload = JSON.parse(
 			decrypt(Buffer.from(a.sent[0]!.body), phone.priv, phone.auth).toString(),
 		) as PushPayload;
-		expect(payload).toEqual({ kind: "finished", agentId: target });
+		expect(payload).toEqual({ kind: "finished", ref: expect.any(String) });
+		// Tapping it on the phone opens the agent on B, through A.
+		const opened = await tailnet.request(
+			"phone",
+			"a",
+			`/api/v1/push/turns/${(payload as { ref: string }).ref}`,
+			{ headers: { "X-Pulsar": "1" } },
+		);
+		expect(await opened.json()).toEqual({ agentId: target });
 	});
 
 	test("a failure on B is a failed push; a replayed record does not push again", async () => {
@@ -214,7 +228,13 @@ describe("finish and fail notifications across machines", () => {
 		const payload = JSON.parse(
 			decrypt(Buffer.from(a.sent[0]!.body), phone.priv, phone.auth).toString(),
 		) as PushPayload;
-		expect(payload).toEqual({ kind: "failed", agentId: target });
+		expect(payload).toMatchObject({ kind: "failed" });
+		expect(
+			a.service.push.turnAgent(
+				{ kind: "human", login: OWNER, node: "phone" },
+				(payload as { ref: string }).ref,
+			),
+		).toEqual({ agentId: target });
 		expect(a.sent[0]!.headers.Topic).toBe("failed");
 		// B's feed publishes again (any change): the same turn stays one push.
 		b.service.registry.setStatus(builder, "busy");

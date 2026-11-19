@@ -1675,6 +1675,10 @@ function realtime(raw: unknown) {
 			const a = agentOr404(c.id);
 			const n = { kind: c.kind, agentId: a.id, at: now };
 			for (const s of streams.values()) s.push?.(frame(s, "notify", n));
+			// The token a push would carry (sw.js resolves it on tap).
+			const ref = `ref-${turnRefs.size + 1}`;
+			turnRefs.set(ref, a.id);
+			out = { ok: true, ref };
 			break;
 		}
 		case "push-subscription": {
@@ -1997,6 +2001,8 @@ function security(kind: SecurityNotice["kind"], message: string) {
 }
 
 const vapid = generateVapidKeys();
+/** Agent tokens of finish/fail pushes (`GET /push/turns/:ref`). */
+const turnRefs = new Map<string, string>();
 /** Finish/fail settings by push endpoint (the daemon keeps them on the subscription row). */
 const pushPrefs = new Map<
 	string,
@@ -2686,6 +2692,12 @@ async function route(
 				pushPrefs.set(b.endpoint, pushPrefs.get(b.endpoint) ?? {});
 			return json({ ok: true });
 		}
+		// The agent a finish/fail push was about (its payload has only a token).
+		if (GET && seg[1] === "turns" && seg[2]) {
+			const agentId = turnRefs.get(seg[2]);
+			if (!agentId) throw notFound("that notification is too old");
+			return json({ agentId });
+		}
 		// This browser's finish/fail settings, kept with its subscription.
 		if (POST && seg[1] === "settings") {
 			const b = (await jsonBody(req)) as {
@@ -2701,6 +2713,7 @@ async function route(
 			}
 			return json({
 				subscribed: !!held,
+				chosen: held?.turns !== undefined,
 				turns: held?.turns ?? b.turns ?? "notify",
 				inApp: held?.inApp ?? b.inApp ?? true,
 			});

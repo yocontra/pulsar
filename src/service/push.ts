@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import type {
 	PushPayload,
@@ -57,6 +58,8 @@ const SUBJECT = "https://github.com/yocontra/pulsar";
 const MAX_SUBSCRIPTIONS = 50;
 const SECURITY_PUSH_MS = 60_000;
 const MODES = new Set<TurnNotifyMode>(["off", "notify", "sound", "both"]);
+/** Agent tokens remembered for `GET /push/turns/:ref`. */
+const MAX_REFS = 1000;
 
 /** The `Topic` header per payload kind: plaintext to the push service, so never an id. */
 const TOPICS: Record<PushPayload["kind"], string> = {
@@ -116,10 +119,12 @@ export class Push {
 		});
 		// A finished or failed turn the operator cares about (Interest).
 		const offNotify = this.o.events.on("notify", ({ kind, agentId }) => {
-			this.send({ kind, agentId }, (row) => {
-				const mode = row.turns ?? "notify";
-				if (mode === "notify") return { kind, agentId };
-				if (mode === "both") return { kind, agentId, sound: true };
+			const ref = this.refFor(agentId);
+			this.send({ kind, ref }, (row) => {
+				// Not chosen yet (a new subscription): nothing until the app says.
+				const mode = row.turns;
+				if (mode === "notify") return { kind, ref };
+				if (mode === "both") return { kind, ref, sound: true };
 				return null;
 			});
 		});
@@ -131,6 +136,33 @@ export class Push {
 	}
 
 	private lastSecurityPush = 0;
+	/** Per daemon run: agent tokens can't be traced back to the id without it. */
+	private readonly refKey = randomBytes(32);
+	private refs = new Map<string, string>();
+
+	/** The same opaque token for an agent every time (one notification per agent). */
+	private refFor(agentId: string): string {
+		const ref = createHmac("sha256", this.refKey)
+			.update(agentId)
+			.digest("base64url")
+			.slice(0, 22);
+		this.refs.delete(ref);
+		this.refs.set(ref, agentId);
+		if (this.refs.size > MAX_REFS) {
+			const first = this.refs.keys().next().value;
+			if (first !== undefined) this.refs.delete(first);
+		}
+		return ref;
+	}
+
+	/** `GET /push/turns/:ref`: the agent a finish/fail notification was about. */
+	turnAgent(p: Principal, ref: string): { agentId: string } {
+		authorize(p, "push.subscribe");
+		const agentId = this.refs.get(ref);
+		if (!agentId)
+			throw new RpcError("not_found", "that notification is too old");
+		return { agentId };
+	}
 
 	/** `notify` in the background; a failure (no key file) is logged while running. */
 	private send(payload: PushPayload, per?: PerSubscription) {
@@ -270,13 +302,15 @@ export class Push {
 		if (!r)
 			return {
 				subscribed: false,
+				chosen: false,
 				turns: turns ?? "notify",
 				inApp: req.inApp ?? true,
 			};
-		const mode = String(r.turns) as TurnNotifyMode;
+		const mode = r.turns as TurnNotifyMode | null;
 		return {
 			subscribed: true,
-			turns: MODES.has(mode) ? mode : "notify",
+			chosen: mode !== null && MODES.has(mode),
+			turns: mode !== null && MODES.has(mode) ? mode : "notify",
 			inApp: Number(r.in_app) !== 0,
 		};
 	}

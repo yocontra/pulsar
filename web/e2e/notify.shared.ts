@@ -15,6 +15,7 @@ async function mock(request: APIRequestContext, body: object) {
 		data: body,
 	});
 	expect(res.ok()).toBe(true);
+	return (await res.json()) as { ref?: string };
 }
 
 /** This browser has a push subscription at `endpoint` (no real push service in tests). */
@@ -64,7 +65,16 @@ export function notifySuite(platform: "desktop" | "phone") {
 	}) => {
 		await ready(page);
 		const id = await agentId(request, "name=apparish-auth");
-		await mock(request, { action: "turn", id, kind: "finished" });
+		const { ref } = await mock(request, {
+			action: "turn",
+			id,
+			kind: "finished",
+		});
+		// The push carries only a token; tapping it asks which agent to open.
+		const opened = await request.get(`/api/v1/push/turns/${ref}`, {
+			headers: { "X-Pulsar": "1" },
+		});
+		expect(await opened.json()).toEqual({ agentId: id });
 		const card = page.locator("[data-sonner-toast]");
 		await expect(card).toHaveCount(1);
 		await expect(card).toContainText("Agent finished");
@@ -108,7 +118,7 @@ export function notifySuite(platform: "desktop" | "phone") {
 			page.waitForRequest(
 				(r) =>
 					r.url().endsWith("/api/v1/push/settings") &&
-					!!r.postDataJSON()?.turns,
+					r.postDataJSON()?.turns === "both",
 			);
 		let section = await openSettings(page, phone);
 		if (phone) {

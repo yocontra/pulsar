@@ -44,6 +44,13 @@ describe("failed turns, per harness", () => {
 		expect(piTurnFailed(fixture("pi-aborted.jsonl"))).toBe(false);
 	});
 
+	test("an older failure is not the last turn's: a prompt after it starts another", () => {
+		expect(
+			claudeTurnFailed(fixture("claude-stopped-after-failure.jsonl")),
+		).toBe(false);
+		expect(piTurnFailed(fixture("pi-stopped-after-failure.jsonl"))).toBe(false);
+	});
+
 	test("a cut first line and junk are skipped; an empty tail is not a failure", () => {
 		const tail = `ror":true}\nnot json\n${fixture("pi-failed.jsonl")}`;
 		expect(piTurnFailed(tail)).toBe(true);
@@ -58,6 +65,32 @@ describe("failed turns, per harness", () => {
 		expect(t("codex")).toBe(codexTurnFailed);
 		expect(t("pi")).toBe(piTurnFailed);
 		expect(t("omp")).toBe(piTurnFailed);
+	});
+});
+
+describe("migration", () => {
+	test("subscriptions made before finish/fail notifications get Notifications only", () => {
+		const dir = mkdtempSync(join(tmpdir(), "pulsar-turns-db-"));
+		try {
+			const file = join(dir, "pulsar.db");
+			let store = new Store(file);
+			store.db
+				.prepare(
+					"INSERT INTO push_subscriptions (endpoint, p256dh, auth, login, created_at) VALUES ('https://web.push.apple.com/old', 'k', 'a', 'me', 1)",
+				)
+				.run();
+			// As an older pulsar left it: no `turns` column.
+			store.db.exec("ALTER TABLE push_subscriptions DROP COLUMN turns");
+			store.close();
+			store = new Store(file);
+			const row = store.db
+				.prepare("SELECT turns, in_app FROM push_subscriptions")
+				.get() as { turns: string; in_app: number };
+			expect(row).toEqual({ turns: "notify", in_app: 1 });
+			store.close();
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });
 
@@ -167,13 +200,13 @@ describe("turn rules", () => {
 	});
 
 	test("busy again within the grace: no turn; neither for busy → gone nor busy → unknown", async () => {
-		const { service, turns, pi } = setup({ graceMs: 80 });
+		const { service, turns, pi } = setup({ graceMs: 1000 });
 		const a = pi("s1");
 		service.registry.setStatus(a, "busy");
 		service.registry.setStatus(a, "idle");
-		await sleep(60); // shown idle (30 ms hold), grace still running
-		service.registry.setStatus(a, "busy");
-		await sleep(150);
+		await until(() => a.status === "idle", 2000); // shown idle (30 ms hold)
+		service.registry.setStatus(a, "busy"); // well inside the grace
+		await sleep(1100);
 		expect(turns).toEqual([]);
 		// Status lost is not a finished turn.
 		service.registry.setStatus(a, "unknown");
@@ -272,13 +305,19 @@ describe("turn pushes", () => {
 			const mode = key as TurnNotifyMode;
 			const endpoint = `https://web.push.apple.com/${mode}`;
 			service.push.subscribe(user, { endpoint, keys: ua.keys });
-			if (mode !== "notify")
-				expect(service.push.settings(user, { endpoint, turns: mode })).toEqual({
-					subscribed: true,
-					turns: mode,
-					inApp: true,
-				});
+			expect(service.push.settings(user, { endpoint, turns: mode })).toEqual({
+				subscribed: true,
+				chosen: true,
+				turns: mode,
+				inApp: true,
+			});
 		}
+		// A new subscription that never said gets no finish/fail pushes.
+		const fresh = browser();
+		service.push.subscribe(user, {
+			endpoint: "https://web.push.apple.com/fresh",
+			keys: fresh.keys,
+		});
 		// The "turned on" security notice (at most one a minute) goes first.
 		await until(() => sent.length >= 1, 2000);
 		await sleep(30);
@@ -302,12 +341,15 @@ describe("turn pushes", () => {
 				} catch {}
 			throw new Error("no subscription decrypts this push");
 		});
-		expect(payloads).toContainEqual({ kind: "failed", agentId: "pi:s1" });
-		expect(payloads).toContainEqual({
-			kind: "failed",
-			agentId: "pi:s1",
-			sound: true,
-		});
+		// An opaque token, the same for every push about this agent; the app
+		// resolves it (GET /push/turns/:ref). Never the id, a name or text.
+		const ref = (payloads[0] as { ref: string }).ref;
+		expect(ref).toMatch(/^[\w-]{22}$/);
+		expect(payloads).toContainEqual({ kind: "failed", ref });
+		expect(payloads).toContainEqual({ kind: "failed", ref, sound: true });
+		expect(JSON.stringify(payloads)).not.toContain("pi:s1");
+		expect(service.push.turnAgent(user, ref)).toEqual({ agentId: "pi:s1" });
+		expect(() => service.push.turnAgent(user, "nope")).toThrow("too old");
 		sent.length = 0;
 		service.events.emit("notify", {
 			kind: "finished",
@@ -326,7 +368,7 @@ describe("turn pushes", () => {
 				endpoint: "https://web.push.apple.com/none",
 				turns: "both",
 			}),
-		).toEqual({ subscribed: false, turns: "both", inApp: true });
+		).toEqual({ subscribed: false, chosen: false, turns: "both", inApp: true });
 		service.push.subscribe(user, {
 			endpoint: "https://web.push.apple.com/x",
 			keys: browser().keys,
@@ -336,12 +378,17 @@ describe("turn pushes", () => {
 				endpoint: "https://web.push.apple.com/x",
 				inApp: false,
 			}),
-		).toEqual({ subscribed: true, turns: "notify", inApp: false });
+		).toEqual({
+			subscribed: true,
+			chosen: false,
+			turns: "notify",
+			inApp: false,
+		});
 	});
 });
 
 describe("the app's stream", () => {
-	test("every stream hears notify; opening an agent makes it interesting", async () => {
+	test("every stream hears notify; opening an agent (not a prefetch) makes it interesting", async () => {
 		const { service, pi } = setup();
 		const a = pi("open-me");
 		const hub = new EventHub(service, { coalesceMs: 600_000 });
@@ -352,15 +399,23 @@ describe("the app's stream", () => {
 			new TextDecoder().decode((await reader.read()).value);
 		const first = await next();
 		const streamId = /"streamId":"([^"]+)"/.exec(first)![1]!;
+		// A hover prefetch follows the transcript (`?stream=`): not an open.
+		hub.watchSession(streamId, "me@x", a.id);
 		expect(service.interest.has(a.id)).toBe(false);
-		hub.setSubscription(streamId, "me@x", {
-			expanded: [],
-			window: null,
-			session: a.id,
-			query: null,
-			results: null,
-			receipts: [],
-		});
+		// The app's own subscription (PUT /subscriptions) with the agent open.
+		hub.setSubscription(
+			streamId,
+			"me@x",
+			{
+				expanded: [],
+				window: null,
+				session: a.id,
+				query: null,
+				results: null,
+				receipts: [],
+			},
+			{ opened: true },
+		);
 		expect(service.interest.has(a.id)).toBe(true);
 		service.events.emit("notify", { kind: "finished", agentId: a.id, at: 1 });
 		let text = "";

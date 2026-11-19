@@ -304,14 +304,18 @@ CREATE TABLE IF NOT EXISTS usage_seen (
 `),
 	},
 	// 9: finish and fail notifications: what each push subscription wants
-	// (`turns`: off, notify, sound, both; `in_app`), and the agents the
-	// operator recently started, messaged or opened. Additive, ensure-style.
+	// (`turns`: off, notify, sound, both; NULL until the browser says, while
+	// subscriptions made before this step get notify; `in_app`), and the
+	// agents the operator recently started, messaged or opened. Additive,
+	// ensure-style.
 	{
 		ensure: (db) => {
-			if (!hasColumn(db, "push_subscriptions", "turns"))
+			if (!hasColumn(db, "push_subscriptions", "turns")) {
 				db.exec(
-					"ALTER TABLE push_subscriptions ADD COLUMN turns TEXT NOT NULL DEFAULT 'notify'",
+					"ALTER TABLE push_subscriptions ADD COLUMN turns TEXT DEFAULT NULL",
 				);
+				db.exec("UPDATE push_subscriptions SET turns = 'notify'");
+			}
 			if (!hasColumn(db, "push_subscriptions", "in_app"))
 				db.exec(
 					"ALTER TABLE push_subscriptions ADD COLUMN in_app INTEGER NOT NULL DEFAULT 1",
