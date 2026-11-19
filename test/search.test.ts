@@ -13,6 +13,7 @@ import { driverFor } from "../src/harnesses/index.ts";
 import type { HarnessDriver } from "../src/harnesses/types.ts";
 import { StaticIdentity } from "../src/http/identity.ts";
 import type { MessageSearchResponse } from "../src/http/wire.ts";
+import { RpcError } from "../src/rpc.ts";
 import { type Doc, hasFts5, MessageIndex } from "../src/search/index.ts";
 import { REDACTED, redactSecrets } from "../src/search/redact.ts";
 import {
@@ -216,14 +217,14 @@ describe.each(["fts5", "memory"] as const)("index engine: %s", (engine) => {
 		expect(index.find(q("rewritten")).map((d) => d.eventId)).toEqual(["g1"]);
 	});
 
-	test("forgetting an agent and pruning old rows remove them from results", () => {
+	test("forgetting an agent and pruning old rows remove them from results", async () => {
 		index.upsert([
 			doc("p1", "ancient history entry", { ts: 1000 }),
 			doc("p2", "fresh history entry"),
 		]);
-		expect(index.prune(10_000)).toBe(1);
+		expect(await index.prune(10_000)).toBe(1);
 		expect(index.find(q("history")).map((d) => d.eventId)).toEqual(["p2"]);
-		index.forgetAgent("pi:b");
+		await index.forgetAgent("pi:b");
 		expect(index.find(q("sourdough"))).toEqual([]);
 		expect(index.count("pi:b")).toBe(0);
 	});
@@ -235,6 +236,27 @@ describe.each(["fts5", "memory"] as const)("index engine: %s", (engine) => {
 		index.upsert([doc("c1", "history after clearing")]);
 		expect(index.find(q("history")).map((d) => d.eventId)).toEqual(["c1"]);
 	});
+});
+
+test("the fallback engine loads rows already stored, in the background", async () => {
+	const path = join(tempDir("load"), "pulsar.db");
+	const first = new Store(path);
+	new MessageIndex(first.db, { engine: "fts5" }).upsert(
+		Array.from({ length: 2500 }, (_, i) =>
+			doc(`l${i}`, `stored row ${i} jaguar`),
+		),
+	);
+	first.db.close();
+	const store = new Store(path);
+	const index = new MessageIndex(store.db, { engine: "memory" });
+	await until(
+		() => index.find(q("jaguar"), { limit: 5000 }).length === 2500,
+		5000,
+	);
+	expect(index.find(q("stored 1234 ")).map((d) => d.eventId)).toEqual([
+		"l1234",
+	]);
+	store.db.close();
 });
 
 test("rows written without FTS5 are found once a runtime with FTS5 opens the database", () => {
@@ -566,6 +588,10 @@ describe("message search service", () => {
 			node: "phone",
 		} as never);
 		expect(asOperator.hits.length).toBe(2);
+		expect(
+			service.app.hello({ kind: "human", login: OWNER, node: "phone" } as never)
+				.features,
+		).toContain("search");
 	});
 });
 
@@ -589,6 +615,8 @@ test("PULSAR_NO_SEARCH: nothing is indexed, searches find nothing, and the store
 	try {
 		expect(service.messages.index.count()).toBe(0);
 		expect(service.transcripts.tailer.tap).toBeNull();
+		const human = { kind: "human", login: OWNER, node: "phone" } as never;
+		expect(service.app.hello(human).features).not.toContain("search");
 		const agent = service.registry.upsert({
 			harness: "pi",
 			sessionId: "off-1",
@@ -711,4 +739,33 @@ describe("every harness's transcript feeds the index", () => {
 		expect(docs[1]!.text).not.toContain("ghp_");
 		store.db.close();
 	});
+});
+
+test("one remote agent's search on an older home node finds nothing instead of failing", async () => {
+	const store = new Store(join(tempDir("old-peer"), "pulsar.db"));
+	const address = "m2/pi:x";
+	const agent = { id: address } as Agent;
+	let reason = "unsupported";
+	const search = new MessageSearch({
+		store,
+		transcripts: null as never,
+		views: { row: (a: Agent) => ({ id: a.id }) } as never,
+		registry: {
+			find: (id: string) => (id === address ? agent : undefined),
+			pool: {
+				get: (id: string) => (id === address ? agent : undefined),
+				searchAgentMessages: async () => {
+					throw new RpcError(reason, "unknown action search.messages");
+				},
+			},
+		} as never,
+	});
+	const as = { kind: "human", login: OWNER, node: "phone" } as never;
+	const r = await search.search("walrus", as, { agent: address });
+	expect(r.hits).toEqual([]);
+	reason = "unreachable";
+	await expect(
+		search.search("walrus", as, { agent: address }),
+	).rejects.toThrow();
+	store.db.close();
 });

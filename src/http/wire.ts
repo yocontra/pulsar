@@ -256,6 +256,10 @@ export type Feature =
 	| "git"
 	/** The issue card of an agent's GitHub issue (`/agents/:id/issue`). */
 	| "issues";
+	| "git";
+	| "launch";
+	/** Message search (`GET /search/messages`); absent with PULSAR_NO_SEARCH. */
+	| "search";
 
 /** `GET /hello`. */
 export interface Hello {

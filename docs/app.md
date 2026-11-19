@@ -158,9 +158,9 @@ Cmd-K, then type `?` (or pick Ask): "who is editing src/auth/session.ts", "who h
 
 Cmd-K searches what you and your agents wrote, on every machine: type a word of 3 letters or more and matching messages show under **In messages**, each with the agent, a snippet ("You:" for your own words, "Agent:" for the agent's) and when it was written. On a phone, tap the search button on the Agents screen. Choosing a message opens its session at that message, with the find bar open.
 
-In a session, **Find** opens the find bar: it searches the whole session, not only what is on screen. Enter or the down arrow goes to the next match, Shift-Enter or the up arrow to the previous one, and Esc closes it. Older messages load as needed.
+In a session, **Find** opens the find bar. It searches all of the session that search covers (below), not only what is on screen. Enter or the **Next match** button goes to the next match, Shift-Enter or **Previous match** to the previous one, and Esc closes it. Older messages load as needed.
 
-Search covers prompts, replies, messages between agents and the titles of tool calls from the last 30 days. It doesn't cover tool output, thinking or subagents. To keep it from storing a copy of your transcripts, see `PULSAR_NO_SEARCH` in the README.
+Search covers prompts, replies, messages between agents and the titles of tool calls from the last 30 days. It doesn't cover tool output, thinking or subagents, and for a long session that was already running when search started, only its most recent part (about 5,000 events). To keep it from storing a copy of your transcripts, see `PULSAR_NO_SEARCH` in the README.
 
 ## Settings
 

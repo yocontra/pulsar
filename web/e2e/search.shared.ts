@@ -112,10 +112,112 @@ export function searchSuite(platform: "desktop" | "phone") {
 		// No matches: the steps are off.
 		await bar.getByRole("searchbox").fill("zzqqxx");
 		await expect(bar).toContainText("No matches");
+		// Nothing stays marked.
+		await expect(page.locator("[data-find-current]")).toHaveCount(0);
 		await expect(
 			bar.getByRole("button", { name: "Next match" }),
 		).toBeDisabled();
 		await bar.getByRole("searchbox").press("Escape");
 		await expect(bar).toBeHidden();
+		await expect(page.locator("[data-find-current]")).toHaveCount(0);
+	});
+
+	test(`leaving a session closes its find bar (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=apparish-auth");
+		await ready(page);
+		await page.evaluate((id) => {
+			location.hash = `#/a/${encodeURIComponent(id)}`;
+		}, id);
+		await page
+			.getByRole("button", { name: "Find in messages", exact: true })
+			.click();
+		await findBar(page).getByRole("searchbox").fill("fake timers");
+		await expect(findBar(page)).toContainText(/\d+ of \d+/);
+		await page.evaluate(() => {
+			location.hash = "#/";
+		});
+		await expect(findBar(page)).toBeHidden();
+		await page.evaluate((id) => {
+			location.hash = `#/a/${encodeURIComponent(id)}`;
+		}, id);
+		await expect(
+			page.getByRole("button", { name: "Find in messages", exact: true }),
+		).toBeVisible();
+		await expect(findBar(page)).toBeHidden();
+	});
+
+	test(`a search that fails says so and offers Retry (${platform})`, async ({
+		page,
+		request,
+		errors,
+	}) => {
+		const id = await agentId(request, "name=apparish-auth");
+		await ready(page);
+		await page.evaluate((id) => {
+			location.hash = `#/a/${encodeURIComponent(id)}`;
+		}, id);
+		await page.route("**/api/v1/search/messages?**", (r) =>
+			r.fulfill({
+				status: 503,
+				contentType: "application/json",
+				body: JSON.stringify({
+					error: { code: "unavailable", message: "down" },
+				}),
+			}),
+		);
+		await page
+			.getByRole("button", { name: "Find in messages", exact: true })
+			.click();
+		const bar = findBar(page);
+		await bar.getByRole("searchbox").fill("fake timers");
+		await expect(bar).toContainText("Couldn't search");
+		await expect(page.locator("[data-find-current]")).toHaveCount(0);
+		await page.unroute("**/api/v1/search/messages?**");
+		await bar.getByRole("button", { name: "Retry" }).click();
+		await expect(bar).toContainText(/\d+ of \d+/);
+		// The refused request logged its status: expected here.
+		errors.splice(
+			0,
+			errors.length,
+			...errors.filter((e) => !/status of 503/.test(e)),
+		);
+	});
+
+	test(`with search off, the entry points say so (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		// The daemon leaves "search" out of hello's features under PULSAR_NO_SEARCH.
+		await page.route("**/api/v1/hello**", async (r) => {
+			const res = await r.fetch();
+			const body = (await res.json()) as { features: string[] };
+			body.features = body.features.filter((f) => f !== "search");
+			await r.fulfill({ response: res, json: body });
+		});
+		const id = await agentId(request, "name=apparish-auth");
+		await ready(page);
+		if (phone)
+			await expect(
+				page
+					.getByRole("button", { name: "Agents" })
+					.or(page.locator("ion-header").first()),
+			).toBeVisible();
+		await expect(
+			page.getByRole("button", { name: "Search messages" }),
+		).toHaveCount(0);
+		await page.evaluate((id) => {
+			location.hash = `#/a/${encodeURIComponent(id)}`;
+		}, id);
+		const find = page.getByRole("button", {
+			name: "Find in messages",
+			exact: true,
+		});
+		await expect(find).toBeDisabled();
+		await expect(
+			page.locator("span[title^='Message search is off']", { has: find }),
+		).toHaveCount(1);
 	});
 }

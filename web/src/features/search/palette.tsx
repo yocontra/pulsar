@@ -6,6 +6,7 @@
 import { AgentAvatar } from "../../ds/index.ts";
 import { ago } from "../../lib/format.ts";
 import type { PaletteResult } from "../../lib/registry.tsx";
+import { can } from "../../lib/store.ts";
 import { searchable, searchMessages } from "./api.ts";
 import { Snippet } from "./Snippet.tsx";
 import { openHit } from "./state.ts";
@@ -15,7 +16,7 @@ export async function messageResults(
 	q: string,
 	signal: AbortSignal,
 ): Promise<PaletteResult[]> {
-	if (!searchable(q)) return [];
+	if (!can("search") || !searchable(q)) return [];
 	const res = await searchMessages(q, { signal });
 	const rows = new Map(res.agents.map((a) => [a.id, a]));
 	return res.hits.map((hit) => {

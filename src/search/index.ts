@@ -38,18 +38,31 @@ export interface IndexState {
 	top: number;
 }
 
+/** Rows deleted per transaction (between yields to the event loop). */
+const DELETE_CHUNK = 100;
 /** Candidates one query reads before scoring. */
 export const CANDIDATES = 300;
+/**
+ * Matches read, most recently indexed first, before the newest by time are
+ * picked: a word in every message (`the`) costs this many rows, not all.
+ */
+export const RECENT = 10_000;
+
+/** What an engine indexes of a row. */
+interface Indexed {
+	text: string;
+	agentId: string;
+}
 
 interface Engine {
 	readonly kind: "fts5" | "memory";
-	/** A row was added or its text changed (old text given when it had one). */
-	put(id: number, text: string, old: string | null): void;
-	drop(id: number, text: string): void;
+	/** A row was added or its text changed (old values given when it had them). */
+	put(id: number, row: Indexed, old: Indexed | null): void;
+	drop(id: number, row: Indexed): void;
 	/** Every row went. */
 	reset(): void;
-	/** Ids of rows that may match, newest first; the caller checks each. */
-	find(query: Query, agentId: string | null, limit: number): number[];
+	/** Ids of rows that may match (at most `RECENT`, recently indexed first); the caller checks each. */
+	find(query: Query, agentId: string | null): number[];
 }
 
 /** True when this runtime's SQLite has FTS5. */
@@ -67,21 +80,36 @@ export function hasFts5(db: DatabaseSync): boolean {
 
 type Row = Record<string, string | number | null>;
 
+/** An agent id as one FTS5 phrase over its words (the SQL checks the exact id). */
+function agentPhrase(agentId: string): string {
+	return `"${words(agentId).join(" ").replaceAll('"', '""')}"`;
+}
+
 class FtsEngine implements Engine {
 	readonly kind = "fts5" as const;
 	private readonly db: DatabaseSync;
 
 	constructor(db: DatabaseSync) {
 		this.db = db;
-		const existed = Boolean(
+		let existed = Boolean(
 			db
 				.prepare(
 					"SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'search_fts'",
 				)
 				.get(),
 		);
+		// A table from before agent ids were indexed: make it again.
+		if (
+			existed &&
+			!(db.prepare("PRAGMA table_info(search_fts)").all() as Row[]).some(
+				(c) => c.name === "agent_id",
+			)
+		) {
+			db.exec("DROP TABLE search_fts");
+			existed = false;
+		}
 		db.exec(
-			"CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(text, content='search_docs', content_rowid='id', tokenize='unicode61 remove_diacritics 2')",
+			"CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(text, agent_id, content='search_docs', content_rowid='id', tokenize='unicode61 remove_diacritics 2')",
 		);
 		const stale = db
 			.prepare("SELECT value FROM meta WHERE key = 'search_fts_stale'")
@@ -93,50 +121,89 @@ class FtsEngine implements Engine {
 		}
 	}
 
-	put(id: number, text: string, old: string | null) {
+	put(id: number, row: Indexed, old: Indexed | null) {
 		if (old !== null) this.drop(id, old);
 		this.db
-			.prepare("INSERT INTO search_fts (rowid, text) VALUES (?, ?)")
-			.run(id, text);
+			.prepare(
+				"INSERT INTO search_fts (rowid, text, agent_id) VALUES (?, ?, ?)",
+			)
+			.run(id, row.text, row.agentId);
 	}
 
-	drop(id: number, text: string) {
+	drop(id: number, row: Indexed) {
 		this.db
 			.prepare(
-				"INSERT INTO search_fts (search_fts, rowid, text) VALUES ('delete', ?, ?)",
+				"INSERT INTO search_fts (search_fts, rowid, text, agent_id) VALUES ('delete', ?, ?, ?)",
 			)
-			.run(id, text);
+			.run(id, row.text, row.agentId);
 	}
 
 	reset() {
 		this.db.exec("INSERT INTO search_fts (search_fts) VALUES ('delete-all')");
 	}
 
-	find(query: Query, agentId: string | null, limit: number): number[] {
-		const sql = `SELECT d.id FROM search_fts f JOIN search_docs d ON d.id = f.rowid
-			WHERE search_fts MATCH ?${agentId ? " AND d.agent_id = ?" : ""}
-			ORDER BY d.ts DESC LIMIT ?`;
-		const args: (string | number)[] = [ftsExpression(query)];
-		if (agentId) args.push(agentId);
-		args.push(limit);
-		return (this.db.prepare(sql).all(...args) as Row[]).map((r) =>
-			Number(r.id),
-		);
+	find(query: Query, agentId: string | null): number[] {
+		const terms = `text : (${ftsExpression(query)})`;
+		const match = agentId
+			? `agent_id : ${agentPhrase(agentId)} AND ${terms}`
+			: terms;
+		// FTS5 walks rowids in order, so the LIMIT stops it early.
+		return (
+			this.db
+				.prepare(
+					"SELECT rowid FROM search_fts WHERE search_fts MATCH ? ORDER BY rowid DESC LIMIT ?",
+				)
+				.all(match, RECENT) as Row[]
+		).map((r) => Number(r.rowid));
 	}
 }
 
+/** The postings key of an agent's rows (never a word: words have no NUL). */
+const agentKey = (agentId: string) => `\u0000${agentId}`;
+
 /**
- * Word → row ids, built from `search_docs` on the first query and kept in
- * step with every write after that.
+ * Word → row ids, kept in step with every write, and loaded from
+ * `search_docs` in the background a chunk at a time (a query before the load
+ * finishes sees what is loaded so far).
  */
 class MemoryEngine implements Engine {
 	readonly kind = "memory" as const;
 	private readonly db: DatabaseSync;
-	private postings: Map<string, Set<number>> | null = null;
+	private postings = new Map<string, Set<number>>();
 	private marked = false;
+	/** Bumps on reset, so a load that started before stops. */
+	private generation = 0;
 
 	constructor(db: DatabaseSync) {
 		this.db = db;
+		setImmediate(() => void this.load());
+	}
+
+	/** Reads every row into the postings, yielding between chunks. */
+	private async load() {
+		const gen = this.generation;
+		let after = 0;
+		for (;;) {
+			if (gen !== this.generation) return;
+			let rows: Row[];
+			try {
+				rows = this.db
+					.prepare(
+						"SELECT id, text, agent_id FROM search_docs WHERE id > ? ORDER BY id LIMIT 250",
+					)
+					.all(after) as Row[];
+			} catch {
+				return; // The database closed.
+			}
+			if (rows.length === 0) return;
+			for (const r of rows)
+				this.add(this.postings, Number(r.id), {
+					text: String(r.text),
+					agentId: String(r.agent_id),
+				});
+			after = Number(rows[rows.length - 1]!.id);
+			await new Promise<void>((r) => setImmediate(r));
+		}
 	}
 
 	/** FTS5 (on a later open with a newer runtime) must index these rows again. */
@@ -150,55 +217,48 @@ class MemoryEngine implements Engine {
 			.run();
 	}
 
-	private index(): Map<string, Set<number>> {
-		if (this.postings) return this.postings;
-		const map = new Map<string, Set<number>>();
-		for (const r of this.db
-			.prepare("SELECT id, text FROM search_docs")
-			.iterate() as Iterable<Row>)
-			this.add(map, Number(r.id), String(r.text));
-		this.postings = map;
-		return map;
+	private keys(row: Indexed): Set<string> {
+		const keys = new Set(words(row.text));
+		keys.add(agentKey(row.agentId));
+		return keys;
 	}
 
-	private add(map: Map<string, Set<number>>, id: number, text: string) {
-		for (const w of new Set(words(text))) {
-			const set = map.get(w);
+	private add(map: Map<string, Set<number>>, id: number, row: Indexed) {
+		for (const k of this.keys(row)) {
+			const set = map.get(k);
 			if (set) set.add(id);
-			else map.set(w, new Set([id]));
+			else map.set(k, new Set([id]));
 		}
 	}
 
-	put(id: number, text: string, old: string | null) {
+	put(id: number, row: Indexed, old: Indexed | null) {
 		this.markStale();
-		if (!this.postings) return;
 		if (old !== null) this.remove(id, old);
-		this.add(this.postings, id, text);
+		this.add(this.postings, id, row);
 	}
 
-	drop(id: number, text: string) {
+	drop(id: number, row: Indexed) {
 		this.markStale();
-		if (this.postings) this.remove(id, text);
+		this.remove(id, row);
 	}
 
 	reset() {
 		this.markStale();
-		this.postings = null;
+		this.generation++;
+		this.postings = new Map();
 	}
 
-	private remove(id: number, text: string) {
-		for (const w of new Set(words(text))) {
-			const set = this.postings!.get(w);
+	private remove(id: number, row: Indexed) {
+		for (const k of this.keys(row)) {
+			const set = this.postings.get(k);
 			set?.delete(id);
-			if (set?.size === 0) this.postings!.delete(w);
+			if (set?.size === 0) this.postings.delete(k);
 		}
 	}
 
-	find(query: Query, agentId: string | null, limit: number): number[] {
-		const map = this.index();
+	find(query: Query, agentId: string | null): number[] {
+		const map = this.postings;
 		const last = query.terms.length - 1;
-		let ids: Set<number> | null = null;
-		// Rarest exact terms first; the prefix term last.
 		const sets = query.terms.map((t, i) => {
 			if (!(query.prefix && i === last)) return map.get(t) ?? new Set<number>();
 			const union = new Set<number>();
@@ -206,28 +266,15 @@ class MemoryEngine implements Engine {
 				if (w.startsWith(t)) for (const id of set) union.add(id);
 			return union;
 		});
+		if (agentId) sets.push(map.get(agentKey(agentId)) ?? new Set<number>());
+		// Smallest set first.
+		let ids: Set<number> | null = null;
 		for (const set of sets.sort((a, b) => a.size - b.size)) {
 			if (!ids) ids = new Set(set);
 			else for (const id of ids) if (!set.has(id)) ids.delete(id);
 			if (ids.size === 0) return [];
 		}
-		const all = [...(ids ?? [])];
-		const out: { id: number; ts: number }[] = [];
-		for (let i = 0; i < all.length; i += 500) {
-			const chunk = all.slice(i, i + 500);
-			const rows = this.db
-				.prepare(
-					`SELECT id, ts, agent_id FROM search_docs WHERE id IN (${chunk.map(() => "?").join(",")})`,
-				)
-				.all(...chunk) as Row[];
-			for (const r of rows)
-				if (!agentId || r.agent_id === agentId)
-					out.push({ id: Number(r.id), ts: Number(r.ts) });
-		}
-		return out
-			.sort((a, b) => b.ts - a.ts)
-			.slice(0, limit)
-			.map((r) => r.id);
+		return [...(ids ?? [])].sort((a, b) => b - a).slice(0, RECENT);
 	}
 }
 
@@ -295,13 +342,21 @@ export class MessageIndex {
 						d.text,
 						d.cursor,
 					);
-					this.engine.put(Number(r.lastInsertRowid), d.text, null);
+					this.engine.put(
+						Number(r.lastInsertRowid),
+						{ text: d.text, agentId: d.agentId },
+						null,
+					);
 					continue;
 				}
 				const cursor = d.cursor ?? (old.cursor as string | null);
 				update.run(d.ts, d.role, d.from, d.text, cursor, Number(old.id));
 				if (old.text !== d.text)
-					this.engine.put(Number(old.id), d.text, String(old.text));
+					this.engine.put(
+						Number(old.id),
+						{ text: d.text, agentId: d.agentId },
+						{ text: String(old.text), agentId: d.agentId },
+					);
 			}
 		});
 	}
@@ -311,51 +366,67 @@ export class MessageIndex {
 		query: Query,
 		opts: { agentId?: string | null; limit?: number } = {},
 	): FoundDoc[] {
-		const ids = this.engine.find(
-			query,
-			opts.agentId ?? null,
-			opts.limit ?? CANDIDATES,
-		);
+		const agentId = opts.agentId ?? null;
+		const ids = this.engine.find(query, agentId);
 		if (ids.length === 0) return [];
+		// The newest by time among the candidates; only those are read whole.
 		const rows = this.db
 			.prepare(
-				`SELECT * FROM search_docs WHERE id IN (${ids.map(() => "?").join(",")})`,
+				`SELECT * FROM search_docs WHERE id IN (
+					SELECT id FROM search_docs WHERE id IN (SELECT value FROM json_each(?))${agentId ? " AND agent_id = ?" : ""}
+					ORDER BY ts DESC LIMIT ?)`,
 			)
-			.all(...ids) as Row[];
+			.all(
+				JSON.stringify(ids),
+				...(agentId ? [agentId] : []),
+				opts.limit ?? CANDIDATES,
+			) as Row[];
 		return rows
 			.map(toDoc)
 			.filter((d) => matches(query, d.text))
 			.sort((a, b) => b.ts - a.ts);
 	}
 
-	/** Deletes rows matching `where` (on `search_docs`), a chunk per transaction. */
-	private deleteWhere(where: string, ...args: (string | number)[]): number {
+	/**
+	 * Deletes rows matching `where` (on `search_docs`): a small chunk per
+	 * transaction, yielding to the event loop between chunks (each delete
+	 * re-reads the row's text for FTS5).
+	 */
+	private async deleteWhere(
+		where: string,
+		...args: (string | number)[]
+	): Promise<number> {
 		let n = 0;
 		for (;;) {
 			const rows = this.db
-				.prepare(`SELECT id, text FROM search_docs WHERE ${where} LIMIT 500`)
+				.prepare(
+					`SELECT id, text, agent_id FROM search_docs WHERE ${where} LIMIT ${DELETE_CHUNK}`,
+				)
 				.all(...args) as Row[];
 			if (rows.length === 0) return n;
 			this.tx(() => {
 				const del = this.db.prepare("DELETE FROM search_docs WHERE id = ?");
 				for (const r of rows) {
-					this.engine.drop(Number(r.id), String(r.text));
+					this.engine.drop(Number(r.id), {
+						text: String(r.text),
+						agentId: String(r.agent_id),
+					});
 					del.run(Number(r.id));
 				}
 			});
 			n += rows.length;
+			await new Promise<void>((r) => setImmediate(r));
 		}
 	}
 
 	/** Forgets one agent's events and where its backfill stopped. */
-	forgetAgent(agentId: string): number {
-		const n = this.deleteWhere("agent_id = ?", agentId);
+	async forgetAgent(agentId: string): Promise<number> {
 		this.db.prepare("DELETE FROM search_state WHERE agent_id = ?").run(agentId);
-		return n;
+		return this.deleteWhere("agent_id = ?", agentId);
 	}
 
 	/** Forgets events older than `cutoff`. */
-	prune(cutoff: number): number {
+	prune(cutoff: number): Promise<number> {
 		return this.deleteWhere("ts < ?", cutoff);
 	}
 

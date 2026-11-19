@@ -505,7 +505,10 @@ export class PulsarService {
 			...(opts.search?.engine ? { engine: opts.search.engine } : {}),
 			off: opts.search?.off ?? false,
 		});
-		if (!this.messages.off) this.transcripts.tailer.tap = this.messages.tap;
+		if (!this.messages.off) {
+			this.transcripts.tailer.tap = this.messages.tap;
+			this.app.extraFeatures = () => ["search"];
+		}
 	}
 
 	/** The pool's token usage, priced on this node (`GET /usage`). */

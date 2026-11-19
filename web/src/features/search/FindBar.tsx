@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AgentRow } from "../../api/types.ts";
 import { observer } from "../../lib/signals.ts";
+import { can } from "../../lib/store.ts";
 import { IonButton } from "../../mobile/ionic.ts";
 import {
 	type MessageHit,
@@ -39,6 +40,13 @@ function FindButtonImpl({
 	const [root, setRoot] = useState<Element | null>(null);
 	const state = find.value;
 	const open = state?.agentId === agent.id;
+	// Leaving the session closes its find bar (reopening the agent starts at its end).
+	useEffect(
+		() => () => {
+			if (find.value?.agentId === agent.id) closeFind();
+		},
+		[agent.id],
+	);
 	useEffect(() => {
 		if (!open) return;
 		// The session this header belongs to (a phone keeps earlier pages in the DOM).
@@ -46,21 +54,29 @@ function FindButtonImpl({
 		setRoot(shell?.querySelector("section.session") ?? null);
 	}, [open, agent.id]);
 	const toggle = () => (open ? closeFind() : openFind(agent.id));
-	const disabled = !agent.hasTranscript;
-	const why = disabled ? "This agent's harness keeps no transcript" : undefined;
+	const off = !can("search");
+	const disabled = off || !agent.hasTranscript;
+	const why = off
+		? "Message search is off on this machine (PULSAR_NO_SEARCH)"
+		: !agent.hasTranscript
+			? "This agent's harness keeps no transcript"
+			: undefined;
 	const button = mobile ? (
-		<IonButton
-			ref={(el: HTMLIonButtonElement | null) => {
+		<span
+			ref={(el) => {
 				ref.current = el;
 			}}
-			aria-label="Find in messages"
-			aria-pressed={open}
-			disabled={disabled}
 			title={why}
-			onClick={toggle}
 		>
-			<SearchIcon />
-		</IonButton>
+			<IonButton
+				aria-label="Find in messages"
+				aria-pressed={open}
+				disabled={disabled}
+				onClick={toggle}
+			>
+				<SearchIcon />
+			</IonButton>
+		</span>
 	) : (
 		<span
 			ref={(el) => {
@@ -167,7 +183,10 @@ function Bar({
 						setStatus("ready");
 					})
 					.catch(() => {
-						if (!ctrl.signal.aborted) setStatus("error");
+						if (ctrl.signal.aborted) return;
+						setHits([]);
+						setIdx(-1);
+						setStatus("error");
 					});
 			},
 			target.current ? 0 : 200,
@@ -181,7 +200,11 @@ function Bar({
 	// Show the current match, then mark the words on screen.
 	const hit = idx >= 0 ? hits[idx] : undefined;
 	useEffect(() => {
-		if (!hit) return;
+		if (!hit) {
+			// No matches (or an error): nothing stays marked.
+			clearHighlight();
+			return;
+		}
 		const ctrl = new AbortController();
 		void reveal(root, state.agentId, hit.eventId, ctrl.signal).then((el) => {
 			if (!ctrl.signal.aborted) highlight(root, el, words, bar.current);

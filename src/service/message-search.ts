@@ -4,6 +4,7 @@ import type {
 	MessageSearchResponse,
 } from "../http/wire.ts";
 import { debugLog } from "../log.ts";
+import { RpcError } from "../rpc.ts";
 import { type Doc, type DocRole, MessageIndex } from "../search/index.ts";
 import { redactSecrets } from "../search/redact.ts";
 import { parseQuery, type Query, score, snippet } from "../search/text.ts";
@@ -22,6 +23,8 @@ export const BACKFILL_MS = 60_000;
 export const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 /** Pages read back the first time an agent is indexed (about 200 events each). */
 export const FIRST_PASS_PAGES = 25;
+/** Rows the backfill writes per transaction. */
+const WRITE_CHUNK = 25;
 /** Longest text kept for one event. */
 const TEXT_CAP = 8000;
 /** Hits one search returns. */
@@ -134,6 +137,14 @@ export class MessageSearch {
 		return n;
 	}
 
+	/** Writes a page's rows a few at a time, yielding between (FTS5 inserts add up). */
+	private async write(docs: Doc[]) {
+		for (let i = 0; i < docs.length; i += WRITE_CHUNK) {
+			this.index.upsert(docs.slice(i, i + WRITE_CHUNK));
+			await yieldLoop();
+		}
+	}
+
 	/** Indexes what is new in one agent's transcript; returns events read. */
 	async backfillAgent(agentId: string, live = true): Promise<number> {
 		const src = await this.transcripts.source(agentId);
@@ -144,12 +155,12 @@ export class MessageSearch {
 			// A harness API: its newest page, as the live poll would see it.
 			const page = await this.transcripts.page(agentId, null);
 			if (!page.available) return 0;
-			this.index.upsert(this.docsFrom(agentId, page.events, null));
+			await this.write(this.docsFrom(agentId, page.events, null));
 			return page.events.length;
 		}
 		let state = this.index.state(agentId);
 		if (state && (state.path !== src.path || src.size < state.top)) {
-			this.index.forgetAgent(agentId);
+			await this.index.forgetAgent(agentId);
 			state = null;
 		}
 		if (state && state.top === src.size) return 0;
@@ -163,7 +174,7 @@ export class MessageSearch {
 			const page = await this.transcripts.page(agentId, cursor);
 			if (!page.available) break;
 			read += page.events.length;
-			this.index.upsert(this.docsFrom(agentId, page.events, cursor));
+			await this.write(this.docsFrom(agentId, page.events, cursor));
 			const begin = page.cursor;
 			if (!begin || Number(begin) <= top) break;
 			if (!state && pages >= FIRST_PASS_PAGES) break;
@@ -177,7 +188,7 @@ export class MessageSearch {
 	}
 
 	/** Forgets events past retention. */
-	prune(): number {
+	prune(): Promise<number> {
 		return this.index.prune(this.now() - RETENTION_MS);
 	}
 
@@ -239,7 +250,17 @@ export class MessageSearch {
 			if (isAddress(agent) && pool?.get(agent)) {
 				if (pool.searchAgentMessages && parseQuery(q)) {
 					const machineId = agent.slice(0, agent.indexOf("/"));
-					const theirs = await pool.searchAgentMessages(agent, q, limit, as);
+					const theirs = await pool
+						.searchAgentMessages(agent, q, limit, as)
+						.catch((e: unknown) => {
+							// An older home node has no message search: nothing to find there.
+							if (
+								e instanceof RpcError &&
+								(e.code === "unsupported" || e.code === "bad_request")
+							)
+								return [];
+							throw e;
+						});
 					for (const h of theirs) {
 						const hit = cleanHit(h, machineId);
 						if (hit?.agentId === agent) hits.push(hit);
