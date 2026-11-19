@@ -313,11 +313,24 @@ export class Launches {
 	 * case, with or without the tailnet's domain).
 	 */
 	isHere(m: string | null | undefined): boolean {
-		if (!m) return true;
+		if (!m || m === "local") return true;
 		if (m === this.d.machineId()) return true;
 		const name = this.d.machine().toLowerCase();
 		const want = m.toLowerCase();
 		return want === name || want.split(".")[0] === name;
+	}
+
+	/** Another machine's id, by id or name (any case, with or without the domain). */
+	private peerId(m: string): string | null {
+		const pool = this.d.registry.pool;
+		if (!pool) return null;
+		const exact = pool.machineIdOf(m);
+		if (exact) return exact;
+		const want = m.toLowerCase().split(".")[0];
+		return (
+			pool.machines().find((x) => x.name.toLowerCase() === want)?.machineId ??
+			null
+		);
 	}
 
 	/** A launch by id: this node's, or one it follows on another machine. */
@@ -339,12 +352,18 @@ export class Launches {
 		const result = (await this.d.acting.run(
 			principal,
 			"agents.launch",
-			{ machine: here ? null : machine },
+			{
+				machine: here
+					? null
+					: machine
+						? (this.peerId(machine) ?? machine)
+						: null,
+			},
 			params,
 			assertion,
 		)) as LaunchState;
 		const pool = this.d.registry.pool;
-		const remoteId = !here && machine ? pool?.machineIdOf(machine) : null;
+		const remoteId = !here && machine ? this.peerId(machine) : null;
 		if (!remoteId || !pool) return result;
 		return this.follow(remoteId, result, principal);
 	}
@@ -811,7 +830,7 @@ export class Launches {
 		const m = machine ?? "";
 		if (this.isHere(m)) return this.readHere(principal, req);
 		const pool = this.d.registry.pool;
-		const id = pool?.machineIdOf(m);
+		const id = this.peerId(m);
 		if (!pool || !id) throw new RpcError("not_found", `no machine ${m}`);
 		if (!pool.launchRead)
 			throw new RpcError("unreachable", "no other machines are linked");

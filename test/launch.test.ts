@@ -1002,6 +1002,17 @@ describe.skipIf(!HAS_TMUX)("over HTTP", () => {
 		);
 		expect(refs.body.current).toBe("main");
 		expect((await api("GET", "/machines/nowhere/projects")).status).toBe(404);
+		// By name, as the app sends it (its machine list is names): the same
+		// answer as by id, with the login shell's probe.
+		for (const m of [mid, "home", "HOME", "home.tail-fake.ts.net", "local"]) {
+			const byName = await api<LaunchOptions>("GET", `/machines/${m}/projects`);
+			expect(byName.status).toBe(200);
+			expect(byName.body.machineId).toBe(mid);
+			expect(byName.body.checked).toBe(true);
+			expect(
+				byName.body.harnesses.find((h) => h.id === "codex")?.installed,
+			).toBe(true);
+		}
 
 		// The stream hears launch events.
 		const ac = new AbortController();

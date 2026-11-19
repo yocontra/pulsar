@@ -19,11 +19,25 @@ import { hello } from "../../lib/store.ts";
 const enc = encodeURIComponent;
 
 /** The machine as the routes name it: this one, or another by name. */
-export const isLocal = (machine: string) =>
-	!machine || machine === hello.peek()?.machine;
+export const isLocal = (machine: string) => {
+	const h = hello.peek();
+	if (!machine || !h) return true;
+	const m = machine.toLowerCase();
+	return (
+		machine === h.machineId ||
+		m === h.machine.toLowerCase() ||
+		m.split(".")[0] === h.machine.toLowerCase()
+	);
+};
 
+/**
+ * The machine as the routes name it: this one by id (the daemon also takes
+ * its name), another by name. `local` stands in before hello arrives.
+ */
 const machineKey = (machine: string) =>
-	isLocal(machine) ? (hello.peek()?.machineId ?? "") : machine;
+	isLocal(machine)
+		? hello.peek()?.machineId || hello.peek()?.machine || "local"
+		: machine;
 
 const optionsCache = new Map<
 	string,
