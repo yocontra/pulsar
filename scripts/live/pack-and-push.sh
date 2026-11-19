@@ -42,12 +42,16 @@ echo "== stop anything running from a previous round"
 docker exec -u dev "$C" bash -lc "$LIVE_ENV tmux kill-session -t pulsar 2>/dev/null; tmux kill-session -t fake 2>/dev/null; pulsar stop >/dev/null 2>&1 || true"
 
 echo "== setup as dev (no agents to configure here: --client none, mesh only)"
-docker exec -u dev "$C" bash -lc "$LIVE_ENV pulsar setup --yes --client none --mesh" || {
+# The global install, not an older `pulsar` shim on dev's PATH; setup then updates the shim.
+PULSAR_BIN="$(docker exec "$C" npm prefix -g)/bin/pulsar"
+docker exec -u dev "$C" bash -lc "$LIVE_ENV $PULSAR_BIN setup --yes --client none --mesh" || {
 	echo "setup failed; see above"
 	exit 1
 }
 
 echo "== daemon under tmux (no systemd here)"
+# Setup leaves an on-demand daemon running; stop it first so the service daemon starts clean.
+docker exec -u dev "$C" bash -lc "$LIVE_ENV pulsar stop >/dev/null 2>&1 || true"
 docker exec -u dev "$C" bash -lc "$LIVE_ENV tmux new -d -s pulsar \"env PULSAR_HOME=\$PULSAR_HOME PULSAR_NO_SCAN=1 pulsar daemon --service 2>&1 | tee -a \$PULSAR_HOME/service.log\""
 
 URL="https://$(docker exec "$C" tailscale status --json | jq -r '.Self.DNSName | rtrimstr(".")'):7337"
