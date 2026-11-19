@@ -107,6 +107,12 @@ export interface PoolView extends ActingRelay {
 	readonly changes?: RemoteChanges;
 	/** Attachment bytes and the `@` file list of remote agents, through their home node. */
 	readonly attachments?: RemoteAttachments;
+	/** A remote agent's git status or PR, read on its home node (src/service/git.ts). */
+	gitRead?(
+		address: string,
+		what: "status" | "pr",
+		as?: Principal,
+	): Promise<unknown>;
 	/** Permission prompts of remote agents, decided by their home node. */
 	readonly approvals: RemoteApprovals;
 	/** Token usage of other machines and their agents (absent before usage existed). */

@@ -59,6 +59,7 @@ import { Deliveries, type DeliveryConfig } from "./delivery.ts";
 import { EnrollGate } from "./enroll.ts";
 import { EventBus, type ServiceEvents } from "./events.ts";
 import { Files } from "./files.ts";
+import { GitOps } from "./git.ts";
 import { cleanPrompt, KINDS } from "./interactions.ts";
 import { Interest } from "./interest.ts";
 import { Interrupts } from "./interrupts.ts";
@@ -194,6 +195,8 @@ export class PulsarService {
 	readonly files: Files;
 	/** Starting agents from the app (`agents.launch`). */
 	readonly launches: Launches;
+	/** Git actions on agents' worktrees: status, PR, and the git.* acting ops. */
+	readonly git: GitOps;
 	/** This node's passkeys (approvals and passkey sessions share them). */
 	readonly passkeys: Passkeys;
 	/** Passkey sessions: what the app shows to act as the user. */
@@ -329,6 +332,11 @@ export class PulsarService {
 			machineId: () => this.machineId,
 			machine: () => this.machine,
 			relay: () => this.registry.pool,
+		});
+		this.git = new GitOps({
+			registry: this.registry,
+			acting: this.acting,
+			pool: () => this.registry.pool,
 		});
 		this.presence = new Presence({
 			native:
