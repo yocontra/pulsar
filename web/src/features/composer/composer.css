@@ -1,0 +1,365 @@
+/* Composer attachments, the @ menu and Stop (attach.tsx). */
+
+.att-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border: 0;
+	border-radius: var(--ds-radius-sm, 6px);
+	background: transparent;
+	color: var(--ds-text-3);
+	cursor: pointer;
+}
+.att-btn:hover {
+	background: var(--ds-surface-hover);
+	color: var(--ds-text);
+}
+.att-btn:focus-visible {
+	outline: 2px solid var(--ds-focus);
+	outline-offset: 1px;
+}
+.att-btn svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* Tiles above the text field. */
+.att-strip {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	width: 100%;
+	padding: 10px 12px 2px;
+}
+.m-composer .att-strip {
+	padding: 2px 0 8px;
+}
+.att-tile {
+	position: relative;
+	width: 64px;
+	height: 64px;
+	overflow: hidden;
+	border: 1px solid var(--ds-border);
+	border-radius: var(--ds-radius-lg, 10px);
+	background: var(--ds-surface-2);
+	animation: att-in 300ms var(--ds-ease-out, ease-out);
+}
+.att-tile.is-file {
+	width: auto;
+	max-width: 220px;
+	height: 44px;
+}
+@keyframes att-in {
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.att-tile {
+		animation: none;
+	}
+}
+.att-thumb {
+	display: block;
+	width: 100%;
+	height: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: zoom-in;
+}
+.att-thumb img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.att-file {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	grid-template-rows: auto auto;
+	column-gap: 8px;
+	align-items: center;
+	height: 100%;
+	padding: 4px 28px 4px 10px;
+	font-size: 12px;
+}
+.att-file svg {
+	grid-row: span 2;
+	width: 18px;
+	height: 18px;
+	color: var(--ds-text-3);
+}
+.att-file-name {
+	overflow: hidden;
+	color: var(--ds-text);
+	font-weight: 500;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.att-file-size {
+	color: var(--ds-text-3);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.att-status {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	padding: 1px 4px;
+	background: color-mix(in srgb, var(--ds-bg) 85%, transparent);
+	color: var(--ds-text-2);
+	font-size: 10px;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+.att-tile[data-state="preparing"] img,
+.att-tile[data-state="uploading"] img {
+	opacity: 0.6;
+}
+.att-retry {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	background: rgb(0 0 0 / 0.45);
+	color: #fff;
+	cursor: pointer;
+}
+.att-retry svg {
+	width: 18px;
+	height: 18px;
+}
+.att-tile[data-state="failed"] {
+	border-color: var(--ds-danger);
+}
+.att-x {
+	position: absolute;
+	top: 3px;
+	right: 3px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: rgb(0 0 0 / 0.6);
+	color: #fff;
+	cursor: pointer;
+}
+.att-x svg {
+	width: 11px;
+	height: 11px;
+}
+.att-tile.is-file .att-x {
+	top: 50%;
+	transform: translateY(-50%);
+	right: 6px;
+	background: var(--ds-control);
+	color: var(--ds-text-2);
+}
+
+/* Drag and drop. */
+.att-drop {
+	position: absolute;
+	inset: 8px;
+	z-index: 20;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 2px dashed color-mix(in srgb, var(--ds-primary) 60%, transparent);
+	border-radius: 16px;
+	background: color-mix(in srgb, var(--ds-primary) 3.5%, var(--ds-surface));
+	pointer-events: none;
+}
+.m-composer .att-drop {
+	inset: 4px;
+}
+.att-drop-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	border: 1px solid var(--ds-border);
+	border-radius: 999px;
+	background: var(--ds-surface);
+	box-shadow: var(--ds-shadow-sm);
+	color: var(--ds-text);
+	font-size: 13px;
+	font-weight: 500;
+}
+.att-drop-pill svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* An image, full size. */
+.att-zoom {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 32px;
+	background: rgb(0 0 0 / 0.75);
+	cursor: zoom-out;
+}
+.att-zoom img {
+	max-width: 100%;
+	max-height: 100%;
+	border-radius: 8px;
+	object-fit: contain;
+}
+.att-zoom-x {
+	position: absolute;
+	top: max(16px, env(safe-area-inset-top));
+	right: 16px;
+	display: flex;
+	padding: 8px;
+	border: 0;
+	border-radius: 50%;
+	background: rgb(255 255 255 / 0.15);
+	color: #fff;
+}
+
+/* The @ menu, docked above the composer. */
+.composer:has(> .mention-menu) {
+	position: relative;
+}
+.composer > .mention-menu {
+	position: absolute;
+	right: 16px;
+	bottom: calc(100% - 2px);
+	left: 16px;
+	z-index: 30;
+	max-height: 18rem;
+	overflow-y: auto;
+	padding: 4px;
+	border: 1px solid var(--ds-border);
+	border-radius: 12px;
+	background: var(--ds-surface);
+	box-shadow: var(--ds-shadow-md);
+}
+.d-main .composer > .mention-menu {
+	right: 32px;
+	left: 32px;
+	bottom: calc(100% + 4px);
+}
+.m-composer > .mention-menu {
+	right: 10px;
+	left: 10px;
+	bottom: calc(100% + 6px);
+}
+.mention-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 30px;
+	padding: 5px 8px;
+	border-radius: 8px;
+	color: var(--ds-text);
+	font-size: 12px;
+	cursor: pointer;
+}
+.m-composer .mention-item {
+	min-height: 40px;
+	font-size: 14px;
+}
+.mention-item[aria-selected="true"] {
+	background: var(--ds-surface-selected);
+}
+.mention-item svg {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	color: var(--ds-text-3);
+}
+.mention-name {
+	flex: none;
+	max-width: 45%;
+	overflow: hidden;
+	font-weight: 500;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.mention-path {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--ds-text-3);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.mention-empty {
+	margin: 0;
+	padding: 8px;
+	color: var(--ds-text-3);
+	font-size: 12px;
+}
+.mention-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 24px;
+	padding: 0 4px 0 6px;
+	border-radius: 4px;
+	background: var(--ds-accent-soft);
+	color: var(--ds-accent-text);
+	font-size: 12px;
+	font-weight: 500;
+	align-self: center;
+}
+.mention-chip svg {
+	width: 1em;
+	height: 1em;
+}
+.mention-chip button {
+	display: flex;
+	padding: 2px;
+	border: 0;
+	border-radius: 3px;
+	background: none;
+	color: inherit;
+	cursor: pointer;
+}
+.mention-chip button:hover {
+	background: var(--ds-surface-hover);
+}
+
+/* Stop replaces Send while the agent works and the draft is empty. */
+.att-stop.send-btn,
+.m-send.att-stop {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	background: color-mix(in srgb, var(--ds-danger) 90%, transparent);
+	color: #fff;
+	cursor: pointer;
+	transition: transform 120ms;
+}
+.att-stop.send-btn {
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+}
+.att-stop.send-btn:hover:not(:disabled) {
+	transform: scale(1.05);
+}
+.att-stop:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+.att-stop svg {
+	width: 12px;
+	height: 12px;
+	border-radius: 2px;
+	fill: currentColor;
+}

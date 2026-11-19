@@ -1,0 +1,46 @@
+/* Files a message names (AttachedFiles.tsx). */
+.ds-attached {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 6px 0 0;
+	padding: 0;
+	list-style: none;
+}
+.ds-attached:first-child {
+	margin-top: 0;
+}
+.ds-attached-img {
+	display: block;
+	width: 96px;
+	height: 96px;
+	border-radius: 10px;
+	object-fit: cover;
+}
+.ds-attached-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	max-width: 260px;
+	padding: 4px 8px;
+	border-radius: 8px;
+	background: color-mix(in srgb, currentColor 10%, transparent);
+	font-size: 12px;
+}
+.ds-attached-chip svg {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	opacity: 0.75;
+}
+.ds-attached-name {
+	overflow: hidden;
+	font-weight: 500;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.ds-attached-size {
+	flex: none;
+	opacity: 0.7;
+	font-variant-numeric: tabular-nums;
+}

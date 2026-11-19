@@ -1,7 +1,7 @@
 // Feature registrations (slots, pages, commands) before anything reads them.
 import "./features.ts";
 import { createRoot } from "react-dom/client";
-import { api, request } from "./api/client.ts";
+import { api, request, setSessionToken } from "./api/client.ts";
 import { App } from "./components/App.tsx";
 import {
 	registerCommand,
@@ -47,7 +47,7 @@ void boot();
 // app loads (never set otherwise), and gets the toast and registry APIs.
 const e2e = (window as { __pulsarE2E?: Record<string, unknown> }).__pulsarE2E;
 if (e2e && typeof e2e === "object")
-	Object.assign(e2e, { toast, api, request, ...registry });
+	Object.assign(e2e, { toast, api, request, setSessionToken, ...registry });
 
 // The service worker caches only the static shell, never API responses.
 if (

@@ -20,6 +20,9 @@ import {
 	type ApprovalOptions,
 	type AskRequest,
 	type AskResponse,
+	type AttachmentManifest,
+	type AttachmentPut,
+	type AttachmentUpload,
 	type AttentionList,
 	type ChangesMode,
 	type ChangesSummary,
@@ -29,6 +32,7 @@ import {
 	type FacetKey,
 	type FacetsResponse,
 	type FileDiff,
+	type FileSearch,
 	type Hello,
 	type InteractionAnswer,
 	type Page,
@@ -482,6 +486,25 @@ export const api = {
 			`/agents/${enc(agentId)}/changes/file${query({ mode, path })}`,
 		),
 	/**
+	 * Opens an upload of files for an agent (the `attachments.upload` act;
+	 * call through `api.acting`, which passes the assertion for another
+	 * machine). Then `uploadAttachment` per file.
+	 */
+	attachments: (
+		agentId: string,
+		manifest: AttachmentManifest,
+		assertion?: unknown,
+	) =>
+		request<AttachmentUpload>(`/agents/${enc(agentId)}/attachments`, {
+			method: "POST",
+			body: { manifest, ...(assertion !== undefined ? { assertion } : {}) },
+		}),
+	/** The composer's `@` menu: files in the agent's folder. */
+	files: (agentId: string, q: string, signal?: AbortSignal) =>
+		request<FileSearch>(`/agents/${enc(agentId)}/files${query({ q })}`, {
+			signal,
+		}),
+	/**
 	 * Interrupt/stop an agent; only when `/hello` lists the `stop` feature. A
 	 * local agent uses this node's passkey session. An agent on another
 	 * machine is a relayed ceremony: its home node issues the challenge, the
@@ -690,6 +713,53 @@ export type ActingOp =
 	| "git.commit"
 	| "git.push"
 	| "git.pr";
+
+/**
+ * One attached file's bytes into an open upload (`PUT`, streamed; XHR for
+ * upload progress). Rejects with an ApiError like `request`.
+ */
+export function uploadAttachment(
+	agentId: string,
+	upload: string,
+	index: number,
+	file: Blob,
+	onProgress?: (fraction: number) => void,
+	signal?: AbortSignal,
+): Promise<AttachmentPut> {
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open(
+			"PUT",
+			`${API_BASE}/agents/${enc(agentId)}/attachments/${enc(upload)}/${index}`,
+		);
+		xhr.setRequestHeader(API_HEADER, "1");
+		if (sessionToken)
+			xhr.setRequestHeader("Authorization", `Bearer ${sessionToken}`);
+		xhr.setRequestHeader("Content-Type", "application/octet-stream");
+		xhr.upload.onprogress = (e) => {
+			if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+		};
+		xhr.onload = () => {
+			let body: unknown = null;
+			try {
+				body = JSON.parse(xhr.responseText);
+			} catch {}
+			if (xhr.status >= 200 && xhr.status < 300) resolve(body as AttachmentPut);
+			else
+				reject(
+					new ApiError(
+						failureKind(xhr.status, body as ApiErrorBody | null),
+						xhr.status,
+						body as ApiErrorBody | null,
+					),
+				);
+		};
+		xhr.onerror = () => reject(new ApiError("offline", 0, null));
+		xhr.onabort = () => reject(new DOMException("aborted", "AbortError"));
+		signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+		xhr.send(file);
+	});
+}
 
 async function withSession<T>(
 	fn: () => Promise<T>,

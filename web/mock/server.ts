@@ -90,6 +90,7 @@ import type {
 	UserSessionInfo,
 	Wake,
 } from "../src/api/types.ts";
+import { openUpload, putFile, searchFiles } from "./attachments.ts";
 import {
 	changeFile,
 	changesSummary,
@@ -159,6 +160,7 @@ const FEATURES: Feature[] = [
 		"push",
 		"ask",
 		"usage",
+		"attachments",
 		...((process.env.PULSAR_MOCK_FEATURES ?? "")
 			.split(",")
 			.map((f) => f.trim())
@@ -1980,6 +1982,12 @@ async function requireActing(
 const actTarget = (t: { agent?: string }) =>
 	t.agent ? t.agent.slice(t.agent.indexOf("/") + 1) : "machine:";
 
+const ATTACH_STATUS: Record<string, number> = {
+	not_found: 404,
+	too_large: 413,
+	unreachable: 503,
+};
+
 const RPC_STATUS: Record<string, number> = {
 	bad_assertion: 403,
 	no_passkey: 409,
@@ -2570,6 +2578,47 @@ async function route(
 			return json(d);
 		}
 	}
+	// Attachments: the manifest is the acting op; then each file's bytes.
+	if (seg[0] === "agents" && seg[2] === "attachments") {
+		const a = agentOr404(seg[1]!);
+		try {
+			if (POST && seg.length === 3) {
+				const b = (await jsonBody(req)) as {
+					manifest?: unknown;
+					assertion?: unknown;
+				};
+				await requireActing(
+					req,
+					"attachments.upload",
+					{ agent: a.id },
+					b.manifest ?? null,
+					b.assertion,
+				);
+				return json(openUpload(a.id, b.manifest));
+			}
+			if (req.method === "PUT" && seg.length === 5)
+				return json(
+					putFile(
+						a.id,
+						seg[3]!,
+						Number(seg[4]),
+						new Uint8Array(await req.arrayBuffer()),
+					),
+				);
+		} catch (e) {
+			if (e instanceof RpcError)
+				throw new ApiError(ATTACH_STATUS[e.code] ?? 400, e.code, e.message);
+			throw e;
+		}
+	}
+	if (GET && seg[0] === "agents" && seg[2] === "files" && seg.length === 3) {
+		const a = agentOr404(seg[1]!);
+		return json({
+			agent: a.id,
+			available: true,
+			items: searchFiles(q.get("q") ?? ""),
+		});
+	}
 	// Mock only: a stand-in acting op (the web client's api.acting flow).
 	if (POST && path === "/__mock/acting") {
 		const b = (await jsonBody(req)) as {
@@ -2666,6 +2715,10 @@ async function route(
 	if (POST && path === "/__mock/realtime")
 		return json(realtime(await jsonBody(req)));
 	// Mock only: forget every passkey and passkey session (test isolation).
+	// Mock only: a passkey session without WebAuthn, for WebKit tests (no
+	// virtual authenticator there); the test hands the token to the app.
+	if (POST && path === "/__mock/session")
+		return json(userSessions.issue(LOGIN, "e2e", deviceOf(req)));
 	if (POST && path === "/__mock/reset-passkeys") {
 		for (const k of passkeys.list()) passkeys.remove(k.id);
 		sessionMeta.clear();
