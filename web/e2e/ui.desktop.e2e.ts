@@ -150,34 +150,44 @@ test.describe("desktop UI", () => {
 		request,
 	}) => {
 		await ready(page);
+		// Each pair is measured until the tree stops moving: rows that just
+		// loaded can re-render between two measurements.
+		const near = (gap: () => Promise<number>, max: number) =>
+			expect.poll(gap).toBeLessThanOrEqual(max);
 		await page.locator('[data-node="m:studio/p:apparish"] .chev').click();
 		// Tree agent row: the avatar spans both lines and centres on the row;
 		// the status shares the name's baseline.
 		const row = page.locator(".d-row.agent:has(.ds-status--plain)").first();
 		await row.waitFor();
 		const av = row.locator(".ds-avatar");
-		expect((await av.boundingBox())!.height).toBeGreaterThanOrEqual(30);
-		expect(Math.abs((await midY(av)) - (await midY(row)))).toBeLessThanOrEqual(
+		await expect
+			.poll(async () => (await av.boundingBox())?.height ?? 0)
+			.toBeGreaterThanOrEqual(30);
+		await near(async () => Math.abs((await midY(av)) - (await midY(row))), 1);
+		const name = row.locator(".d-name");
+		await near(
+			async () =>
+				Math.abs(
+					(await baselineY(name)) -
+						(await baselineY(row.locator(".ds-status-text"))),
+				),
 			1,
 		);
-		const name = row.locator(".d-name");
-		expect(
-			Math.abs(
-				(await baselineY(name)) -
-					(await baselineY(row.locator(".ds-status-text"))),
-			),
-		).toBeLessThanOrEqual(1);
 		// Needs-you sidebar rows: same avatar, time on the name's baseline.
 		const attn = page.locator(".d-row.attn").first();
-		expect(
-			Math.abs((await midY(attn.locator(".ds-avatar"))) - (await midY(attn))),
-		).toBeLessThanOrEqual(1);
-		expect(
-			Math.abs(
-				(await baselineY(attn.locator(".d-name"))) -
-					(await baselineY(attn.locator(".d-trail"))),
-			),
-		).toBeLessThanOrEqual(1);
+		await near(
+			async () =>
+				Math.abs((await midY(attn.locator(".ds-avatar"))) - (await midY(attn))),
+			1,
+		);
+		await near(
+			async () =>
+				Math.abs(
+					(await baselineY(attn.locator(".d-name"))) -
+						(await baselineY(attn.locator(".d-trail"))),
+				),
+			1,
+		);
 		// Needs badges: small, bold, centred on their label.
 		for (const [badge, label] of [
 			[".d-section .ds-needs-badge", ".d-section > span:first-child"],
@@ -193,10 +203,15 @@ test.describe("desktop UI", () => {
 			expect(
 				Number(await b.evaluate((el) => getComputedStyle(el).fontWeight)),
 			).toBeGreaterThanOrEqual(600);
-			expect(
-				Math.abs((await midY(b)) - (await midY(page.locator(label).first()))),
-				badge,
-			).toBeLessThanOrEqual(1.5);
+			await expect
+				.poll(
+					async () =>
+						Math.abs(
+							(await midY(b)) - (await midY(page.locator(label).first())),
+						),
+					{ message: badge },
+				)
+				.toBeLessThanOrEqual(1.5);
 		}
 		// Home card: the avatar centres on the row, the trail sits on the
 		// title's baseline.
@@ -205,29 +220,35 @@ test.describe("desktop UI", () => {
 			const s = getComputedStyle(el);
 			return parseFloat(s.paddingTop) - parseFloat(s.paddingBottom);
 		});
-		expect(
-			Math.abs(
-				(await midY(card.locator(".ds-avatar"))) -
-					((await midY(card)) + pad / 2),
-			),
-		).toBeLessThanOrEqual(1);
-		expect(
-			Math.abs(
-				(await baselineY(card.locator(".d-card-title"))) -
-					(await baselineY(card.locator(".d-card-meta"))),
-			),
-		).toBeLessThanOrEqual(1);
+		await near(
+			async () =>
+				Math.abs(
+					(await midY(card.locator(".ds-avatar"))) -
+						((await midY(card)) + pad / 2),
+				),
+			1,
+		);
+		await near(
+			async () =>
+				Math.abs(
+					(await baselineY(card.locator(".d-card-title"))) -
+						(await baselineY(card.locator(".d-card-meta"))),
+				),
+			1,
+		);
 		// Session header: the status pill's words share the title's baseline.
 		const id = await agentId(request, "name=apparish-auth");
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
 		const head = page.locator(".d-sh-line1");
 		await head.locator(".ds-status").waitFor();
-		expect(
-			Math.abs(
-				(await baselineY(head.locator("h1"))) -
-					(await baselineY(head.locator(".ds-status-text"))),
-			),
-		).toBeLessThanOrEqual(1);
+		await near(
+			async () =>
+				Math.abs(
+					(await baselineY(head.locator("h1"))) -
+						(await baselineY(head.locator(".ds-status-text"))),
+				),
+			1,
+		);
 	});
 
 	test("one chip per shortcut, aligned with its label", async ({ page }) => {
