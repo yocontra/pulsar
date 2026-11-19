@@ -119,6 +119,8 @@ export class Daemon {
 
 	/** Binds the socket. Resolves false when another live daemon already owns it. */
 	async start(): Promise<boolean> {
+		// The database holds message and transcript text: this user only.
+		await this.store.secure();
 		if (!this.remoteGiven)
 			this.remote = remoteConfig(process.env, await readSettingsAsync());
 		// The socket's folder: made (and for a short path in /tmp, checked) first.
