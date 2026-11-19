@@ -10,6 +10,17 @@ import { agentId, expect, ready, test } from "./fixtures.ts";
 const findBar = (page: Page) =>
 	page.getByRole("search", { name: "Find in messages" });
 
+/**
+ * The find bar's match count once its search is done ("N of N", on the
+ * newest match). Read from the bar, not from an earlier API call: the mock's
+ * sessions are live, and a new matching message can land in between.
+ */
+async function landed(page: Page): Promise<number> {
+	const count = findBar(page).locator(".msr-count");
+	await expect(count).toHaveText(/^(\d+) of \1$/);
+	return Number((await count.textContent())!.split(" ")[0]);
+}
+
 /** The session's find bar is open, prefilled, on match `n` of `of`, and the match is on screen. */
 async function expectAtMatch(page: Page, q: string) {
 	const bar = findBar(page);
@@ -84,6 +95,17 @@ export function searchSuite(platform: "desktop" | "phone") {
 		// The oldest match is behind "load earlier".
 		const oldest = body.hits[0]!;
 		expect(oldest.cursor).not.toBeNull();
+		// The session is live: a new match lands after that count (as the
+		// mock's own sessions do at any time).
+		const added = await request.post("/api/v1/__mock/realtime", {
+			headers: { "X-Pulsar": "1" },
+			data: {
+				action: "transcript",
+				id,
+				text: "Moved the retry test to fake timers too.",
+			},
+		});
+		expect(added.ok()).toBe(true);
 		await ready(page);
 		await page.evaluate((id) => {
 			location.hash = `#/a/${encodeURIComponent(id)}`;
@@ -93,12 +115,11 @@ export function searchSuite(platform: "desktop" | "phone") {
 			.click();
 		const bar = findBar(page);
 		await bar.getByRole("searchbox").fill("fake timers");
-		await expect(bar).toContainText(
-			`${body.hits.length} of ${body.hits.length}`,
-		);
+		const n = await landed(page);
+		expect(n).toBeGreaterThan(body.hits.length);
 		// Wraps from the newest to the oldest.
 		await bar.getByRole("searchbox").press("Enter");
-		await expect(bar).toContainText(`1 of ${body.hits.length}`);
+		await expect(bar).toContainText(`1 of ${n}`);
 		const el = page
 			.locator("section.session")
 			.last()
@@ -106,9 +127,9 @@ export function searchSuite(platform: "desktop" | "phone") {
 		await expect(el).toBeInViewport();
 		await expect(el).toHaveAttribute("data-find-current", "");
 		await bar.getByRole("button", { name: "Next match" }).click();
-		await expect(bar).toContainText(`2 of ${body.hits.length}`);
+		await expect(bar).toContainText(`2 of ${n}`);
 		await bar.getByRole("button", { name: "Previous match" }).click();
-		await expect(bar).toContainText(`1 of ${body.hits.length}`);
+		await expect(bar).toContainText(`1 of ${n}`);
 		// No matches: the steps are off.
 		await bar.getByRole("searchbox").fill("zzqqxx");
 		await expect(bar).toContainText("No matches");
@@ -231,7 +252,10 @@ export function searchSuite(platform: "desktop" | "phone") {
 			`/api/v1/search/messages?q=${encodeURIComponent("fake timers")}&agent=${encodeURIComponent(id)}`,
 			{ headers: { "X-Pulsar": "1" } },
 		);
-		const n = ((await res.json()) as { hits: unknown[] }).hits.length;
+		const oldest = ((await res.json()) as { hits: { cursor: string | null }[] })
+			.hits[0]!;
+		// The oldest match is behind "load earlier", so stepping to it needs a page.
+		expect(oldest.cursor).not.toBeNull();
 		await ready(page);
 		await page.evaluate((id) => {
 			location.hash = `#/a/${encodeURIComponent(id)}`;
@@ -241,7 +265,7 @@ export function searchSuite(platform: "desktop" | "phone") {
 			.getByRole("button", { name: "Find in messages", exact: true })
 			.click();
 		await bar.getByRole("searchbox").fill("fake timers");
-		await expect(bar).toContainText(`${n} of ${n}`);
+		const n = await landed(page);
 		// Older pages fail from now on.
 		await page.route("**/transcript?cursor=**", (r) =>
 			r.fulfill({
