@@ -95,6 +95,7 @@ describe("status", () => {
 			"",
 		].join("\0");
 		expect(parsePorcelain(out)).toEqual({
+			ab: true,
 			branch: "feat",
 			head: "0123456",
 			upstream: "origin/feat",
@@ -356,6 +357,68 @@ describe("push", () => {
 		expect(await message(push(lone, {}))).toBe(
 			"This repo has no remote to push to.",
 		);
+	});
+
+	test("a branch that tracks the default branch pushes to its own name", async () => {
+		const { d, bare } = project();
+		// `checkout -b feature origin/main`: the upstream is origin/main.
+		g(d, "checkout", "-q", "-b", "feature", "origin/main");
+		expect(g(d, "rev-parse", "--abbrev-ref", "feature@{upstream}").trim()).toBe(
+			"origin/main",
+		);
+		appendFileSync(join(d, "a.txt"), "four\n");
+		g(d, "commit", "-qam", "on feature");
+		const s = await gitStatus("a", d, { pr: false });
+		expect(s).toMatchObject({
+			upstream: "origin/main",
+			pushTo: "origin/feature",
+			onDefault: false,
+			ahead: 0,
+		});
+		// No PR before the push: the branch is not on the remote yet.
+		expect(await message(createPr(d, {}))).toBe("Push the branch first.");
+		expect(await push(d, {})).toEqual({
+			branch: "feature",
+			remote: "origin",
+			upstream: "origin/feature",
+			pushed: true,
+		});
+		// main on the remote is untouched; the upstream now is origin/feature.
+		expect(g(bare, "log", "-1", "--format=%s", "main").trim()).toBe("init");
+		expect(g(bare, "log", "-1", "--format=%s", "feature").trim()).toBe(
+			"on feature",
+		);
+		expect(g(d, "rev-parse", "--abbrev-ref", "feature@{upstream}").trim()).toBe(
+			"origin/feature",
+		);
+		// --set-upstream-to another branch: the same.
+		g(d, "switch", "-q", "-c", "hotfix");
+		g(d, "branch", "-q", "--set-upstream-to", "origin/main");
+		appendFileSync(join(d, "a.txt"), "five\n");
+		g(d, "commit", "-qam", "hotfix");
+		expect((await push(d, {})).upstream).toBe("origin/hotfix");
+		expect(g(bare, "log", "-1", "--format=%s", "main").trim()).toBe("init");
+	});
+
+	test("an upstream whose branch is gone: push recreates it, no PR before", async () => {
+		const { d, bare } = project();
+		g(d, "switch", "-q", "-c", "feat");
+		appendFileSync(join(d, "a.txt"), "four\n");
+		g(d, "commit", "-qam", "c1");
+		await push(d, {});
+		// Deleted on the remote after a merge (and pruned here).
+		g(bare, "branch", "-q", "-D", "feat");
+		g(d, "update-ref", "-d", "refs/remotes/origin/feat");
+		const s = await gitStatus("a", d, { pr: false });
+		expect(s).toMatchObject({
+			upstream: "origin/feat",
+			upstreamGone: true,
+			ahead: 0,
+		});
+		expect(await message(createPr(d, {}))).toBe("Push the branch first.");
+		expect((await push(d, {})).pushed).toBe(true);
+		expect(g(bare, "log", "-1", "--format=%s", "feat").trim()).toBe("c1");
+		expect((await gitStatus("a", d, { pr: false })).upstreamGone).toBe(false);
 	});
 
 	test("a rejected push says what the remote said", async () => {

@@ -28,6 +28,7 @@ import {
 	pushReason,
 	quickAction,
 	type Step,
+	tracking,
 } from "./model.ts";
 import { AskFixForm, PR_STATE, PrCard } from "./PrCard.tsx";
 import { Progress } from "./Progress.tsx";
@@ -98,11 +99,13 @@ function Overview({
 					<span className="g-row-value">
 						{!status.remote
 							? "None"
-							: !status.upstream
-								? "Not pushed yet"
-								: status.ahead || status.behind
-									? `${status.ahead} ahead, ${status.behind} behind ${status.upstream}`
-									: `Up to date with ${status.upstream}`}
+							: status.upstreamGone
+								? `${status.upstream} is gone: push makes ${status.pushTo}`
+								: !tracking(status)
+									? `Not pushed to ${status.pushTo} yet`
+									: status.ahead || status.behind
+										? `${status.ahead} ahead, ${status.behind} behind ${status.upstream}`
+										: `Up to date with ${status.upstream}`}
 					</span>
 				</li>
 				{status.pr && (

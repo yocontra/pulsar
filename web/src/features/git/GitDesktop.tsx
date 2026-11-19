@@ -158,7 +158,10 @@ function GitDesktopImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 	const busy = run.phase.kind === "running" || run.phase.kind === "paused";
 	const items: { step: Step; label: string }[] = [
 		{ step: "commit", label: "Commit…" },
-		{ step: "push", label: "Push" },
+		{
+			step: "push",
+			label: status.pushTo ? `Push to ${status.pushTo}` : "Push",
+		},
 		{ step: "pr", label: "Create PR" },
 	];
 	return (

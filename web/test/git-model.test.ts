@@ -26,6 +26,8 @@ const base: GitStatus = {
 	onDefault: false,
 	remote: "origin",
 	upstream: "origin/feat",
+	pushTo: "origin/feat",
+	upstreamGone: false,
 	ahead: 0,
 	behind: 0,
 	dirty: 0,

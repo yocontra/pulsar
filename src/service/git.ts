@@ -230,6 +230,8 @@ function unsupportedStatus(): Omit<GitStatus, "agent"> {
 		onDefault: false,
 		remote: null,
 		upstream: null,
+		pushTo: null,
+		upstreamGone: false,
 		ahead: 0,
 		behind: 0,
 		dirty: 0,

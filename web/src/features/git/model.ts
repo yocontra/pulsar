@@ -52,7 +52,11 @@ export function commitReason(s: GitStatus | undefined): string | null {
 
 /** Commits to push exist (or the branch was never pushed). */
 export const needsPush = (s: GitStatus) =>
-	!!s.remote && !!s.branch && !!s.head && (!s.upstream || s.ahead > 0);
+	!!s.pushTo && !!s.head && (!tracking(s) || s.ahead > 0);
+
+/** The upstream is where a push goes (`pushTo`) and its branch exists. */
+export const tracking = (s: GitStatus) =>
+	!!s.pushTo && s.upstream === s.pushTo && !s.upstreamGone;
 
 export function pushReason(s: GitStatus | undefined): string | null {
 	const b = blocked(s);
