@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
 	appendFileSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	statSync,
 	writeFileSync,
@@ -22,8 +23,9 @@ import {
 	snippet,
 } from "../src/search/text.ts";
 import { PulsarService } from "../src/service/index.ts";
-import { RETENTION_MS } from "../src/service/message-search.ts";
+import { MessageSearch, RETENTION_MS } from "../src/service/message-search.ts";
 import { Store } from "../src/store.ts";
+import { newParseState } from "../src/transcripts/types.ts";
 import { HttpTransport } from "../src/transport/http.ts";
 import type { Agent } from "../src/types.ts";
 import { until } from "./helpers.ts";
@@ -514,6 +516,38 @@ describe("message search service", () => {
 		expect(tooLong.status).toBe(400);
 	});
 
+	test("GET /search/messages?agent=: one agent's hits, oldest first, past the per-agent cap", async () => {
+		const agent = addAgent(
+			"find-1",
+			Array.from({ length: 12 }, (_, i) =>
+				piLine(
+					`f${i}`,
+					"assistant",
+					`step ${i} of the tapir rollout`,
+					Date.now() - (12 - i) * 1000,
+				),
+			).join(""),
+		);
+		addAgent("find-2", piLine("g0", "user", "tapir elsewhere"));
+		await service.messages.backfill();
+		const all = await get(`/search/messages?q=tapir`);
+		expect(
+			(all.body as MessageSearchResponse).hits.filter(
+				(h) => h.agentId === agent.id,
+			).length,
+		).toBe(5);
+		const r = await get(
+			`/search/messages?q=tapir&agent=${encodeURIComponent(agent.id)}`,
+		);
+		const body = r.body as MessageSearchResponse;
+		expect(body.hits.map((h) => h.eventId)).toEqual(
+			Array.from({ length: 12 }, (_, i) => `f${i}#0`),
+		);
+		expect(body.agents.map((a) => a.id)).toEqual([agent.id]);
+		const unknown = await get("/search/messages?q=tapir&agent=pi%3Anope");
+		expect((unknown.body as MessageSearchResponse).hits).toEqual([]);
+	});
+
 	test("an agent finds only its own transcript's events", async () => {
 		const mine = addAgent(
 			"own-1",
@@ -572,4 +606,109 @@ test("PULSAR_NO_SEARCH: nothing is indexed, searches find nothing, and the store
 		service.stop();
 		store.db.close();
 	}
+});
+
+describe("every harness's transcript feeds the index", () => {
+	const FIXTURES: [string, string][] = [
+		["claude", "claude/session.jsonl"],
+		[
+			"codex",
+			"codex/rollout-2026-11-10T11-00-00-0000bbbb-1111-4222-8333-444455556666.jsonl",
+		],
+		[
+			"pi",
+			"pi/2026-11-10T12-00-00-000Z_0000dddd-1111-4222-8333-444455556666.jsonl",
+		],
+		[
+			"omp",
+			"omp/2026-11-10T13-00-00-000Z_0000eeee-1111-4222-8333-444455556666.jsonl",
+		],
+	];
+	test.each(FIXTURES)(
+		"%s: prompts and replies, no thinking or tool output",
+		(harness, rel) => {
+			const support = (driverFor(harness) as HarnessDriver).transcript!;
+			const text = readFileSync(
+				join(import.meta.dir, "fixtures", "transcripts", rel),
+				"utf8",
+			);
+			const events = support.parse(text, newParseState({ atStart: true }));
+			const newest = events.reduce((m, e) => Math.max(m, e.ts || 0), 0);
+			const store = new Store(join(tempDir(harness), "pulsar.db"));
+			const search = new MessageSearch({
+				store,
+				transcripts: null as never,
+				registry: null as never,
+				views: null as never,
+				now: () => newest + 1000,
+			});
+			const docs = search.docsFrom("a", events, null);
+			const roles = new Set(docs.map((d) => d.role));
+			expect(roles.has("user")).toBe(true);
+			expect(roles.has("agent")).toBe(true);
+			const kept = new Set(docs.map((d) => d.eventId));
+			for (const e of events)
+				if (
+					e.kind === "thinking" ||
+					e.kind === "tool_result" ||
+					e.kind === "system"
+				)
+					expect(kept.has(e.id)).toBe(false);
+			store.db.close();
+		},
+	);
+
+	test("events without a usable time, subagent events and team notices", () => {
+		const store = new Store(join(tempDir("edge"), "pulsar.db"));
+		const search = new MessageSearch({
+			store,
+			transcripts: null as never,
+			registry: null as never,
+			views: null as never,
+		});
+		const now = Date.now();
+		const docs = search.docsFrom(
+			"a",
+			[
+				{ id: "z", ts: 0, role: "user", kind: "text", text: "no time" },
+				{
+					id: "n",
+					ts: Number.NaN,
+					role: "user",
+					kind: "text",
+					text: "bad time",
+				},
+				{
+					id: "s",
+					ts: now,
+					role: "assistant",
+					kind: "text",
+					text: "sub",
+					sidechain: "x",
+				},
+				{
+					id: "t",
+					ts: now,
+					role: "user",
+					kind: "text",
+					text: "teammate result",
+					notice: { type: "message" },
+				},
+				{
+					id: "k",
+					ts: now,
+					role: "user",
+					kind: "text",
+					text: `${"x ".repeat(3993)}ghp_abcdefghijklmnopqrstuvwxyz0123456789`,
+				},
+			],
+			null,
+		);
+		expect(docs.map((d) => [d.eventId, d.role])).toEqual([
+			["t", "peer"],
+			["k", "user"],
+		]);
+		expect(docs[1]!.text).not.toContain("ghp_");
+		store.db.close();
+	});
 });

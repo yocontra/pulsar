@@ -704,7 +704,9 @@ export interface MessageHit {
 /**
  * `GET /search/messages?q=`: transcript messages with every word of `q` (the
  * last word may be a prefix). Needs a word of at least 3 letters, else no
- * hits. `agents` has a row for every agent a hit names.
+ * hits. `agents` has a row for every agent a hit names. With `agent=<id>`
+ * (the find bar): only that agent's hits, oldest first, up to `limit` (200),
+ * searched on its home machine.
  */
 export interface MessageSearchResponse {
 	q: string;

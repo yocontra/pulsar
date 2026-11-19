@@ -12,7 +12,11 @@ import type {
 } from "../../src/http/wire.ts";
 import { redactSecrets } from "../../src/search/redact.ts";
 import { matches, parseQuery, score, snippet } from "../../src/search/text.ts";
-import { MAX_HITS, pick } from "../../src/service/message-search.ts";
+import {
+	AGENT_HITS,
+	MAX_HITS,
+	pick,
+} from "../../src/service/message-search.ts";
 import type { MockAgent } from "./data.ts";
 import { logFor } from "./transcript.ts";
 
@@ -26,6 +30,8 @@ export function searchMessages(
 	opts: {
 		row: (a: MockAgent) => AgentRow;
 		unreachable: (a: MockAgent) => boolean;
+		/** The find bar: this agent's hits only, oldest first. */
+		agent?: string;
 	},
 ): MessageSearchResponse {
 	const query = parseQuery(q);
@@ -35,6 +41,7 @@ export function searchMessages(
 	const found: { hit: MessageHit; agent: MockAgent }[] = [];
 	for (const a of agents) {
 		if (!a.hasTranscript) continue;
+		if (opts.agent !== undefined && a.id !== opts.agent) continue;
 		if (opts.unreachable(a)) {
 			missing.add(a.machine);
 			continue;
@@ -63,9 +70,22 @@ export function searchMessages(
 				},
 			});
 		});
+		if (opts.agent !== undefined) {
+			const hits = mine.map((m) => m.hit).slice(-AGENT_HITS);
+			return { q, hits, agents: hits.length ? [opts.row(a)] : [] };
+		}
 		mine.sort((x, y) => y.hit.score - x.hit.score || y.hit.ts - x.hit.ts);
 		found.push(...mine.slice(0, PER_AGENT));
 	}
+	if (opts.agent !== undefined)
+		return {
+			q,
+			hits: [],
+			agents: [],
+			...(missing.size
+				? { partial: true as const, missing: [...missing] }
+				: {}),
+		};
 	found.sort((x, y) => y.hit.score - x.hit.score || y.hit.ts - x.hit.ts);
 	const top = found.slice(0, MAX_HITS);
 	const rows = new Map<string, AgentRow>();

@@ -2881,9 +2881,20 @@ async function route(
 		const text = q.get("q") ?? "";
 		if (text.length > 200)
 			throw new ApiError(400, "bad_request", "q: too long");
+		const one = q.get("agent");
+		if (one) {
+			// Like the daemon: one agent's search runs on its home machine.
+			const a = agentOr404(one);
+			const link = machineByName.get(a.machineId)?.link;
+			if (link === "asleep" || link === "daemon-down")
+				throw new ApiError(504, "unreachable", `${a.machine} is unreachable`, {
+					machine: a.machine,
+				});
+		}
 		return json(
 			searchMessages(text, agents, {
 				row,
+				...(one ? { agent: one } : {}),
 				unreachable: (a) => {
 					const link = machineByName.get(a.machineId)?.link;
 					return link === "asleep" || link === "daemon-down";

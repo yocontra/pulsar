@@ -11,6 +11,7 @@ import type { Store } from "../store.ts";
 import type { TranscriptEvent } from "../transcripts/types.ts";
 import type { Agent } from "../types.ts";
 import type { Principal } from "./caller.ts";
+import { isAddress } from "./pool.ts";
 import type { Registry } from "./registry.ts";
 import type { Transcripts } from "./transcripts.ts";
 import type { Views } from "./views.ts";
@@ -27,6 +28,8 @@ const TEXT_CAP = 8000;
 export const MAX_HITS = 20;
 /** Hits one agent may take of them. */
 const PER_AGENT = 5;
+/** Hits a search in one agent's transcript returns (the find bar). */
+export const AGENT_HITS = 200;
 
 /** What one machine found (agent ids are its own). */
 export interface LocalHits {
@@ -83,10 +86,14 @@ export class MessageSearch {
 		const cutoff = this.now() - RETENTION_MS;
 		const docs: Doc[] = [];
 		for (const e of events) {
-			if (e.sidechain || e.ts < cutoff) continue;
+			// A missing or bad time fails this too.
+			if (e.sidechain || !(e.ts >= cutoff)) continue;
 			const picked = pick(e);
 			if (!picked) continue;
-			const text = this.redact(picked.text.slice(0, TEXT_CAP)).trim();
+			// Redact before the cut, so a secret across the cap still matches.
+			const text = this.redact(picked.text.slice(0, TEXT_CAP + 1024))
+				.slice(0, TEXT_CAP)
+				.trim();
 			if (!text) continue;
 			docs.push({
 				agentId,
@@ -118,7 +125,7 @@ export class MessageSearch {
 		for (const agent of this.registry.all()) {
 			if (agent.id.includes("/")) continue;
 			try {
-				n += await this.backfillAgent(agent.id);
+				n += await this.backfillAgent(agent.id, agent.status !== "gone");
 			} catch (e) {
 				debugLog(`search backfill ${agent.id}: ${(e as Error).message}`);
 			}
@@ -128,10 +135,12 @@ export class MessageSearch {
 	}
 
 	/** Indexes what is new in one agent's transcript; returns events read. */
-	async backfillAgent(agentId: string): Promise<number> {
+	async backfillAgent(agentId: string, live = true): Promise<number> {
 		const src = await this.transcripts.source(agentId);
 		if (!src) return 0;
 		if (src.kind === "poll") {
+			// A harness API answers only while its session runs.
+			if (!live) return 0;
 			// A harness API: its newest page, as the live poll would see it.
 			const page = await this.transcripts.page(agentId, null);
 			if (!page.available) return 0;
@@ -173,16 +182,28 @@ export class MessageSearch {
 	}
 
 	/**
-	 * This machine's hits for `q`, best first. `agentId` limits them to one
-	 * agent (an agent searching its own transcript).
+	 * This machine's hits for `q`, best first (at most `PER_AGENT` per agent).
+	 * With `agentId`: that agent's hits only, oldest first, up to
+	 * `AGENT_HITS` (the find bar steps through them in reading order).
 	 */
 	local(q: string, opts: { agentId?: string; limit?: number } = {}): LocalHits {
 		const query = parseQuery(q);
 		if (!query || this.off) return { hits: [] };
-		const limit = Math.min(opts.limit ?? MAX_HITS, MAX_HITS);
 		const now = this.now();
+		if (opts.agentId) {
+			const limit = clamp(opts.limit ?? AGENT_HITS, AGENT_HITS);
+			const docs = this.registry.find(opts.agentId)
+				? this.index.find(query, { agentId: opts.agentId, limit })
+				: [];
+			return {
+				hits: docs
+					.sort((a, b) => a.ts - b.ts)
+					.map((d) => toHit(query, d, score(query, d, now))),
+			};
+		}
+		const limit = clamp(opts.limit ?? MAX_HITS, MAX_HITS);
 		const scored = this.index
-			.find(query, opts.agentId ? { agentId: opts.agentId } : {})
+			.find(query)
 			.filter((d) => this.registry.find(d.agentId))
 			.map((d) => ({ d, s: score(query, d, now) }))
 			.sort((a, b) => b.s - a.s || b.d.ts - a.d.ts);
@@ -199,48 +220,65 @@ export class MessageSearch {
 	}
 
 	/**
-	 * Pool-wide search for the app: this machine's hits and every reachable
-	 * peer's (their ids made pool addresses), merged by score. An agent finds
-	 * only its own transcript's events, like `transcript.read`.
+	 * Search for the app: this machine's hits and every reachable peer's
+	 * (their ids made pool addresses), merged by score. With `agent`: that
+	 * agent's hits, oldest first, from its home node. An agent finds only its
+	 * own transcript's events, like `transcript.read`.
 	 */
 	async search(
 		q: string,
 		as: Principal,
-		limit = MAX_HITS,
+		opts: { limit?: number; agent?: string } = {},
 	): Promise<MessageSearchResponse> {
-		const own = as.kind === "agent" ? as.agentId : null;
-		const mine = this.local(q, {
-			limit,
-			...(own ? { agentId: own } : {}),
-		});
+		const agent = opts.agent ?? (as.kind === "agent" ? as.agentId : undefined);
 		const pool = this.registry.pool;
-		const hits = [...mine.hits];
+		let hits: MessageHit[] = [];
 		let missing: string[] = [];
-		if (!own && pool?.searchMessages && parseQuery(q)) {
-			const remote = await pool.searchMessages(q, limit, as);
-			missing = remote.missing;
-			for (const { machineId, hits: theirs } of remote.answers)
-				for (const h of theirs) {
-					const hit = cleanHit(h, machineId);
-					if (hit && this.registry.find(hit.agentId)) hits.push(hit);
+		if (agent !== undefined) {
+			const limit = clamp(opts.limit ?? AGENT_HITS, AGENT_HITS);
+			if (isAddress(agent) && pool?.get(agent)) {
+				if (pool.searchAgentMessages && parseQuery(q)) {
+					const machineId = agent.slice(0, agent.indexOf("/"));
+					const theirs = await pool.searchAgentMessages(agent, q, limit, as);
+					for (const h of theirs) {
+						const hit = cleanHit(h, machineId);
+						if (hit?.agentId === agent) hits.push(hit);
+					}
+					hits.sort((a, b) => a.ts - b.ts);
 				}
+			} else hits = this.local(q, { agentId: agent, limit }).hits;
+		} else {
+			const limit = clamp(opts.limit ?? MAX_HITS, MAX_HITS);
+			hits = this.local(q, { limit }).hits;
+			if (pool?.searchMessages && parseQuery(q)) {
+				const remote = await pool.searchMessages(q, limit, as);
+				missing = remote.missing;
+				for (const { machineId, hits: theirs } of remote.answers)
+					for (const h of theirs) {
+						const hit = cleanHit(h, machineId);
+						if (hit && this.registry.find(hit.agentId)) hits.push(hit);
+					}
+			}
+			hits.sort((a, b) => b.score - a.score || b.ts - a.ts);
+			hits = hits.slice(0, limit);
 		}
-		hits.sort((a, b) => b.score - a.score || b.ts - a.ts);
-		const top = hits.slice(0, limit);
 		const agents = new Map<string, AgentRow>();
-		for (const h of top) {
+		for (const h of hits) {
 			if (agents.has(h.agentId)) continue;
-			const agent = this.registry.find(h.agentId) as Agent | undefined;
-			if (agent) agents.set(h.agentId, this.views.row(agent));
+			const row = this.registry.find(h.agentId) as Agent | undefined;
+			if (row) agents.set(h.agentId, this.views.row(row));
 		}
 		return {
 			q,
-			hits: top,
+			hits,
 			agents: [...agents.values()],
 			...(missing.length ? { partial: true as const, missing } : {}),
 		};
 	}
 }
+
+const clamp = (n: number, max: number) =>
+	Math.max(1, Math.min(Math.floor(n) || 1, max));
 
 /** What of an event the index keeps, and as whose words (null: nothing). */
 export function pick(
@@ -256,6 +294,8 @@ export function pick(
 			? { role: "peer", text: e.text }
 			: null;
 	if (e.kind !== "text") return null;
+	// A team or task notice is never the operator's own words.
+	if (e.notice) return { role: "peer", text: e.text };
 	if (e.role === "user") return { role: "user", text: e.text };
 	if (e.role === "assistant") return { role: "agent", text: e.text };
 	return null;

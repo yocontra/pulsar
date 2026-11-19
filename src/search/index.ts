@@ -182,6 +182,7 @@ class MemoryEngine implements Engine {
 	}
 
 	reset() {
+		this.markStale();
 		this.postings = null;
 	}
 
