@@ -5,6 +5,7 @@
 			"**",
 			"!dist",
 			"!node_modules",
+			"!.cache",
 			"!**/*.md",
 			"!web/.astro",
 			"!web/test-results",
