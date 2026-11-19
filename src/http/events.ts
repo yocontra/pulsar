@@ -75,6 +75,7 @@ type TopicKind =
 	| "approvals"
 	| "security"
 	| "notify"
+	| "launches"
 	| "subagents";
 
 interface TopicEvent {
@@ -143,6 +144,7 @@ function topicsOf(sub: Subscription, login: string): string[] {
 		topicKey("security"),
 		// Finished and failed turns of agents the operator acted on (src/service/turns.ts).
 		topicKey("notify"),
+		topicKey("launches"),
 	];
 	const filter = sub.window?.filter ?? "";
 	if (sub.window) keys.push(topicKey("tree", sub.window.group, filter));
@@ -222,10 +224,14 @@ export class EventHub {
 		const offNotify = this.service.events.on("notify", (data) =>
 			this.publish(topicKey("notify"), "notify", data),
 		);
+		const offLaunch = this.service.events.on("launch", (data) =>
+			this.publish(topicKey("launches"), "launch", data),
+		);
 		this.offApprovals = () => {
 			offApproval();
 			offSecurity();
 			offNotify();
+			offLaunch();
 		};
 	}
 
@@ -554,7 +560,8 @@ export class EventHub {
 		if (
 			topic.kind === "approvals" ||
 			topic.kind === "security" ||
-			topic.kind === "notify"
+			topic.kind === "notify" ||
+			topic.kind === "launches"
 		) {
 			stream.since.set(key, ++this.seq);
 			return;
@@ -600,7 +607,8 @@ export class EventHub {
 			topic.kind === "changes" ||
 			topic.kind === "approvals" ||
 			topic.kind === "security" ||
-			topic.kind === "notify"
+			topic.kind === "notify" ||
+			topic.kind === "launches"
 		)
 			return;
 		const next = this.compute(topic);
@@ -757,6 +765,7 @@ export class EventHub {
 			case "approvals":
 			case "security":
 			case "notify":
+			case "launches":
 				// Never recomputed: events arrive from the service (see publish).
 				return whole(topic.kind, {});
 		}

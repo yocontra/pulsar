@@ -1,5 +1,6 @@
 import type {
 	Approval,
+	LaunchState,
 	SecurityNotice,
 	SubagentCounts,
 	TurnKind,
@@ -47,6 +48,8 @@ export interface ServiceEvents {
 	 * stream and Web Push follow it.
 	 */
 	notify: { kind: TurnKind; agentId: string; at: number };
+	/** A launch from the app moved on (src/service/launch.ts; not a `tail` frame). */
+	launch: LaunchState;
 }
 
 export type ServiceEvent = keyof ServiceEvents;

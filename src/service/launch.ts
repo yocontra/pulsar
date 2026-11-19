@@ -1,0 +1,866 @@
+import { stat } from "node:fs/promises";
+import { homedir as osHome, userInfo } from "node:os";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
+import { exec } from "../exec.ts";
+import { runGit, worktreeRoot } from "../git-write.ts";
+import type {
+	LaunchHarness,
+	LaunchOptions,
+	LaunchParams,
+	LaunchProject,
+	LaunchRefs,
+	LaunchState,
+} from "../http/wire.ts";
+import { processSnapshot } from "../processes.ts";
+import { RpcError } from "../rpc.ts";
+import type { Store } from "../store.ts";
+import { capture, newSession, panePid, type TmuxOptions } from "../tmux.ts";
+import type { Agent, ReceiptState } from "../types.ts";
+import type { Acting, VerifiedUser } from "./acting.ts";
+import { type Principal, principalLabel } from "./caller.ts";
+import type { EventBus } from "./events.ts";
+import { LIMITS } from "./limits.ts";
+import type { Registry } from "./registry.ts";
+
+/**
+ * Starting agents from the app (`agents.launch`, an acting op).
+ *
+ * The home node starts the harness in a new detached tmux session through
+ * the operator's login shell (`$SHELL -lic "exec <harness>"`), so it gets
+ * the PATH and environment of a terminal, not the daemon's (launchd and
+ * systemd give the daemon a bare one). The command is fixed per harness: no
+ * flags from the app, none that skip permission prompts.
+ *
+ * The op returns as soon as the request checks out (federation gives a
+ * relayed act a few seconds); the launch then goes on here and reports each
+ * step as a `launch` event: worktree, starting, waiting, sending, done or
+ * failed. The first message goes out only once the agent registered with
+ * Pulsar and is ready: typed earlier, a TUI drops it. A dialog in the new
+ * terminal (Claude's and Codex's folder trust) is shown as "Waiting in the
+ * terminal" and the message waits until the operator answers it on that
+ * machine. Nothing is sent on a timeout.
+ *
+ * A launch on another machine runs on its home node; this node follows it
+ * there (`launch.status` reads) and repeats its steps as local events, with
+ * pool addresses.
+ */
+
+/** What the app can start, and the fixed command that starts it. */
+export const LAUNCH_HARNESSES: Record<
+	LaunchHarness,
+	{ label: string; bin: string }
+> = {
+	claude: { label: "Claude Code", bin: "claude" },
+	codex: { label: "Codex", bin: "codex" },
+	opencode: { label: "OpenCode", bin: "opencode" },
+	pi: { label: "pi", bin: "pi" },
+	omp: { label: "omp", bin: "omp" },
+};
+
+const HARNESS_IDS = Object.keys(LAUNCH_HARNESSES) as LaunchHarness[];
+
+/** The shell command a harness starts with (a constant: never user input). */
+export function harnessCommand(h: LaunchHarness): string {
+	return `exec ${LAUNCH_HARNESSES[h].bin}`;
+}
+
+/**
+ * Dialogs a harness shows in its terminal before it takes a prompt. While
+ * one shows, the launch waits for the operator to answer it there.
+ */
+const DIALOGS: { re: RegExp; what: string }[] = [
+	{
+		re: /trust (the files in |the contents of )?this (folder|directory)/i,
+		what: "folder trust",
+	},
+	{ re: /Do you trust/i, what: "folder trust" },
+	{ re: /a project you created or one you trust/i, what: "folder trust" },
+	{ re: /Yes, I trust this folder/i, what: "folder trust" },
+];
+
+/** The dialog a pane shows, if any. */
+export function terminalDialog(text: string): string | null {
+	// Only what is on screen now: the last lines, not old scrollback.
+	const tail = text.trimEnd().split("\n").slice(-25).join("\n");
+	return DIALOGS.find((d) => d.re.test(tail))?.what ?? null;
+}
+
+/** The operator's home folder (`~`): HOME, as their shell sees it. */
+const homedir = () => process.env.HOME || osHome();
+
+/** Folder names safe in a path: a branch `feat/x` becomes `feat-x`. */
+function slug(s: string): string {
+	return (
+		s
+			.replace(/[^A-Za-z0-9._-]+/g, "-")
+			.replace(/^[-.]+|[-.]+$/g, "")
+			.slice(0, 80) || "worktree"
+	);
+}
+
+const NONCE = /^[A-Za-z0-9_-]{8,64}$/;
+const MAX_PATH = 4096;
+const MAX_REF = 250;
+
+function str(o: Record<string, unknown>, key: string, max: number) {
+	const v = o[key];
+	if (v === undefined) return undefined;
+	if (typeof v !== "string" || v.length > max)
+		throw new RpcError("bad_request", `launch: bad ${key}`);
+	return v;
+}
+
+/**
+ * Checks launch params as they arrive (a relayed act reaches the home node
+ * unchecked). Unknown keys are refused: the challenge covers all of them.
+ */
+export function parseLaunchParams(raw: unknown): LaunchParams {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw))
+		throw new RpcError("bad_request", "launch: params must be an object");
+	const o = raw as Record<string, unknown>;
+	const allowed = new Set([
+		"nonce",
+		"cwd",
+		"harness",
+		"workspace",
+		"branch",
+		"base",
+		"prompt",
+		"name",
+	]);
+	for (const k of Object.keys(o))
+		if (!allowed.has(k))
+			throw new RpcError("bad_request", `launch: unknown ${k}`);
+	const nonce = str(o, "nonce", 64);
+	if (!nonce || !NONCE.test(nonce))
+		throw new RpcError("bad_request", "launch: bad nonce");
+	const cwd = str(o, "cwd", MAX_PATH)?.trim();
+	if (!cwd || !(isAbsolute(cwd) || cwd === "~" || cwd.startsWith("~/")))
+		throw new RpcError(
+			"bad_request",
+			"launch: the folder must be an absolute path",
+		);
+	const harness = o.harness;
+	if (
+		typeof harness !== "string" ||
+		!HARNESS_IDS.includes(harness as LaunchHarness)
+	)
+		throw new RpcError("bad_request", "launch: unknown harness");
+	const workspace = o.workspace;
+	if (workspace !== "current" && workspace !== "worktree")
+		throw new RpcError("bad_request", "launch: bad workspace");
+	const branch = str(o, "branch", MAX_REF)?.trim() || undefined;
+	const base = str(o, "base", MAX_REF)?.trim() || undefined;
+	if (workspace === "current" && (branch || base))
+		throw new RpcError("bad_request", "launch: a branch needs a new worktree");
+	for (const ref of [branch, base])
+		if (ref !== undefined && (ref.startsWith("-") || /[\s\0]/.test(ref)))
+			throw new RpcError("bad_request", `launch: bad branch name ${ref}`);
+	const prompt = str(o, "prompt", LIMITS.maxBody);
+	const name = str(o, "name", 80)?.trim() || undefined;
+	return {
+		nonce,
+		cwd,
+		harness: harness as LaunchHarness,
+		workspace,
+		...(branch ? { branch } : {}),
+		...(base ? { base } : {}),
+		...(prompt?.trim() ? { prompt } : {}),
+		...(name ? { name } : {}),
+	};
+}
+
+/** What the launcher reads and how long it waits (tests shorten them). */
+export interface LaunchTiming {
+	pollMs: number;
+	/** From start until the agent must be ready (no dialog showing). */
+	readyMs: number;
+	/** How long a dialog in the terminal may wait for the operator. */
+	terminalMs: number;
+	/** Unchanged pane reads before an agent with no status counts as ready. */
+	quietPolls: number;
+	/** A finished launch stays readable this long. */
+	keepMs: number;
+	/** How often a launch on another machine is read there. */
+	followMs: number;
+}
+
+const TIMING: LaunchTiming = {
+	pollMs: 500,
+	readyMs: 120_000,
+	terminalMs: 30 * 60_000,
+	quietPolls: 4,
+	keepMs: 30 * 60_000,
+	followMs: 1500,
+};
+
+/** A read the home node answers for another node (federation `launch.*`). */
+export type LaunchRead =
+	| { op: "launch.status"; id: string }
+	| { op: "launch.options" }
+	| { op: "launch.refs"; cwd: string };
+
+export interface LaunchDeps {
+	registry: Registry;
+	events: EventBus;
+	store: Store;
+	acting: Acting;
+	machineId: () => string;
+	machine: () => string;
+	/** Sends the first message as the operator; the receipt state it got. */
+	send: (
+		user: VerifiedUser,
+		agentId: string,
+		body: string,
+	) => Promise<ReceiptState | null>;
+	/** Tests: a private tmux server (`-L`). */
+	tmux?: TmuxOptions;
+	/** Tests: the login shell (default: the operator's, from the passwd entry). */
+	shell?: string;
+	/** Tests: the command a harness starts with (default `exec <bin>`). */
+	command?: (h: LaunchHarness) => string;
+	timing?: Partial<LaunchTiming>;
+}
+
+interface Running {
+	state: LaunchState;
+	params: LaunchParams;
+	nonce: string;
+}
+
+const FINAL = new Set(["done", "failed"]);
+
+export class Launches {
+	private d: LaunchDeps;
+	private t: LaunchTiming;
+	private runs = new Map<string, Running>();
+	/** `<login> <nonce>` → launch id, so a repeated press starts nothing new. */
+	private nonces = new Map<string, string>();
+	private harnessCache: { at: number; ids: Set<string> } | null = null;
+	private seq = 0;
+
+	constructor(deps: LaunchDeps) {
+		this.d = deps;
+		this.t = { ...TIMING, ...deps.timing };
+	}
+
+	/** The login shell harnesses start under. */
+	private shell(): string {
+		if (this.d.shell) return this.d.shell;
+		let sh: string | undefined;
+		try {
+			sh = userInfo().shell ?? undefined;
+		} catch {}
+		sh ||= process.env.SHELL;
+		return sh && isAbsolute(sh) ? sh : "/bin/sh";
+	}
+
+	private command(h: LaunchHarness): string {
+		return this.d.command?.(h) ?? harnessCommand(h);
+	}
+
+	/** A launch by id: this node's, or one it follows on another machine. */
+	get(id: string): LaunchState | null {
+		return this.runs.get(id)?.state ?? null;
+	}
+
+	/**
+	 * `POST /agents/launch`: here, or relayed to the machine's home node,
+	 * which verifies the assertion itself (src/service/acting.ts).
+	 */
+	async launch(
+		principal: Principal,
+		machine: string | null,
+		params: unknown,
+		assertion?: unknown,
+	): Promise<LaunchState> {
+		const result = (await this.d.acting.run(
+			principal,
+			"agents.launch",
+			{ machine },
+			params,
+			assertion,
+		)) as LaunchState;
+		const pool = this.d.registry.pool;
+		const remoteId =
+			machine && machine !== this.d.machineId() && machine !== this.d.machine()
+				? pool?.machineIdOf(machine)
+				: null;
+		if (!remoteId || !pool) return result;
+		return this.follow(remoteId, result, principal);
+	}
+
+	/** The acting handler: checks the request, starts the launch, returns at once. */
+	async start(user: VerifiedUser, raw: unknown): Promise<LaunchState> {
+		const p = parseLaunchParams(raw);
+		const key = `${user.login} ${p.nonce}`;
+		const held = this.nonces.get(key);
+		if (held && this.runs.has(held)) return this.runs.get(held)!.state;
+		this.prune();
+
+		const cwd = await this.folder(p.cwd);
+		let dir = cwd;
+		let worktree: {
+			root: string;
+			path: string;
+			branch: string;
+			base: string;
+		} | null = null;
+		const id = `${Date.now().toString(36)}${(this.seq++ % 1296).toString(36).padStart(2, "0")}`;
+		if (p.workspace === "worktree") {
+			const root = await worktreeRoot(cwd);
+			if (!root)
+				throw new RpcError("bad_request", `${cwd} is not in a git repo`);
+			const branch = p.branch ?? `pulsar/${p.harness}-${id}`;
+			const fmt = await runGit(root, ["check-ref-format", "--branch", branch], {
+				mode: "read",
+			});
+			if (!fmt.ok)
+				throw new RpcError("bad_request", `not a valid branch name: ${branch}`);
+			const exists = await runGit(
+				root,
+				["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+				{ mode: "read" },
+			);
+			if (exists.ok)
+				throw new RpcError("bad_request", `branch ${branch} already exists`);
+			const base = p.base ?? "HEAD";
+			const ok = await runGit(
+				root,
+				[
+					"rev-parse",
+					"--verify",
+					"--quiet",
+					"--end-of-options",
+					`${base}^{commit}`,
+				],
+				{ mode: "read" },
+			);
+			if (!ok.ok)
+				throw new RpcError("bad_request", `no branch or commit ${base}`);
+			const path = join(dirname(root), `${basename(root)}-${slug(branch)}`);
+			if (await exists_(path))
+				throw new RpcError("bad_request", `${path} already exists`);
+			worktree = { root, path, branch, base };
+			dir = join(path, relative(root, cwd));
+		}
+
+		const now = Date.now();
+		const state: LaunchState = {
+			id,
+			machineId: this.d.machineId(),
+			machine: this.d.machine(),
+			harness: p.harness,
+			cwd: dir,
+			branch: worktree?.branch ?? null,
+			step: worktree ? "worktree" : "starting",
+			detail: null,
+			error: null,
+			agentId: null,
+			session: `pulsar-${id}`,
+			prompt: !!p.prompt,
+			sent: false,
+			startedAt: now,
+			updatedAt: now,
+		};
+		const run: Running = { state, params: p, nonce: p.nonce };
+		this.runs.set(id, run);
+		this.nonces.set(key, id);
+		this.emit(run);
+		void this.drive(run, user, worktree).catch((e: unknown) =>
+			this.fail(run, user, (e as Error).message || "launch failed"),
+		);
+		return { ...state };
+	}
+
+	/** `~` and `~/x` on this machine; must be an existing folder. */
+	private async folder(raw: string): Promise<string> {
+		const cwd =
+			raw === "~"
+				? homedir()
+				: raw.startsWith("~/")
+					? join(homedir(), raw.slice(2))
+					: raw;
+		let s: Awaited<ReturnType<typeof stat>>;
+		try {
+			s = await stat(cwd);
+		} catch {
+			throw new RpcError(
+				"not_found",
+				`no folder ${cwd} on ${this.d.machine()}`,
+			);
+		}
+		if (!s.isDirectory())
+			throw new RpcError("bad_request", `${cwd} is not a folder`);
+		return cwd;
+	}
+
+	private async drive(
+		run: Running,
+		user: VerifiedUser,
+		worktree: {
+			root: string;
+			path: string;
+			branch: string;
+			base: string;
+		} | null,
+	) {
+		const s = run.state;
+		const label = LAUNCH_HARNESSES[s.harness].label;
+		if (worktree) {
+			this.set(run, { step: "worktree", detail: worktree.path });
+			const r = await runGit(worktree.root, [
+				"worktree",
+				"add",
+				"-b",
+				worktree.branch,
+				"--",
+				worktree.path,
+				worktree.base,
+			]);
+			if (!r.ok)
+				return this.fail(
+					run,
+					user,
+					`Couldn't create the worktree: ${r.message}`,
+				);
+		}
+		this.set(run, { step: "starting", detail: null });
+		const started = await newSession(
+			s.session!,
+			s.cwd,
+			[this.shell(), "-lic", this.command(s.harness)],
+			this.d.tmux,
+		);
+		if (!started.ok)
+			return this.fail(run, user, `Couldn't start tmux: ${started.error}`);
+		const pane = started.pane;
+		const shellPid = await panePid(pane, this.d.tmux);
+		this.set(run, { step: "waiting" });
+
+		const t0 = Date.now();
+		/** The ready clock: from the start, or from when a dialog was answered. */
+		let readyFrom = t0;
+		let last = "";
+		let quiet = 0;
+		let named = false;
+		let terminalSince: number | null = null;
+		for (;;) {
+			await new Promise((r) => setTimeout(r, this.t.pollMs));
+			const text = await capture(pane, { ...this.d.tmux, lines: 0 });
+			if (text === null || !(await panePid(pane, this.d.tmux))) {
+				const tail = last.trim().split("\n").slice(-3).join(" ").trim();
+				return this.fail(
+					run,
+					user,
+					`${label} exited${tail ? `: ${tail.slice(0, 300)}` : ""}`,
+				);
+			}
+			quiet = text === last ? quiet + 1 : 0;
+			last = text;
+			const agent = await this.match(s, shellPid, t0);
+			if (agent) {
+				// The launcher knows the pane: Stop and typing reach it.
+				if (agent.meta.tmux !== pane) agent.meta.tmux = pane;
+				if (!named && run.params.name) {
+					this.d.registry.setIdentity(agent, { name: run.params.name });
+					named = true;
+				}
+			}
+			const needs = agent ? this.d.registry.needsYou(agent.id) : null;
+			const dialog =
+				terminalDialog(text) ??
+				(needs?.reason === "terminal"
+					? (needs.detail?.replace(/^Waiting in the terminal:\s*/i, "") ??
+						"a dialog")
+					: null);
+			const agentId = agent?.id ?? null;
+			if (dialog) {
+				terminalSince ??= Date.now();
+				this.set(run, {
+					step: "terminal",
+					detail: `Waiting in the terminal: ${dialog}`,
+					agentId,
+				});
+				if (Date.now() - terminalSince > this.t.terminalMs)
+					return this.fail(
+						run,
+						user,
+						`Nobody answered the ${dialog} dialog on ${s.machine}${s.prompt ? "; your message was not sent" : ""}`,
+					);
+				continue;
+			}
+			if (terminalSince !== null) {
+				// Answered: the ready clock starts again.
+				terminalSince = null;
+				readyFrom = Date.now();
+				quiet = 0;
+			}
+			this.set(run, { step: "waiting", detail: null, agentId });
+			const ready =
+				!!agent &&
+				(!run.params.prompt ||
+					agent.status === "idle" ||
+					(agent.status === "unknown" && quiet >= this.t.quietPolls));
+			if (ready) break;
+			if (Date.now() - readyFrom > this.t.readyMs)
+				return this.fail(
+					run,
+					user,
+					agent
+						? `${label} didn't become ready${s.prompt ? "; your message was not sent" : ""}`
+						: `${label} started but didn't connect to Pulsar. Run \`pulsar doctor\` on ${s.machine}.`,
+				);
+		}
+
+		const agentId = s.agentId!;
+		if (run.params.prompt) {
+			this.set(run, { step: "sending" });
+			let state: ReceiptState | null;
+			try {
+				state = await this.d.send(user, agentId, run.params.prompt);
+			} catch (e) {
+				return this.fail(
+					run,
+					user,
+					`Couldn't send your message: ${(e as Error).message}`,
+				);
+			}
+			if (state === "failed" || state === "refused")
+				return this.fail(run, user, `Couldn't send your message (${state})`);
+			this.set(run, { sent: true });
+		}
+		this.set(run, { step: "done", detail: null });
+		this.audit(user, run, true, null);
+	}
+
+	/**
+	 * The new agent: its process is the pane's (the login shell exec'd into
+	 * the harness) or under it; else, with no pid, one that registered in
+	 * that folder since the launch started.
+	 */
+	private async match(
+		s: LaunchState,
+		shellPid: number | null,
+		since: number,
+	): Promise<Agent | null> {
+		const candidates = this.d.registry
+			.all()
+			.filter((a) => a.harness === s.harness && a.status !== "gone");
+		if (candidates.length === 0) return null;
+		if (shellPid) {
+			const direct = candidates.find((a) => a.pid === shellPid);
+			if (direct) return direct;
+			const procs = await processSnapshot(1000, "user");
+			const under = (pid: number) => {
+				for (let p = pid, n = 0; p > 1 && n < 32; n++) {
+					if (p === shellPid) return true;
+					const next = procs.get(p)?.ppid;
+					if (!next || next === p) return false;
+					p = next;
+				}
+				return false;
+			};
+			const child = candidates.find((a) => a.pid !== null && under(a.pid));
+			if (child) return child;
+		}
+		return (
+			candidates.find(
+				(a) => a.pid === null && a.cwd === s.cwd && a.createdAt >= since,
+			) ?? null
+		);
+	}
+
+	private set(run: Running, patch: Partial<LaunchState>) {
+		const s = run.state;
+		if (FINAL.has(s.step)) return;
+		let changed = false;
+		for (const [k, v] of Object.entries(patch) as [keyof LaunchState, never][])
+			if (s[k] !== v) {
+				(s as unknown as Record<string, unknown>)[k] = v;
+				changed = true;
+			}
+		if (!changed) return;
+		s.updatedAt = Date.now();
+		this.emit(run);
+	}
+
+	private fail(run: Running, user: Principal, error: string) {
+		if (FINAL.has(run.state.step)) return;
+		this.set(run, { step: "failed", error: error.slice(0, 500) });
+		this.audit(user, run, false, error);
+	}
+
+	private emit(run: Running) {
+		this.d.events.emit("launch", { ...run.state });
+	}
+
+	/** The outcome, next to the acting op's own audit row (which ends when it returns). */
+	private audit(
+		user: Principal,
+		run: Running,
+		ok: boolean,
+		error: string | null,
+	) {
+		const s = run.state;
+		this.d.store.audit({
+			at: Date.now(),
+			principal: principalLabel(user),
+			op: "agents.launch.result",
+			target: s.agentId ?? `launch:${s.id}`,
+			detail: JSON.stringify({
+				harness: s.harness,
+				cwd: s.cwd,
+				session: s.session,
+				...(error ? { error } : {}),
+			}),
+			ok,
+		});
+	}
+
+	/** Drops finished launches past `keepMs`. */
+	private prune(now = Date.now()) {
+		for (const [id, r] of this.runs)
+			if (FINAL.has(r.state.step) && now - r.state.updatedAt > this.t.keepMs) {
+				this.runs.delete(id);
+				for (const [k, v] of this.nonces) if (v === id) this.nonces.delete(k);
+			}
+	}
+
+	// ------------------------------------------------------- another machine
+
+	/**
+	 * Follows a launch on another machine: reads its state there until it
+	 * ends, and repeats it here as `launch` events with pool addresses.
+	 */
+	private follow(
+		machineId: string,
+		first: LaunchState,
+		as: Principal,
+	): LaunchState {
+		const id = `${machineId}/${first.id}`;
+		const held = this.runs.get(id);
+		if (held) return held.state;
+		const local = (r: LaunchState): LaunchState => ({
+			...r,
+			id,
+			machineId,
+			agentId: r.agentId ? `${machineId}/${r.agentId}` : null,
+		});
+		const run: Running = {
+			state: local(first),
+			params: {
+				nonce: "remote",
+				cwd: first.cwd,
+				harness: first.harness,
+				workspace: "current",
+			},
+			nonce: "",
+		};
+		this.runs.set(id, run);
+		this.emit(run);
+		const pool = this.d.registry.pool!;
+		void (async () => {
+			let misses = 0;
+			const until = Date.now() + this.t.readyMs + this.t.terminalMs + 60_000;
+			while (!FINAL.has(run.state.step) && Date.now() < until) {
+				// Every read leaves an audit row there: slower while a dialog waits.
+				const wait = this.t.followMs * (run.state.step === "terminal" ? 3 : 1);
+				await new Promise((r) => setTimeout(r, wait));
+				try {
+					const next = (await pool.launchRead?.(
+						machineId,
+						{ op: "launch.status", id: first.id },
+						as,
+					)) as LaunchState | undefined;
+					if (!next) break;
+					misses = 0;
+					const l = local(next);
+					const changed =
+						l.updatedAt !== run.state.updatedAt || l.step !== run.state.step;
+					run.state = l;
+					if (changed) this.emit(run);
+				} catch {
+					// A few missed reads are a slow link; many are a lost machine.
+					if (++misses >= 10) break;
+				}
+			}
+			if (!FINAL.has(run.state.step)) {
+				run.state = {
+					...run.state,
+					step: "failed",
+					error: `Lost touch with ${run.state.machine}; the agent may still start there`,
+					updatedAt: Date.now(),
+				};
+				this.emit(run);
+			}
+		})();
+		return { ...run.state };
+	}
+
+	// ----------------------------------------------------------------- reads
+
+	/** `GET /machines/:m/projects` and `/refs`, here or on the machine's home node. */
+	async read(
+		principal: Principal,
+		machine: string | null,
+		req: LaunchRead,
+	): Promise<unknown> {
+		if (principal.kind !== "human")
+			throw new RpcError("forbidden", "only the human operator starts agents");
+		const m = machine ?? "";
+		if (!m || m === this.d.machineId() || m === this.d.machine())
+			return this.readHere(principal, req);
+		const pool = this.d.registry.pool;
+		const id = pool?.machineIdOf(m);
+		if (!pool || !id) throw new RpcError("not_found", `no machine ${m}`);
+		if (!pool.launchRead)
+			throw new RpcError("unreachable", "no other machines are linked");
+		const r = await pool.launchRead(id, req, principal);
+		if (req.op === "launch.status") {
+			const s = r as LaunchState;
+			return {
+				...s,
+				id: `${id}/${s.id}`,
+				machineId: id,
+				agentId: s.agentId ? `${id}/${s.agentId}` : null,
+			};
+		}
+		return r;
+	}
+
+	/** The home node's answer to a read (federation receiver, and here). */
+	async readHere(principal: Principal, req: LaunchRead): Promise<unknown> {
+		if (principal.kind !== "human")
+			throw new RpcError("forbidden", "only the human operator starts agents");
+		switch (req.op) {
+			case "launch.status": {
+				const s = this.get(String(req.id));
+				if (!s || s.id.includes("/"))
+					throw new RpcError("not_found", `no launch ${req.id}`);
+				return s;
+			}
+			case "launch.options":
+				return this.options();
+			case "launch.refs":
+				return this.refs(String(req.cwd).slice(0, MAX_PATH));
+			default:
+				throw new RpcError("bad_request", "unknown launch read");
+		}
+	}
+
+	/** Folders agents ran in here, and which harnesses are installed. */
+	async options(): Promise<LaunchOptions> {
+		const by = new Map<string, LaunchProject>();
+		const note = (path: string, live: boolean, at: number) => {
+			const p = by.get(path) ?? {
+				path,
+				name: basename(path) || path,
+				agents: 0,
+				lastSeen: 0,
+			};
+			if (live) p.agents++;
+			p.lastSeen = Math.max(p.lastSeen, at);
+			by.set(path, p);
+		};
+		for (const a of this.d.registry.all())
+			if (a.cwd && isAbsolute(a.cwd) && !a.id.includes("/"))
+				note(a.cwd, a.status !== "gone", a.lastSeen);
+		for (const r of this.runs.values())
+			if (!r.state.id.includes("/"))
+				note(r.state.cwd, false, r.state.startedAt);
+		const projects = [...by.values()]
+			.sort((a, b) => b.lastSeen - a.lastSeen)
+			.slice(0, 200);
+		const installed = await this.installed();
+		return {
+			machineId: this.d.machineId(),
+			machine: this.d.machine(),
+			home: homedir(),
+			projects,
+			harnesses: HARNESS_IDS.map((id) => ({
+				id,
+				label: LAUNCH_HARNESSES[id].label,
+				installed: installed.has(id),
+			})),
+		};
+	}
+
+	/**
+	 * Harnesses a login shell finds (the daemon's own PATH is not the
+	 * operator's). Cached for a few minutes.
+	 */
+	private async installed(): Promise<Set<string>> {
+		const c = this.harnessCache;
+		if (c && Date.now() - c.at < 5 * 60_000) return c.ids;
+		const bins = HARNESS_IDS.map((h) => LAUNCH_HARNESSES[h].bin);
+		const script = `for c in ${bins.join(" ")}; do command -v "$c" 2>/dev/null; done; exit 0`;
+		const r = await exec(this.shell(), ["-lic", script], {
+			lane: "user",
+			timeoutMs: 10_000,
+			cwd: homedir(),
+		});
+		const ids = new Set<string>();
+		for (const line of r.stdout.split("\n")) {
+			const path = line.trim();
+			if (!isAbsolute(path)) continue;
+			const bin = basename(path);
+			for (const h of HARNESS_IDS)
+				if (LAUNCH_HARNESSES[h].bin === bin) ids.add(h);
+		}
+		this.harnessCache = { at: Date.now(), ids };
+		return ids;
+	}
+
+	/** Branches of the repo that holds `cwd` (newest first). */
+	async refs(raw: string): Promise<LaunchRefs> {
+		let cwd: string;
+		try {
+			cwd = await this.folder(raw.trim());
+		} catch {
+			return { root: null, current: null, branches: [] };
+		}
+		const root = await worktreeRoot(cwd);
+		if (!root) return { root: null, current: null, branches: [] };
+		const [head, list] = await Promise.all([
+			runGit(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], {
+				mode: "read",
+			}),
+			runGit(
+				root,
+				[
+					"for-each-ref",
+					"--sort=-committerdate",
+					"--count=500",
+					"--format=%(refname)",
+					"refs/heads",
+					"refs/remotes",
+				],
+				{ mode: "read" },
+			),
+		]);
+		const branches: LaunchRefs["branches"] = [];
+		if (list.ok)
+			for (const line of list.stdout.split("\n")) {
+				const ref = line.trim();
+				if (ref.startsWith("refs/heads/"))
+					branches.push({ name: ref.slice(11), remote: false });
+				else if (ref.startsWith("refs/remotes/") && !ref.endsWith("/HEAD"))
+					branches.push({ name: ref.slice(13), remote: true });
+			}
+		return {
+			root,
+			current: head.ok ? head.stdout.trim() || null : null,
+			branches,
+		};
+	}
+}
+
+async function exists_(path: string): Promise<boolean> {
+	try {
+		await stat(path);
+		return true;
+	} catch {
+		return false;
+	}
+}

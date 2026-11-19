@@ -247,7 +247,9 @@ export type Feature =
 	| "approvals"
 	| "push"
 	| "subagents"
-	| "usage";
+	| "usage"
+	/** Start agents from the app (`POST /agents/launch`, src/service/launch.ts). */
+	| "launch";
 
 /** `GET /hello`. */
 export interface Hello {
@@ -1031,6 +1033,8 @@ export interface ServerEvents {
 	security: SecurityNotice;
 	/** An agent's subagents (a `subagents` subscription), as list updates. */
 	subagents: ListUpdate<SubagentRow> & { agentId: string };
+	/** A launch started from the app moved on (sent at once to every stream). */
+	launch: LaunchState;
 }
 
 export type ServerEventName = keyof ServerEvents;
@@ -1101,4 +1105,104 @@ export interface AgentUsage {
 	/** Tokens in the latest request; `window` when the harness reports it. */
 	context: { used: number; window: number | null } | null;
 	model: string | null;
+}
+
+// ------------------------------------------------------------------ launch
+
+/** Harnesses the app can start (src/service/launch.ts has their fixed commands). */
+export type LaunchHarness = "claude" | "codex" | "opencode" | "pi" | "omp";
+
+/**
+ * `POST /agents/launch` params, signed as they are (the acting challenge
+ * covers a digest of exactly this object). `nonce`: the client's id for one
+ * press of Send, so a repeat starts nothing new.
+ */
+export interface LaunchParams {
+	nonce: string;
+	/** An absolute folder on that machine (`~/` is its home). */
+	cwd: string;
+	harness: LaunchHarness;
+	/** `worktree`: a new git worktree next to the repo, on a new branch. */
+	workspace: "current" | "worktree";
+	/** The new branch (worktree only); Pulsar names one when absent. */
+	branch?: string;
+	/** What the new branch starts from (worktree only); HEAD when absent. */
+	base?: string;
+	/** The first message, sent once the agent is ready. */
+	prompt?: string;
+	/** The agent's name in Pulsar. */
+	name?: string;
+}
+
+/** `POST /agents/launch` body. */
+export interface LaunchRequest {
+	/** Another machine (id or name); absent: this one. */
+	machine?: string;
+	params: LaunchParams;
+	/** On another machine: the passkey assertion over its challenge. */
+	assertion?: unknown;
+}
+
+export type LaunchStep =
+	| "worktree"
+	| "starting"
+	| "waiting"
+	/** A dialog in the agent's own terminal (folder trust): answer it there. */
+	| "terminal"
+	| "sending"
+	| "done"
+	| "failed";
+
+/** One launch, as `POST /agents/launch`, `GET /launches/:id` and the `launch` event show it. */
+export interface LaunchState {
+	/** On another machine: `<machineId>/<id>`. */
+	id: string;
+	machineId: string;
+	machine: string;
+	harness: LaunchHarness;
+	/** The folder the agent runs in (the new worktree's, when one was made). */
+	cwd: string;
+	branch: string | null;
+	step: LaunchStep;
+	/** The terminal's dialog, or how far a step got. */
+	detail: string | null;
+	/** Why it failed (`step: "failed"`). */
+	error: string | null;
+	/** The agent once it showed up (a pool address on another machine). */
+	agentId: string | null;
+	/** It runs in this tmux session (`tmux attach -t <session>` on that machine). */
+	session: string | null;
+	/** A first message was given, and whether it went out. */
+	prompt: boolean;
+	sent: boolean;
+	startedAt: number;
+	updatedAt: number;
+}
+
+/** One folder agents ran in on a machine (`GET /machines/:m/projects`). */
+export interface LaunchProject {
+	path: string;
+	name: string;
+	/** Live agents there now. */
+	agents: number;
+	lastSeen: number;
+}
+
+/** `GET /machines/:m/projects`: where and what that machine can start. */
+export interface LaunchOptions {
+	machineId: string;
+	machine: string;
+	/** Its home folder (`~`). */
+	home: string;
+	projects: LaunchProject[];
+	harnesses: { id: LaunchHarness; label: string; installed: boolean }[];
+}
+
+/** `GET /machines/:m/refs?cwd=`: branches to start a worktree from. */
+export interface LaunchRefs {
+	/** The repo's top folder; null when `cwd` is not in a git repo. */
+	root: string | null;
+	/** The checked-out branch (null: detached or no repo). */
+	current: string | null;
+	branches: { name: string; remote: boolean }[];
 }

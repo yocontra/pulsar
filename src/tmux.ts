@@ -118,3 +118,60 @@ export async function capture(
 	);
 	return r.ok ? r.stdout : null;
 }
+
+/** tmux session names Pulsar makes: letters, digits, `-`, `_`. */
+const SESSION = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * Starts a detached tmux session (and the tmux server, if none runs) that
+ * runs `argv` in `dir`; returns its pane id. `argv` goes to tmux as separate
+ * arguments, so tmux runs it directly, never through a shell of its own.
+ */
+export async function newSession(
+	name: string,
+	dir: string,
+	argv: string[],
+	opts: TmuxOptions & { width?: number; height?: number } = {},
+): Promise<{ ok: true; pane: string } | { ok: false; error: string }> {
+	if (!SESSION.test(name))
+		return { ok: false, error: `not a session name: ${name}` };
+	if (argv.length === 0) return { ok: false, error: "no command" };
+	const r = await tmux(
+		[
+			"new-session",
+			"-d",
+			"-s",
+			name,
+			"-c",
+			dir,
+			"-x",
+			String(opts.width ?? 200),
+			"-y",
+			String(opts.height ?? 50),
+			"-P",
+			"-F",
+			"#{pane_id}",
+			"--",
+			...argv,
+		],
+		{ ...opts, timeoutMs: opts.timeoutMs ?? 10_000 },
+	);
+	const pane = r.stdout.trim();
+	if (!r.ok || !isPane(pane))
+		return {
+			ok: false,
+			error: (r.stderr || r.error || "tmux failed").trim().slice(0, 300),
+		};
+	return { ok: true, pane };
+}
+
+/** Ends a tmux session and what runs in it. */
+export async function killSession(
+	name: string,
+	opts: TmuxOptions = {},
+): Promise<TmuxResult> {
+	if (!SESSION.test(name))
+		return { ok: false, error: `not a session name: ${name}` };
+	const r = await tmux(["kill-session", "-t", `=${name}`], opts);
+	return r.ok ? { ok: true } : { ok: false, error: r.error ?? "tmux failed" };
+}

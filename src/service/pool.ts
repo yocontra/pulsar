@@ -20,6 +20,7 @@ import type { Agent, Message, Receipt } from "../types.ts";
 import type { PoolUsage } from "../usage/index.ts";
 import type { ActingRelay } from "./acting.ts";
 import type { Principal } from "./caller.ts";
+import type { LaunchRead } from "./launch.ts";
 import type { TranscriptPageResult } from "./transcripts.ts";
 
 /**
@@ -55,6 +56,15 @@ export interface PoolView extends ActingRelay {
 		address: string,
 		as: Principal,
 		assertion?: unknown,
+	): Promise<unknown>;
+	/**
+	 * A launch read on another machine's home node (`launch.*`: a launch's
+	 * state, the folders and harnesses it offers, a repo's branches).
+	 */
+	launchRead?(
+		machineId: string,
+		req: LaunchRead,
+		as: Principal,
 	): Promise<unknown>;
 	/** Every remote machine this node knows, with how it is reached. */
 	machines(): PoolMachine[];
