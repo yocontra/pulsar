@@ -33,6 +33,8 @@ import {
 	type FacetsResponse,
 	type FileDiff,
 	type FileSearch,
+	type GitPrDetails,
+	type GitStatus,
 	type Hello,
 	type InteractionAnswer,
 	type Page,
@@ -484,6 +486,27 @@ export const api = {
 	changeFile: (agentId: string, mode: ChangesMode, path: string) =>
 		request<FileDiff>(
 			`/agents/${enc(agentId)}/changes/file${query({ mode, path })}`,
+		),
+	/** What the git actions need about the agent's worktree (features/git). */
+	gitStatus: (agentId: string) =>
+		request<GitStatus>(`/agents/${enc(agentId)}/git/status`),
+	/** The branch's PR with checks and review comments. */
+	gitPr: (agentId: string) =>
+		request<GitPrDetails>(`/agents/${enc(agentId)}/git/pr`),
+	/**
+	 * Commit, push or PR: acting ops (Prove Human here; a remote agent's
+	 * machine checks one passkey assertion for exactly these params).
+	 */
+	gitAct: <T>(
+		agentId: string,
+		what: "commit" | "push" | "pr",
+		params: object,
+	) =>
+		api.acting<T>(`git.${what}`, { agent: agentId }, params, (assertion) =>
+			request<T>(`/agents/${enc(agentId)}/git/${what}`, {
+				method: "POST",
+				body: assertion === undefined ? params : { ...params, assertion },
+			}),
 		),
 	/**
 	 * Opens an upload of files for an agent (the `attachments.upload` act;

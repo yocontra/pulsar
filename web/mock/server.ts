@@ -112,6 +112,16 @@ import {
 	OMP_BLOCKS,
 	rng,
 } from "./data.ts";
+import {
+	GitMockError,
+	gitCommit,
+	gitControl,
+	gitCreatePr,
+	gitPrDetails,
+	gitPush,
+	gitStatus,
+	resetGit,
+} from "./git.ts";
 import { CHART, SAMPLE_PDF, SCREENSHOT } from "./images.ts";
 import { launchRoute } from "./launch.ts";
 import {
@@ -163,6 +173,7 @@ const FEATURES: Feature[] = [
 		"usage",
 		"attachments",
 		"launch",
+		"git",
 		...((process.env.PULSAR_MOCK_FEATURES ?? "")
 			.split(",")
 			.map((f) => f.trim())
@@ -1791,6 +1802,7 @@ function realtime(raw: unknown) {
 		}
 		case "restore": {
 			resetChanges();
+			resetGit();
 			for (const a of rtAdded) {
 				agents.splice(agents.indexOf(a), 1);
 				agentById.delete(a.id);
@@ -2632,6 +2644,58 @@ async function route(
 		stepMs: Number(process.env.PULSAR_MOCK_LAUNCH_MS ?? 600),
 	});
 	if (launched !== null) return json(launched);
+	// Git actions (web/mock/git.ts). An agent address (`<machine>/<id>`)
+	// stands for an agent on another machine: its acts need that machine's
+	// passkey check, like the daemon's home-node proof.
+	if (seg[0] === "agents" && seg[2] === "git" && seg.length === 4) {
+		const raw = seg[1]!;
+		const a = agentOr404(
+			raw.includes("/") ? raw.slice(raw.indexOf("/") + 1) : raw,
+		);
+		try {
+			if (GET && seg[3] === "status")
+				return json(gitStatus(a, changesSummary(a, "worktree")));
+			if (GET && seg[3] === "pr") return json(gitPrDetails(a));
+			if (POST && ["commit", "push", "pr"].includes(seg[3]!)) {
+				const body = await jsonBody(req);
+				if (!body || typeof body !== "object" || Array.isArray(body))
+					throw badRequest("the body must be an object");
+				const { assertion, ...params } = body as Record<string, unknown>;
+				await requireActing(
+					req,
+					`git.${seg[3]}`,
+					{ agent: raw },
+					params,
+					assertion,
+				);
+				const s = changesSummary(a, "worktree");
+				if (!s.available)
+					throw new ApiError(
+						409,
+						"git_refused",
+						"The agent's folder is not a git worktree.",
+					);
+				if (seg[3] === "commit") return json(gitCommit(a, s, params));
+				if (seg[3] === "push") return json(gitPush(a, params));
+				return json(gitCreatePr(a, params));
+			}
+		} catch (e) {
+			if (e instanceof GitMockError)
+				throw new ApiError(e.status, e.code, e.message);
+			throw e;
+		}
+	}
+	// Mock only: change an agent's git state, or fail its next action.
+	if (POST && path === "/__mock/git") {
+		const b = (await jsonBody(req)) as { agent: string } & Parameters<
+			typeof gitControl
+		>[1];
+		// By name; a fixed fixture first (random agents can share a name).
+		const named = agents.filter((x) => x.name === b.agent);
+		const a = named.find((x) => x.fixed) ?? named[0];
+		if (!a) throw notFound(`no agent ${b.agent}`);
+		return json(gitControl(a, b));
+	}
 	// Mock only: a stand-in acting op (the web client's api.acting flow).
 	if (POST && path === "/__mock/acting") {
 		const b = (await jsonBody(req)) as {

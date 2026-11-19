@@ -59,7 +59,21 @@ Limits: Codex subagents are listed only while Codex's app-server runs, and a Cod
 - Binary files and diffs over 512 KB show a note instead. The list shows at most 500 files.
 - It updates as the agent works (after each edit or command, and every few seconds while open) and keeps your place.
 
-Pulsar reads the worktree with git and never writes to it: it takes no index lock, runs no external diff tools, textconv filters or fsmonitor hooks, shows only files `git status` lists (never ignored ones), and reads a new file only inside the repo and never through a symbolic link (a link shows its target). Diffs show file contents as they are; Pulsar redacts nothing. The same people who can read an agent's transcript can read its changes: you, from the app on any of your machines (the agent's machine reads them), and the agent itself. Tagged devices you allowed get nothing. An agent on a machine with an older Pulsar shows "update it to see changes".
+The Changes view reads the worktree with git and never writes to it (only the git actions below do, when you ask): it takes no index lock, runs no external diff tools, textconv filters or fsmonitor hooks, shows only files `git status` lists (never ignored ones), and reads a new file only inside the repo and never through a symbolic link (a link shows its target). Diffs show file contents as they are; Pulsar redacts nothing. The same people who can read an agent's transcript can read its changes: you, from the app on any of your machines (the agent's machine reads them), and the agent itself. Tagged devices you allowed get nothing. An agent on a machine with an older Pulsar shows "update it to see changes".
+
+## Commit, push and PR
+
+The session header has the git actions for the agent's worktree. On a computer: **+N −M** (hover for each file; click to open Changes), the PR (**#N**, when the branch has one) and a split button. On a phone: the branch button in the agent's top bar opens a sheet with the branch, changes, remote and PR, and the same actions.
+
+- The main button does the next useful thing: **Commit, push & PR**, **Commit & push**, **Push & create PR**, **Create PR**, **Push**, or **View PR #N**. The menu (the arrow) has **Commit…**, **Push** and **Create PR** on their own.
+- An action that can't run says why: on a computer when you hover it, on a phone under the buttons. For example "Worktree is clean. Make changes before committing.", "Branch is behind upstream. Pull or rebase before pushing.", "Detached HEAD: check out a branch first." or "gh isn't logged in on studio."
+- **Commit** opens a form: the branch, the changed files and a message. **Edit** lets you leave files out; only the files you keep go in the commit, and what the agent staged for other files stays staged. **Draft from changes** writes a message from the file names (no AI). **Commit on new branch** creates the branch first. On the default branch, Commit asks before it commits there.
+- If the agent is working (or waiting on you), the app asks before it commits or pushes.
+- While an action runs, the button shows its step and a timer. When it is done, the result shows in its place for a few seconds ("Pushed to origin/fix-1378", "Created PR #12"). If git or gh refuses, a notice shows their message: a rejected push, a failed hook, missing credentials.
+- **Push** sets the upstream on the first push and never force-pushes. **Create PR** uses `gh` on the agent's machine (title and body from the commits), so that machine needs `gh` installed and logged in, and a GitHub remote.
+- The PR card shows the PR's state, review status, checks and review comments, with a link to GitHub. **Ask {agent} to fix** sends the failing checks and comments to the agent; you can read and change the text first.
+
+Each commit, push or PR needs a proven human (Prove Human, once per session) and is recorded in the audit log of the agent's machine. For an agent on another machine, that machine checks your passkey for each step: "Commit, push & PR" asks three times, and on an iPhone you tap **Confirm** before each next step.
 
 ## Usage
 

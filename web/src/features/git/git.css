@@ -1,0 +1,732 @@
+/* Git actions: desktop header controls, popovers, commit form; phone sheet. */
+
+.g-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.g-stat {
+	display: inline-flex;
+	gap: 6px;
+	font-family: var(--ds-font-mono);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+.g-add {
+	color: var(--ds-diff-add-text);
+}
+.g-del {
+	color: var(--ds-diff-del-text);
+}
+.g-head-stat {
+	height: 28px;
+	padding: 0 6px;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	cursor: pointer;
+}
+.g-head-stat:hover {
+	background: var(--ds-surface-hover);
+}
+.g-head-stat:focus-visible {
+	outline: 2px solid var(--ds-focus);
+}
+
+.g-split {
+	display: inline-flex;
+}
+.g-split .g-main {
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+.g-split .g-more {
+	margin-left: -1px;
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+}
+.g-main[aria-disabled="true"] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.g-pr-chip > svg,
+.g-pr-ico {
+	color: var(--ds-success);
+}
+.g-pr-chip.draft > svg,
+.g-pr-ico.draft {
+	color: var(--ds-text-3);
+}
+.g-pr-chip.merged > svg,
+.g-pr-ico.merged {
+	color: var(--ds-accent);
+}
+.g-pr-chip.closed > svg,
+.g-pr-ico.closed {
+	color: var(--ds-danger);
+}
+
+.g-tip {
+	z-index: 60;
+	max-width: 320px;
+	padding: 6px 9px;
+	border-radius: 7px;
+	background: var(--ds-text);
+	color: var(--ds-bg);
+	font-size: 12px;
+	line-height: 1.35;
+	box-shadow: var(--ds-shadow-md);
+}
+.g-tip-files {
+	display: grid;
+	gap: 2px;
+	max-width: 420px;
+}
+.g-tip-file {
+	display: flex;
+	gap: 8px;
+	font-family: var(--ds-font-mono);
+	font-size: 11.5px;
+}
+.g-tip-path {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.g-tip .g-add {
+	color: color-mix(in oklch, var(--ds-success) 60%, var(--ds-bg));
+}
+.g-tip .g-del {
+	color: color-mix(in oklch, var(--ds-danger) 60%, var(--ds-bg));
+}
+.g-tip-more {
+	opacity: 0.75;
+}
+
+.g-menu {
+	z-index: 60;
+	min-width: 240px;
+}
+.g-menu-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 6px 10px;
+	border-radius: 6px;
+	color: var(--ds-text);
+	font-size: 13px;
+	text-decoration: none;
+	outline: none;
+	cursor: pointer;
+}
+.g-menu-item > svg {
+	width: 15px;
+	height: 15px;
+	margin-top: 1px;
+	flex: none;
+	color: var(--ds-text-3);
+}
+.g-menu-item[data-highlighted] {
+	background: var(--ds-surface-hover);
+}
+.g-menu-item[data-disabled] {
+	cursor: default;
+	color: var(--ds-text-3);
+}
+.g-menu-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.g-menu-text small {
+	color: var(--ds-text-3);
+	font-size: 11.5px;
+	line-height: 1.3;
+}
+
+.g-progress {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	height: 28px;
+	padding: 0 10px;
+	border-radius: 7px;
+	background: color-mix(in oklch, var(--ds-text) 4%, transparent);
+	color: var(--ds-text-2);
+	font-size: 12.5px;
+	font-weight: 550;
+	white-space: nowrap;
+}
+.g-progress.done {
+	color: var(--ds-success-text);
+	background: var(--ds-success-soft);
+}
+.g-progress.done a {
+	color: inherit;
+}
+.g-progress.paused {
+	padding-right: 2px;
+}
+.g-spin {
+	width: 15px;
+	height: 15px;
+	color: var(--ds-busy);
+	animation: g-spin 0.9s linear infinite;
+}
+@keyframes g-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.g-spin {
+		animation-duration: 2.5s;
+	}
+}
+.g-timer,
+.g-stepn {
+	font-family: var(--ds-font-mono);
+	font-variant-numeric: tabular-nums;
+	color: var(--ds-text-3);
+}
+
+/* PR card */
+
+.g-pop {
+	z-index: 60;
+	width: min(420px, calc(100vw - 32px));
+	max-height: min(560px, calc(100vh - 120px));
+	overflow-y: auto;
+	padding: 12px;
+	border-radius: 12px;
+	background: var(--ds-surface);
+	box-shadow: var(--ds-shadow-lg);
+	outline: none;
+}
+.g-pr-card {
+	display: grid;
+	gap: 12px;
+	font-size: 13px;
+	color: var(--ds-text);
+}
+.g-pr-head {
+	display: flex;
+	gap: 10px;
+}
+.g-pr-head > svg {
+	width: 18px;
+	height: 18px;
+	margin-top: 2px;
+	flex: none;
+}
+.g-pr-title {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+}
+.g-pr-title a {
+	color: var(--ds-text);
+	font-weight: 600;
+	text-decoration: none;
+	overflow-wrap: anywhere;
+}
+.g-pr-title a:hover {
+	text-decoration: underline;
+}
+.g-pr-title a svg {
+	width: 12px;
+	height: 12px;
+	margin-left: 4px;
+	color: var(--ds-text-3);
+	vertical-align: -1px;
+}
+.g-pr-num {
+	color: var(--ds-text-3);
+}
+.g-pr-sub {
+	color: var(--ds-text-3);
+	font-size: 12px;
+}
+.g-pr-state {
+	display: inline-block;
+	margin-right: 6px;
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	background: var(--ds-success-soft);
+	color: var(--ds-success-text);
+}
+.g-pr-state.draft {
+	background: var(--ds-surface-3);
+	color: var(--ds-text-2);
+}
+.g-pr-state.merged {
+	background: var(--ds-accent-soft);
+	color: var(--ds-accent-text);
+}
+.g-pr-state.closed {
+	background: var(--ds-danger-soft);
+	color: var(--ds-danger-text);
+}
+.g-pr-sec h3 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 6px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--ds-text-2);
+}
+.g-sum {
+	font-weight: 500;
+	color: var(--ds-text-3);
+}
+.g-sum.fail {
+	color: var(--ds-danger-text);
+}
+.g-sum.pending {
+	color: var(--ds-busy-text);
+}
+.g-sum.pass {
+	color: var(--ds-success-text);
+}
+.g-pr-empty {
+	margin: 0;
+	color: var(--ds-text-3);
+	font-size: 12.5px;
+}
+.g-checks,
+.g-comments {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.g-check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.g-check > svg {
+	width: 14px;
+	height: 14px;
+	flex: none;
+}
+.g-check.pass > svg {
+	color: var(--ds-success);
+}
+.g-check.fail > svg {
+	color: var(--ds-danger);
+}
+.g-check.pending > svg {
+	color: var(--ds-busy);
+}
+.g-check.skipped > svg {
+	color: var(--ds-text-4);
+}
+.g-check a,
+.g-check span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--ds-text);
+}
+.g-check .g-check-wf {
+	margin-left: auto;
+	color: var(--ds-text-3);
+	font-size: 11.5px;
+}
+.g-comment {
+	padding: 8px;
+	border-radius: 8px;
+	background: var(--ds-surface-2);
+}
+.g-comment-by {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+}
+.g-comment-by > svg {
+	width: 13px;
+	height: 13px;
+	color: var(--ds-text-3);
+}
+.g-comment-at {
+	font-family: var(--ds-font-mono);
+	font-size: 11.5px;
+	color: var(--ds-text-3);
+}
+.g-comment-body {
+	margin: 4px 0 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	max-height: 9em;
+	overflow: hidden;
+	font-size: 12.5px;
+	color: var(--ds-text-2);
+}
+.g-pr-foot {
+	display: flex;
+	justify-content: flex-end;
+}
+
+/* Commit form */
+
+.g-commit-layer {
+	width: min(560px, calc(100vw - 32px));
+}
+.g-commit {
+	display: grid;
+	gap: 10px;
+	font-size: 13px;
+}
+.g-branch-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: var(--ds-surface-2);
+}
+.g-branch-row > svg {
+	width: 15px;
+	height: 15px;
+	color: var(--ds-text-3);
+}
+.g-branch {
+	font-family: var(--ds-font-mono);
+	font-size: 12.5px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.g-chip {
+	padding: 1px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.g-chip.warn {
+	background: var(--ds-needs-soft);
+	color: var(--ds-needs-text);
+}
+.g-field {
+	display: grid;
+	gap: 4px;
+	font-size: 12px;
+	color: var(--ds-text-2);
+}
+.g-input {
+	font-family: var(--ds-font-mono);
+}
+.g-files-head,
+.g-msg-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.g-files-title,
+.g-msg-head label {
+	flex: 1;
+	font-weight: 600;
+	font-size: 12px;
+	color: var(--ds-text-2);
+}
+.g-files {
+	height: 176px;
+	margin: 0;
+	padding: 4px;
+	overflow-y: auto;
+	list-style: none;
+	border: 1px solid var(--ds-border);
+	border-radius: 10px;
+}
+.g-file-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 26px;
+	padding: 0 6px;
+	border-radius: 6px;
+}
+.g-file-row:hover {
+	background: var(--ds-surface-hover);
+}
+.g-file.muted {
+	padding: 6px;
+	color: var(--ds-text-3);
+}
+.g-file.excluded .g-path {
+	color: var(--ds-text-3);
+	text-decoration: line-through;
+}
+.g-letter {
+	width: 14px;
+	flex: none;
+	font-family: var(--ds-font-mono);
+	font-size: 11px;
+	font-weight: 700;
+	text-align: center;
+	color: var(--ds-busy-text);
+}
+.g-letter.added,
+.g-letter.untracked {
+	color: var(--ds-success-text);
+}
+.g-letter.deleted,
+.g-letter.conflicted {
+	color: var(--ds-danger-text);
+}
+.g-path {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--ds-font-mono);
+	font-size: 12px;
+}
+.g-dir {
+	color: var(--ds-text-3);
+}
+.g-excluded {
+	font-size: 11px;
+	color: var(--ds-text-3);
+}
+.g-textarea {
+	width: 100%;
+	min-height: 88px;
+	padding: 8px 10px;
+	resize: vertical;
+	font: inherit;
+	line-height: 1.45;
+}
+.g-confirm {
+	display: flex;
+	gap: 10px;
+	padding: 12px;
+	border-radius: 10px;
+	background: var(--ds-needs-soft);
+	color: var(--ds-needs-text);
+}
+.g-confirm > svg {
+	width: 18px;
+	height: 18px;
+	flex: none;
+}
+.g-confirm p {
+	margin: 4px 0 0;
+	color: var(--ds-text-2);
+}
+.g-ask {
+	display: grid;
+	gap: 10px;
+}
+.g-ask-layer {
+	width: min(600px, calc(100vw - 32px));
+}
+.g-ask-note {
+	margin: 0;
+	color: var(--ds-text-2);
+	font-size: 12.5px;
+}
+
+/* Phone */
+
+.g-phone-btn {
+	position: relative;
+}
+.g-phone-btn svg {
+	width: 22px;
+	height: 22px;
+}
+.g-dot {
+	position: absolute;
+	top: 6px;
+	right: 4px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--ds-busy);
+}
+.g-dot.pr {
+	background: var(--ds-success);
+}
+.g-sheet {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	background: var(--ds-bg);
+}
+.g-sheet-body {
+	display: grid;
+	gap: 14px;
+	padding: 4px 16px 24px;
+}
+.g-rows {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	border-radius: 12px;
+	background: var(--ds-surface);
+	overflow: hidden;
+}
+.g-rows > li {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 46px;
+	padding: 0 14px;
+}
+.g-rows > li + li {
+	border-top: 0.5px solid var(--ds-border);
+}
+.g-row-btn {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	min-height: 46px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+}
+.g-row-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--ds-text);
+}
+.g-row-label svg {
+	width: 16px;
+	height: 16px;
+}
+.g-row-value {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	color: var(--ds-text-2);
+	font-size: 0.94rem;
+	text-align: right;
+}
+.g-row-value svg {
+	width: 16px;
+	height: 16px;
+	color: var(--ds-text-3);
+}
+.g-sheet-actions {
+	display: grid;
+	gap: 10px;
+}
+.g-sheet-more {
+	display: flex;
+	gap: 8px;
+	justify-content: center;
+}
+.g-why {
+	margin: 0;
+	color: var(--ds-text-3);
+	font-size: 0.82rem;
+	text-align: center;
+}
+.g-sheet-foot {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+}
+.g-sheet-foot .m-btn {
+	flex: 1;
+	min-height: 44px;
+	padding: 0 12px;
+	font-size: 0.94rem;
+}
+.g-commit.mobile .g-files {
+	height: 30vh;
+}
+.g-commit.mobile .g-file-row {
+	min-height: 40px;
+}
+.g-commit.mobile .g-textarea,
+.g-ask.mobile .g-textarea,
+.g-commit.mobile .g-input {
+	border: 1px solid var(--ds-border);
+	border-radius: 10px;
+	background: var(--ds-surface);
+	color: var(--ds-text);
+	font-size: 16px;
+}
+.g-commit.mobile .g-input {
+	padding: 10px;
+}
+.g-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 4px;
+	border: 0;
+	background: none;
+	color: var(--ds-link);
+	font: inherit;
+	font-size: 0.94rem;
+}
+.g-link svg {
+	width: 14px;
+	height: 14px;
+}
+.g-link:disabled {
+	color: var(--ds-text-4);
+}
+.g-sheet .g-progress {
+	justify-content: center;
+	height: 50px;
+	border-radius: 12px;
+	font-size: 0.94rem;
+}
+.g-sheet-confirm {
+	position: absolute;
+	left: 12px;
+	right: 12px;
+	bottom: calc(12px + var(--sab, 0px));
+	display: grid;
+	gap: 8px;
+	padding: 16px;
+	border-radius: 14px;
+	background: var(--ds-surface);
+	box-shadow: var(--ds-shadow-lg);
+}
+.g-sheet-confirm p {
+	margin: 0;
+	color: var(--ds-text-2);
+}
+
+/* Desktop dialogs: the layer's padding, its footer full width. */
+.g-commit-layer .g-commit,
+.g-ask-layer .g-ask {
+	min-height: 0;
+	padding: 14px 24px 0;
+	overflow-y: auto;
+}
+.g-commit-layer .d-pop-foot,
+.g-ask-layer .d-pop-foot {
+	margin: 0 -24px;
+}
+.g-sheet-foot .m-btn:disabled,
+.g-sheet-actions .m-btn:disabled {
+	background: var(--m-fill-3);
+	color: var(--m-label-3);
+}
