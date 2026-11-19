@@ -30,9 +30,11 @@ import type { TranscriptEvent } from "../api/types.ts";
 import { MessageResponse } from "../components/ai-elements/message.tsx";
 import { AgentAvatar, harnessName } from "../components/ui/agent-avatar.tsx";
 import { LOCAL_PREFIX, useLocalSend } from "../data/pending.ts";
+import { splitAttached } from "../lib/attachments.ts";
 import { clock, duration, plural } from "../lib/format.ts";
 import { linkPrs } from "../lib/links.ts";
 import { sentHere } from "../lib/sent.ts";
+import { AttachedFiles } from "./AttachedFiles.tsx";
 import { CodeBlock } from "./CodeBlock.tsx";
 import { InlineCode } from "./highlight.tsx";
 import { buildItems, type Item, isGap } from "./items.ts";
@@ -360,7 +362,7 @@ function MessageView({ m, prev }: { m: ChatMessage; prev?: ChatMessage }) {
 					<div className="ds-peer-body">
 						{/* Kept for search and tests: "from codex@apparish". */}
 						<span className="sr-only">from {name}</span>
-						{text && <MessageResponse>{text}</MessageResponse>}
+						{text && <TextWithFiles text={text} />}
 						<EventMedia ev={m.ev} />
 					</div>
 					{app && <BubbleState ev={m.ev} last={sentKey(m.ev) === lastSentId} />}
@@ -685,6 +687,17 @@ export function TranscriptImage({
 }
 
 /** A user turn's body: a slash command, a `!` shell command, or Markdown. */
+/** A message's text, and the files it names (`Attached:` lines) as chips. */
+function TextWithFiles({ text }: { text: string }) {
+	const { text: body, files } = splitAttached(text);
+	return (
+		<>
+			{body && <MessageResponse>{body}</MessageResponse>}
+			{files.length > 0 && <AttachedFiles files={files} />}
+		</>
+	);
+}
+
 function UserBody({ ev }: { ev: TranscriptEvent }) {
 	const text = textOf(ev);
 	if (!text) return null;
@@ -708,7 +721,7 @@ function UserBody({ ev }: { ev: TranscriptEvent }) {
 				<InlineCode code={text} lang="bash" className="ds-user-shell-cmd" />
 			</p>
 		);
-	return <MessageResponse>{text}</MessageResponse>;
+	return <TextWithFiles text={text} />;
 }
 
 /**

@@ -19,6 +19,7 @@
 import type { ComponentType, ReactNode, RefObject } from "react";
 import type { AgentRow } from "../api/types.ts";
 import type { Target } from "../components/Composer.tsx";
+import type { ComposerDraft } from "./composer-draft.ts";
 import { type Route, registerPageName } from "./hash.ts";
 import { observer, type Signal, signal } from "./signals.ts";
 
@@ -65,6 +66,8 @@ export interface ComposerSlotProps {
 	hasText: boolean;
 	/** The draft's textarea (read or insert text). */
 	textarea: RefObject<HTMLTextAreaElement | null>;
+	/** Attached files and `@` picks of this draft (lib/composer-draft.ts). */
+	draft: ComposerDraft;
 }
 
 /** Every slot and the props its components get. */
@@ -77,6 +80,8 @@ export interface SlotProps {
 	"composer.left": ComposerSlotProps;
 	/** The composer toolbar's right end, before Send (send / stop). */
 	"composer.right": ComposerSlotProps;
+	/** Above the composer's text field (attachment tiles, the `@` menu). */
+	"composer.top": ComposerSlotProps;
 }
 
 export type SlotName = keyof SlotProps;
@@ -90,6 +95,7 @@ const slots: { [K in SlotName]: Registry<SlotEntry<K>> } = {
 	"session.header": new Registry(),
 	"composer.left": new Registry(),
 	"composer.right": new Registry(),
+	"composer.top": new Registry(),
 };
 
 export function registerSlot<K extends SlotName>(

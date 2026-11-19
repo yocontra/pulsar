@@ -5,7 +5,7 @@ import {
 	MoonIcon,
 	ZapIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, ProveCancelled } from "../api/client.ts";
 import type {
 	AgentRow,
@@ -18,6 +18,7 @@ import type {
 	Wake,
 } from "../api/types.ts";
 import type { ChatStatus } from "../lib/ai-types.ts";
+import { ComposerDraft, showsStop } from "../lib/composer-draft.ts";
 import {
 	num,
 	plural,
@@ -44,9 +45,11 @@ import { Layer } from "./desktop/Layer.tsx";
 import { Kbd } from "./ui/kbd.tsx";
 
 /**
- * The composer sends text only: a paste is the browser's own. (PromptInput
- * would take a clipboard file as a hidden attachment and drop the text that
- * came with it, as Excel, Numbers and Word copy both.)
+ * A paste is the browser's own here. (PromptInput would take a clipboard
+ * file as a hidden attachment and drop the text that came with it, as
+ * Excel, Numbers and Word copy both.) Images and very long text become
+ * attachments in the attach feature (features/composer), which listens on
+ * the text field itself.
  */
 const pasteText = () => {};
 
@@ -322,6 +325,9 @@ function ComposerImpl({
 	/** The text being sent; PromptInput clears its form on submit. */
 	const pendingBody = useRef("");
 	const key = targetKey(target);
+	// Attached files and `@` picks: one draft per target (lib/composer-draft.ts).
+	const draft = useMemo(() => new ComposerDraft(), [key]);
+	useEffect(() => () => draft.clear(), [draft]);
 
 	useEffect(() => {
 		setPhase("idle");
@@ -413,8 +419,11 @@ function ComposerImpl({
 	};
 
 	const start = async (text: string) => {
-		if (!text.trim() || phase === "sending" || phase === "checking") return;
-		pendingBody.current = text;
+		if (!text.trim() && !draft.ready().length) return;
+		if (draft.blocked() || phase === "sending" || phase === "checking") return;
+		// The files went to the agent's machine already: the message names them.
+		pendingBody.current = draft.body(text);
+		draft.clear();
 		setHasText(false);
 		// One recipient (an agent, a subagent): no confirmation to show.
 		if (
@@ -465,42 +474,61 @@ function ComposerImpl({
 		busy: phase === "checking" || phase === "sending",
 		hasText,
 		textarea: ta,
+		draft,
 	};
+	const blocked = draft.blocked();
+	const canSend =
+		(hasText || draft.ready().length > 0) &&
+		!blocked &&
+		phase !== "sending" &&
+		phase !== "checking";
+	// The agent works and the draft is empty: Stop (composer.right) replaces Send.
+	const stopMode = showsStop(
+		target.kind === "agent" ? target.agent : null,
+		hasText,
+		draft,
+	);
 	const form = compact ? (
-		<PromptInput
-			onSubmit={(msg) => void start(msg.text)}
-			className="prompt m-prompt"
-		>
-			<PriorityMenu
-				value={priority}
-				onChange={setPriority}
-				expectReply={expectReply}
-				onExpectReply={setExpectReply}
-			/>
-			<Slot name="composer.left" {...slot} />
-			<PromptInputBody>
-				<PromptInputTextarea
-					ref={ta}
-					className="composer-input"
-					placeholder={placeholder ?? "Message"}
-					aria-label="Message"
-					enterKeyHint="send"
-					onChange={(e) => setHasText(!!e.currentTarget.value.trim())}
-					onPaste={pasteText}
-				/>
-			</PromptInputBody>
-			<Slot name="composer.right" {...slot} />
-			<PromptInputSubmit
-				className="send-btn m-send"
-				status={status}
-				aria-label="Send"
-				disabled={!hasText || phase === "sending" || phase === "checking"}
+		<>
+			<Slot name="composer.top" {...slot} />
+			<PromptInput
+				onSubmit={(msg) => void start(msg.text)}
+				className="prompt m-prompt"
 			>
-				{status === "ready" || status === "error" ? (
-					<ArrowUpIcon className="size-[18px]" strokeWidth={2.6} />
-				) : undefined}
-			</PromptInputSubmit>
-		</PromptInput>
+				<PriorityMenu
+					value={priority}
+					onChange={setPriority}
+					expectReply={expectReply}
+					onExpectReply={setExpectReply}
+				/>
+				<Slot name="composer.left" {...slot} />
+				<PromptInputBody>
+					<PromptInputTextarea
+						ref={ta}
+						className="composer-input"
+						placeholder={placeholder ?? "Message"}
+						aria-label="Message"
+						enterKeyHint="send"
+						onChange={(e) => setHasText(!!e.currentTarget.value.trim())}
+						onPaste={pasteText}
+					/>
+				</PromptInputBody>
+				<Slot name="composer.right" {...slot} />
+				{!stopMode && (
+					<PromptInputSubmit
+						className="send-btn m-send"
+						status={status}
+						aria-label="Send"
+						title={blocked ?? undefined}
+						disabled={!canSend}
+					>
+						{status === "ready" || status === "error" ? (
+							<ArrowUpIcon className="size-[18px]" strokeWidth={2.6} />
+						) : undefined}
+					</PromptInputSubmit>
+				)}
+			</PromptInput>
+		</>
 	) : null;
 
 	return (
@@ -537,6 +565,7 @@ function ComposerImpl({
 					onSubmit={(msg) => void start(msg.text)}
 					className="prompt"
 				>
+					<Slot name="composer.top" {...slot} />
 					<PromptInputBody>
 						<PromptInputTextarea
 							ref={ta}
@@ -565,12 +594,19 @@ function ComposerImpl({
 							<Kbd keys={["mod", "enter"]} /> Send
 						</span>
 						<Slot name="composer.right" {...slot} />
-						<PromptInputSubmit
-							className="send-btn"
-							status={status}
-							aria-label="Send"
-							disabled={!hasText || phase === "sending" || phase === "checking"}
-						/>
+						{!stopMode && (
+							<PromptInputSubmit
+								className="send-btn"
+								status={status}
+								aria-label="Send"
+								title={blocked ?? undefined}
+								disabled={!canSend}
+							>
+								{status === "ready" || status === "error" ? (
+									<ArrowUpIcon className="size-4" strokeWidth={2.6} />
+								) : undefined}
+							</PromptInputSubmit>
+						)}
 					</PromptInputFooter>
 				</PromptInput>
 			)}
