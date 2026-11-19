@@ -47,9 +47,7 @@ export const test = base.extend<{ errors: string[]; proveSends: boolean }>({
 				// Linux WebKit reports a request that a navigation cancelled as an
 				// access-control failure. Same-origin API calls can't fail CORS here.
 				if (
-					/^Fetch API cannot load .*\/api\/v1\/.* due to access control checks\.$/.test(
-						m.text(),
-					) &&
+					/\/api\/v1\/\S* due to access control checks\.$/.test(m.text()) &&
 					m.text().includes(new URL(page.url()).host)
 				)
 					return;

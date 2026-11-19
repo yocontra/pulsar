@@ -41,9 +41,10 @@ describe("Codex script: tools.exec_command extraction", () => {
 		]);
 	});
 
-	test("string constants resolve: values, shorthand, ${NAME}", () => {
+	test("string constants resolve: values, shorthand, template references", () => {
 		expect(
 			execCalls(
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: JavaScript source as test input
 				'const repo = "/w/demo";\nconst cmd = "make";\nawait tools.exec_command({ cmd, workdir: repo });\nawait tools.exec_command({ cmd: `git -C ${repo} log` });\nawait tools.exec_command(cmd);',
 			),
 		).toEqual([
@@ -55,9 +56,11 @@ describe("Codex script: tools.exec_command extraction", () => {
 
 	test("what can't be read statically is shown as the call's source", () => {
 		const steps = execCalls(
+			// biome-ignore lint/suspicious/noTemplateCurlyInString: JavaScript source as test input
 			"for (const f of files) await tools.exec_command({ cmd: `cat ${f}` });\nawait tools.exec_command({ cmd: base + ' --watch' });\nawait tools.exec_command({ ...opts });\nawait tools.exec_command(build());",
 		);
 		expect(steps).toEqual([
+			// biome-ignore lint/suspicious/noTemplateCurlyInString: JavaScript source as test input
 			{ call: "tools.exec_command({ cmd: `cat ${f}` })" },
 			{ call: "tools.exec_command({ cmd: base + ' --watch' })" },
 			{ call: "tools.exec_command({ ...opts })" },

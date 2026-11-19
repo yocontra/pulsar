@@ -738,6 +738,7 @@ export function codexLog(): string {
 	call(
 		"custom_tool_call",
 		"exec",
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: Codex's script source, shown as is
 		'const repo = "/work/demo";\nconst a = await tools.exec_command({cmd: "bun test net --reporter=dots", workdir: `${repo}/packages/net`});\nconst b = await tools.exec_command({cmd: `git -C ${repo} status --short`});\nfor (const f of ["a.ts", "b.ts"]) await tools.exec_command({cmd: `wc -l ${f}`, workdir: repo});\ntext(JSON.stringify(a));\ntext(JSON.stringify(b));',
 		[
 			{

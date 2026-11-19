@@ -955,7 +955,7 @@ export class Approvals {
 				 ORDER BY created_at DESC, rowid DESC LIMIT 1`,
 			)
 			.get(...ids, agent.sessionId, agent.sessionId) as Row | undefined;
-		if (!r || r.state !== "expired" || r.answered_by !== "timeout") return null;
+		if (r?.state !== "expired" || r.answered_by !== "timeout") return null;
 		const gap = since - Number(r.decided_at ?? 0);
 		return gap >= -5_000 && gap <= TERMINAL_GAP_MS ? this.toWire(r) : null;
 	}
