@@ -11,6 +11,7 @@ import type {
 	AgentUsage,
 	AskRequest,
 	AskResponse,
+	SendDone,
 	StopResult,
 	UsagePeriod,
 	UsageReport,
@@ -62,6 +63,7 @@ import { cleanPrompt, KINDS } from "./interactions.ts";
 import { Interest } from "./interest.ts";
 import { Interrupts } from "./interrupts.ts";
 import { Jobs, LagMonitor } from "./jobs.ts";
+import { type LaunchDeps, Launches } from "./launch.ts";
 import { INTERVALS, LIMITS } from "./limits.ts";
 import { Lookup } from "./lookup.ts";
 import { Mailbox } from "./mailbox.ts";
@@ -128,6 +130,8 @@ export interface ServiceOptions {
 	turns?: { graceMs?: number };
 	/** Pool membership: where to write the display copy (`pool.json`). */
 	pool?: { mirror?: string };
+	/** Launches: a private tmux server, shell and harness command (tests). */
+	launch?: Pick<LaunchDeps, "tmux" | "shell" | "command" | "timing" | "send">;
 	/**
 	 * Presence checks: the OS prompt (this platform's by default; tests pass
 	 * a fake or null) and how long the person has to answer.
@@ -186,6 +190,8 @@ export class PulsarService {
 	readonly attachments: Attachments;
 	/** The composer's `@` file list (git ls-files in the agent's folder). */
 	readonly files: Files;
+	/** Starting agents from the app (`agents.launch`). */
+	readonly launches: Launches;
 	/** This node's passkeys (approvals and passkey sessions share them). */
 	readonly passkeys: Passkeys;
 	/** Passkey sessions: what the app shows to act as the user. */
@@ -380,6 +386,28 @@ export class PulsarService {
 		this.app.onOperatorSend = (ids) => {
 			for (const id of ids) this.interest.note(id);
 		};
+		this.launches = new Launches({
+			registry: this.registry,
+			events: this.events,
+			store: this.store,
+			acting: this.acting,
+			machineId: () => this.machineId,
+			machine: () => this.machine,
+			send: async (user, agentId, body) => {
+				const r = (await this.app.send(user, {
+					ids: [agentId],
+					body,
+					priority: "normal",
+					expectReply: false,
+					dryRun: false,
+				})) as SendDone;
+				return r.receipts[0]?.state ?? null;
+			},
+			...opts.launch,
+		});
+		this.acting.register("agents.launch", ({ user, params }) =>
+			this.launches.start(user, params),
+		);
 		this.registry.onRelease = (agent) => void this.router.releaseHeld(agent);
 		const resolveTranscript = opts.transcripts?.resolve ?? driverTranscript;
 		this.transcripts = new Transcripts(

@@ -52,6 +52,7 @@ const FEATURES: Feature[] = [
 	"subagents",
 	"usage",
 	"attachments",
+	"launch",
 ];
 
 interface ResolveToken {

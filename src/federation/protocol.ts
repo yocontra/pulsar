@@ -289,7 +289,11 @@ export type FedAction =
 	  }
 	/** The receiver's own token usage (unpriced), and one of its agents'. */
 	| { op: "usage.rows"; period: UsagePeriod; tz: number }
-	| { op: "usage.agent"; agent: string };
+	| { op: "usage.agent"; agent: string }
+	/** Launch reads on the receiver itself (src/service/launch.ts). */
+	| { op: "launch.status"; id: string }
+	| { op: "launch.options" }
+	| { op: "launch.refs"; cwd: string };
 
 /** Up frames, batched in `POST /fed/v1/frames`. */
 export type UpFrame =

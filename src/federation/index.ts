@@ -15,6 +15,7 @@ import { authorize } from "../service/authorize.ts";
 import type { Principal } from "../service/caller.ts";
 import { principalLabel } from "../service/caller.ts";
 import type { PulsarService } from "../service/index.ts";
+import type { LaunchRead } from "../service/launch.ts";
 import { INTERVALS, LIMITS } from "../service/limits.ts";
 import {
 	isLocalSubagentId,
@@ -584,6 +585,16 @@ export class Federation implements PoolView {
 			// here would report "unreachable" after the work succeeded.
 			ACTING_RUN_TIMEOUT_MS,
 		);
+		return r.result;
+	}
+
+	/** A launch read on a machine's home node (src/service/launch.ts). */
+	async launchRead(
+		machineId: string,
+		req: LaunchRead,
+		as: Principal,
+	): Promise<unknown> {
+		const r = await this.act(`${machineId}/`, req, as);
 		return r.result;
 	}
 
@@ -2398,6 +2409,17 @@ export class Federation implements PoolView {
 					{ ...relayedAct(action), assertion: action.assertion },
 					link.name,
 				);
+				return { ok: true, result };
+			}
+			case "launch.status":
+			case "launch.options":
+			case "launch.refs": {
+				// Reads for the human operator only (checked by the service).
+				const result = await this.service.launches.readHere(user, {
+					op: action.op,
+					id: String((action as { id?: unknown }).id ?? ""),
+					cwd: String((action as { cwd?: unknown }).cwd ?? ""),
+				} as LaunchRead);
 				return { ok: true, result };
 			}
 			case "ask": {

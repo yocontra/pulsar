@@ -353,6 +353,15 @@ const ActingOptionsBody = z
 		params: z.unknown().optional(),
 	})
 	.strict();
+/** `POST /agents/launch`: params go to the handler as sent (the challenge signs them). */
+const LaunchBody = z
+	.object({
+		machine: z.string().max(200).optional(),
+		params: z.unknown(),
+		assertion: z.unknown().optional(),
+	})
+	.strict();
+const LaunchRefsQuery = z.object({ cwd: z.string().min(1).max(4096) });
 // The answer is checked against its prompt by the approvals service.
 const Answer = z.record(z.string(), z.unknown()).optional();
 const ApprovalOptionsBody = z
@@ -1034,6 +1043,46 @@ export class HttpTransport {
 					{ agent: body.agent ?? null, machine: body.machine ?? null },
 					body.params ?? null,
 				),
+			);
+		});
+		// Launch: start an agent in tmux on a machine (src/service/launch.ts).
+		const launches = this.service.launches;
+		api.post("/agents/launch", async (c) => {
+			const body = parse(LaunchBody, await jsonBody(c));
+			return c.json(
+				await launches.launch(
+					who(c),
+					body.machine ?? null,
+					body.params,
+					body.assertion,
+				),
+			);
+		});
+		api.get("/launches/:id{.+}", async (c) => {
+			const id = c.req.param("id");
+			const held = launches.get(id);
+			if (held) return c.json(held);
+			const slash = id.indexOf("/");
+			if (slash < 0) throw new RpcError("not_found", `no launch ${id}`);
+			return c.json(
+				await launches.read(who(c), id.slice(0, slash), {
+					op: "launch.status",
+					id: id.slice(slash + 1),
+				}),
+			);
+		});
+		api.get("/machines/:m/projects", async (c) =>
+			c.json(
+				await launches.read(who(c), c.req.param("m"), { op: "launch.options" }),
+			),
+		);
+		api.get("/machines/:m/refs", async (c) => {
+			const q = parse(LaunchRefsQuery, c.req.query());
+			return c.json(
+				await launches.read(who(c), c.req.param("m"), {
+					op: "launch.refs",
+					cwd: q.cwd,
+				}),
 			);
 		});
 		// Approvals: the passkey signs one prompt and one answer.

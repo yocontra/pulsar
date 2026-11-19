@@ -127,6 +127,11 @@ export class Acting {
 		};
 	}
 
+	/** Drops an op's handler (tests stand a dummy in for a feature's). */
+	unregister(op: ActingOp) {
+		this.handlers.delete(op);
+	}
+
 	/**
 	 * Runs an op for the app: here with the passkey session, or on the home
 	 * node with `assertion` (signed over that node's `options`).

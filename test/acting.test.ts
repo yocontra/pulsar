@@ -116,13 +116,16 @@ const calls = new Map<
 function dummyHandlers(n: Node) {
 	const got: { op: string; agent: string | null; params: unknown }[] = [];
 	calls.set(n.name, got);
-	for (const op of ["git.commit", "agents.launch"] as const)
+	for (const op of ["git.commit", "agents.launch"] as const) {
+		// The feature's own handler (launch) makes way for the dummy.
+		n.service.acting.unregister(op);
 		n.service.acting.register(op, async ({ user, agent, params }) => {
 			// A handler always runs as a verified operator.
 			expect(user.verified).toBe(true);
 			got.push({ op, agent, params });
 			return { done: op };
 		});
+	}
 }
 
 function auditOps(
