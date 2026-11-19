@@ -1093,6 +1093,10 @@ export class HttpTransport {
 			this.service.push.unsubscribe(who(c), body.endpoint);
 			return c.json({ ok: true });
 		});
+		// The agent a finish/fail notification was about (its payload has a token).
+		api.get("/push/turns/:ref", (c) =>
+			c.json(this.service.push.turnAgent(who(c), c.req.param("ref"))),
+		);
 		// Finish/fail settings of this browser's subscription (read, or change).
 		api.post("/push/settings", async (c) => {
 			const body = parse(PushSettingsBody, await jsonBody(c));
@@ -1245,7 +1249,11 @@ export class HttpTransport {
 		api.put("/subscriptions/:streamId", async (c) => {
 			this.service.authorize(who(c), "subscribe");
 			const sub = parse(SubscriptionBody, await jsonBody(c));
-			if (!this.hub.setSubscription(c.req.param("streamId"), who(c).login, sub))
+			if (
+				!this.hub.setSubscription(c.req.param("streamId"), who(c).login, sub, {
+					opened: true,
+				})
+			)
 				throw new RpcError("not_found", "no such stream; open /events again");
 			return c.json({ ok: true });
 		});

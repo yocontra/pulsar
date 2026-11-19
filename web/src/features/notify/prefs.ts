@@ -6,6 +6,10 @@
  * finish/fail pushes only when the mode includes notifications). A browser
  * without a subscription keeps them here only, and its select shows the
  * mode without notifications ("Off" or "Sound only") until it subscribes.
+ * What this device chose wins: a new subscription (turned on from
+ * "Approval alerts") gets it on the next `refresh`, and gets no finish or
+ * fail pushes before that. The daemon's copy counts only when this device
+ * has none (cleared site data).
  */
 import { api } from "../../api/client.ts";
 import type { TurnNotifyMode } from "../../api/types.ts";
@@ -34,6 +38,14 @@ function load(): { mode: Mode; inApp: boolean } {
 		return { mode: "notify", inApp: true };
 	}
 }
+
+const hasSaved = () => {
+	try {
+		return localStorage.getItem(KEY) !== null;
+	} catch {
+		return false;
+	}
+};
 
 const first = load();
 /** The chosen mode (with notifications even while this browser has no subscription). */
@@ -80,6 +92,18 @@ export async function refresh(): Promise<void> {
 	const r = await api.pushSettings({ endpoint: ep });
 	subscribed.value = r.subscribed;
 	if (!r.subscribed) return;
+	if (
+		!r.chosen ||
+		(hasSaved() && (r.turns !== mode.value || r.inApp !== inApp.value))
+	) {
+		// This device's choice (or the default) goes to the daemon.
+		await api.pushSettings({
+			endpoint: ep,
+			turns: mode.value,
+			inApp: inApp.value,
+		});
+		return;
+	}
 	mode.value = r.turns;
 	inApp.value = r.inApp;
 	save();

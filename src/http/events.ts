@@ -311,14 +311,22 @@ export class EventHub {
 		this.gcTopics();
 	}
 
-	/** Replaces a stream's subscription set; new topics start with a snapshot. False if unknown. */
-	setSubscription(streamId: string, login: string, sub: Subscription): boolean {
+	/**
+	 * Replaces a stream's subscription set; new topics start with a snapshot.
+	 * False if unknown. `opened`: the app's own subscription (what is on
+	 * screen), not a prefetch's `watchSession`, so its open session counts as
+	 * the operator opening that agent (finish/fail notifications follow it).
+	 */
+	setSubscription(
+		streamId: string,
+		login: string,
+		sub: Subscription,
+		opts: { opened?: boolean } = {},
+	): boolean {
 		const stream = this.streams.get(streamId);
 		if (!stream || stream.login !== login) return false;
 		const next = new Set(topicsOf(sub, login));
-		// Opening an agent makes its finish/fail notifications relevant.
-		if (sub.session && sub.session !== stream.sub.session)
-			this.service.interest.note(sub.session);
+		if (opts.opened && sub.session) this.service.interest.note(sub.session);
 		stream.sub = sub;
 		for (const key of stream.topics)
 			if (!next.has(key)) stream.since.delete(key);

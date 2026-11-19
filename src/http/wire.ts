@@ -564,6 +564,11 @@ export interface PushSettingsRequest {
 export interface PushSettings {
 	/** False when this node holds no subscription for `endpoint`. */
 	subscribed: boolean;
+	/**
+	 * False until this browser sent its choice (a new subscription): no
+	 * finish/fail pushes until then. The app sends what this device chose.
+	 */
+	chosen: boolean;
 	turns: TurnNotifyMode;
 	inApp: boolean;
 }
@@ -586,11 +591,13 @@ export type PushPayload =
 	| { kind: "security"; badge: number }
 	/**
 	 * An agent the operator recently acted on finished its turn or stopped
-	 * with an error. `agentId` is the opaque id this node shows (no name).
+	 * with an error. `ref`: an opaque token for that agent on this node
+	 * (an agent id can hold a session name); `GET /push/turns/:ref` gives
+	 * the agent's id to open.
 	 */
 	| {
 			kind: "finished" | "failed";
-			agentId: string;
+			ref: string;
 			/** Play the notification's sound ("Notifications with sound"). */
 			sound?: true;
 	  };

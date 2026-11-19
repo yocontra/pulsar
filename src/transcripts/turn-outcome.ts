@@ -25,15 +25,29 @@ function* newestFirst(tail: string): Generator<Record<string, unknown>> {
 const obj = (v: unknown): Record<string, unknown> | null =>
 	v && typeof v === "object" ? (v as Record<string, unknown>) : null;
 
+/** A Claude `user` record the person typed (not a tool result or a meta note). */
+function claudePrompt(r: Record<string, unknown>): boolean {
+	if (r.type !== "user" || r.isMeta === true) return false;
+	const content = obj(r.message)?.content;
+	if (typeof content === "string") return true;
+	return (
+		Array.isArray(content) &&
+		!content.some((c) => obj(c)?.type === "tool_result")
+	);
+}
+
 /**
- * Claude Code: the last main-thread assistant record. A turn that failed
- * ends with a synthetic one marked `isApiErrorMessage` ("API Error: 500",
- * "You've hit your limit"); a retry that then answered ends with a normal one.
+ * Claude Code: the last main-thread assistant record of the last turn. A
+ * turn that failed ends with a synthetic one marked `isApiErrorMessage`
+ * ("API Error: 500", "You've hit your limit"); a retry that then answered
+ * ends with a normal one. A prompt (or the "[Request interrupted by user]"
+ * note) after it starts another turn, so an older failure is not this one.
  */
 export function claudeTurnFailed(tail: string): boolean {
 	for (const r of newestFirst(tail)) {
 		if (r.isSidechain === true) continue;
 		if (r.type === "assistant") return r.isApiErrorMessage === true;
+		if (claudePrompt(r)) return false;
 	}
 	return false;
 }
@@ -61,14 +75,16 @@ export function codexTurnFailed(tail: string): boolean {
 }
 
 /**
- * pi and omp: the last assistant message. `stopReason: "error"` is a failed
- * request; `aborted` is the operator stopping it.
+ * pi and omp: the last assistant message of the last turn. `stopReason:
+ * "error"` is a failed request; `aborted` is the operator stopping it. A
+ * user message after it starts another turn.
  */
 export function piTurnFailed(tail: string): boolean {
 	for (const r of newestFirst(tail)) {
 		if (r.type !== "message") continue;
 		const m = obj(r.message);
 		if (m?.role === "assistant") return m.stopReason === "error";
+		if (m?.role === "user") return false;
 	}
 	return false;
 }

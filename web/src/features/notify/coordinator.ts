@@ -22,7 +22,7 @@ import { live, queryClient } from "../../data/runtime.ts";
 import { navigate, route } from "../../lib/router.ts";
 import { effect } from "../../lib/signals.ts";
 import { dismissToast, type ToastId, toast } from "../../lib/toast.ts";
-import { inApp, mode, wantsSound } from "./prefs.ts";
+import { inApp, mode, refresh, wantsSound } from "./prefs.ts";
 
 type Notice = ServerEvents["notify"];
 
@@ -149,8 +149,18 @@ export function start() {
 	for (const ev of ["pointerdown", "keydown"] as const)
 		window.addEventListener(ev, unlock, { capture: true, passive: true });
 	window.addEventListener("focus", clearBadge);
+	// What this device chose reaches its subscription: now, and on coming back
+	// (notifications may have been turned on meanwhile), at most once a minute.
+	let synced = 0;
+	const sync = () => {
+		if (Date.now() - synced < 60_000) return;
+		synced = Date.now();
+		refresh().catch(() => {});
+	};
+	sync();
 	document.addEventListener("visibilitychange", () => {
 		if (focused()) clearBadge();
+		if (document.visibilityState === "visible") sync();
 	});
 	// Opening an agent closes its toast.
 	effect(() => {
