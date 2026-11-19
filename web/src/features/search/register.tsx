@@ -3,7 +3,8 @@
  * (session.header slot), and the phone's search page (`#/search`, opened
  * from Home's header). Metadata and lazy chunks only.
  */
-import { type ComponentType, lazy, Suspense } from "react";
+import { SearchIcon } from "lucide-react";
+import { type ComponentType, createElement, lazy, Suspense } from "react";
 import {
 	registerPage,
 	registerPaletteProvider,
@@ -20,8 +21,41 @@ registerPaletteProvider({
 });
 
 const LazyFind = lazy(() => import("./FindBar.tsx"));
+
+/**
+ * The Find button as it looks before its chunk loads: same markup and size,
+ * inert, so the header's other actions don't move when the real one lands
+ * (a tooltip or click aimed at them would miss). The phone uses the bare
+ * `ion-button` element, which PhoneApp has already defined.
+ */
+function FindPlaceholder({ mobile }: { mobile: boolean }) {
+	if (mobile)
+		return (
+			<span>
+				{createElement(
+					"ion-button",
+					{ "aria-label": "Find in messages", disabled: true },
+					<SearchIcon />,
+				)}
+			</span>
+		);
+	return (
+		<span>
+			<button
+				type="button"
+				className="d-btn sm msr-toggle"
+				aria-label="Find in messages"
+				disabled
+			>
+				<SearchIcon aria-hidden="true" />
+				Find
+			</button>
+		</span>
+	);
+}
+
 const Find: ComponentType<SlotProps["session.header"]> = (props) => (
-	<Suspense fallback={null}>
+	<Suspense fallback={<FindPlaceholder mobile={props.mobile} />}>
 		<LazyFind {...props} />
 	</Suspense>
 );
