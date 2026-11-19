@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
 	cpSync,
 	existsSync,
@@ -32,20 +32,39 @@ function run(
 ) {
 	const r = spawnSync(node, [entry, ...args], {
 		encoding: "utf8",
-		env: {
-			PATH: "/usr/bin:/bin",
-			HOME: home,
-			PULSAR_HOME: join(home, ".pulsar-state"),
-			PULSAR_INSTALL_ROOT: join(home, ".pulsar-install"),
-			// Never reach the real launchctl, systemctl or Tailscale.
-			PULSAR_NO_MESH: "1",
-			// A daemon setup starts must not scan (and message) real sessions.
-			PULSAR_NO_SCAN: "1",
-			...extraEnv,
-		},
+		env: cliEnv(home, extraEnv),
 		timeout: 60_000,
 	});
 	return { code: r.status, out: `${r.stdout}${r.stderr}` };
+}
+
+function cliEnv(home: string, extraEnv: Record<string, string> = {}) {
+	return {
+		PATH: "/usr/bin:/bin",
+		HOME: home,
+		PULSAR_HOME: join(home, ".pulsar-state"),
+		PULSAR_INSTALL_ROOT: join(home, ".pulsar-install"),
+		// Never reach the real launchctl, systemctl or Tailscale.
+		PULSAR_NO_MESH: "1",
+		// A daemon setup starts must not scan (and message) real sessions.
+		PULSAR_NO_SCAN: "1",
+		...extraEnv,
+	};
+}
+
+/** `run` without blocking, so the homes can be cleaned up side by side. */
+function runAsync(home: string, args: string[]): Promise<string> {
+	return new Promise((resolve) => {
+		const child = spawn(node, [cli, ...args], {
+			env: cliEnv(home),
+			stdio: ["ignore", "pipe", "pipe"],
+			timeout: 60_000,
+		});
+		let out = "";
+		child.stdout.on("data", (c) => (out += c));
+		child.stderr.on("data", (c) => (out += c));
+		child.on("close", () => resolve(out));
+	});
 }
 
 const homes: string[] = [];
@@ -69,19 +88,22 @@ function fakeHome() {
 
 // Setup starts a daemon in each fake home (detached, so it may still be
 // coming up): stop it until none answers, then remove the home.
+// The homes are independent, so they are cleaned up side by side.
 afterAll(async () => {
-	for (const home of homes) {
-		for (let i = 0; i < 10; i++) {
-			run(home, ["stop"]);
-			await new Promise((r) => setTimeout(r, 200));
-			if (/not running/.test(run(home, ["status"]).out)) break;
-		}
-		// A daemon that came up after the last check: anything running from
-		// this temp home is ours.
-		await new Promise((r) => setTimeout(r, 500));
-		spawnSync("pkill", ["-f", home]);
-		rmSync(home, { recursive: true, force: true });
-	}
+	await Promise.all(
+		homes.map(async (home) => {
+			for (let i = 0; i < 10; i++) {
+				await runAsync(home, ["stop"]);
+				await new Promise((r) => setTimeout(r, 200));
+				if (/not running/.test(await runAsync(home, ["status"]))) break;
+			}
+			// A daemon that came up after the last check: anything running from
+			// this temp home is ours.
+			await new Promise((r) => setTimeout(r, 500));
+			spawnSync("pkill", ["-f", home]);
+			rmSync(home, { recursive: true, force: true });
+		}),
+	);
 }, 60_000);
 
 beforeAll(() => {
