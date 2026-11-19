@@ -6,11 +6,13 @@ import {
 	PinIcon,
 	SendIcon,
 	SquareIcon,
+	SquarePenIcon,
 } from "lucide-react";
 import { useEffect } from "react";
 import type { TreeNode } from "../api/types.ts";
 import { openPrompt } from "../approval/focus.ts";
 import { askStop } from "../data/pending.ts";
+import { openDraft } from "../features/launch/open.ts";
 import { back, navigate, route } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import {
@@ -94,6 +96,18 @@ function ContextMenuImpl({
 					() => navigate({ view: "broadcast", selector: n.selector }),
 					"",
 					MegaphoneIcon,
+				)}
+			{n.kind === "project" &&
+				can("launch") &&
+				item(
+					`New agent in ${n.project ?? n.label}`,
+					() =>
+						openDraft({
+							machine: n.machine ?? undefined,
+							project: n.project ?? n.label,
+						}),
+					"",
+					SquarePenIcon,
 				)}
 			{n.agent?.canStop &&
 				can("stop") &&

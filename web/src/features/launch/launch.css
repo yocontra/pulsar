@@ -1,0 +1,446 @@
+/* New agent draft (features/launch): the headline with its project and
+   machine pickers, the composer's controls, the start steps. Colors come
+   from the design tokens, so both themes follow. */
+
+.ld {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	height: 100%;
+}
+.ld-body,
+.ld-composer {
+	position: relative;
+	z-index: 1;
+}
+/* An open picker's popover goes over the other half. */
+.ld-body:has(.lp-pop),
+.ld-composer:has(.lp-pop) {
+	z-index: 5;
+}
+.ld-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 18px;
+	padding: 24px 16px;
+}
+.ld-hero {
+	max-width: 760px;
+	text-align: center;
+}
+.ld-headline {
+	margin: 0;
+	font-size: 24px;
+	line-height: 1.35;
+	font-weight: var(--ds-weight-regular);
+	letter-spacing: var(--ds-tracking-title);
+	color: var(--ds-text);
+}
+@media (min-width: 640px) {
+	.ld-headline {
+		font-size: 30px;
+	}
+}
+.ld-word {
+	color: var(--ds-text-2);
+}
+
+/* ------------------------------------------------------------- pickers */
+.lp {
+	position: relative;
+	display: inline-flex;
+}
+.lp-hero-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font: inherit;
+	color: inherit;
+	background: transparent;
+	border: 0;
+	border-radius: var(--ds-radius-md);
+	padding: 0 6px;
+	margin: 0 -2px;
+	cursor: pointer;
+	text-decoration: underline;
+	text-decoration-color: var(--ds-border-strong);
+	text-underline-offset: 6px;
+	text-decoration-thickness: 1px;
+}
+.lp-hero-btn:hover,
+.lp-hero-btn[aria-expanded="true"] {
+	background: var(--ds-surface-hover);
+}
+.lp-hero-btn:focus-visible,
+.lp-chip:focus-visible {
+	outline: none;
+	box-shadow: var(--ds-focus-ring);
+}
+.lp-hero-btn .lp-caret {
+	width: 0.6em;
+	height: 0.6em;
+	color: var(--ds-text-3);
+}
+.lp-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	padding: 0 8px;
+	border-radius: var(--ds-radius-sm);
+	border: 1px solid var(--ds-control-border);
+	background: var(--ds-control);
+	color: var(--ds-text);
+	font: inherit;
+	font-size: 12.5px;
+	cursor: pointer;
+	max-width: 220px;
+}
+.lp-chip:hover:not(:disabled) {
+	background: var(--ds-control-hover);
+}
+.lp-chip:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+.lp-chip svg {
+	width: 13px;
+	height: 13px;
+	flex: none;
+}
+.lp-chip .lp-caret {
+	width: 12px;
+	height: 12px;
+	color: var(--ds-text-3);
+}
+.lp-btn-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.lp-pop {
+	position: absolute;
+	z-index: 60;
+	width: 288px;
+	background: var(--ds-surface);
+	color: var(--ds-text);
+	border: 1px solid var(--ds-border-strong);
+	border-radius: var(--ds-radius-lg);
+	box-shadow: var(--ds-shadow-lg);
+	padding: 6px;
+	text-align: left;
+	font-size: var(--ds-text-body);
+	letter-spacing: normal;
+}
+.lp-v-hero .lp-pop {
+	top: calc(100% + 6px);
+	left: 50%;
+	transform: translateX(-50%);
+}
+.lp-chip + .lp-pop {
+	bottom: calc(100% + 6px);
+	left: 0;
+}
+.lp-search {
+	width: 100%;
+	height: 30px;
+	padding: 0 8px;
+	margin-bottom: 4px;
+	border: 1px solid var(--ds-control-border);
+	border-radius: var(--ds-radius-sm);
+	background: var(--ds-bg);
+	color: var(--ds-text);
+	font: inherit;
+	font-size: var(--ds-text-secondary);
+}
+.lp-search:focus {
+	outline: none;
+	box-shadow: var(--ds-focus-ring);
+}
+.lp-list {
+	max-height: 280px;
+	overflow-y: auto;
+	outline: none;
+}
+.lp-opt {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 8px;
+	border-radius: var(--ds-radius-sm);
+	cursor: pointer;
+}
+.lp-opt.active {
+	background: var(--ds-surface-hover);
+}
+.lp-opt.off {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.lp-opt-icon {
+	display: inline-flex;
+	color: var(--ds-text-2);
+}
+.lp-opt-icon svg {
+	width: 14px;
+	height: 14px;
+}
+.lp-opt-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1;
+}
+.lp-opt-label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.lp-opt-sub {
+	font-size: var(--ds-text-caption);
+	color: var(--ds-text-3);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.lp-badge {
+	font-size: 11px;
+	line-height: 16px;
+	padding: 0 6px;
+	border-radius: var(--ds-radius-full);
+	background: var(--ds-control);
+	color: var(--ds-text-2);
+}
+.lp-check {
+	width: 14px;
+	height: 14px;
+	color: var(--ds-text-2);
+	flex: none;
+}
+.lp-note {
+	margin: 0;
+	padding: 10px 8px;
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-secondary);
+}
+.lp-extra {
+	display: block;
+	width: 100%;
+	text-align: left;
+	margin-top: 4px;
+	padding: 6px 8px;
+	border: 0;
+	border-top: 1px solid var(--ds-hairline);
+	background: transparent;
+	color: var(--ds-text-2);
+	font: inherit;
+	font-size: var(--ds-text-secondary);
+	cursor: pointer;
+	border-radius: 0 0 var(--ds-radius-sm) var(--ds-radius-sm);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.lp-extra:hover {
+	background: var(--ds-surface-hover);
+}
+
+/* Phone: a picker is a page of its own. */
+.lp-page {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	flex-direction: column;
+	background: var(--ds-bg);
+	color: var(--ds-text);
+	padding: env(safe-area-inset-top) 12px env(safe-area-inset-bottom);
+	text-align: left;
+	font-size: 16px;
+	letter-spacing: normal;
+}
+.lp-page-head {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	height: 44px;
+}
+.lp-page-head h2 {
+	margin: 0;
+	font-size: 17px;
+	font-weight: var(--ds-weight-semibold);
+}
+.lp-back {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	justify-self: start;
+	border: 0;
+	background: transparent;
+	color: var(--ds-primary);
+	font: inherit;
+	font-size: 17px;
+	padding: 0;
+}
+.lp-page .lp-search {
+	height: 36px;
+	font-size: 16px;
+	border-radius: 10px;
+}
+.lp-page .lp-list {
+	max-height: none;
+	flex: 1;
+}
+.lp-page .lp-opt {
+	min-height: 44px;
+}
+
+/* ---------------------------------------------------------------- steps */
+.ld-timeline {
+	max-width: 560px;
+	text-align: center;
+}
+.ld-shimmer {
+	margin: 0;
+	font-size: var(--ds-text-body);
+	color: var(--ds-busy-text);
+	background: linear-gradient(
+		90deg,
+		var(--ds-busy-text) 0%,
+		color-mix(in srgb, var(--ds-busy-text) 35%, transparent) 50%,
+		var(--ds-busy-text) 100%
+	);
+	background-size: 200% 100%;
+	background-clip: text;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: ld-shimmer 1.6s linear infinite;
+}
+@keyframes ld-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -100% 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.ld-shimmer {
+		animation: none;
+		-webkit-text-fill-color: currentColor;
+	}
+}
+.ld-terminal {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	padding: 14px 16px;
+	border-radius: var(--ds-radius-lg);
+	background: var(--ds-needs-soft);
+	color: var(--ds-text);
+	font-size: var(--ds-text-secondary);
+}
+.ld-terminal p {
+	margin: 0;
+}
+.ld-attach {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--ds-text-2);
+}
+.ld-attach svg {
+	width: 14px;
+	height: 14px;
+}
+.ld-error {
+	margin: 0;
+	max-width: 560px;
+	text-align: center;
+	color: var(--ds-danger-text);
+	font-size: var(--ds-text-secondary);
+}
+.ld-error .link svg {
+	width: 12px;
+	height: 12px;
+	vertical-align: -1px;
+}
+.ld-why {
+	margin: 0;
+	padding: 0 4px;
+	font-size: var(--ds-text-caption);
+	color: var(--ds-text-3);
+}
+.ld-progress {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 32px;
+	color: var(--ds-busy-text);
+	font-size: 12.5px;
+	white-space: nowrap;
+}
+.ld-progress svg {
+	width: 14px;
+	height: 14px;
+}
+.ld-timer {
+	color: var(--ds-text-3);
+	font-variant-numeric: tabular-nums;
+}
+.ld-send-wrap {
+	display: inline-flex;
+}
+
+/* ---------------------------------------------------------------- phone */
+.ld-phone-content::part(scroll) {
+	display: flex;
+	flex-direction: column;
+}
+.ld-phone .ld-body {
+	overflow-y: auto;
+	justify-content: flex-start;
+	padding-top: 32px;
+}
+.ld-phone .ld-headline {
+	font-size: 22px;
+}
+.ld-chips {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+}
+.ld-chips .lp-chip {
+	height: 32px;
+	font-size: 14px;
+	border-radius: var(--ds-radius-full);
+	padding: 0 12px;
+}
+.ld-phone .ld-composer {
+	padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+.ld-phone .ld-progress {
+	font-size: 13px;
+}
+button.lp-opt {
+	width: 100%;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+}
+/* The input group clips its corners; a picker's popover must leave it. */
+.ld-composer [data-slot="input-group"] {
+	overflow: visible;
+}
