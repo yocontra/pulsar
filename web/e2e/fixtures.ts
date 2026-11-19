@@ -4,13 +4,36 @@ import {
 	expect,
 	type Page,
 } from "@playwright/test";
+import { type E2EWorkerOptions, startServer } from "./infra.ts";
 
 /**
  * Every test fails on a console error, an uncaught exception, a CSP
  * violation (they log as console errors) or a dialog (an XSS `alert`).
  * Tests that render Mermaid allow its style-src violations (see below).
  */
-export const test = base.extend<{ errors: string[]; proveSends: boolean }>({
+export const test = base.extend<
+	{ errors: string[]; proveSends: boolean },
+	E2EWorkerOptions & { serverProcess: undefined }
+>({
+	/**
+	 * The server this worker's tests talk to (the config's `server` option):
+	 * every worker starts its own on its own port (infra.ts workerPort, which
+	 * the config's baseURL uses), so tests that change server state never see
+	 * another worker's changes. Configs with a shared webServer leave it null.
+	 */
+	server: [null, { scope: "worker", option: true }],
+	serverProcess: [
+		async ({ server }, use, workerInfo) => {
+			if (!server) return use(undefined);
+			const stop = await startServer(server, workerInfo.workerIndex);
+			try {
+				await use(undefined);
+			} finally {
+				await stop();
+			}
+		},
+		{ scope: "worker", auto: true, timeout: 60_000 },
+	],
 	/**
 	 * Unproven sends open Prove Human once per tab. Tests that aren't about
 	 * it start as if the operator chose "Send without proving".

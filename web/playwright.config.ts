@@ -1,39 +1,45 @@
 import { defineConfig, devices } from "@playwright/test";
-import { runPort, serverLog, sh } from "./e2e/infra.ts";
+import {
+	clearWorkerLogs,
+	type E2EWorkerOptions,
+	e2eWorkers,
+	IN_WORKER,
+	workerPort,
+} from "./e2e/infra.ts";
 
-// A free port per run (see e2e/infra.ts): concurrent runs never share a server.
-const PORT = runPort("PULSAR_MOCK_PORT");
-const LOG = serverLog("mock");
+// Every worker runs its own mock on its own free port (e2e/infra.ts), so the
+// tests that change the mock's state run in parallel without colliding.
+const PORT = workerPort("PULSAR_MOCK_PORT");
+if (!IN_WORKER) clearWorkerLogs("mock");
 
 /**
  * End-to-end runs against the mock API serving the built app (dist/web) with
  * the production CSP, so CSP violations fail the tests. Run with
- * `bun run test:e2e` (builds first).
+ * `bun run test:e2e` (builds first). PULSAR_E2E_WORKERS sets the workers.
  */
-export default defineConfig({
+export default defineConfig<unknown, E2EWorkerOptions>({
 	testDir: "./e2e",
 	testMatch: /.*\.e2e\.ts$/,
 	outputDir: "./test-results",
+	// A file's tests run in order on one worker (and one mock); files spread
+	// over the workers.
 	fullyParallel: false,
-	workers: 1,
+	workers: e2eWorkers(),
 	retries: 0,
 	timeout: 30_000,
-	reporter: [["list"], ["./e2e/server-log-reporter.ts", { file: LOG }]],
+	// A failed run prints the tail of each worker's e2e-logs/mock-w<n>.log.
+	reporter: [["list"], ["./e2e/server-log-reporter.ts", { name: "mock" }]],
 	use: {
 		baseURL: `http://127.0.0.1:${PORT}`,
 		serviceWorkers: "block",
 		trace: "retain-on-failure",
-	},
-	webServer: {
-		// The mock's output goes to e2e-logs/mock.log; a failed run prints its tail.
-		command: `bun web/mock/server.ts > ${sh(LOG)} 2>&1`,
-		cwd: "..",
 		// The mock serves the daemon's features (approvals and push included).
-		env: { PULSAR_MOCK_PORT: String(PORT), PULSAR_MOCK_STEADY: "1" },
-		url: `http://127.0.0.1:${PORT}/api/v1/hello`,
-		reuseExistingServer: false,
-		stdout: "ignore",
-		timeout: 20_000,
+		server: {
+			name: "mock",
+			script: "web/mock/server.ts",
+			portEnv: "PULSAR_MOCK_PORT",
+			env: { PULSAR_MOCK_STEADY: "1" },
+		},
 	},
 	projects: [
 		{

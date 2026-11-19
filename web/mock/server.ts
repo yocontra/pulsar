@@ -2665,3 +2665,11 @@ const server = Bun.serve({
 console.log(
 	`pulsar mock: http://${server.hostname}:${server.port} (${machines.length} machines, ${agents.length} agents; features ${FEATURES.join(",")})`,
 );
+
+// Started by an e2e worker (web/e2e/infra.ts): stdin is a pipe from it, and
+// it closes when the worker ends, even if the worker was killed.
+if (process.env.PULSAR_E2E_PIPE === "1") {
+	process.stdin.on("close", () => process.exit(0));
+	process.stdin.on("end", () => process.exit(0));
+	process.stdin.resume();
+}

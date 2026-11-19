@@ -478,9 +478,13 @@ const control = createServer(async (req, res) => {
 	}
 	res.writeHead(404).end();
 });
-control.listen(
-	Number(process.env.PULSAR_REAL_CONTROL_PORT ?? PORT + 1),
-	"127.0.0.1",
+// Listening before the ready line below (the e2e worker waits for it).
+await new Promise<void>((ok) =>
+	control.listen(
+		Number(process.env.PULSAR_REAL_CONTROL_PORT ?? PORT + 1),
+		"127.0.0.1",
+		ok,
+	),
 );
 // TLS too (the TLS e2e and the benchmark): the same daemon behind HTTPS with
 // a throwaway self-signed certificate for localhost, HTTP/2 like a real
@@ -535,14 +539,24 @@ console.log(
 	`real daemon: app http://127.0.0.1:${PORT}/ control :${PORT + 1}${tlsPort ? ` tls https://localhost:${tlsPort}/` : ""}`,
 );
 
-const stop = async () => {
-	control.close();
-	for (const c of [fixer, reviewer, ...others]) c.client.close();
-	asker?.close();
-	await tlsApp?.close();
-	await daemon.stop();
-	rmSync(root, { recursive: true, force: true });
-	process.exit(0);
-};
+// Once, whichever comes first: a signal or the worker's pipe closing.
+let stopping: Promise<void> | null = null;
+const stop = () =>
+	(stopping ??= (async () => {
+		control.close();
+		for (const c of [fixer, reviewer, ...others]) c.client.close();
+		asker?.close();
+		await tlsApp?.close();
+		await daemon.stop();
+		rmSync(root, { recursive: true, force: true });
+		process.exit(0);
+	})());
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
+// Started by an e2e worker (web/e2e/infra.ts): stdin is a pipe from it, and
+// it closes when the worker ends, even if the worker was killed.
+if (process.env.PULSAR_E2E_PIPE === "1") {
+	process.stdin.on("close", stop);
+	process.stdin.on("end", stop);
+	process.stdin.resume();
+}
