@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { IDENTS } from "../src/harnesses/ident.ts";
 import {
 	CLIENTS,
 	DRIVERS,
@@ -86,6 +87,11 @@ function expectWellFormed(action: Action, id: string) {
 			break;
 		case "dir":
 			expect(u.path.length).toBeGreaterThan(0);
+			break;
+		case "hook":
+			expect(typeof u.file).toBe("string");
+			expect(u.event.length).toBeGreaterThan(0);
+			expect(u.marker.length).toBeGreaterThan(0);
 			break;
 		default:
 			throw new Error(`unknown undo ${JSON.stringify(u)}`);
@@ -177,5 +183,23 @@ describe.each(DRIVERS.map((d) => [d.id, d] as const))("driver %s", (id, d) => {
 		}
 		// With MCP and per-harness skills on, every harness gets at least one change.
 		expect(d.setup.plan(ctx()).length).toBeGreaterThan(0);
+	});
+});
+
+describe("light identity registry", () => {
+	test("IDENTS mirrors DRIVERS: same order, same identity functions", () => {
+		expect(IDENTS.map((i) => i.id)).toEqual(DRIVERS.map((d) => d.id));
+		for (const [n, ident] of IDENTS.entries()) {
+			const driver = DRIVERS[n]!;
+			for (const key of [
+				"label",
+				"matchProcess",
+				"identify",
+				"lateSession",
+				"toolSessions",
+				"extension",
+			] as const)
+				expect(driver[key]).toBe(ident[key] as never);
+		}
 	});
 });
