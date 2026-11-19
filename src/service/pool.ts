@@ -17,6 +17,7 @@ import type {
 import type { TranscriptListener } from "../transcripts/tailer.ts";
 import type { MediaType } from "../transcripts/types.ts";
 import type { Agent, Message, Receipt } from "../types.ts";
+import type { PoolUsage } from "../usage/index.ts";
 import type { ActingRelay } from "./acting.ts";
 import type { Principal } from "./caller.ts";
 import type { TranscriptPageResult } from "./transcripts.ts";
@@ -94,6 +95,8 @@ export interface PoolView extends ActingRelay {
 	readonly changes?: RemoteChanges;
 	/** Permission prompts of remote agents, decided by their home node. */
 	readonly approvals: RemoteApprovals;
+	/** Token usage of other machines and their agents (absent before usage existed). */
+	readonly usage?: PoolUsage;
 	/**
 	 * The sender of a message that came from a peer (`<machineId>/<id>`), or
 	 * null when the id is not such an address.

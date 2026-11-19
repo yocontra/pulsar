@@ -235,7 +235,35 @@ const Q = {
 		cursor: optionalText(100),
 		limit: limit(100, 500),
 	}),
+	usage: z.object({
+		period: z.enum(["24h", "7d", "30d", "90d"]).default("7d"),
+		/** Minutes east of UTC, for local days. */
+		tz: z.coerce.number().int().min(-1440).max(1440).default(0),
+		/** Read new session lines first (waits a few seconds at most). */
+		refresh: z.enum(["0", "1"]).optional(),
+	}),
 };
+
+const PriceNumber = z.number().min(0).max(10_000);
+const UsagePriceBody = z
+	.object({
+		model: z.string().min(1).max(200),
+		/** Dollars per million tokens; null drops the edit (back to the default). */
+		price: z
+			.object({
+				input: PriceNumber,
+				output: PriceNumber,
+				cacheRead: PriceNumber,
+				cacheWrite5m: PriceNumber,
+				cacheWrite1h: PriceNumber,
+			})
+			.strict()
+			.nullable(),
+	})
+	.strict();
+
+/** How long `GET /usage?refresh=1` waits for the scan before answering anyway. */
+const USAGE_REFRESH_WAIT_MS = 8000;
 
 const SendBody = z
 	.object({
@@ -1141,6 +1169,34 @@ export class HttpTransport {
 			this.service.authorize(who(c), "lookup");
 			const body = parse(AskBody, await jsonBody(c));
 			return c.json(await this.service.askPool(body, who(c)));
+		});
+		// Token usage across the pool, priced here ("API estimate").
+		api.get("/usage", async (c) => {
+			const q = parse(Q.usage, c.req.query());
+			this.service.authorize(who(c), "usage");
+			if (q.refresh === "1") {
+				const scan = this.service.usage.scanner.scan();
+				let timer: ReturnType<typeof setTimeout> | undefined;
+				await Promise.race([
+					scan.catch(() => {}),
+					new Promise((r) => {
+						timer = setTimeout(r, USAGE_REFRESH_WAIT_MS);
+					}),
+				]);
+				clearTimeout(timer);
+			}
+			return c.json(await this.service.usageReport(q.period, q.tz, who(c)));
+		});
+		api.get("/agents/:id/usage", async (c) =>
+			c.json(await this.service.agentUsage(c.req.param("id"), who(c))),
+		);
+		// Edit a model's price (or drop the edit): used for every machine's tokens.
+		api.put("/usage/prices", async (c) => {
+			this.service.authorize(who(c), "usage");
+			const body = parse(UsagePriceBody, await jsonBody(c));
+			return c.json({
+				prices: this.service.usage.setPrice(body.model, body.price),
+			});
 		});
 		api.get("/messages/:id/receipts", (c) => {
 			const q = parse(Q.receipts, c.req.query());

@@ -32,6 +32,8 @@ export const INTERVALS = {
 	refreshGitMs: 30_000,
 	refreshPrsMs: 60_000,
 	refreshModelsMs: 30_000,
+	/** Reading new lines of harness session files for token usage. */
+	usageMs: 60_000,
 	refreshMachineMs: 10 * 60_000,
 	pruneMs: 3600_000,
 	rateWindowMs: 60_000,

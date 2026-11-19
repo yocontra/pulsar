@@ -4,6 +4,7 @@ import type {
 	ChangesMode,
 	NeedsYou,
 	SubagentCounts,
+	UsagePeriod,
 	Wake,
 } from "../http/wire.ts";
 import type { Message, PublicAgent, Receipt, ReceiptState } from "../types.ts";
@@ -265,7 +266,10 @@ export type FedAction =
 			agent: string | null;
 			params: unknown;
 			assertion: unknown;
-	  };
+	  }
+	/** The receiver's own token usage (unpriced), and one of its agents'. */
+	| { op: "usage.rows"; period: UsagePeriod; tz: number }
+	| { op: "usage.agent"; agent: string };
 
 /** Up frames, batched in `POST /fed/v1/frames`. */
 export type UpFrame =

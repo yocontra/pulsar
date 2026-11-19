@@ -85,6 +85,8 @@ export const HTTP_OPS = [
 	/** Request options for an acting op on a remote agent (its home node's challenge). */
 	"acting.options",
 	...ACTING_OPS,
+	/** Token usage and model prices (reading, and editing a price). */
+	"usage",
 ] as const;
 
 /**
@@ -166,6 +168,7 @@ const USER_OPS: ReadonlySet<Op> = new Set<Op>([
 	"lookup",
 	"acting.options",
 	...ACTING_OPS,
+	"usage",
 ]);
 
 /** What the human operator may do only with a passkey session (`verified`, Prove Human). */

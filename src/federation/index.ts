@@ -24,6 +24,7 @@ import {
 import { delivered, writeReceipt } from "../service/util.ts";
 import type { Agent, Message, Receipt, ReceiptState } from "../types.ts";
 import { RECEIPT_STATES as ALL_RECEIPT_STATES } from "../types.ts";
+import { USAGE_PERIODS } from "../usage/index.ts";
 import { VERSION } from "../version.ts";
 import { RemoteChangesReader } from "./changes.ts";
 import { LocalFeed } from "./local.ts";
@@ -60,6 +61,7 @@ import {
 	tailnetRpId,
 } from "./tailnet.ts";
 import { RemoteTranscriptReader } from "./transcripts.ts";
+import { RemoteUsage } from "./usage.ts";
 
 export type { Tailnet, TailnetNode, TailnetStatus } from "./tailnet.ts";
 
@@ -220,6 +222,7 @@ export class Federation implements PoolView {
 	readonly feed: LocalFeed;
 	readonly transcripts: RemoteTranscriptReader;
 	readonly changes: RemoteChangesReader;
+	readonly usage: RemoteUsage;
 	/** Prompts of remote agents: shared in their records, decided by their home node. */
 	readonly approvals: RemoteApprovals = {
 		approval: (id) => this.state.approval(id),
@@ -326,6 +329,7 @@ export class Federation implements PoolView {
 		this.feed = new LocalFeed(service, opts.feedLog);
 		this.transcripts = new RemoteTranscriptReader(this);
 		this.changes = new RemoteChangesReader(this);
+		this.usage = new RemoteUsage(this);
 		this.state.selfProtocol = this.protocol;
 		this.state.onApproval = (approval) =>
 			this.service.events.emit("approval", { approval });
@@ -2428,6 +2432,21 @@ export class Federation implements PoolView {
 					},
 				);
 				return { ok: true, response };
+			}
+			case "usage.rows": {
+				authorize(user, "usage");
+				const period = USAGE_PERIODS.includes(action.period)
+					? action.period
+					: "7d";
+				const tz = Math.max(-1440, Math.min(1440, Number(action.tz) || 0));
+				return { ok: true, usage: this.service.usage.local(period, tz) };
+			}
+			case "usage.agent": {
+				const agent = this.service.registry.get(String(action.agent));
+				authorize(user, "usage");
+				if (!agent)
+					return fail("not_found", `no agent ${String(action.agent)}`);
+				return { ok: true, usage: this.service.usage.localAgent(agent) };
 			}
 			default:
 				return fail(

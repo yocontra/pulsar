@@ -246,7 +246,8 @@ export type Feature =
 	| "ask"
 	| "approvals"
 	| "push"
-	| "subagents";
+	| "subagents"
+	| "usage";
 
 /** `GET /hello`. */
 export interface Hello {
@@ -992,3 +993,66 @@ export type ServerEventName = keyof ServerEvents;
 export type ServerEvent = {
 	[K in ServerEventName]: { type: K; data: ServerEvents[K] };
 }[ServerEventName];
+
+/** `GET /usage` periods. */
+export type UsagePeriod = "24h" | "7d" | "30d" | "90d";
+
+/** Token counts; `input` is uncached input only. */
+export interface UsageTokens {
+	input: number;
+	cacheRead: number;
+	cacheWrite5m: number;
+	cacheWrite1h: number;
+	output: number;
+	/** Model responses counted. */
+	records: number;
+}
+
+/** Tokens for one machine, harness and model in one hour (24h) or local day. */
+export interface UsageRow extends UsageTokens {
+	machine: string;
+	harness: string;
+	model: string;
+	/** Bucket start (ms). */
+	t: number;
+	/** API estimate in US dollars; null when the model has no price. */
+	cost: number | null;
+}
+
+/** A model price in US dollars per million tokens. */
+export interface UsagePrice {
+	model: string;
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite5m: number;
+	cacheWrite1h: number;
+	source: "default" | "custom";
+}
+
+/** `GET /usage`: the pool's token usage, priced by this node. */
+export interface UsageReport {
+	period: UsagePeriod;
+	from: number;
+	to: number;
+	bucket: "hour" | "day";
+	rows: UsageRow[];
+	/** Sessions with usage in the period, per machine and harness. */
+	sessions: { machine: string; harness: string; count: number }[];
+	/** Every machine asked; `error` when it did not answer. */
+	machines: { id: string; name: string; error: string | null }[];
+	prices: UsagePrice[];
+	/** This node's last finished scan of session files (ms), null before the first. */
+	scannedAt: number | null;
+	scanning: boolean;
+}
+
+/** `GET /agents/:id/usage`: one agent's session so far. */
+export interface AgentUsage {
+	agent: string;
+	tokens: UsageTokens;
+	cost: number | null;
+	/** Tokens in the latest request; `window` when the harness reports it. */
+	context: { used: number; window: number | null } | null;
+	model: string | null;
+}

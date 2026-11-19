@@ -262,6 +262,47 @@ CREATE INDEX IF NOT EXISTS receipts_resume ON receipts(resume_key) WHERE resume_
 					db.exec(`ALTER TABLE approvals ADD COLUMN ${col} TEXT DEFAULT NULL`);
 		},
 	},
+	// 8: token usage read from harness session files (src/usage): tokens per
+	// UTC hour, harness, model, folder and session; each file's read offset
+	// and parser state; provider message ids already counted.
+	{
+		ensure: (db) =>
+			db.exec(`
+CREATE TABLE IF NOT EXISTS usage_hourly (
+	hour INTEGER NOT NULL,
+	harness TEXT NOT NULL,
+	model TEXT NOT NULL,
+	project TEXT NOT NULL,
+	session TEXT NOT NULL,
+	input INTEGER NOT NULL DEFAULT 0,
+	cache_read INTEGER NOT NULL DEFAULT 0,
+	cache_write_5m INTEGER NOT NULL DEFAULT 0,
+	cache_write_1h INTEGER NOT NULL DEFAULT 0,
+	output INTEGER NOT NULL DEFAULT 0,
+	records INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (hour, harness, model, project, session)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS usage_hourly_session ON usage_hourly(harness, session);
+CREATE TABLE IF NOT EXISTS usage_files (
+	path TEXT PRIMARY KEY,
+	harness TEXT NOT NULL,
+	session TEXT NOT NULL,
+	offset INTEGER NOT NULL DEFAULT 0,
+	size INTEGER NOT NULL DEFAULT 0,
+	mtime INTEGER NOT NULL DEFAULT 0,
+	state TEXT NOT NULL DEFAULT '{}',
+	model TEXT,
+	context_used INTEGER,
+	context_window INTEGER,
+	last_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS usage_files_session ON usage_files(harness, session);
+CREATE TABLE IF NOT EXISTS usage_seen (
+	key INTEGER PRIMARY KEY,
+	at INTEGER NOT NULL
+);
+`),
+	},
 ];
 
 /** The schema version this pulsar writes. */

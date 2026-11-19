@@ -7,7 +7,14 @@ import { type TailnetStatus, TailscaleTailnet } from "../federation/tailnet.ts";
 import { gitInfoAsync } from "../git.ts";
 import { DRIVERS, driverFor } from "../harnesses/index.ts";
 import type { LocalAnswerCheck, PromptRef } from "../harnesses/types.ts";
-import type { AskRequest, AskResponse, StopResult } from "../http/wire.ts";
+import type {
+	AgentUsage,
+	AskRequest,
+	AskResponse,
+	StopResult,
+	UsagePeriod,
+	UsageReport,
+} from "../http/wire.ts";
 import { daemonLog } from "../log.ts";
 import {
 	cleanMachineName,
@@ -27,6 +34,7 @@ import {
 	type PublicAgent,
 	type Registration,
 } from "../types.ts";
+import { Usage, type UsageOptions } from "../usage/index.ts";
 import { VERSION } from "../version.ts";
 import { Acting } from "./acting.ts";
 import { AppApi } from "./app.ts";
@@ -106,6 +114,8 @@ export interface ServiceOptions {
 	};
 	/** Worktree changes: poll and debounce timers (tests shorten them). */
 	changes?: { pollMs?: number; debounceMs?: number };
+	/** Token usage: session folders and how often to read them (tests use fixtures). */
+	usage?: UsageOptions & { intervalMs?: number; scan?: boolean };
 	/** Web Push: where the VAPID keys live (the state folder by default) and how to send (tests). */
 	push?: { keyFile?: string; send?: PushOptions["send"] };
 	/** Pool membership: where to write the display copy (`pool.json`). */
@@ -171,6 +181,9 @@ export class PulsarService {
 
 	/** Ask without waking anyone: `ask.local({question, selector?})`. */
 	readonly ask: Lookup;
+	/** Token usage read from harness session files, and its API estimate. */
+	readonly usage: Usage;
+	private readonly usageOpts: ServiceOptions["usage"];
 	/** Pool views and user sends for the app (HTTP transport). */
 	readonly app: AppApi;
 	/** Permission prompts from harness hooks, decided with a passkey; first answer wins. */
@@ -379,6 +392,36 @@ export class PulsarService {
 			views: this.app.views,
 			transcripts: this.transcripts,
 		});
+		this.usageOpts = opts.usage;
+		this.usage = new Usage(this.store, opts.usage);
+	}
+
+	/** The pool's token usage, priced on this node (`GET /usage`). */
+	usageReport(
+		period: UsagePeriod,
+		tzMinutes: number,
+		as: Principal,
+	): Promise<UsageReport> {
+		authorize(as, "usage");
+		return this.usage.report(
+			period,
+			tzMinutes,
+			{ id: this.machineId, name: this.machine },
+			this.registry.pool?.usage ?? null,
+			as,
+		);
+	}
+
+	/** One agent's tokens, cost and context (a remote one's from its home node). */
+	async agentUsage(id: string, as: Principal): Promise<AgentUsage> {
+		authorize(as, "usage");
+		const agent = this.registry.find(id);
+		if (!agent) throw new RpcError("not_found", `no agent ${id}`);
+		if (!agent.id.includes("/"))
+			return this.usage.priceAgent(agent.id, this.usage.localAgent(agent));
+		const pool = this.registry.pool?.usage;
+		if (!pool) throw new RpcError("not_found", `no agent ${id}`);
+		return this.usage.priceAgent(agent.id, await pool.agentUsage(agent.id, as));
 	}
 
 	/**
@@ -500,6 +543,14 @@ export class PulsarService {
 					});
 				}
 		jobs.every("sweep", INTERVALS.sweepMs, () => this.registry.sweep());
+		// Token usage: new lines of the harnesses' session files.
+		if (this.usageOpts?.scan ?? this.scan)
+			jobs.every(
+				"usage",
+				this.usageOpts?.intervalMs ?? INTERVALS.usageMs,
+				() => this.usage.scanner.scan(),
+				{ runNow: true },
+			);
 		// Subagents: one cheap check per live agent; lists only what moved.
 		if (this.scan)
 			jobs.every("subagents", INTERVALS.subagentsMs, () =>

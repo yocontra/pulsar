@@ -99,6 +99,7 @@ describe("authorize matrix", () => {
 		"lookup",
 		"acting.options",
 		...ACTING_OPS,
+		"usage",
 	]);
 	// Acting ops (attachments, launch, git): the human operator only, with a session.
 	const acting = new Set<Op>(ACTING_OPS);
