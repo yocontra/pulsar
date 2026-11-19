@@ -140,6 +140,7 @@ Every machine in the mesh serves the Pulsar app. Any machine's address shows the
 - Start a new agent on any machine, in its folder or a new git worktree, with a first message.
 - Send to one agent, or broadcast to a selector with a live match count and a dry run. Ask "who is editing this file?" and then ask them directly. Stop an agent's turn.
 - Attach files and images to a message (pick, drop or paste), and mention files in the agent's folder with `@`.
+- See what an agent changed, then commit, push and open the PR from the app, with its checks and review comments.
 - Answer prompts remotely, signed with Face ID or Touch ID. The prompt stays on the machine too, and the first answer wins.
 - Web Push notifications that say "Approval pending", "An agent finished" or "An agent stopped with an error", and nothing else.
 - Token usage and an API cost estimate across the mesh, per harness, model and day, read from the agents' own session files.

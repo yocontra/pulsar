@@ -356,3 +356,21 @@ export function editChanges(a: MockAgent, path: string, line: string): boolean {
 	s.sort((x, y) => (x.file.path < y.file.path ? -1 : 1));
 	return true;
 }
+
+/**
+ * The git actions' commit (web/mock/git.ts): the files leave the working
+ * tree and stay in branch-vs-base mode, as a commit on the branch would.
+ * Returns how many matched.
+ */
+export function commitChanges(a: MockAgent, paths: string[]): number {
+	const s = filesOf(a);
+	if (s === "not_a_repo") return 0;
+	let n = 0;
+	for (const f of s)
+		if (!f.committed && paths.includes(f.file.path)) {
+			f.committed = true;
+			f.rev++;
+			n++;
+		}
+	return n;
+}
