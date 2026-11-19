@@ -247,7 +247,9 @@ export type Feature =
 	| "approvals"
 	| "push"
 	| "subagents"
-	| "usage";
+	| "usage"
+	/** Attachments and the composer's `@` file list. */
+	| "attachments";
 
 /** `GET /hello`. */
 export interface Hello {
@@ -1101,4 +1103,65 @@ export interface AgentUsage {
 	/** Tokens in the latest request; `window` when the harness reports it. */
 	context: { used: number; window: number | null } | null;
 	model: string | null;
+}
+
+// ------------------------------------------------------------ attachments
+
+/** One file the operator attaches, as the browser describes it before upload. */
+export interface AttachmentFileSpec {
+	name: string;
+	/** The browser's media type ("" when unknown). */
+	type: string;
+	size: number;
+	/** Hex SHA-256 of the file's bytes. */
+	sha256: string;
+}
+
+/**
+ * `POST /agents/:id/attachments` params, signed as one `attachments.upload`
+ * act: every file of one message, so one proof covers the whole upload.
+ */
+export interface AttachmentManifest {
+	/** Random per upload: two uploads of the same files are two acts. */
+	nonce: string;
+	files: AttachmentFileSpec[];
+}
+
+/** The upload the home node opened: then `PUT …/attachments/:upload/:index` per file. */
+export interface AttachmentUpload {
+	upload: string;
+	/** Until then the upload takes bytes (ms since epoch). */
+	expiresAt: number;
+	files: { index: number; name: string }[];
+}
+
+/** A file saved on the agent's machine. */
+export interface AttachmentSaved {
+	name: string;
+	/** Sniffed for images; else the browser's type. */
+	type: string;
+	size: number;
+	/** Absolute path on the agent's machine. */
+	path: string;
+}
+
+/** The answer to one `PUT …/attachments/:upload/:index`. */
+export interface AttachmentPut {
+	received: number;
+	file: AttachmentSaved;
+}
+
+/** One `@` menu row: a tracked or untracked file, or a folder, relative to the agent's folder. */
+export interface FileHit {
+	path: string;
+	kind: "file" | "dir";
+}
+
+/** `GET /agents/:id/files?q=`. */
+export interface FileSearch {
+	agent: string;
+	available: boolean;
+	/** Why there is no list (`no_cwd`, `not_git`, `unsupported`). */
+	reason?: string;
+	items: FileHit[];
 }

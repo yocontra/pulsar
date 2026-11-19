@@ -25,6 +25,7 @@ import {
 import type { UserSessionInfo } from "../http/wire.ts";
 import { operatorName } from "../human-tag.ts";
 import { RpcError } from "../rpc.ts";
+import { ATTACH_LIMITS } from "../service/attachments.ts";
 import { ACTING_OPS } from "../service/authorize.ts";
 import {
 	type Principal,
@@ -230,6 +231,7 @@ const Q = {
 		mode: z.enum(["worktree", "base"]).default("worktree"),
 		path: z.string().min(1).max(4096),
 	}),
+	files: z.object({ q: z.string().max(200).default("") }),
 	receipts: z.object({
 		state: z.enum(RECEIPT_STATES).optional(),
 		cursor: optionalText(100),
@@ -334,6 +336,12 @@ const SubscriptionBody = z
 	})
 	.strict();
 
+/** `POST /agents/:id/attachments`: the manifest (checked by the handler) and, on another machine, the assertion. */
+const AttachmentsBody = z
+	.object({ manifest: z.unknown(), assertion: z.unknown().optional() })
+	.strict();
+/** `PUT /api/v1/agents/:id/attachments/:upload/:index`: exempt from the 2 MB JSON limit. */
+const ATTACHMENT_PUT = /^\/api\/v1\/agents\/.+\/attachments\/[^/]+\/\d+$/;
 const Decision = z.enum(["allow-once", "allow-session", "deny", "answer"]);
 const StopBody = z.object({ assertion: z.unknown().optional() }).strict();
 /** `POST /acting/options`: the home node's challenge for one acting op (src/service/acting.ts). */
@@ -810,16 +818,19 @@ export class HttpTransport {
 			}
 		});
 
-		app.use(
-			"/api/*",
-			bodyLimit({
-				maxSize: 2 * 1024 * 1024,
-				onError: (c) =>
-					c.json(
-						{ error: { code: "too_large", message: "the body is over 2 MB" } },
-						413,
-					),
-			}),
+		const jsonLimit = bodyLimit({
+			maxSize: 2 * 1024 * 1024,
+			onError: (c) =>
+				c.json(
+					{ error: { code: "too_large", message: "the body is over 2 MB" } },
+					413,
+				),
+		});
+		// An attachment's bytes stream with their own limit (src/service/attachments.ts).
+		app.use("/api/*", (c, next) =>
+			c.req.method === "PUT" && ATTACHMENT_PUT.test(c.req.path)
+				? next()
+				: jsonLimit(c, next),
 		);
 
 		app.onError((err, c) => {
@@ -972,6 +983,44 @@ export class HttpTransport {
 			return c.json(
 				await this.service.stopAgent(who(c), c.req.param("id"), body.assertion),
 			);
+		});
+		// Attachments: the manifest is the `attachments.upload` act (one
+		// proof for every file); then each file's bytes, streamed.
+		api.post("/agents/:id/attachments", async (c) => {
+			const body = parse(AttachmentsBody, await jsonBody(c));
+			return c.json(
+				await this.service.acting.run(
+					who(c),
+					"attachments.upload",
+					{ agent: c.req.param("id") },
+					body.manifest,
+					body.assertion,
+				),
+			);
+		});
+		api.put("/agents/:id/attachments/:upload/:index", async (c) => {
+			const index = Number(c.req.param("index"));
+			if (!Number.isInteger(index) || index < 0 || index > 99)
+				throw new RpcError("bad_request", "index");
+			const length = Number(c.req.header("content-length") ?? 0);
+			if (length > ATTACH_LIMITS.fileBytes)
+				throw new RpcError("too_large", "the file is over 25 MB");
+			return c.json(
+				await this.service.attachments.receive(
+					who(c),
+					c.req.param("id"),
+					c.req.param("upload").slice(0, 100),
+					index,
+					c.req.raw.body,
+				),
+			);
+		});
+		// The composer's `@` menu: files in the agent's folder (same rule as its transcript).
+		api.get("/agents/:id/files", async (c) => {
+			const q = parse(Q.files, c.req.query());
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			return c.json(await this.service.files.search(id, q.q, who(c)));
 		});
 		// Acting ops on another machine (attachments, launch, git): its home
 		// node's challenge for this exact act. The op's own route then sends

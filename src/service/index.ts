@@ -45,6 +45,7 @@ import {
 	type InteractionRequest,
 } from "./approvals.ts";
 import { withoutTranscriptText } from "./ask-core.ts";
+import { Attachments } from "./attachments.ts";
 import { authorize, isOp, type Op } from "./authorize.ts";
 import {
 	agentIdOf,
@@ -56,6 +57,7 @@ import { Changes } from "./changes.ts";
 import { Deliveries, type DeliveryConfig } from "./delivery.ts";
 import { EnrollGate } from "./enroll.ts";
 import { EventBus, type ServiceEvents } from "./events.ts";
+import { Files } from "./files.ts";
 import { cleanPrompt, KINDS } from "./interactions.ts";
 import { Interest } from "./interest.ts";
 import { Interrupts } from "./interrupts.ts";
@@ -114,6 +116,8 @@ export interface ServiceOptions {
 		pollMs?: number;
 		resolve?: (agent: Agent) => ResolvedTranscript | null;
 	};
+	/** Attachments: the folder they are saved in (tests use a temp folder). */
+	attachments?: { dir?: () => string };
 	/** Worktree changes: poll and debounce timers (tests shorten them). */
 	changes?: { pollMs?: number; debounceMs?: number };
 	/** Token usage: session folders and how often to read them (tests use fixtures). */
@@ -178,6 +182,10 @@ export class PulsarService {
 	readonly interrupts: Interrupts;
 	/** Acting ops (attachments, launch, git): Prove Human here, home-node proof for remote agents. */
 	readonly acting: Acting;
+	/** Files attached to messages, saved on the agent's machine. */
+	readonly attachments: Attachments;
+	/** The composer's `@` file list (git ls-files in the agent's folder). */
+	readonly files: Files;
 	/** This node's passkeys (approvals and passkey sessions share them). */
 	readonly passkeys: Passkeys;
 	/** Passkey sessions: what the app shows to act as the user. */
@@ -412,6 +420,16 @@ export class PulsarService {
 				activity: (id, fn) => this.transcripts.subscribe(id, () => fn()),
 			},
 		);
+		const localAgent = (id: string) => {
+			const agent = this.registry.find(id);
+			return agent && !agent.id.includes("/") ? agent : undefined;
+		};
+		this.attachments = new Attachments({
+			dir: opts.attachments?.dir ?? (() => join(stateDir(), "attachments")),
+			isLocal: (id) => !!this.registry.get(id),
+		});
+		this.acting.register("attachments.upload", this.attachments.handler);
+		this.files = new Files(localAgent);
 		this.ask = new Lookup({
 			views: this.app.views,
 			transcripts: this.transcripts,
@@ -509,6 +527,8 @@ export class PulsarService {
 		this.subagents.pool = pool;
 		this.transcripts.remote = pool?.transcripts ?? null;
 		this.changes.remote = pool?.changes ?? null;
+		this.attachments.remote = pool?.attachments ?? null;
+		this.files.remote = pool?.attachments ?? null;
 		this.approvals.remote = pool?.approvals ?? null;
 		this.events.emit("pool", { machineId: null });
 	}
@@ -601,6 +621,14 @@ export class PulsarService {
 		jobs.every("refresh:models", INTERVALS.refreshModelsMs, () =>
 			this.registry.refreshModels(),
 		);
+		// Attachments past their week (a scanning daemon: tests' services skip it).
+		if (this.scan)
+			jobs.every(
+				"attachments:gc",
+				ATTACHMENTS_GC_MS,
+				() => this.attachments.gc(),
+				{ runNow: true },
+			);
 		jobs.every("prune", INTERVALS.pruneMs, () =>
 			this.store.prune(Date.now(), LIMITS.messageRetentionMs),
 		);
@@ -1186,6 +1214,9 @@ export class PulsarService {
 		caller.closed.addEventListener("abort", off, { once: true });
 	}
 }
+
+/** How often saved attachments past their week are removed. */
+const ATTACHMENTS_GC_MS = 6 * 60 * 60 * 1000;
 
 const str = (v: unknown, max: number): string | null =>
 	typeof v === "string" && v.length > 0 ? v.slice(0, max) : null;

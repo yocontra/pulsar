@@ -251,6 +251,20 @@ export type FedAction =
 			assertion: unknown;
 			answer?: unknown;
 	  }
+	/*
+	 * Attachments (src/service/attachments.ts): one file's bytes at `offset`
+	 * (base64) into an upload the home node opened after its own passkey
+	 * check; the frame grants nothing else. And the composer's `@` files.
+	 */
+	| {
+			op: "attachments.chunk";
+			agent: string;
+			upload: string;
+			index: number;
+			offset: number;
+			data: string;
+	  }
+	| { op: "files.search"; agent: string; q: string }
 	| { op: "stop.options"; agent: string }
 	| { op: "stop"; agent: string; assertion: unknown }
 	/*

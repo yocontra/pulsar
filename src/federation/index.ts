@@ -10,6 +10,7 @@ import type {
 } from "../http/wire.ts";
 import { RpcError } from "../rpc.ts";
 import type { RelayedAct } from "../service/acting.ts";
+import { ATTACH_LIMITS } from "../service/attachments.ts";
 import { authorize } from "../service/authorize.ts";
 import type { Principal } from "../service/caller.ts";
 import { principalLabel } from "../service/caller.ts";
@@ -26,6 +27,7 @@ import type { Agent, Message, Receipt, ReceiptState } from "../types.ts";
 import { RECEIPT_STATES as ALL_RECEIPT_STATES } from "../types.ts";
 import { USAGE_PERIODS } from "../usage/index.ts";
 import { VERSION } from "../version.ts";
+import { RemoteAttachmentsRelay } from "./attachments.ts";
 import { RemoteChangesReader } from "./changes.ts";
 import { LocalFeed } from "./local.ts";
 import { isOwner, type PoolMembers } from "./members.ts";
@@ -223,6 +225,7 @@ export class Federation implements PoolView {
 	readonly transcripts: RemoteTranscriptReader;
 	readonly changes: RemoteChangesReader;
 	readonly usage: RemoteUsage;
+	readonly attachments: RemoteAttachmentsRelay;
 	/** Prompts of remote agents: shared in their records, decided by their home node. */
 	readonly approvals: RemoteApprovals = {
 		approval: (id) => this.state.approval(id),
@@ -330,6 +333,7 @@ export class Federation implements PoolView {
 		this.transcripts = new RemoteTranscriptReader(this);
 		this.changes = new RemoteChangesReader(this);
 		this.usage = new RemoteUsage(this);
+		this.attachments = new RemoteAttachmentsRelay(this);
 		this.state.selfProtocol = this.protocol;
 		this.state.onApproval = (approval) =>
 			this.service.events.emit("approval", { approval });
@@ -2293,6 +2297,40 @@ export class Federation implements PoolView {
 					String(action.path).slice(0, 4096),
 				);
 				return { ok: true, diff };
+			}
+			case "attachments.chunk": {
+				const agent = String(action.agent);
+				if (user.kind !== "human")
+					return fail(
+						"forbidden",
+						"only the human operator attaches files on other machines",
+					);
+				if (!this.service.registry.get(agent))
+					return fail("not_found", `no agent ${agent}`);
+				const data = Buffer.from(String(action.data ?? ""), "base64");
+				if (data.length > ATTACH_LIMITS.chunkBytes)
+					return fail("too_large", "chunk over 1 MB");
+				// Only into this login's open upload, checked against its signed hashes.
+				const r = await this.service.attachments.write(
+					user.login,
+					agent,
+					String(action.upload).slice(0, 100),
+					Number(action.index),
+					Number(action.offset),
+					data,
+				);
+				return { ok: true, ...r };
+			}
+			case "files.search": {
+				const agent = String(action.agent);
+				authorize(user, "transcript.read", agent);
+				if (!this.service.registry.get(agent))
+					return fail("not_found", `no agent ${agent}`);
+				const files = await this.service.files.search(
+					agent,
+					String(action.q ?? "").slice(0, 200),
+				);
+				return { ok: true, files };
 			}
 			case "stop.options": {
 				const agent = String(action.agent);
