@@ -11,18 +11,65 @@ import type {
 	MessageSearchResponse,
 } from "../../src/http/wire.ts";
 import { redactSecrets } from "../../src/search/redact.ts";
-import { matches, parseQuery, score, snippet } from "../../src/search/text.ts";
+import {
+	parseQuery,
+	type Query,
+	score,
+	snippet,
+	words,
+} from "../../src/search/text.ts";
 import {
 	AGENT_HITS,
 	MAX_HITS,
 	pick,
 } from "../../src/service/message-search.ts";
+import type { TranscriptEvent } from "../../src/transcripts/types.ts";
 import type { MockAgent } from "./data.ts";
 import { logFor } from "./transcript.ts";
 
 /** Events on the newest page of a mock transcript (`page()`'s default). */
 const NEWEST_PAGE = 150;
 const PER_AGENT = 5;
+
+/** What search keeps of one event, worked out once (replaced events are new objects). */
+interface Indexed {
+	role: MessageHit["role"];
+	text: string;
+	words: Set<string>;
+}
+const cache = new WeakMap<TranscriptEvent, Indexed | null>();
+
+function indexed(e: TranscriptEvent): Indexed | null {
+	const hit = cache.get(e);
+	if (hit !== undefined) return hit;
+	const picked = e.sidechain ? null : pick(e);
+	const text = picked ? redactSecrets(picked.text).trim() : "";
+	const out =
+		picked && text
+			? { role: picked.role, text, words: new Set(words(text)) }
+			: null;
+	cache.set(e, out);
+	return out;
+}
+
+/** True when `ws` has every term (the last one as a prefix while typing), like `matches()`. */
+function hasAll(query: Query, ws: Set<string>): boolean {
+	const last = query.terms.length - 1;
+	return query.terms.every(
+		(t, i) =>
+			ws.has(t) ||
+			(query.prefix && i === last && [...ws].some((w) => w.startsWith(t))),
+	);
+}
+
+/**
+ * Builds every transcript and its words before the server listens, so a
+ * search costs set lookups, never minutes of parsing on a loaded machine.
+ */
+export function warmSearch(agents: MockAgent[]) {
+	for (const a of agents)
+		if (a.hasTranscript) for (const e of logFor(a).events) indexed(e);
+}
 
 export function searchMessages(
 	q: string,
@@ -49,10 +96,9 @@ export function searchMessages(
 		const events = logFor(a).events;
 		const mine: { hit: MessageHit; agent: MockAgent }[] = [];
 		events.forEach((e, i) => {
-			const picked = e.sidechain ? null : pick(e);
-			if (!picked) return;
-			const text = redactSecrets(picked.text).trim();
-			if (!text || !matches(query, text)) return;
+			const picked = indexed(e);
+			if (!picked || !hasAll(query, picked.words)) return;
+			const text = picked.text;
 			const snip = snippet(query, text);
 			mine.push({
 				agent: a,

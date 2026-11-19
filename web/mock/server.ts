@@ -127,6 +127,7 @@ import { CHART, SAMPLE_PDF, SCREENSHOT } from "./images.ts";
 import { issueControl, issueDetails } from "./issues.ts";
 import { launchRoute } from "./launch.ts";
 import { searchMessages } from "./search.ts";
+import { searchMessages, warmSearch } from "./search.ts";
 import {
 	forParentBody,
 	subagentById,
@@ -3015,6 +3016,8 @@ async function staticFile(req: Request, url: URL): Promise<Response> {
 	return new Response(r.body, { status: r.status, headers: r.headers });
 }
 
+// Message search parses every mock transcript once, before the first request.
+warmSearch(agents);
 const server = Bun.serve({
 	port: PORT,
 	hostname: "127.0.0.1",
