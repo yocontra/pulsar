@@ -1,0 +1,9 @@
+# A Linux node for the Headscale live test: Node 24, tailscaled (from the
+# pinned official image), tmux and jq. User `dev` runs pulsar.
+FROM tailscale/tailscale:v1.104.4 AS tailscale
+FROM node:24.11.1-bookworm-slim
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates iptables iproute2 tmux jq curl procps lsof \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& useradd -m -s /bin/bash dev
+COPY --from=tailscale /usr/local/bin/tailscale /usr/local/bin/tailscaled /usr/local/bin/

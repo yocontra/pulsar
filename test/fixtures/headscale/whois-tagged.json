@@ -1,0 +1,75 @@
+{
+	"Node": {
+		"ID": 3,
+		"StableID": "3",
+		"Name": "pulsar-hs-tagged.mesh.corp.example.",
+		"User": 2147455555,
+		"Key": "nodekey:dae04b0540e2f943d18866a7784a7ee6e3b81354464ab4ea3de4cc35de08ae52",
+		"Machine": "mkey:536621c51c7fdd3f64163da917aea6c4b8268a7d2e6fa76f843f4a5bc9d9e00c",
+		"DiscoKey": "discokey:bca33dcb14077fcc5c1d866c70cab9f78d36ea6907dc0489a18da1498ffeec31",
+		"Addresses": ["100.64.0.3/32", "fd7a:115c:a1e0::3/128"],
+		"AllowedIPs": ["100.64.0.3/32", "fd7a:115c:a1e0::3/128"],
+		"Endpoints": ["172.19.0.5:54195"],
+		"HomeDERP": 999,
+		"Hostinfo": {
+			"IPNVersion": "1.104.4-t27047635f",
+			"BackendLogID": "519aff39b546d840d798d5449baba0ddc603eeb9ac16e905ffb2256885ae27cd",
+			"OS": "linux",
+			"OSVersion": "6.12.76-linuxkit",
+			"Container": true,
+			"Distro": "debian",
+			"DistroVersion": "12.12",
+			"DistroCodeName": "bookworm",
+			"Desktop": false,
+			"Package": "container",
+			"Hostname": "pulsar-hs-tagged",
+			"Machine": "aarch64",
+			"GoArch": "arm64",
+			"GoArchVar": "v8.0",
+			"GoVersion": "go1.27.3",
+			"Services": [
+				{
+					"Proto": "peerapi4",
+					"Port": 34152
+				},
+				{
+					"Proto": "peerapi6",
+					"Port": 34984
+				},
+				{
+					"Proto": "peerapi-dns-proxy",
+					"Port": 1
+				}
+			],
+			"NetInfo": {
+				"MappingVariesByDestIP": false,
+				"WorkingIPv6": false,
+				"OSHasIPv6": true,
+				"WorkingUDP": true,
+				"WorkingICMPv4": false,
+				"UPnP": false,
+				"PMP": false,
+				"PCP": false,
+				"PreferredDERP": 999,
+				"FirewallMode": "ipt-default"
+			},
+			"Userspace": false,
+			"UserspaceRouter": false,
+			"AppConnector": false,
+			"StateEncrypted": false
+		},
+		"Created": "2026-11-19T02:06:23.132959Z",
+		"Cap": 148,
+		"Tags": ["tag:server"],
+		"Online": true,
+		"MachineAuthorized": true,
+		"ComputedName": "pulsar-hs-tagged",
+		"ComputedNameWithHost": "pulsar-hs-tagged"
+	},
+	"UserProfile": {
+		"ID": 2147455555,
+		"LoginName": "tagged-devices",
+		"DisplayName": "Tagged Devices"
+	},
+	"CapMap": null
+}
