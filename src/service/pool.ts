@@ -3,10 +3,12 @@ import type {
 	ApprovalDecision,
 	AskRequest,
 	AskResponse,
+	AttachmentSaved,
 	ChangesMode,
 	ChangesSummary,
 	DecideResponse,
 	FileDiff,
+	FileSearch,
 	InteractionAnswer,
 	Link,
 	NeedsYou,
@@ -93,6 +95,8 @@ export interface PoolView extends ActingRelay {
 	subagents?(address: string, as?: Principal): Promise<SubagentList>;
 	/** Worktree changes of remote agents, read through their home node. */
 	readonly changes?: RemoteChanges;
+	/** Attachment bytes and the `@` file list of remote agents, through their home node. */
+	readonly attachments?: RemoteAttachments;
 	/** Permission prompts of remote agents, decided by their home node. */
 	readonly approvals: RemoteApprovals;
 	/** Token usage of other machines and their agents (absent before usage existed). */
@@ -225,4 +229,19 @@ export function splitAddress(
 	const slash = id.indexOf("/");
 	if (slash <= 0) return null;
 	return { machineId: id.slice(0, slash), localId: id.slice(slash + 1) };
+}
+
+/**
+ * Attachments and the `@` file list of agents on other machines (forwarded
+ * actions to the home node, carrying the user). A chunk carries no
+ * authority: it writes into an upload the home node opened after its own
+ * passkey check, and must match the hashes that check signed.
+ */
+export interface RemoteAttachments {
+	chunk(
+		address: string,
+		chunk: { upload: string; index: number; offset: number; data: Uint8Array },
+		as: Principal,
+	): Promise<{ received: number; file: AttachmentSaved | null }>;
+	files(address: string, q: string, as?: Principal): Promise<FileSearch>;
 }
