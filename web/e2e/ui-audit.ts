@@ -73,6 +73,8 @@ export async function cursorOffenders(page: Page): Promise<string[]> {
 			const want = disabled(el) ? "not-allowed" : "pointer";
 			// A disabled control may also keep `default`.
 			if (cur === want || (want === "not-allowed" && cur === "default")) return;
+			// An image that opens a viewer says so with zoom-in, on purpose.
+			if (want === "pointer" && cur === "zoom-in") return;
 			out.push(`${desc(el)}: cursor ${cur}, want ${want}`);
 		};
 		for (const el of document.querySelectorAll(ROLES)) check(el);
