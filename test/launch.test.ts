@@ -33,6 +33,8 @@ import { PulsarService } from "../src/service/index.ts";
 import {
 	harnessCommand,
 	LAUNCH_HARNESSES,
+	type LaunchDeps,
+	Launches,
 	parseLaunchParams,
 	terminalDialog,
 } from "../src/service/launch.ts";
@@ -665,6 +667,56 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 				}),
 			),
 		).toBe("not_found");
+	});
+});
+
+describe("the installed-harness probe", () => {
+	/** A fake login shell: counts runs; slow while `slow` exists, else lists codex. */
+	function fakeShell() {
+		const dir = mkdtempSync(join(root, "probe-"));
+		const count = join(dir, "runs");
+		const slow = join(dir, "slow");
+		const sh = join(dir, "fake-sh");
+		writeFileSync(count, "");
+		writeFileSync(
+			sh,
+			`#!/bin/sh\necho run >> '${count}'\nif [ -e '${slow}' ]; then sleep 2; fi\necho /opt/bin/codex\n`,
+			{ mode: 0o755 },
+		);
+		const runs = () =>
+			readFileSync(count, "utf8").split("\n").filter(Boolean).length;
+		return { sh, slow, runs };
+	}
+	const launches = (shell: string) =>
+		new Launches({
+			registry: { all: () => [], pool: null },
+			machineId: () => "m1",
+			machine: () => "m1",
+			shell,
+			timing: { probeMs: 300 },
+		} as unknown as LaunchDeps);
+	const installed = (o: LaunchOptions) =>
+		o.harnesses.filter((h) => h.installed).map((h) => h.id);
+
+	test("a probe that timed out is not kept; the next read asks again", async () => {
+		const f = fakeShell();
+		writeFileSync(f.slow, "");
+		const l = launches(f.sh);
+		expect(installed(await l.options())).toEqual([]);
+		rmSync(f.slow);
+		expect(installed(await l.options())).toEqual(["codex"]);
+		expect(f.runs()).toBe(2);
+		// A finished probe is kept.
+		expect(installed(await l.options())).toEqual(["codex"]);
+		expect(f.runs()).toBe(2);
+	});
+
+	test("reads at the same time share one login shell", async () => {
+		const f = fakeShell();
+		const l = launches(f.sh);
+		const all = await Promise.all([l.options(), l.options(), l.options()]);
+		for (const o of all) expect(installed(o)).toEqual(["codex"]);
+		expect(f.runs()).toBe(1);
 	});
 });
 

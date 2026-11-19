@@ -183,6 +183,8 @@ export interface LaunchTiming {
 	keepMs: number;
 	/** How often a launch on another machine is read there. */
 	followMs: number;
+	/** How long the login shell may take to list installed harnesses. */
+	probeMs: number;
 }
 
 const TIMING: LaunchTiming = {
@@ -192,6 +194,7 @@ const TIMING: LaunchTiming = {
 	quietPolls: 4,
 	keepMs: 30 * 60_000,
 	followMs: 1500,
+	probeMs: 5000,
 };
 
 /** A read the home node answers for another node (federation `launch.*`). */
@@ -253,6 +256,7 @@ export class Launches {
 	private nonces = new Map<string, string>();
 	private starting = new Map<string, Promise<LaunchState>>();
 	private harnessCache: { at: number; ids: Set<string> } | null = null;
+	private probing: Promise<Set<string>> | null = null;
 	private seq = 0;
 
 	constructor(deps: LaunchDeps) {
@@ -847,15 +851,23 @@ export class Launches {
 	 * Harnesses a login shell finds (the daemon's own PATH is not the
 	 * operator's). Cached for a few minutes.
 	 */
-	private async installed(): Promise<Set<string>> {
+	private installed(): Promise<Set<string>> {
 		const c = this.harnessCache;
-		if (c && Date.now() - c.at < 5 * 60_000) return c.ids;
+		if (c && Date.now() - c.at < 5 * 60_000) return Promise.resolve(c.ids);
+		// One login shell at a time: concurrent reads share its answer.
+		this.probing ??= this.probe().finally(() => {
+			this.probing = null;
+		});
+		return this.probing;
+	}
+
+	private async probe(): Promise<Set<string>> {
 		const bins = HARNESS_IDS.map((h) => LAUNCH_HARNESSES[h].bin);
 		const script = `for c in ${bins.join(" ")}; do command -v "$c" 2>/dev/null; done; exit 0`;
 		const r = await exec(this.shell(), ["-lic", script], {
 			lane: "user",
 			// Under a relayed read's time limit: a slow rc file shows as "not found".
-			timeoutMs: 5000,
+			timeoutMs: this.t.probeMs,
 			cwd: homedir(),
 		});
 		const ids = new Set<string>();
@@ -866,7 +878,9 @@ export class Launches {
 			for (const h of HARNESS_IDS)
 				if (LAUNCH_HARNESSES[h].bin === bin) ids.add(h);
 		}
-		this.harnessCache = { at: Date.now(), ids };
+		// Only a probe that finished is kept: a timed-out or failed one (a
+		// slow rc file, a cold start) is asked again next time.
+		if (r.ok && !r.timedOut) this.harnessCache = { at: Date.now(), ids };
 		return ids;
 	}
 
