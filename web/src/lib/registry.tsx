@@ -88,6 +88,8 @@ export type SlotName = keyof SlotProps;
 
 export interface SlotEntry<K extends SlotName> extends Entry {
 	component: ComponentType<SlotProps[K]>;
+	/** Render on one layout only (skeletons leave no placeholder on the other). */
+	only?: "desktop" | "phone";
 }
 
 const slots: { [K in SlotName]: Registry<SlotEntry<K>> } = {
@@ -111,7 +113,10 @@ export function slotEntries<K extends SlotName>(name: K): SlotEntry<K>[] {
 }
 
 function SlotImpl({ name, props }: { name: SlotName; props: object }) {
-	const list = slots[name].list() as SlotEntry<SlotName>[];
+	const mobile = (props as { mobile?: boolean }).mobile;
+	const list = (slots[name].list() as SlotEntry<SlotName>[]).filter(
+		(e) => !e.only || mobile === undefined || (e.only === "phone") === mobile,
+	);
 	if (list.length === 0) return null;
 	return (
 		<>
