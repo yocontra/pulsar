@@ -14,8 +14,12 @@ import type { Store } from "../store.ts";
 
 /** How long one action keeps an agent interesting. */
 export const INTEREST_MS = 6 * 60 * 60_000;
-/** Most agents remembered; the oldest go first. */
-const MAX_ROWS = 2000;
+/**
+ * Most ids kept in the in-memory write throttle (`recent`); past it the map
+ * starts over. The table is bounded by time instead: each write drops rows
+ * older than the window.
+ */
+const RECENT_MAX = 2000;
 
 export class Interest {
 	private readonly store: Store;
@@ -42,7 +46,7 @@ export class Interest {
 		// Within a minute of the last write: nothing new to keep.
 		if (last !== undefined && now - last < 60_000) return;
 		this.recent.set(agentId, now);
-		if (this.recent.size > MAX_ROWS) this.recent.clear();
+		if (this.recent.size > RECENT_MAX) this.recent.clear();
 		const db = this.store.db;
 		db.prepare(
 			`INSERT INTO agent_interest (agent_id, at) VALUES (?, ?)
