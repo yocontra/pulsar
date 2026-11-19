@@ -25,13 +25,19 @@ const PATTERNS: RegExp[] = [
 	/\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
 	// Bearer tokens (an Authorization header's value).
 	/(?<=\bbearer\s+)[A-Za-z0-9._~+/-]{16,}=*/gi,
+	// Basic credentials in an Authorization header.
+	/(?<=\bauthorization["']?\s*[:=]\s*["']?basic\s+)[A-Za-z0-9+/]{8,}={0,2}/gi,
 	// Credentials in URLs: scheme://user:password@host.
 	/(?<=\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)[^\s@/]+(?=@)/gi,
 ];
 
-/** `password = …`, `API_KEY: "…"`, `"client_secret": "…"`: the value goes. */
+/**
+ * `password = …`, `API_KEY: "…"`, `"client_secret": "…"`, and names like
+ * `GITHUB_TOKEN=` or `export DB_PASSWORD=` (only a letter before the key
+ * word stops it, not `_`): the value goes.
+ */
 const ASSIGNMENT =
-	/\b((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)[A-Za-z0-9_-]*["']?\s*[:=]\s*["']?)([^\s"',;]{8,})/gi;
+	/(?<![A-Za-z])((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret)[A-Za-z0-9_-]*["']?\s*[:=]\s*["']?)([^\s"',;]{8,})/gi;
 
 /** `text` with anything that looks like a secret replaced by `[redacted]`. */
 export function redactSecrets(text: string): string {

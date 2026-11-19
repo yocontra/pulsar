@@ -172,7 +172,8 @@ export class MessageSearch {
 		let read = 0;
 		for (let pages = 1; ; pages++) {
 			const page = await this.transcripts.page(agentId, cursor);
-			if (!page.available) break;
+			// Not readable now: keep where we were, so the next pass reads it all.
+			if (!page.available) return read;
 			read += page.events.length;
 			await this.write(this.docsFrom(agentId, page.events, cursor));
 			const begin = page.cursor;

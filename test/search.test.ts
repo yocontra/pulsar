@@ -14,7 +14,12 @@ import type { HarnessDriver } from "../src/harnesses/types.ts";
 import { StaticIdentity } from "../src/http/identity.ts";
 import type { MessageSearchResponse } from "../src/http/wire.ts";
 import { RpcError } from "../src/rpc.ts";
-import { type Doc, hasFts5, MessageIndex } from "../src/search/index.ts";
+import {
+	type Doc,
+	hasFts5,
+	INDEX_VERSION,
+	MessageIndex,
+} from "../src/search/index.ts";
 import { REDACTED, redactSecrets } from "../src/search/redact.ts";
 import {
 	ftsExpression,
@@ -163,12 +168,39 @@ describe("redaction", () => {
 		);
 	});
 
+	test("environment-style names (a key word after `_`) and Basic auth are redacted", () => {
+		const cases: [string, string][] = [
+			["GITHUB_TOKEN=ghx1234567890abcdef", "ghx1234567890abcdef"],
+			["DB_PASSWORD=hunter2hunter2", "hunter2hunter2"],
+			[
+				"AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIbPxRfiCYEXAMPLEKEY",
+				"wJalrXUtnFEMIbPxRfiCYEXAMPLEKEY",
+			],
+			["OPENAI_API_KEY=abcd1234efgh5678ijkl", "abcd1234efgh5678ijkl"],
+			["export X_TOKEN=supersecretvalue1", "supersecretvalue1"],
+			[
+				'curl -H "Authorization: Basic dXNlcjpwYXNzd29yZA==" https://x',
+				"dXNlcjpwYXNzd29yZA==",
+			],
+		];
+		for (const [text, secret] of cases) {
+			const out = redactSecrets(text);
+			expect(out).not.toContain(secret);
+			expect(out).toContain(REDACTED);
+		}
+		expect(redactSecrets("export DB_PASSWORD=hunter2hunter2")).toBe(
+			`export DB_PASSWORD=${REDACTED}`,
+		);
+	});
+
 	test("ordinary prose about tokens and passwords is kept", () => {
 		for (const text of [
 			"the token management code needs a refactor",
 			"reset the password flow and add a test",
 			"sk-learn is a library",
 			"secret: no",
+			"a basic implementation of the parser",
+			"mytokenizer=whitespace",
 		])
 			expect(redactSecrets(text)).toBe(text);
 	});
@@ -256,6 +288,33 @@ test("the fallback engine loads rows already stored, in the background", async (
 	expect(index.find(q("stored 1234 ")).map((d) => d.eventId)).toEqual([
 		"l1234",
 	]);
+	store.db.close();
+});
+
+test("rows from an older index version are dropped on open; the same version keeps them", () => {
+	const path = join(tempDir("version"), "pulsar.db");
+	const first = new Store(path);
+	new MessageIndex(first.db).upsert([doc("v1", "stored before the upgrade")]);
+	new MessageIndex(first.db).setState("pi:a", { path: "/x", top: 10 });
+	expect(new MessageIndex(first.db).count()).toBe(1);
+	// An index written by a build with the older redaction.
+	first.db.exec(
+		"UPDATE meta SET value = '1' WHERE key = 'search_index_version'",
+	);
+	first.db.close();
+	const store = new Store(path);
+	const index = new MessageIndex(store.db);
+	expect(index.count()).toBe(0);
+	expect(index.state("pi:a")).toBeNull();
+	expect(
+		(
+			store.db
+				.prepare("SELECT value FROM meta WHERE key = 'search_index_version'")
+				.get() as { value: string }
+		).value,
+	).toBe(String(INDEX_VERSION));
+	index.upsert([doc("v2", "stored after")]);
+	expect(new MessageIndex(store.db).count()).toBe(1);
 	store.db.close();
 });
 
@@ -484,6 +543,31 @@ describe("message search service", () => {
 		expect(service.messages.local("okapi").hits.map((h) => h.eventId)).toEqual([
 			"n1",
 		]);
+	});
+
+	test("a page that can't be read leaves the backfill where it was; the next pass reads it all", async () => {
+		const many = Array.from({ length: 450 }, (_, i) =>
+			piLine(`u${i}`, "assistant", `unreadable page note ${i} ibex`),
+		).join("");
+		const agent = addAgent("bf-unavailable", many);
+		const original = service.transcripts.page.bind(service.transcripts);
+		let calls = 0;
+		service.transcripts.page = async (...args) => {
+			// The second page fails (the log went away for a moment).
+			if (++calls === 2) return { events: [], cursor: null, available: false };
+			return original(...args);
+		};
+		try {
+			await service.messages.backfillAgent(agent.id);
+		} finally {
+			service.transcripts.page = original;
+		}
+		expect(service.messages.index.state(agent.id)).toBeNull();
+		await service.messages.backfillAgent(agent.id);
+		expect(service.messages.index.count(agent.id)).toBe(450);
+		expect(service.messages.index.state(agent.id)?.top).toBe(
+			statSync(files.get("bf-unavailable")!).size,
+		);
 	});
 
 	test("the live tail feeds the index as events arrive, redacted", async () => {

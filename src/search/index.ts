@@ -4,7 +4,7 @@ import { ftsExpression, matches, type Query, words } from "./text.ts";
 
 /**
  * The message index: one row per transcript event worth finding, in the
- * `search_docs` table (store migration 8), and an engine that finds rows by
+ * `search_docs` table (store migration 10), and an engine that finds rows by
  * word. SQLite's FTS5 when the runtime has it (Node 22.16+, Node 24+, Bun);
  * else an in-memory word index built from the same rows (Node 22.13–22.15
  * ship SQLite without FTS5). The FTS5 table is never part of the schema: a
@@ -38,6 +38,13 @@ export interface IndexState {
 	top: number;
 }
 
+/**
+ * What the stored rows were made with. Bump it when what is stored changes
+ * (redaction, which events are kept): rows from another version are dropped
+ * on open and indexed again. 2: names like GITHUB_TOKEN= and Basic auth
+ * are redacted.
+ */
+export const INDEX_VERSION = 2;
 /** Rows deleted per transaction (between yields to the event loop). */
 const DELETE_CHUNK = 100;
 /** Candidates one query reads before scoring. */
@@ -306,6 +313,17 @@ export class MessageIndex {
 			engine = new MemoryEngine(db);
 		}
 		this.engine = engine;
+		// Rows from an older index (an older redaction): drop them; the backfill
+		// reads the transcripts again.
+		const stored = db
+			.prepare("SELECT value FROM meta WHERE key = 'search_index_version'")
+			.get() as Row | undefined;
+		if (stored?.value !== String(INDEX_VERSION)) {
+			this.clear();
+			db.prepare(
+				"INSERT OR REPLACE INTO meta (key, value) VALUES ('search_index_version', ?)",
+			).run(String(INDEX_VERSION));
+		}
 	}
 
 	/** Which engine finds rows. */
