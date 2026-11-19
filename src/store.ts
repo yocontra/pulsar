@@ -328,6 +328,32 @@ CREATE TABLE IF NOT EXISTS agent_interest (
 `);
 		},
 	},
+	// 10: message search (src/search): transcript text worth finding, redacted,
+	// and where each agent's backfill stopped. Plain tables only: the FTS5
+	// table is made on open when the runtime has FTS5 (src/search/index.ts).
+	{
+		ensure: (db) =>
+			db.exec(`
+CREATE TABLE IF NOT EXISTS search_docs (
+	id INTEGER PRIMARY KEY,
+	agent_id TEXT NOT NULL,
+	event_id TEXT NOT NULL,
+	ts INTEGER NOT NULL,
+	role TEXT NOT NULL,
+	sender TEXT,
+	text TEXT NOT NULL,
+	cursor TEXT,
+	UNIQUE (agent_id, event_id)
+);
+CREATE INDEX IF NOT EXISTS search_docs_ts ON search_docs(ts);
+CREATE TABLE IF NOT EXISTS search_state (
+	agent_id TEXT PRIMARY KEY,
+	path TEXT,
+	top INTEGER NOT NULL DEFAULT 0,
+	updated_at INTEGER NOT NULL
+);
+`),
+	},
 ];
 
 /** The schema version this pulsar writes. */

@@ -150,6 +150,18 @@ pulsar doctor                      # check the daemon, harnesses and mesh
 
 Read [SECURITY.md](SECURITY.md) for the full model and to report a vulnerability.
 
+## Environment
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `PULSAR_HOME` | `~/.local/state/pulsar` | State folder: socket, message log, certificate |
+| `PULSAR_HTTP_PORT` | `7337` | Port of the app and the mesh |
+| `PULSAR_NAME` | detected | Name this agent registers under |
+| `PULSAR_TAGS` | none | Extra tags for this agent |
+| `PULSAR_NO_MESH` | unset | `pulsar mesh on` refuses to run (tests, sandboxes) |
+| `PULSAR_NO_SEARCH` | unset | No message search: the daemon keeps no copy of transcript text and deletes the copy it has |
+| `PULSAR_DEBUG` | unset | Log the MCP server to `mcp-debug.log` |
+
 ## Development
 
 ```bash

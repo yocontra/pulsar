@@ -231,6 +231,8 @@ export type FedAction =
 	| { op: "issue.read"; agent: string }
 	/** Ask about the receiver's own agents (`service.ask.local`). */
 	| { op: "ask"; question: string; selector?: string }
+	/** Message search over the receiver's own agents (newer nodes; older ones answer bad_request). */
+	| { op: "search.messages"; q: string; limit: number }
 	/*
 	 * The relayed WebAuthn ceremonies. The home node issues the challenge
 	 * (bound to the purpose), allows only credentials it enrolled itself, and

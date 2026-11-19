@@ -226,6 +226,10 @@ const Q = {
 		top: limit(8, 100),
 	}),
 	search: z.object({ q: z.string().max(200).default("") }),
+	searchMessages: z.object({
+		q: z.string().max(200).default(""),
+		limit: limit(20, 20),
+	}),
 	recent: z.object({ limit: limit(10, 50) }),
 	transcript: z.object({
 		cursor: optionalText(2000),
@@ -1323,6 +1327,13 @@ export class HttpTransport {
 		api.get("/search", (c) => {
 			const q = parse(Q.search, c.req.query());
 			return c.json(svc.search(who(c), q.q));
+		});
+		// Message search: transcript text, so the transcript.read rule; the
+		// pool answers in parallel.
+		api.get("/search/messages", async (c) => {
+			const q = parse(Q.searchMessages, c.req.query());
+			this.service.authorize(who(c), "transcript.read");
+			return c.json(await this.service.messages.search(q.q, who(c), q.limit));
 		});
 		api.post("/send", async (c) => {
 			const body = parse(SendBody, await jsonBody(c));

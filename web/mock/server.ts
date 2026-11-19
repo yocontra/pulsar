@@ -126,6 +126,7 @@ import {
 import { CHART, SAMPLE_PDF, SCREENSHOT } from "./images.ts";
 import { issueControl, issueDetails } from "./issues.ts";
 import { launchRoute } from "./launch.ts";
+import { searchMessages } from "./search.ts";
 import {
 	forParentBody,
 	subagentById,
@@ -2914,6 +2915,20 @@ async function route(
 		);
 	}
 	if (GET && path === "/search") return json(search(q.get("q") ?? ""));
+	if (GET && path === "/search/messages") {
+		const text = q.get("q") ?? "";
+		if (text.length > 200)
+			throw new ApiError(400, "bad_request", "q: too long");
+		return json(
+			searchMessages(text, agents, {
+				row,
+				unreachable: (a) => {
+					const link = machineByName.get(a.machineId)?.link;
+					return link === "asleep" || link === "daemon-down";
+				},
+			}),
+		);
+	}
 	if (POST && path === "/ask") {
 		const body = (await jsonBody(req)) as Partial<AskRequest>;
 		if (typeof body.question !== "string" || !body.question.trim())
