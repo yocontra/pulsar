@@ -1170,6 +1170,8 @@ export interface FileSearch {
 	items: FileHit[];
 	/** The folder holds more files than are searched. */
 	truncated?: boolean;
+}
+
 // ------------------------------------------------------------------ launch
 
 /** Harnesses the app can start (src/service/launch.ts has their fixed commands). */
