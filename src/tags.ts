@@ -2,7 +2,7 @@ import type { GitInfo } from "./git.ts";
 
 /** Tags pulsar sets and refreshes itself; agents add any others. */
 export function isAutoTag(tag: string): boolean {
-	return /^(harness|project|branch|worktree|model):/.test(tag);
+	return /^(harness|project|branch|worktree|model|machine):/.test(tag);
 }
 
 /** Auto-tags every agent gets. Self-tags are added on top. */

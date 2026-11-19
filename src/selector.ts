@@ -5,16 +5,17 @@ import type { PublicAgent } from "./types.ts";
  *
  * - `*` matches every live agent (the machine-wide bus).
  * - `key=value` terms are ANDed. Known keys match fields (`harness`, `project`,
- *   `branch`, `status`, `name`, `id`); `activity` matches words in the agent's
+ *   `branch`, `machine`, `status`, `name`, `id`); `activity` matches words in the agent's
  *   activity text; `model` matches part of the model id (`model=fable`); any other key matches the tag `key:value` (so `pr=1402`
  *   matches the tag `pr:1402`). A value may end in `*` for a prefix match.
+ *   `key=a|b` matches either value (OR within one key).
  * - `~text` (or `#1378`, or `q=text`) matches text anywhere in the agent's name,
  *   branch, project, tags or activity: "find whoever is on 1378".
  * - A single bare word matches an agent name or id exactly, or a bare tag.
  */
-type Term = { key: string; value: string };
+export type Term = { key: string; value: string };
 
-type Selector =
+export type Selector =
 	| { kind: "all" }
 	| { kind: "terms"; terms: Term[] }
 	| { kind: "name"; value: string };
@@ -23,6 +24,7 @@ const FIELD_KEYS = new Set([
 	"harness",
 	"project",
 	"branch",
+	"machine",
 	"status",
 	"name",
 	"id",
@@ -68,7 +70,19 @@ function contains(haystack: Array<string | null | undefined>, needle: string) {
 	return haystack.some((h) => h?.toLowerCase().includes(n));
 }
 
-function termMatches(agent: PublicAgent, { key, value }: Term): boolean {
+/** `key=a|b`: the term matches when any alternative does. */
+function termMatches(agent: PublicAgent, term: Term): boolean {
+	if (term.key !== "tag" && term.value.includes("|")) {
+		const alternatives = term.value.split("|").filter(Boolean);
+		if (alternatives.length > 0)
+			return alternatives.some((value) =>
+				singleTermMatches(agent, { key: term.key, value }),
+			);
+	}
+	return singleTermMatches(agent, term);
+}
+
+function singleTermMatches(agent: PublicAgent, { key, value }: Term): boolean {
 	if (key === "tag") return tagMatches(agent.tags, value);
 	if (key === "q" || key === "text") {
 		return contains(
@@ -90,6 +104,9 @@ function termMatches(agent: PublicAgent, { key, value }: Term): boolean {
 		return value.endsWith("*")
 			? valueMatches(agent.model, value)
 			: contains([agent.model], value);
+	// A record without the field (from a 1.x daemon) still matches its `machine:` tag.
+	if (key === "machine" && agent.machine == null)
+		return tagMatches(agent.tags, `machine:${value}`);
 	if (FIELD_KEYS.has(key)) {
 		const field = agent[key as keyof PublicAgent];
 		return valueMatches(typeof field === "string" ? field : null, value);
@@ -110,6 +127,19 @@ export function matches(agent: PublicAgent, selector: Selector): boolean {
 		case "terms":
 			return selector.terms.every((t) => termMatches(agent, t));
 	}
+}
+
+/**
+ * The selector without its terms on `key` (facet counts for a key ignore
+ * that key's own filter, so other values stay visible). A bare-name
+ * selector counts as a `tag` term here.
+ */
+export function withoutKey(selector: Selector, key: string): Selector {
+	if (selector.kind === "all") return selector;
+	if (selector.kind === "name")
+		return key === "tag" || key === "name" ? { kind: "all" } : selector;
+	const terms = selector.terms.filter((t) => t.key !== key);
+	return terms.length ? { kind: "terms", terms } : { kind: "all" };
 }
 
 export function isBroadcast(selector: Selector): boolean {

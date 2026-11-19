@@ -151,3 +151,47 @@ describe("finding agents by model, PR, issue and activity", () => {
 		expect(pick("~fable")).toEqual(["reviewer-7"]);
 	});
 });
+
+describe("OR within a key (key=a|b)", () => {
+	const studio = agent({
+		id: "claude:s",
+		machine: "studio",
+		project: "apparish",
+		tags: ["harness:claude", "project:apparish", "machine:studio", "pr:1402"],
+	});
+	const desk = agent({
+		id: "codex:d",
+		harness: "codex",
+		machine: "desk",
+		project: "billing",
+		tags: ["harness:codex", "project:billing", "machine:desk", "pr:77"],
+	});
+	const pick = (sel: string) =>
+		[studio, desk]
+			.filter((a) => matches(a, parseSelector(sel)))
+			.map((a) => a.id);
+
+	test("fields", () => {
+		expect(pick("machine=studio|desk")).toEqual(["claude:s", "codex:d"]);
+		expect(pick("project=billing|other")).toEqual(["codex:d"]);
+		expect(pick("harness=claude|codex project=apparish")).toEqual(["claude:s"]);
+		expect(pick("machine=nope|none")).toEqual([]);
+	});
+	test("tag fallbacks and prefixes", () => {
+		expect(pick("pr=1402|77")).toEqual(["claude:s", "codex:d"]);
+		expect(pick("pr=77|9999")).toEqual(["codex:d"]);
+		expect(pick("project=app*|bill*")).toEqual(["claude:s", "codex:d"]);
+	});
+	test("machine is a field, with the tag as fallback", () => {
+		expect(pick("machine=studio")).toEqual(["claude:s"]);
+		const old = agent({ tags: ["machine:studio"] });
+		expect(matches(old, parseSelector("machine=studio"))).toBe(true);
+		expect(matches(old, parseSelector("machine=desk"))).toBe(false);
+	});
+	test("parsing keeps the value as written", () => {
+		expect(parseSelector("machine=a|b")).toEqual({
+			kind: "terms",
+			terms: [{ key: "machine", value: "a|b" }],
+		});
+	});
+});

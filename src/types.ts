@@ -27,6 +27,17 @@ export interface Agent {
 	cwd: string | null;
 	project: string | null;
 	branch: string | null;
+	/**
+	 * The web page of the repo the agent pushes to (`https://host/owner/repo`,
+	 * no credentials), from its git remote; null or absent when unknown.
+	 * Absent from older daemons and peers.
+	 */
+	repoUrl?: string | null;
+	/**
+	 * The machine the agent runs on (MagicDNS short name, else the host name).
+	 * The daemon always sets it; optional so records from 1.x daemons still fit.
+	 */
+	machine?: string;
 	/** `key:value` or bare tags. Auto-tags plus self-tags. */
 	tags: string[];
 	status: AgentStatus;
@@ -44,7 +55,23 @@ export interface Agent {
 	meta: Record<string, string>;
 }
 
-export type PublicAgent = Omit<Agent, "meta">;
+/**
+ * A session the scanner only guessed (`meta.sessionFrom = "folder"`: the
+ * latest session in an open OpenCode TUI's folder) that has not shown it is
+ * in use by connecting to pulsar itself.
+ */
+export function isFolderGuess(agent: Agent): boolean {
+	return agent.meta.sessionFrom === "folder" && !agent.registered;
+}
+
+export type PublicAgent = Omit<Agent, "meta"> & {
+	/**
+	 * `folder`: not a session the harness named but a guess, the latest
+	 * session in the folder of an open OpenCode TUI. Inbox only: sends never
+	 * wake or resume it.
+	 */
+	sessionFrom?: "folder";
+};
 
 export interface Message {
 	id: string;
@@ -58,6 +85,12 @@ export interface Message {
 	replyTo: string | null;
 	expectReply: boolean;
 	createdAt: number;
+	/**
+	 * How Pulsar tracks it (docs/delivery.md): 0 not at all, 1 redelivered
+	 * after a restart only (a group ask), 2 the full treatment (a
+	 * single-recipient ask: ack timeout, lease, dead letter). Absent: 0.
+	 */
+	tracked?: 0 | 1 | 2;
 }
 
 export type ReceiptState =
@@ -70,7 +103,43 @@ export type ReceiptState =
 	| "replied"
 	| "held"
 	| "refused"
-	| "failed";
+	| "failed"
+	/** The agent took it on (`ack`). */
+	| "acked"
+	/** The agent finished it (`done`). */
+	| "done"
+	/** The agent declined it for good (`nack` without retry). */
+	| "nacked"
+	/** Its time to live passed before it was done. */
+	| "expired"
+	/** Pulsar gave up after the last attempt. */
+	| "dead";
+
+/** Every receipt state, for validation (HTTP filters, peer receipts). */
+export const RECEIPT_STATES: readonly ReceiptState[] = [
+	"queued",
+	"sent",
+	"delivered",
+	"read",
+	"replied",
+	"held",
+	"refused",
+	"failed",
+	"acked",
+	"done",
+	"nacked",
+	"expired",
+	"dead",
+];
+
+/** States after which a receipt never changes within its attempt. */
+export const FINAL_STATES: ReadonlySet<ReceiptState> = new Set([
+	"replied",
+	"done",
+	"nacked",
+	"expired",
+	"dead",
+]);
 
 export interface Receipt {
 	messageId: string;
@@ -80,6 +149,10 @@ export interface Receipt {
 	via: string | null;
 	detail: string | null;
 	updatedAt: number;
+	/** Which delivery attempt this is (1 unless redelivered). */
+	attempt?: number;
+	/** `done`'s result or `nack`'s reason. */
+	result?: string | null;
 }
 
 /** What the daemon learns about a session when it registers. */
@@ -97,9 +170,22 @@ export interface Registration {
 	meta?: Record<string, string>;
 	/** "mcp" | "extension" | "cli". An extension can push into its own session. */
 	role: "mcp" | "extension" | "cli";
+	/**
+	 * What the client can do. `acks`: its agent has the `ack`/`done`/`nack`
+	 * tools, so an unacked tracked message may be redelivered on a timer.
+	 */
+	capabilities?: string[];
+	/**
+	 * A session id that survives a restart when the agent id does not (pi and
+	 * omp ids are the pid). Tracked messages follow it to the new agent.
+	 */
+	resumeKey?: string;
 }
 
 export interface DeliveredMessage extends Message {
+	/** Set on a redelivery: this is attempt `attempt` of at most `maxAttempts`. */
+	attempt?: number;
+	maxAttempts?: number;
 	from: {
 		id: string;
 		name: string;

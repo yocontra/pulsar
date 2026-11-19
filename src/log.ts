@@ -1,11 +1,23 @@
-import { appendFileSync } from "node:fs";
-import { logPath } from "./paths.ts";
+import { appendFile } from "node:fs/promises";
+import { ensureStateDir, logPath } from "./paths.ts";
 
-/** Appends a line to the daemon log. Never throws. */
+let queue: Promise<void> = Promise.resolve();
+
+/**
+ * Appends a line to the daemon log. Never throws and never blocks: lines are
+ * written in order in the background (`flushLog` waits for them).
+ */
 export function daemonLog(line: string) {
-	try {
-		appendFileSync(logPath(), `${new Date().toISOString()} ${line}\n`);
-	} catch {}
+	const text = `${new Date().toISOString()} ${line}\n`;
+	queue = queue
+		.then(() => ensureStateDir())
+		.then(() => appendFile(logPath(), text))
+		.catch(() => {});
+}
+
+/** Resolves once every line logged so far is written (before an exit). */
+export function flushLog(): Promise<void> {
+	return queue;
 }
 
 /** Like `daemonLog`, but only when PULSAR_DEBUG is set (for noisy or polled paths). */

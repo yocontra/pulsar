@@ -101,7 +101,7 @@ describe("multicast and broadcast (goals 3, 4)", () => {
 		expect(r.receipts.map((x) => x.agentId)).toEqual([peer.agent.id]);
 		await until(() => peer.pushes.length === 1);
 		expect(peer.pushes[0]!.text).toContain("migration done");
-		expect(peer.pushes[0]!.text).toContain("not from your user");
+		expect(peer.pushes[0]!.text).toContain("agent message, not your operator");
 		expect(other.pushes).toHaveLength(0);
 	});
 
@@ -229,6 +229,49 @@ describe("delivery rules", () => {
 			timeoutSeconds: 5,
 		});
 		await roundTrip(a.client);
+		await b.client.call("set_status", { status: "idle" });
+		expect((await waiting).event).toBe("idle");
+	});
+
+	test("an idle wait ends when the agent's session ends", async () => {
+		const a = await spawnAgent();
+		const b = await spawnAgent();
+		await b.client.call("set_status", { status: "busy" });
+		const waiting = a.client.call<{ event: string }>("wait", {
+			for: `idle:${b.agent.name}`,
+			timeoutSeconds: 5,
+		});
+		await roundTrip(a.client);
+		b.client.close();
+		expect((await waiting).event).toBe("gone");
+	});
+
+	test("an idle wait follows an agent that learns its session id late", async () => {
+		const pid = 940_001;
+		const b = await spawnAgent({
+			harness: "codex",
+			role: "mcp",
+			sessionId: null,
+			pid,
+		});
+		const a = await spawnAgent();
+		await b.client.call("set_status", { status: "busy" });
+		const waiting = a.client.call<{ event: string }>("wait", {
+			for: `idle:${b.agent.name}`,
+			timeoutSeconds: 5,
+		});
+		await roundTrip(a.client);
+		// Codex learned its thread: the same connection says hello again.
+		const { PROTOCOL_VERSION } = await import("../src/types.ts");
+		await b.client.call("hello", {
+			protocol: PROTOCOL_VERSION,
+			registration: registration({
+				harness: "codex",
+				role: "mcp",
+				sessionId: "thread-late",
+				pid,
+			}),
+		});
 		await b.client.call("set_status", { status: "idle" });
 		expect((await waiting).event).toBe("idle");
 	});
