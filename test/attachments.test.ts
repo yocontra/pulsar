@@ -5,6 +5,7 @@ import {
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	statSync,
 	symlinkSync,
@@ -13,6 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { runGit } from "../src/git-write.ts";
 import { StaticIdentity } from "../src/http/identity.ts";
 import type {
 	AttachmentManifest,
@@ -21,10 +23,11 @@ import type {
 } from "../src/http/wire.ts";
 import {
 	ATTACH_LIMITS,
+	Attachments,
 	parseManifest,
 	safeName,
 } from "../src/service/attachments.ts";
-import { rankFiles } from "../src/service/files.ts";
+import { Files, MAX_PATHS, rankFiles } from "../src/service/files.ts";
 import { PulsarService } from "../src/service/index.ts";
 import { Store } from "../src/store.ts";
 import { HttpTransport } from "../src/transport/http.ts";
@@ -298,13 +301,80 @@ describe("uploads on this node", () => {
 		// Starting over at 0 works after a failure.
 		const ok = await w.write(OWNER, agentId, up.upload, 0, 0, data);
 		expect(ok.file!.size).toBe(6);
-		// A finished upload is gone.
-		expect(await code(w.write(OWNER, agentId, up.upload, 0, 0, data))).toBe(
-			"not_found",
+		// A retry whose answer was lost gets the saved file, not an error.
+		expect(
+			(await w.write(OWNER, agentId, up.upload, 0, 0, data)).file!.path,
+		).toBe(ok.file!.path);
+		// Only a write past its start is refused.
+		expect(await code(w.write(OWNER, agentId, up.upload, 0, 3, data))).toBe(
+			"bad_request",
 		);
 		// No partial files left behind.
 		expect(
 			readdirSync(join(ok.file!.path, "..")).filter((n) => n.endsWith(".part")),
+		).toEqual([]);
+	});
+
+	test("a local write in pieces continues at the returned offset", async () => {
+		const data = Buffer.from("0123456789abcdefghij");
+		const up = await open({ nonce: nonce(), files: [spec("parts.txt", data)] });
+		let at = 0;
+		let saved = null as Awaited<
+			ReturnType<typeof service.attachments.write>
+		>["file"];
+		for (const n of [7, 7, 6]) {
+			const r = await service.attachments.write(
+				OWNER,
+				agentId,
+				up.upload,
+				0,
+				at,
+				data.subarray(at, at + n),
+			);
+			at = r.received;
+			saved = r.file;
+		}
+		expect(at).toBe(20);
+		expect(readFileSync(saved!.path, "utf8")).toBe(data.toString());
+		// Through receive(): a stream of pieces, written as they come.
+		const up2 = await open({ nonce: nonce(), files: [spec("s.txt", data)] });
+		const r = await service.attachments.receive(
+			USER,
+			agentId,
+			up2.upload,
+			0,
+			new ReadableStream({
+				start(c) {
+					for (let i = 0; i < data.length; i += 3)
+						c.enqueue(data.subarray(i, i + 3));
+					c.close();
+				},
+			}),
+		);
+		expect(readFileSync(r.file.path, "utf8")).toBe(data.toString());
+	});
+
+	test("an upload expires: gone, and no partial file left", async () => {
+		let t = 1_000_000;
+		const dirX = join(dir, "expiry");
+		const att = new Attachments({
+			dir: () => dirX,
+			isLocal: () => true,
+			now: () => t,
+		});
+		const data = Buffer.from("abcdef");
+		const up = (await att.handler({
+			user: VERIFIED,
+			agent: "pi:x",
+			params: { nonce: nonce(), files: [spec("e.txt", data)] },
+		})) as AttachmentUpload;
+		await att.write(OWNER, "pi:x", up.upload, 0, 0, data.subarray(0, 3));
+		t += ATTACH_LIMITS.uploadMs + 1;
+		expect(
+			await code(att.write(OWNER, "pi:x", up.upload, 0, 3, data.subarray(3))),
+		).toBe("gone");
+		expect(
+			readdirSync(join(dirX, "pi_x")).filter((n) => n.endsWith(".part")),
 		).toEqual([]);
 	});
 
@@ -354,6 +424,35 @@ describe("HTTP", () => {
 			body: JSON.stringify({ body: "x".repeat(3 * 1024 * 1024) }),
 		});
 		expect(big.status).toBe(413);
+	});
+
+	test("a short body: the upload ended before the whole file arrived", async () => {
+		const data = Buffer.from("the whole file");
+		const up = await open({ nonce: nonce(), files: [spec("short.txt", data)] });
+		const res = await api(
+			`/agents/${encodeURIComponent(agentId)}/attachments/${up.upload}/0`,
+			{ method: "PUT", body: data.subarray(0, 5) },
+		);
+		expect(res.status).toBe(400);
+		expect(
+			((await res.json()) as { error: { message: string } }).error.message,
+		).toBe("the upload ended before the whole file arrived");
+	});
+
+	test("a PUT repeated after its answer was lost answers the saved file", async () => {
+		const data = Buffer.from("saved once");
+		const up = await open({ nonce: nonce(), files: [spec("twice.txt", data)] });
+		const put = () =>
+			api(`/agents/${encodeURIComponent(agentId)}/attachments/${up.upload}/0`, {
+				method: "PUT",
+				body: data,
+			});
+		const a = (await (await put()).json()) as { file: { path: string } };
+		const res = await put();
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { file: { path: string } }).file.path).toBe(
+			a.file.path,
+		);
 	});
 
 	test("PUT over 25 MB is refused by its length", async () => {
@@ -425,8 +524,25 @@ describe("@ files", () => {
 		expect(paths.some((p) => p.startsWith("..") || p.includes("a.txt"))).toBe(
 			false,
 		);
-		// The link itself is listed (git tracks it); nothing through it.
+		// Nothing through a link out, and not the link itself.
 		expect(paths.some((p) => p.startsWith("out/"))).toBe(false);
+		expect(paths).not.toContain("out");
+	});
+
+	test("a link to a file outside the folder is not listed", async () => {
+		const outside = tmpFolder();
+		writeFileSync(join(outside, "id_rsa"), "secret");
+		symlinkSync(join(outside, "id_rsa"), join(repo, "key"));
+		symlinkSync(join(repo, "a.txt"), join(repo, "inside-link"));
+		g(repo, "add", "-A");
+		const files = new Files(
+			(id) => service.registry.get(id),
+			() => Date.now(),
+		);
+		const paths = (await files.search(agentId, "")).items.map((h) => h.path);
+		expect(paths).not.toContain("key");
+		// A link that stays inside is fine.
+		expect(paths).toContain("inside-link");
 	});
 
 	test("no folder, or not a repo", async () => {
@@ -445,6 +561,34 @@ describe("@ files", () => {
 			available: false,
 			reason: "not_git",
 		});
+	});
+
+	test("git that times out is unavailable, not 'no repository'; a cut list says so", async () => {
+		const fail = (async (_cwd: string) => ({
+			ok: false,
+			code: "timeout",
+			message: "git took longer than 10 s and was stopped",
+			exitCode: null,
+			stdout: "",
+			stderr: "",
+		})) as unknown as typeof runGit;
+		const slow = new Files((id) => service.registry.get(id), Date.now, fail);
+		expect(await slow.search(agentId, "")).toMatchObject({
+			available: false,
+			reason: "unavailable",
+		});
+		const many = (async (cwd: string) => ({
+			ok: true,
+			stdout: Array.from({ length: MAX_PATHS + 5 }, (_, i) => `f${i}.txt`).join(
+				"\0",
+			),
+			stderr: "",
+			root: realpathSync(cwd),
+		})) as unknown as typeof runGit;
+		const big = new Files((id) => service.registry.get(id), Date.now, many);
+		const r = await big.search(agentId, "f1");
+		expect(r.available).toBe(true);
+		expect(r.truncated).toBe(true);
 	});
 
 	test("ranking: name beats folder, contiguous beats scattered", () => {

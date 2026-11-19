@@ -114,3 +114,40 @@ test("without a passkey session, Prove Human comes first; closing it drops the f
 	await expect(sheet).toHaveCount(0);
 	await expect(composer.getByTestId("attachment")).toHaveCount(0);
 });
+
+test("removing a file while it uploads cancels its upload", async ({
+	page,
+	request,
+}) => {
+	const composer = await openAgent(page, request, "name=apparish-auth");
+	// The mock holds every PUT for 4 s before handling it.
+	const set = await request.post("/api/v1/__mock/faults", {
+		headers: { "X-Pulsar": "1" },
+		data: { rules: [{ method: "PUT", path: "/agents/", beforeMs: 4000 }] },
+	});
+	expect(set.ok()).toBe(true);
+	const aborted = page.waitForEvent(
+		"requestfailed",
+		(r) => r.method() === "PUT" && r.url().includes("/attachments/"),
+	);
+	let finished = false;
+	page.on("requestfinished", (r) => {
+		if (r.method() === "PUT" && r.url().includes("/attachments/"))
+			finished = true;
+	});
+	await composer
+		.getByTestId("attach-files")
+		.setInputFiles([
+			{ name: "slow.txt", mimeType: "text/plain", buffer: Buffer.from("slow") },
+		]);
+	const tile = composer.getByTestId("attachment");
+	await expect(tile).toHaveAttribute("data-state", "uploading");
+	await composer.getByRole("button", { name: "Remove slow.txt" }).click();
+	await aborted;
+	await expect(tile).toHaveCount(0);
+	expect(finished).toBe(false);
+	await request.post("/api/v1/__mock/faults", {
+		headers: { "X-Pulsar": "1" },
+		data: {},
+	});
+});

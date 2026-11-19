@@ -53,6 +53,7 @@ export class RemoteAttachmentsRelay implements RemoteAttachments {
 				agent: address,
 				available: f?.available === true,
 				...(f?.reason ? { reason: String(f.reason) } : {}),
+				...(f?.truncated === true ? { truncated: true } : {}),
 				items: Array.isArray(f?.items)
 					? f.items
 							.filter(

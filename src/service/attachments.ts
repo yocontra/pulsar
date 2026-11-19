@@ -242,7 +242,9 @@ export class Attachments {
 		if (!f) throw new RpcError("not_found", "no such file in the upload");
 		if (f.busy) throw new RpcError("bad_request", "that file is being written");
 		if (f.saved) {
-			if (offset === f.spec.size && data.length === 0)
+			// A retry of a file already saved (its answer was lost): the saved
+			// file, checked against the signed hash already.
+			if (offset === 0 || (offset === f.spec.size && data.length === 0))
 				return { received: f.received, file: f.saved };
 			throw new RpcError("bad_request", "that file is complete");
 		}
@@ -294,7 +296,7 @@ export class Attachments {
 				size: f.spec.size,
 				path: f.path,
 			};
-			if (upload.files.every((x) => x.saved)) this.uploads.delete(upload.id);
+			// Kept until it expires, so a retry whose answer was lost finds the file.
 			return { received: f.received, file: f.saved };
 		} finally {
 			f.busy = false;
@@ -347,7 +349,7 @@ export class Attachments {
 		};
 		const reader = body?.getReader();
 		try {
-			while (reader) {
+			while (reader && !last.file) {
 				const { done, value } = await reader.read();
 				if (done) break;
 				if (!value?.length) continue;
@@ -358,19 +360,18 @@ export class Attachments {
 				pendingBytes += value.length;
 				if (local || pendingBytes >= ATTACH_LIMITS.chunkBytes) await flush();
 			}
-			await flush();
+			if (last.file) await reader?.cancel().catch(() => {});
+			else await flush();
 		} finally {
 			reader?.releaseLock();
 		}
-		if (!last.file) {
-			// An empty body for a complete file answers what was saved.
-			if (offset === 0) last = await send(0, new Uint8Array(0));
-			if (!last.file)
-				throw new RpcError(
-					"bad_request",
-					"the upload ended before the whole file arrived",
-				);
-		}
+		// An empty body for a file already saved answers what was saved.
+		if (!last.file && offset === 0) last = await send(0, new Uint8Array(0));
+		if (!last.file)
+			throw new RpcError(
+				"bad_request",
+				"the upload ended before the whole file arrived",
+			);
 		return { received: last.received, file: last.file };
 	}
 

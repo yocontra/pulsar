@@ -1161,7 +1161,9 @@ export interface FileHit {
 export interface FileSearch {
 	agent: string;
 	available: boolean;
-	/** Why there is no list (`no_cwd`, `not_git`, `unsupported`). */
+	/** Why there is no list (`no_cwd`, `not_git`, `unavailable`, `unsupported`). */
 	reason?: string;
 	items: FileHit[];
+	/** The folder holds more files than are searched. */
+	truncated?: boolean;
 }
