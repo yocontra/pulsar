@@ -254,6 +254,9 @@ export type Feature =
 	| "launch"
 	/** Commit, push and PR from the app (`/agents/:id/git/*`). */
 	| "git";
+	| "launch";
+	/** Message search (`GET /search/messages`); absent with PULSAR_NO_SEARCH. */
+	| "search";
 
 /** `GET /hello`. */
 export interface Hello {

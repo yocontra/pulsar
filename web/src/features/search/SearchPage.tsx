@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { AgentAvatar } from "../../ds/index.ts";
 import { ago } from "../../lib/format.ts";
 import type { PageProps } from "../../lib/registry.tsx";
+import { can } from "../../lib/store.ts";
 import { BackButton } from "../../mobile/BackButton.tsx";
 import {
 	IonButtons,
@@ -36,8 +37,9 @@ type Result =
 export default function SearchPage({ params }: PageProps) {
 	const [q, setQ] = useState(params.q ?? "");
 	const [result, setResult] = useState<Result>({ kind: "idle" });
+	const off = !can("search");
 	useEffect(() => {
-		if (!searchable(q)) {
+		if (off || !searchable(q)) {
 			setResult({ kind: "idle" });
 			return;
 		}
@@ -56,7 +58,7 @@ export default function SearchPage({ params }: PageProps) {
 			clearTimeout(t);
 			ctrl.abort();
 		};
-	}, [q]);
+	}, [q, off]);
 
 	const rows =
 		result.kind === "done"
@@ -94,8 +96,9 @@ export default function SearchPage({ params }: PageProps) {
 						<MessageSquareTextIcon />
 						<h3>Search Messages</h3>
 						<p>
-							Find what you and your agents wrote. Type a word of 3 letters or
-							more.
+							{off
+								? "Message search is off on this machine."
+								: "Find what you and your agents wrote. Type a word of 3 letters or more."}
 						</p>
 					</div>
 				)}

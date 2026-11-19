@@ -77,6 +77,8 @@ export class AppApi {
 	readonly views: Views;
 	private readonly machine: () => { id: string; name: string };
 	private readonly subagents: Subagents;
+	/** Features the service adds when they are on (message search). */
+	extraFeatures: () => Feature[] = () => [];
 	private tokens = new Map<string, ResolveToken>();
 	/** Real sends by `<login> <clientId>`, for idempotent retries. */
 	private sent = new Map<string, { at: number; result: Promise<SendResult> }>();
@@ -108,7 +110,7 @@ export class AppApi {
 			machineId: id,
 			machine: name,
 			fedProtocol: FED_PROTOCOL,
-			features: FEATURES,
+			features: [...FEATURES, ...this.extraFeatures()],
 			...(p.kind === "human"
 				? {
 						you: {
