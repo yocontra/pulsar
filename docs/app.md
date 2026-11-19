@@ -57,6 +57,19 @@ Limits: Codex subagents are listed only while Codex's app-server runs, and a Cod
 
 Pulsar reads the worktree with git and never writes to it: it takes no index lock, runs no external diff tools, textconv filters or fsmonitor hooks, shows only files `git status` lists (never ignored ones), and reads a new file only inside the repo and never through a symbolic link (a link shows its target). Diffs show file contents as they are; Pulsar redacts nothing. The same people who can read an agent's transcript can read its changes: you, from the app on any of your machines (the agent's machine reads them), and the agent itself. Tagged devices you allowed get nothing. An agent on a machine with an older Pulsar shows "update it to see changes".
 
+## Usage
+
+**Usage** shows how many tokens your agents used and what that would cost at API prices. Open it with the chart button in the sidebar header (on a phone, on Home's top bar), from Cmd-K, or with Cmd-U.
+
+- Pulsar reads the session files Claude Code, Codex, pi and omp write on each machine (including subagents, counted toward their session) and sums every machine in the pool. A machine that is offline or runs an older Pulsar is listed with the reason and left out.
+- Pick a period (24h, 7d, 30d, 90d) and **Cost** or **Tokens**. Narrow the view to one machine or one harness from the line at the top.
+- The big number is the total, with the number of sessions. Below it, each harness's share. The chart shows each harness per day (per hour for 24h); point at it for the numbers.
+- **Totals** splits the tokens: processed, cached input, uncached input, output, and what cache reads saved. **Breakdown** lists models or days; click a model for its trend, cache hit rate and cost per million tokens.
+- Cost is an **API estimate**: list prices per million tokens, not what a subscription charges. Set a model's price from its sheet (**Set price**), or all prices from **Model prices…** in the machine menu. Prices apply to every machine and to all past usage. A model with no price (for example a Codex or third-party model) is left out of the cost and named under the info button.
+- Usage updates every minute while the page is open; the refresh button reads new lines first. It keeps 90 days.
+
+In a session's header (on a computer), a short line shows the session's cost so far and, when the harness reports its context window (Codex), "Context: 42% used".
+
 ## Approvals
 
 An agent's permission prompt shows in Needs you and in its session as a card: the tool, every argument exactly as the agent sent it (spaces, tabs, newlines and hidden characters are marked), the folder and branch, and a countdown. Choose Allow once, Allow for session (the rules it adds are listed) or Deny with a note. The prompt also stays on the machine; whichever answer comes first wins, and the card says where it was answered.
@@ -99,6 +112,9 @@ The gear button opens Settings:
 | Cmd-Shift-B | Broadcast |
 | Cmd-. | Stop the open agent |
 | Cmd-\ | Show or hide the changes panel |
+| Cmd-U | Usage |
+| `C` / `T` | Cost / Tokens (on the usage page) |
+| Cmd-Shift-1…4 | Usage period: 24h, 7d, 30d, 90d |
 | `[` / `]` | Previous / next changed file (in the panel) |
 | Esc | Close |
 | `?` | Help |

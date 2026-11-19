@@ -86,6 +86,7 @@ import type {
 	TreeGroup,
 	TreeNode,
 	TreeSort,
+	UsagePeriod,
 	UserSessionInfo,
 	Wake,
 } from "../src/api/types.ts";
@@ -125,6 +126,7 @@ import {
 	page as transcriptPage,
 	step as transcriptStep,
 } from "./transcript.ts";
+import { agentUsage, mockUsage, setPrice, usageReport } from "./usage.ts";
 
 /** How the app names each harness ("handed to Claude Code"). */
 const HARNESS_NAMES: Record<string, string> = {
@@ -156,6 +158,7 @@ const FEATURES: Feature[] = [
 		"approvals",
 		"push",
 		"ask",
+		"usage",
 		...((process.env.PULSAR_MOCK_FEATURES ?? "")
 			.split(",")
 			.map((f) => f.trim())
@@ -2298,6 +2301,7 @@ async function route(
 	const seg = path.split("/").filter(Boolean).map(decodeURIComponent);
 	const GET = req.method === "GET";
 	const POST = req.method === "POST";
+	const PUT = req.method === "PUT";
 
 	// Mock only: the next `count` requests (or only event streams) answer
 	// like a daemon whose Tailscale identity lookup is slow; `drop` closes
@@ -2562,6 +2566,32 @@ async function route(
 		);
 		return json({ ok: true, op: b.op });
 	}
+	// Token usage (web/mock/usage.ts).
+	if (GET && path === "/usage") {
+		const period = q.get("period") ?? "7d";
+		if (!["24h", "7d", "30d", "90d"].includes(period))
+			throw badRequest("period: 24h, 7d, 30d or 90d");
+		return json(
+			usageReport(period as UsagePeriod, Number(q.get("tz") ?? 0) || 0),
+		);
+	}
+	if (GET && seg[0] === "agents" && seg[2] === "usage" && seg.length === 3)
+		return json(agentUsage(agentOr404(seg[1]!)));
+	if (PUT && path === "/usage/prices") {
+		const b = (await jsonBody(req)) as {
+			model?: string;
+			price?: Record<string, number> | null;
+		};
+		if (!b.model || b.price === undefined) throw badRequest("model, price");
+		try {
+			return json(setPrice(b.model, b.price));
+		} catch (e) {
+			throw badRequest((e as Error).message);
+		}
+	}
+	// Mock only: no usage at all, or the defaults back (test isolation).
+	if (POST && path === "/__mock/usage")
+		return json(mockUsage((await jsonBody(req)) as { empty?: boolean }));
 	// The home node's challenge for an acting op on another machine.
 	if (POST && path === "/acting/options") {
 		const body = (await jsonBody(req)) as {

@@ -37,17 +37,17 @@ function Sheet({
 	useEffect(() => {
 		const back = document.activeElement as HTMLElement | null;
 		ref.current?.focus();
+		// Capture on the window: Esc closes the sheet wherever focus is, and
+		// never reaches the page or the shell (which would go back).
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key !== "Escape") return;
-			// The sheet closes, not the page under it.
-			e.stopPropagation();
+			e.stopImmediatePropagation();
 			e.preventDefault();
 			onClose();
 		};
-		const el = ref.current;
-		el?.addEventListener("keydown", onKey);
+		window.addEventListener("keydown", onKey, true);
 		return () => {
-			el?.removeEventListener("keydown", onKey);
+			window.removeEventListener("keydown", onKey, true);
 			back?.focus?.();
 		};
 	}, [onClose]);
@@ -65,6 +65,7 @@ function Sheet({
 				className="usage-sheet"
 				role="dialog"
 				aria-modal="true"
+				data-state="open"
 				aria-label={title}
 				tabIndex={-1}
 			>

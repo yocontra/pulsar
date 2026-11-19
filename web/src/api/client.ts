@@ -9,9 +9,9 @@ import {
 } from "../prove/state.ts";
 import {
 	type AgentRow,
-	type AgentUsage,
 	type AgentSort,
 	type AgentsPage,
+	type AgentUsage,
 	API_BASE,
 	API_HEADER,
 	type ApiErrorBody,
@@ -45,9 +45,6 @@ import {
 	type SendResponse,
 	type SendResult,
 	type ServerEvent,
-	type UsagePeriod,
-	type UsagePrice,
-	type UsageReport,
 	type SessionOptionsResponse,
 	type SessionVerifyResponse,
 	type StopResult,
@@ -58,6 +55,9 @@ import {
 	type TreeNode,
 	type TreePage,
 	type TreeSort,
+	type UsagePeriod,
+	type UsagePrice,
+	type UsageReport,
 	type UserSessionInfo,
 } from "./types.ts";
 

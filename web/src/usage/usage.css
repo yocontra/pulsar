@@ -673,3 +673,20 @@
 	align-items: center;
 	gap: var(--ds-space-1);
 }
+
+/* ------------------------------------------------------- desktop page pane */
+.usage-page {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	background: var(--ds-bg);
+}
+.usage-page > .usage {
+	flex: 1;
+}
+.usage-phone .usage-body {
+	overflow: visible;
+}

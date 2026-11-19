@@ -103,17 +103,7 @@ const isTyping = (t: EventTarget | null) =>
 	t instanceof HTMLElement &&
 	(t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
-export function UsageView({
-	variant,
-	escape,
-}: {
-	variant: "desktop" | "phone";
-	/**
-	 * Set to a function that closes an open sheet and returns true (the
-	 * desktop layer asks it before Esc closes the page).
-	 */
-	escape?: { current: (() => boolean) | null };
-}) {
+export function UsageView({ variant }: { variant: "desktop" | "phone" }) {
 	const [prefs, setPrefs] = useState(loadPrefs);
 	const [filters, setFilters] = useState<Filters>({
 		machine: null,
@@ -123,15 +113,6 @@ export function UsageView({
 	const [prices, setPrices] = useState(false);
 	const [refreshError, setRefreshError] = useState<string | null>(null);
 	const q = useUsage(prefs.period);
-	useEffect(() => {
-		if (!escape) return;
-		escape.current = () => {
-			if (model) setModel(null);
-			else if (prices) setPrices(false);
-			else return false;
-			return true;
-		};
-	}, [escape, model, prices]);
 	const update = (p: Partial<Prefs>) =>
 		setPrefs((old) => {
 			const next = { ...old, ...p };
