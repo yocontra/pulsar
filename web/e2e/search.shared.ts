@@ -220,4 +220,53 @@ export function searchSuite(platform: "desktop" | "phone") {
 			page.locator("span[title^='Message search is off']", { has: find }),
 		).toHaveCount(1);
 	});
+
+	test(`an older match whose page fails to load leaves nothing marked and no error (${platform})`, async ({
+		page,
+		request,
+		errors,
+	}) => {
+		const id = await agentId(request, "name=apparish-auth");
+		const res = await request.get(
+			`/api/v1/search/messages?q=${encodeURIComponent("fake timers")}&agent=${encodeURIComponent(id)}`,
+			{ headers: { "X-Pulsar": "1" } },
+		);
+		const n = ((await res.json()) as { hits: unknown[] }).hits.length;
+		await ready(page);
+		await page.evaluate((id) => {
+			location.hash = `#/a/${encodeURIComponent(id)}`;
+		}, id);
+		const bar = findBar(page);
+		await page
+			.getByRole("button", { name: "Find in messages", exact: true })
+			.click();
+		await bar.getByRole("searchbox").fill("fake timers");
+		await expect(bar).toContainText(`${n} of ${n}`);
+		// Older pages fail from now on.
+		await page.route("**/transcript?cursor=**", (r) =>
+			r.fulfill({
+				status: 503,
+				contentType: "application/json",
+				body: JSON.stringify({
+					error: { code: "unavailable", message: "down" },
+				}),
+			}),
+		);
+		// The oldest match needs an earlier page.
+		await bar.getByRole("searchbox").press("Enter");
+		await expect(bar).toContainText(`1 of ${n}`);
+		await expect(page.locator("[data-find-current]")).toHaveCount(0);
+		// Stepping back to a match on screen still lands.
+		await bar.getByRole("button", { name: "Previous match" }).click();
+		await expect(bar).toContainText(`${n} of ${n}`);
+		await expect(
+			page.locator("section.session").last().locator("[data-find-current]"),
+		).toHaveCount(1);
+		// Only the refused requests' own log lines; no unhandled rejection.
+		errors.splice(
+			0,
+			errors.length,
+			...errors.filter((e) => !/status of 503/.test(e)),
+		);
+	});
 }

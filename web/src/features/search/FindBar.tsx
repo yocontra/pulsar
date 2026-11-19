@@ -206,9 +206,12 @@ function Bar({
 			return;
 		}
 		const ctrl = new AbortController();
-		void reveal(root, state.agentId, hit.eventId, ctrl.signal).then((el) => {
-			if (!ctrl.signal.aborted) highlight(root, el, words, bar.current);
-		});
+		reveal(root, state.agentId, hit.eventId, ctrl.signal)
+			// Older pages failed to load: as if the match isn't on screen.
+			.catch(() => null)
+			.then((el) => {
+				if (!ctrl.signal.aborted) highlight(root, el, words, bar.current);
+			});
 		return () => ctrl.abort();
 	}, [hit?.eventId, root, state.agentId, words]);
 
