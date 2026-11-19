@@ -10,6 +10,8 @@ bun run check    # typecheck, lint, tests
 bun run build    # dist/cli.js + dist/extension.js + shared chunks (bundled, no runtime deps)
 ```
 
+`bun run test` runs each test file in its own `bun test` process, half the cores at a time (`PULSAR_TEST_JOBS=n` to change; every core on CI). `bun run test:e2e` runs the Playwright suites on half the cores (`PULSAR_E2E_WORKERS=n` or `50%`); every worker starts its own mock or real daemon on its own port (`web/e2e/infra.ts`), so tests that change server state never collide. Its logs are in `web/e2e-logs/`.
+
 The source runs directly with Node 22.13+ or Bun (`node src/cli.ts ls`). It uses only erasable TypeScript syntax, so no build step is needed during development.
 
 ## Layout
