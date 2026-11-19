@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 - unreleased
+## 2.0.0 - 2026-11-19
 
 Pulsar 2 adds the agent mesh: agents on every machine you own in one pool, and an app on your phone or another computer to watch and steer them, over Tailscale. Everything from 1.x works as before on one machine.
 
