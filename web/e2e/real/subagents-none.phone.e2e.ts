@@ -27,7 +27,10 @@ test("no Subagents bar for an agent with none listed (phone) @real", async ({
 	] as const) {
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
 		const header = page.locator(".p-agent-header").last();
-		await expect(header.locator(".p-nav-title")).toContainText(name);
+		// The first visit compiles the app cold in WebKit; give it time under load.
+		await expect(header.locator(".p-nav-title")).toContainText(name, {
+			timeout: 15_000,
+		});
 		// The agent row has loaded (its status line), so the bar had its chance.
 		await expect(header.locator(".p-nav-sub")).toBeVisible();
 		await expect(page.locator("[data-subs-section]")).toHaveCount(0);
