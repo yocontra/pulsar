@@ -57,6 +57,7 @@ import { Deliveries, type DeliveryConfig } from "./delivery.ts";
 import { EnrollGate } from "./enroll.ts";
 import { EventBus, type ServiceEvents } from "./events.ts";
 import { cleanPrompt, KINDS } from "./interactions.ts";
+import { Interest } from "./interest.ts";
 import { Interrupts } from "./interrupts.ts";
 import { Jobs, LagMonitor } from "./jobs.ts";
 import { INTERVALS, LIMITS } from "./limits.ts";
@@ -73,6 +74,7 @@ import { ServerInteractions } from "./server-interactions.ts";
 import { Sessions } from "./sessions.ts";
 import { Subagents } from "./subagents.ts";
 import { driverTranscript, Transcripts } from "./transcripts.ts";
+import { Turns } from "./turns.ts";
 import { UserSessions } from "./user-sessions.ts";
 import { clampInt, toPublic } from "./util.ts";
 import { Views } from "./views.ts";
@@ -118,6 +120,8 @@ export interface ServiceOptions {
 	usage?: UsageOptions & { intervalMs?: number; scan?: boolean };
 	/** Web Push: where the VAPID keys live (the state folder by default) and how to send (tests). */
 	push?: { keyFile?: string; send?: PushOptions["send"] };
+	/** Finish and fail notifications (tests shorten the grace). */
+	turns?: { graceMs?: number };
 	/** Pool membership: where to write the display copy (`pool.json`). */
 	pool?: { mirror?: string };
 	/**
@@ -190,6 +194,10 @@ export class PulsarService {
 	readonly approvals: Approvals;
 	/** Web Push to the app for new approvals (subscriptions on this node). */
 	readonly push: Push;
+	/** Agents the operator recently started, messaged or opened (notifications go to these). */
+	readonly interest: Interest;
+	/** Finished and failed turns (`agent:turn`, `notify`). */
+	readonly turns: Turns;
 	/** Who may be in the pool (by Tailscale node id), held here. */
 	readonly poolMembers: PoolMembers;
 	/** `pulsar mesh allow|deny|forget|owner`: resolve, confirm at the terminal, audit, announce. */
@@ -333,6 +341,7 @@ export class PulsarService {
 			onForget: (id) => this.onPoolForget(id),
 			onChange: () => this.onPoolChange(),
 		});
+		this.interest = new Interest({ store: this.store });
 		this.push = new Push({
 			store: this.store,
 			events: this.events,
@@ -357,6 +366,12 @@ export class PulsarService {
 			machine: () => ({ id: this.machineId, name: this.machine }),
 			subagents: this.subagents,
 		});
+		this.acting.onActed = (id) => {
+			if (id) this.interest.note(id);
+		};
+		this.app.onOperatorSend = (ids) => {
+			for (const id of ids) this.interest.note(id);
+		};
 		this.registry.onRelease = (agent) => void this.router.releaseHeld(agent);
 		const resolveTranscript = opts.transcripts?.resolve ?? driverTranscript;
 		this.transcripts = new Transcripts(
@@ -375,6 +390,15 @@ export class PulsarService {
 				ensure: (id) => this.subagents.row(id),
 			},
 		);
+		this.turns = new Turns({
+			events: this.events,
+			registry: this.registry,
+			interest: this.interest,
+			resolve: resolveTranscript,
+			...(opts.turns?.graceMs !== undefined
+				? { graceMs: opts.turns.graceMs }
+				: {}),
+		});
 		this.changes = new Changes(
 			(id) => {
 				// The operator (a presence check from a terminal) has no folder: no_cwd.
@@ -493,6 +517,7 @@ export class PulsarService {
 	start() {
 		this.approvals.expireStale();
 		this.push.start();
+		this.turns.start();
 		this.lag.start();
 		const jobs = this.jobs;
 		if (this.scan) {
@@ -623,6 +648,7 @@ export class PulsarService {
 		this.presence.stop();
 		this.approvals.stop();
 		this.push.stop();
+		this.turns.stop();
 	}
 
 	/** Tracks a new caller until its `closed` signal aborts. */

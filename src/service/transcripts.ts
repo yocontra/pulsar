@@ -24,7 +24,12 @@ export async function driverTranscript(
 	const support = driverFor(agent.harness)?.transcript;
 	const source = await support?.locate(agent);
 	return support && source
-		? { source, parse: support.parse, cwd: agent.cwd }
+		? {
+				source,
+				parse: support.parse,
+				cwd: agent.cwd,
+				...(support.turnFailed ? { turnFailed: support.turnFailed } : {}),
+			}
 		: null;
 }
 

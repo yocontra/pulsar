@@ -544,6 +544,30 @@ export interface PushSubscribeRequest {
 	keys: { p256dh: string; auth: string };
 }
 
+/** How an agent's turn ended: on its own, or with an error from the harness. */
+export type TurnKind = "finished" | "failed";
+
+/** Finish and fail notifications on one device: Settings' "Agent activity" select. */
+export type TurnNotifyMode = "off" | "notify" | "sound" | "both";
+
+/**
+ * `POST /push/settings`: read (no fields) or change this browser's
+ * finish/fail settings, kept with its subscription (`endpoint`). Without a
+ * subscription only the browser keeps them.
+ */
+export interface PushSettingsRequest {
+	endpoint: string;
+	turns?: TurnNotifyMode;
+	inApp?: boolean;
+}
+
+export interface PushSettings {
+	/** False when this node holds no subscription for `endpoint`. */
+	subscribed: boolean;
+	turns: TurnNotifyMode;
+	inApp: boolean;
+}
+
 /**
  * What a push carries: no agent names, tools or arguments (they would pass
  * through Apple's or Google's push service). The app fetches details.
@@ -559,7 +583,17 @@ export type PushPayload =
 			badge: number;
 	  }
 	/** A passkey or enrollment change: the app's settings say what (no details here). */
-	| { kind: "security"; badge: number };
+	| { kind: "security"; badge: number }
+	/**
+	 * An agent the operator recently acted on finished its turn or stopped
+	 * with an error. `agentId` is the opaque id this node shows (no name).
+	 */
+	| {
+			kind: "finished" | "failed";
+			agentId: string;
+			/** Play the notification's sound ("Notifications with sound"). */
+			sound?: true;
+	  };
 
 /** `GET /attention` items: who waits on the user, approvals first, newest first. */
 export interface AttentionItem {
@@ -945,6 +979,11 @@ export type ListUpdate<T> =
  */
 export interface ServerEvents {
 	ready: { streamId: string; bootId: string; resumed: boolean };
+	/**
+	 * An agent the operator recently started, messaged or opened finished
+	 * its turn or stopped with an error (the in-app toast and sound).
+	 */
+	notify: { kind: TurnKind; agentId: string; at: number };
 	gap: {
 		reason: "expired" | "overflow";
 		topic?: "transcript" | "changes";

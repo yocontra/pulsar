@@ -38,7 +38,7 @@ export class LocalFeed {
 
 	/** What one local agent looks like to peers. */
 	private record(): FedAgent[] {
-		const { registry, store } = this.service;
+		const { registry, store, turns } = this.service;
 		const views = this.service.app.views;
 		const full = store.fullInboxes(LIMITS.inboxCap);
 		return registry.live().map((agent) => {
@@ -71,6 +71,7 @@ export class LocalFeed {
 					agent.id,
 					RECENT_APPROVALS_MS,
 				) as FedAgent["approvals"],
+				...(turns.lastTurn(agent.id) ? { turn: turns.lastTurn(agent.id) } : {}),
 			};
 		});
 	}

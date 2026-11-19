@@ -331,4 +331,9 @@ export interface TranscriptSupport<A> {
 	 * Unknown or malformed lines are skipped.
 	 */
 	parse(chunk: string, state: ParseState): TranscriptEvent[];
+	/**
+	 * Whether the last turn ended with a harness error (API error, refused
+	 * model), from the log's last bytes (src/transcripts/turn-outcome.ts).
+	 */
+	turnFailed?(tail: string): boolean;
 }

@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { jsonAction, mcpCommand } from "../setup/actions.ts";
 import { exists, getPath, readJsonc, runCli, which } from "../setup/files.ts";
+import { piTurnFailed } from "../transcripts/turn-outcome.ts";
 import {
 	listOmpSubagents,
 	ompSubagentStamp,
@@ -22,6 +23,7 @@ export const omp: HarnessDriver = {
 			return file ? { kind: "file", path: file, headerLine: true } : null;
 		},
 		parse: parsePi,
+		turnFailed: piTurnFailed,
 	},
 
 	subagents: {

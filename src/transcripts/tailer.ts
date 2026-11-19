@@ -52,6 +52,8 @@ export interface ResolvedTranscript {
 	parse: ParseFn;
 	/** The agent's folder (relative paths in summaries). */
 	cwd?: string | null;
+	/** Whether the last turn failed (the driver's `turnFailed`). */
+	turnFailed?: (tail: string) => boolean;
 }
 
 /** Finds an agent's transcript now; null when it has none (yet). Called again on every miss. */

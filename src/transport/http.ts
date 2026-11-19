@@ -383,6 +383,13 @@ const PushSubscribeBody = z
 const PushUnsubscribeBody = z
 	.object({ endpoint: z.string().max(2000) })
 	.strict();
+const PushSettingsBody = z
+	.object({
+		endpoint: z.string().max(2000),
+		turns: z.enum(["off", "notify", "sound", "both"]).optional(),
+		inApp: z.boolean().optional(),
+	})
+	.strict();
 
 function parse<T extends z.ZodType>(schema: T, value: unknown): z.infer<T> {
 	const r = schema.safeParse(value);
@@ -1085,6 +1092,11 @@ export class HttpTransport {
 			const body = parse(PushUnsubscribeBody, await jsonBody(c));
 			this.service.push.unsubscribe(who(c), body.endpoint);
 			return c.json({ ok: true });
+		});
+		// Finish/fail settings of this browser's subscription (read, or change).
+		api.post("/push/settings", async (c) => {
+			const body = parse(PushSettingsBody, await jsonBody(c));
+			return c.json(this.service.push.settings(who(c), body));
 		});
 		api.get("/passkeys", (c) =>
 			c.json({ items: approvals.listPasskeys(who(c)) }),

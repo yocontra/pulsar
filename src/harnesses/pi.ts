@@ -8,6 +8,7 @@ import {
 	tryCli,
 	which,
 } from "../setup/files.ts";
+import { piTurnFailed } from "../transcripts/turn-outcome.ts";
 import { piSessionFile, piSessionLog } from "./pi-sessions.ts";
 import { parsePi } from "./pi-transcript.ts";
 import { piIdent } from "./simple-ident.ts";
@@ -22,6 +23,7 @@ export const pi: HarnessDriver = {
 			return file ? { kind: "file", path: file } : null;
 		},
 		parse: parsePi,
+		turnFailed: piTurnFailed,
 	},
 
 	sessionLog: (agent) => piSessionLog(".pi", agent.cwd),

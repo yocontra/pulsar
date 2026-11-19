@@ -83,7 +83,7 @@ describe("migrations", () => {
 		old.close();
 
 		const store = new Store(path);
-		expect(SCHEMA_VERSION).toBe(8);
+		expect(SCHEMA_VERSION).toBe(9);
 		expect(store.version()).toBe(SCHEMA_VERSION);
 		expect(store.getMessage("m1")).toEqual({
 			id: "m1",

@@ -1,4 +1,9 @@
-import type { Approval, SecurityNotice, SubagentCounts } from "../http/wire.ts";
+import type {
+	Approval,
+	SecurityNotice,
+	SubagentCounts,
+	TurnKind,
+} from "../http/wire.ts";
 import type { AgentStatus, Message, PublicAgent } from "../types.ts";
 import type { NeedsYou } from "./registry.ts";
 
@@ -30,6 +35,18 @@ export interface ServiceEvents {
 		to: AgentStatus;
 		at: number;
 	};
+	/**
+	 * An agent's turn ended (not a `tail` frame): decided by its home node
+	 * (src/service/turns.ts). A local id, or a pool address for an agent on
+	 * another machine.
+	 */
+	"agent:turn": { agentId: string; kind: TurnKind; at: number };
+	/**
+	 * A turn the operator should hear about: `agent:turn` for an agent they
+	 * recently started, messaged or opened (not a `tail` frame). The app's
+	 * stream and Web Push follow it.
+	 */
+	notify: { kind: TurnKind; agentId: string; at: number };
 }
 
 export type ServiceEvent = keyof ServiceEvents;
@@ -57,7 +74,8 @@ export class EventBus {
 		fn: (data: ServiceEvents[K]) => void,
 	): () => void {
 		return this.onAny((e, data) => {
-			if ((e as ServiceEvent) === event) fn(data as ServiceEvents[K]);
+			if ((e as ServiceEvent) === event)
+				fn(data as unknown as ServiceEvents[K]);
 		});
 	}
 
