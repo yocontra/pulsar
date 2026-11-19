@@ -1,4 +1,3 @@
-import { processTable } from "../processes.ts";
 import type { Agent } from "../types.ts";
 import { claude } from "./claude.ts";
 import { codex } from "./codex.ts";
@@ -10,6 +9,12 @@ import { pi } from "./pi.ts";
 import type { HarnessDriver } from "./types.ts";
 import { vscode } from "./vscode.ts";
 
+export {
+	extensionHostFor,
+	findHarnessAncestor,
+	harnessIds,
+	PSEUDO_HARNESSES,
+} from "./ident.ts";
 export type { HarnessDriver } from "./types.ts";
 
 /**
@@ -29,14 +34,6 @@ export const DRIVERS: HarnessDriver[] = [
 	vscode,
 ];
 
-/** Harness ids with no driver: a plain terminal, and no harness found. */
-export const PSEUDO_HARNESSES = ["cli", "unknown"] as const;
-
-/** Every valid harness id: the drivers, then the pseudo-harnesses. */
-export function harnessIds(): string[] {
-	return [...DRIVERS.map((d) => d.id), ...PSEUDO_HARNESSES];
-}
-
 export function driverFor(id: string): HarnessDriver | null {
 	return DRIVERS.find((d) => d.id === id) ?? null;
 }
@@ -46,30 +43,9 @@ export function driverForProcess(args: string): HarnessDriver | null {
 	return DRIVERS.find((d) => d.matchProcess(args)) ?? null;
 }
 
-/** Walks up from `pid` to the first process that is a known harness. */
-export function findHarnessAncestor(
-	pid: number,
-	table = processTable(),
-): { harness: string; pid: number } | null {
-	let current = table.get(pid);
-	for (let depth = 0; current && depth < 16; depth++) {
-		const parent = table.get(current.ppid);
-		if (!parent || parent.pid <= 1) return null;
-		const driver = driverForProcess(parent.args);
-		if (driver) return { harness: driver.id, pid: parent.pid };
-		current = parent;
-	}
-	return null;
-}
-
 /** The push path that reaches an agent from outside its session, if any. */
 export function pushFor(agent: Agent): HarnessDriver["push"] | null {
 	return DRIVERS.find((d) => d.push?.canPush(agent))?.push ?? null;
-}
-
-/** The harness hosting pulsar's extension, from the host process's argv. */
-export function extensionHostFor(argv: string): HarnessDriver | null {
-	return DRIVERS.find((d) => d.extension?.isHost(argv)) ?? null;
 }
 
 /** Drivers `pulsar setup` and `doctor` can configure, in registry order. */

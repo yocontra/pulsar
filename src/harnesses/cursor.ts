@@ -1,22 +1,16 @@
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { jsonAction, mcpCommand } from "../setup/actions.ts";
-import { getPath, readJsonc } from "../setup/files.ts";
+import { exists, getPath, readJsonc } from "../setup/files.ts";
+import { cursorIdent } from "./simple-ident.ts";
 import type { HarnessDriver } from "./types.ts";
 
 /** Pull only: messages wait in the inbox. */
 export const cursor: HarnessDriver = {
-	id: "cursor",
-	label: "Cursor",
-
-	matchProcess(args) {
-		const exe = basename(args.split(/\s+/)[0] ?? "").toLowerCase();
-		return exe === "cursor" || args.includes("Cursor.app");
-	},
+	...cursorIdent,
 
 	setup: {
-		detect: () => existsSync(join(homedir(), ".cursor")),
+		detect: () => exists(join(homedir(), ".cursor")),
 		configured: () =>
 			!!getPath(readJsonc(join(homedir(), ".cursor", "mcp.json")), [
 				"mcpServers",

@@ -1,156 +1,88 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { access, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
-import { gitInfo } from "../git.ts";
-import { processTable } from "../processes.ts";
+import { join } from "node:path";
 import { type Action, skillFor } from "../setup/actions.ts";
-import { runCli, setTomlKey, tryCli } from "../setup/files.ts";
-import { autoTags, isAutoTag } from "../tags.ts";
-import { MAX_BLOCK_SECONDS, type Registration } from "../types.ts";
-import { head, lastModel, run, tail, which } from "../util.ts";
+import { exists, runCli, setTomlKey, tryCli, which } from "../setup/files.ts";
+import { MAX_BLOCK_SECONDS } from "../types.ts";
+import { headAsync, lastModel, run, statAsync, tailAsync } from "../util.ts";
+import { codexIdent } from "./codex-ident.ts";
+import { codexPending } from "./codex-interactions.ts";
+import { codexNames } from "./codex-names.ts";
+import {
+	codexControlAvailable,
+	codexControlReady,
+	codexRpc,
+} from "./codex-rpc.ts";
+import { codexStatuses } from "./codex-status.ts";
+import { parseCodex } from "./codex-transcript.ts";
+import { listCodexSubagents } from "./more-subagents.ts";
 import type { HarnessDriver } from "./types.ts";
 
-/**
- * Codex threads a codex process is writing, best guess first. Codex does not
- * tell MCP servers their thread id, but it holds each thread's
- * `rollout-<time>-<thread uuid>.jsonl` open. The app-server daemon serves many
- * threads from one process, so candidates whose recorded cwd matches come
- * first, newest first; the daemon refuses a thread another session claimed.
- */
-function codexThreadIds(pid: number, cwd: string | null): string[] {
-	let out = "";
-	try {
-		out = execFileSync("lsof", ["-p", String(pid), "-Fn"], {
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-			timeout: 3000,
-		});
-	} catch {
-		return [];
-	}
-	const candidates: Array<{ id: string; cwdMatch: boolean; mtime: number }> =
-		[];
-	for (const line of out.split("\n")) {
-		if (!line.startsWith("n") || !/rollout-.*\.jsonl$/.test(line)) continue;
-		const file = line.slice(1);
-		const id =
-			/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/.exec(
-				file,
-			)?.[1];
-		if (!id) continue;
-		try {
-			const head = readFileSync(file, "utf8").slice(0, 8192);
-			if (head.includes("parent_thread_id")) continue;
-			const recorded = /"cwd":"([^"]+)"/.exec(head)?.[1] ?? null;
-			if (recorded) codexThreadCwds.set(id, recorded);
-			candidates.push({
-				id,
-				cwdMatch: !!cwd && recorded === cwd,
-				mtime: statSync(file).mtimeMs,
-			});
-		} catch {}
-	}
-	return candidates
-		.sort(
-			(a, b) => Number(b.cwdMatch) - Number(a.cwdMatch) || b.mtime - a.mtime,
-		)
-		.map((c) => c.id);
-}
-
-/** Each Codex thread's folder, recorded by `codexThreadIds` from its rollout. */
-const codexThreadCwds = new Map<string, string>();
-
-/** The folder a Codex thread works in, from its rollout (not the MCP server's own folder). */
-function codexThreadCwd(threadId: string): string | null {
-	return codexThreadCwds.get(threadId) ?? null;
-}
-
-/** The best Codex thread guess for a process, skipping ones already claimed. */
-function codexThreadId(
-	pid: number,
-	cwd: string | null,
-	exclude: ReadonlySet<string> = new Set(),
-): string | null {
-	return codexThreadIds(pid, cwd).find((id) => !exclude.has(id)) ?? null;
-}
-
-/** Points a Codex registration at its thread: id, the thread's folder, and its git tags. */
-function adoptCodexThread(reg: Registration, threadId: string | null) {
-	reg.sessionId = threadId;
-	const cwd = threadId ? codexThreadCwd(threadId) : null;
-	if (!cwd || cwd === reg.cwd) return;
-	reg.cwd = cwd;
-	const git = gitInfo(cwd);
-	reg.project = git.project;
-	reg.branch = git.branch;
-	reg.tags = [
-		...autoTags(reg.harness, git),
-		...reg.tags.filter((t) => !isAutoTag(t)),
-	];
-}
-
 const codexFiles = new Map<string, string>();
+/** Threads with no rollout found, and when: the folders are walked again only after `MISS_RETRY_MS`. */
+const codexMisses = new Map<string, number>();
+const MISS_RETRY_MS = 10_000;
 
 /** Codex rollout: `rollout-…-<thread>.jsonl` in the last month of ~/.codex/sessions. */
-function codexRollout(threadId: string): string | null {
+async function codexRolloutAsync(threadId: string): Promise<string | null> {
 	const cached = codexFiles.get(threadId);
-	if (cached && existsSync(cached)) return cached;
+	if (
+		cached &&
+		(await access(cached).then(
+			() => true,
+			() => false,
+		))
+	)
+		return cached;
+	const missed = codexMisses.get(threadId);
+	if (missed !== undefined && Date.now() - missed < MISS_RETRY_MS) return null;
 	const root = join(
 		process.env.CODEX_HOME ?? join(homedir(), ".codex"),
 		"sessions",
 	);
+	const newest = async (dir: string, n?: number) =>
+		(await readdir(dir)).sort().reverse().slice(0, n);
 	try {
 		const days: string[] = [];
-		for (const y of readdirSync(root).sort().reverse().slice(0, 2))
-			for (const m of readdirSync(join(root, y)).sort().reverse().slice(0, 2))
-				for (const d of readdirSync(join(root, y, m))
-					.sort()
-					.reverse())
+		for (const y of await newest(root, 2))
+			for (const m of await newest(join(root, y), 2))
+				for (const d of await newest(join(root, y, m)))
 					days.push(join(root, y, m, d));
 		for (const dir of days.slice(0, 31)) {
-			const file = readdirSync(dir).find((f) =>
+			const file = (await readdir(dir)).find((f) =>
 				f.endsWith(`${threadId}.jsonl`),
 			);
 			if (file) {
 				codexFiles.set(threadId, join(dir, file));
+				codexMisses.delete(threadId);
 				return join(dir, file);
 			}
 		}
 	} catch {}
+	if (codexMisses.size > 1000) codexMisses.clear();
+	codexMisses.set(threadId, Date.now());
 	return null;
 }
 
+/** Whether the thread's latest turn still runs, from the app-server; null when it can't tell. */
+async function codexTurnRuns(threadId: string): Promise<boolean | null> {
+	if (!(await codexControlReady())) return null;
+	const [turns] = (await codexRpc(
+		[["thread/turns/list", { threadId, limit: 1 }]],
+		{ timeoutMs: 3000 },
+	)) as [{ data?: Array<{ status?: string }> }];
+	const status = turns.data?.[0]?.status;
+	return status ? status === "inProgress" : null;
+}
+
+/** The model each rollout named last, kept while the file is unchanged. */
+const modelCache = new Map<
+	string,
+	{ size: number; mtimeMs: number; model: string | null }
+>();
+
 export const codex: HarnessDriver = {
-	id: "codex",
-	label: "Codex",
-
-	matchProcess(args) {
-		const exe = basename(args.split(/\s+/)[0] ?? "").toLowerCase();
-		return exe === "codex" || exe === "codex-exec-server";
-	},
-
-	identify({ pid, cwd, sessionId, env }) {
-		const id =
-			sessionId ??
-			env.CODEX_THREAD_ID ??
-			env.CODEX_SESSION_ID ??
-			(pid ? codexThreadId(pid, cwd) : null);
-		// Under the app-server, this process's folder is not the thread's: use the
-		// rollout's, and claim no folder until the thread is known.
-		const appServer = pid
-			? /\bapp-server\b/.test(processTable().get(pid)?.args ?? "")
-			: false;
-		if (id) return { sessionId: id, cwd: codexThreadCwd(id) ?? cwd };
-		return appServer ? { sessionId: id, cwd: null } : { sessionId: id };
-	},
-
-	// Codex creates its thread (and rollout file) after starting MCP servers.
-	lateSession: {
-		find: (reg, exclude) =>
-			reg.pid ? codexThreadId(reg.pid, reg.cwd, exclude) : null,
-		adopt: adoptCodexThread,
-	},
+	...codexIdent,
 
 	push: {
 		canPush(agent) {
@@ -173,20 +105,90 @@ export const codex: HarnessDriver = {
 		},
 	},
 
-	/** The model in the thread's latest turn context (long rollouts state it near the start). */
-	model(agent) {
-		const file = agent.sessionId ? codexRollout(agent.sessionId) : null;
-		if (!file) return null;
-		return lastModel(tail(file, 512 * 1024)) ?? lastModel(head(file));
+	// The TUI's turns run in the shared app-server daemon (unless started in
+	// embedded mode, which has no control socket to reach).
+	canInterrupt(agent) {
+		return (
+			agent.harness === codex.id && !!agent.sessionId && codexControlAvailable()
+		);
+	},
+	async interrupt(agent) {
+		const via = "codex-app-server";
+		if (!agent.sessionId || !(await codexControlReady()))
+			return { result: "unsupported", via, detail: "no app-server socket" };
+		const threadId = agent.sessionId;
+		try {
+			const [turns] = (await codexRpc([
+				["thread/turns/list", { threadId, limit: 1 }],
+			])) as [{ data?: Array<{ id: string; status?: string }> }];
+			const turn = turns.data?.[0];
+			if (turn?.status !== "inProgress") return { result: "not-running", via };
+			await codexRpc([["turn/interrupt", { threadId, turnId: turn.id }]]);
+			return { result: "interrupted", via };
+		} catch (e) {
+			const msg = (e as Error).message;
+			// The turn ended between the two calls.
+			if (/no active turn|expected active turn/.test(msg))
+				return { result: "not-running", via };
+			// Not loaded in the daemon: an embedded-mode TUI, or not open at all.
+			return { result: "unsupported", via, detail: msg };
+		}
 	},
 
-	sessionLog(agent) {
-		const file = agent.sessionId ? codexRollout(agent.sessionId) : null;
-		return file ? tail(file, 512 * 1024) : "";
+	/** The model in the thread's latest turn context (long rollouts state it near the start). */
+	async model(agent) {
+		const file = agent.sessionId
+			? await codexRolloutAsync(agent.sessionId)
+			: null;
+		const st = file ? await statAsync(file) : null;
+		if (!file || !st) return null;
+		const hit = modelCache.get(file);
+		if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs)
+			return hit.model;
+		const model =
+			lastModel(await tailAsync(file, 512 * 1024)) ??
+			lastModel(await headAsync(file));
+		if (modelCache.size > 1000) modelCache.clear();
+		modelCache.set(file, { size: st.size, mtimeMs: st.mtimeMs, model });
+		return model;
+	},
+
+	transcript: {
+		async locate(agent) {
+			const file = agent.sessionId
+				? await codexRolloutAsync(agent.sessionId)
+				: null;
+			return file ? { kind: "file", path: file } : null;
+		},
+		parse: parseCodex,
+	},
+
+	// Spawned threads; their transcript is the thread's own (`transcript.locate`).
+	subagents: { list: listCodexSubagents },
+
+	serverInteractions: {
+		intervalMs: 2000,
+		pending: (agents) => codexPending(agents, codexRolloutAsync),
+		// Codex answers only in its own TUI (docs/interactive-tools.md).
+		reply: async () => false,
+	},
+
+	names: { intervalMs: 5000, read: (agents) => codexNames(agents) },
+
+	liveStatus: {
+		intervalMs: 3000,
+		read: (agents) => codexStatuses(agents, codexRolloutAsync, codexTurnRuns),
+	},
+
+	async sessionLog(agent) {
+		const file = agent.sessionId
+			? await codexRolloutAsync(agent.sessionId)
+			: null;
+		return file ? tailAsync(file, 512 * 1024) : "";
 	},
 
 	setup: {
-		detect: () => !!which("codex") || existsSync(join(homedir(), ".codex")),
+		detect: () => !!which("codex") || exists(join(homedir(), ".codex")),
 		configured: () => {
 			try {
 				return runCli("codex", ["mcp", "get", "pulsar"]).includes("pulsar");
@@ -211,7 +213,7 @@ export const codex: HarnessDriver = {
 									ctx.cli,
 									"mcp",
 								]);
-								// pulsar's tools only message other agents: approve them, and let ask/wait block past 60s.
+								// pulsar's tools only message other agents: approve them, and let send await_reply / wait block past 60s.
 								const toml = join(homedir(), ".codex", "config.toml");
 								setTomlKey(
 									toml,

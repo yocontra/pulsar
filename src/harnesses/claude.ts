@@ -1,43 +1,61 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { debugLog } from "../log.ts";
-import { pidAlive } from "../processes.ts";
-import { type Action, mcpCommand, skillFor } from "../setup/actions.ts";
+import { pidAlive, processSnapshot } from "../processes.ts";
+import {
+	type Action,
+	addHook,
+	mcpCommand,
+	removeHook,
+	type SetupContext,
+	skillFor,
+	type Undo,
+} from "../setup/actions.ts";
 import {
 	editJson,
+	exists,
 	getPath,
 	readJsonc,
 	runCli,
 	tryCli,
+	which,
 } from "../setup/files.ts";
 import type { AgentStatus } from "../types.ts";
-import { lastModel, tail, which } from "../util.ts";
-import type { DeliveryResult, HarnessDriver, Scanned } from "./types.ts";
+import { lastModel, run, statAsync, tailAsync } from "../util.ts";
+import { claudeLocalAnswer } from "./claude-approvals.ts";
+import {
+	type ClaudeSessionRecord,
+	claudeIdent,
+	claudeNameMeta,
+	claudeSessionsDir,
+	configDir,
+} from "./claude-ident.ts";
+import { classifyClaude, decideClaude } from "./claude-interactions.ts";
+import {
+	claudeSessionDir,
+	claudeSubagentStamp,
+	claudeSubagentTranscript,
+	listClaudeSubagents,
+	TEAMMATE_QUIET_MS,
+} from "./claude-subagents.ts";
+import { parseClaude } from "./claude-transcript.ts";
+import type {
+	DeliveryResult,
+	HarnessDriver,
+	InterruptOutcome,
+	Scanned,
+} from "./types.ts";
 
-interface ClaudeSessionRecord {
-	pid: number;
-	sessionId?: string;
-	cwd?: string;
-	name?: string;
-	status?: string;
-	messagingSocketPath?: string;
-	kind?: string;
-}
-
-function configDir(): string {
-	return process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
-}
-
-function claudeSessionsDir(): string {
-	return join(configDir(), "sessions");
-}
-
-function readClaudeSession(pid: number): ClaudeSessionRecord | null {
+/** A session record, read without blocking (the daemon's scan, push and interrupt). */
+async function readClaudeSessionAsync(
+	pid: number,
+): Promise<ClaudeSessionRecord | null> {
+	let rec: ClaudeSessionRecord | null = null;
 	try {
-		return JSON.parse(
-			readFileSync(join(claudeSessionsDir(), `${pid}.json`), "utf8"),
+		rec = JSON.parse(
+			await readFile(join(claudeSessionsDir(), `${pid}.json`), "utf8"),
 		) as ClaudeSessionRecord;
 	} catch (e) {
 		// ENOENT is a session that ended; anything else is a file we cannot read.
@@ -45,80 +63,252 @@ function readClaudeSession(pid: number): ClaudeSessionRecord | null {
 			debugLog(
 				`claude session ${pid}.json unreadable: ${(e as Error).message}`,
 			);
-		return null;
 	}
+	rememberRecord(pid, rec);
+	return rec;
+}
+
+/**
+ * Session records for `canInterrupt`, which runs for every row shown: the
+ * scan keeps them current (it reads every live session's record). A record
+ * not seen yet, or stale, is read in the background; the row shows the
+ * interrupt once it arrives.
+ */
+const recordCache = new Map<
+	number,
+	{ at: number; rec: ClaudeSessionRecord | null }
+>();
+function rememberRecord(pid: number, rec: ClaudeSessionRecord | null) {
+	if (recordCache.size > 1000) recordCache.clear();
+	recordCache.set(pid, { at: Date.now(), rec });
+}
+function cachedClaudeSession(pid: number): ClaudeSessionRecord | null {
+	const hit = recordCache.get(pid);
+	if (!hit || Date.now() - hit.at > 5000) {
+		// Marked fresh now, so a burst of rows starts one read, not many.
+		rememberRecord(pid, hit?.rec ?? null);
+		void readClaudeSessionAsync(pid);
+	}
+	return hit?.rec ?? null;
+}
+
+/** The tmux pane id (`%9`) in a session record's `tmux` field. */
+function tmuxPane(rec: ClaudeSessionRecord | null): string | null {
+	const m = /(%\d+)$/.exec(rec?.tmux ?? "");
+	return m ? m[1]! : null;
+}
+
+/**
+ * Claude Code has no outside interrupt: its socket only takes messages and a
+ * SIGINT ends the process. Inside tmux, the Esc key stops the turn the way a
+ * person would. Only when the record says `busy`, and only into the pane whose
+ * process is this session (or its shell).
+ */
+async function interruptClaude(pid: number): Promise<InterruptOutcome> {
+	const via = "tmux-escape";
+	const rec = await readClaudeSessionAsync(pid);
+	const pane = tmuxPane(rec);
+	if (!rec || !pane)
+		return { result: "unsupported", via, detail: "the session is not in tmux" };
+	if (rec.status !== "busy") return { result: "not-running", via };
+	let panePid: number;
+	try {
+		panePid = Number(
+			(
+				await run(
+					"tmux",
+					["display-message", "-p", "-t", pane, "#{pane_pid}"],
+					3000,
+				)
+			).trim(),
+		);
+	} catch (e) {
+		return { result: "unsupported", via, detail: (e as Error).message };
+	}
+	// tmux prints nothing (and exits 0) for a pane that doesn't exist.
+	if (!Number.isInteger(panePid) || panePid <= 0)
+		return { result: "unsupported", via, detail: `no tmux pane ${pane}` };
+	const table = await processSnapshot(0, "user");
+	let p: number | undefined = pid;
+	let owns = false;
+	for (let hops = 0; p && hops < 4; hops++) {
+		if (p === panePid) {
+			owns = true;
+			break;
+		}
+		p = table.get(p)?.ppid;
+	}
+	if (!owns)
+		return {
+			result: "unsupported",
+			via,
+			detail: `tmux pane ${pane} is not this session`,
+		};
+	// Read the status again right before the key: Esc on an idle prompt or a
+	// dialog would do something else.
+	if ((await readClaudeSessionAsync(pid))?.status !== "busy")
+		return { result: "not-running", via };
+	try {
+		await run("tmux", ["send-keys", "-t", pane, "Escape"], 3000);
+	} catch (e) {
+		return { result: "unsupported", via, detail: (e as Error).message };
+	}
+	return { result: "interrupted", via };
+}
+
+/**
+ * A Claude Code session id as Claude writes it (a UUID): letters, digits
+ * and dashes only. A registering client chooses the id, so anything else
+ * (`../`, a slash) never reaches a file path.
+ */
+export function isClaudeSessionId(id: string): boolean {
+	return /^[A-Za-z0-9-]{1,128}$/.test(id);
 }
 
 /** Claude Code transcript: ~/.claude/projects/<cwd with non-alphanumerics as ->/<session>.jsonl. */
-function claudeTranscript(
+function claudeTranscriptPath(
 	cwd: string | null,
 	sessionId: string,
 ): string | null {
-	if (!cwd) return null;
-	const file = join(
+	if (!cwd || !isClaudeSessionId(sessionId)) return null;
+	return join(
 		configDir(),
 		"projects",
 		cwd.replace(/[^a-zA-Z0-9]/g, "-"),
 		`${sessionId}.jsonl`,
 	);
-	return existsSync(file) ? file : null;
 }
+
+/** The transcript file when it exists. */
+async function claudeTranscript(
+	cwd: string | null,
+	sessionId: string,
+): Promise<string | null> {
+	const file = claudeTranscriptPath(cwd, sessionId);
+	return file && (await statAsync(file)) ? file : null;
+}
+
+/** The model each transcript named last, by file, kept while the file is unchanged. */
+const modelCache = new Map<
+	string,
+	{ size: number; mtimeMs: number; model: string | null }
+>();
 
 /** Claude Code: the model on the latest assistant entry of the session transcript. */
-function claudeModel(cwd: string | null, sessionId: string): string | null {
-	const file = claudeTranscript(cwd, sessionId);
-	return file ? lastModel(tail(file)) : null;
+async function claudeModel(
+	cwd: string | null,
+	sessionId: string,
+): Promise<string | null> {
+	const file = claudeTranscriptPath(cwd, sessionId);
+	const st = file ? await statAsync(file) : null;
+	if (!file || !st) return null;
+	const hit = modelCache.get(file);
+	if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs)
+		return hit.model;
+	const model = lastModel(await tailAsync(file));
+	if (modelCache.size > 1000) modelCache.clear();
+	modelCache.set(file, { size: st.size, mtimeMs: st.mtimeMs, model });
+	return model;
 }
 
-function claudeStatus(status: string | undefined): AgentStatus {
+/**
+ * Claude Code's own session status (`~/.claude/sessions/<pid>.json`, read
+ * from Claude Code 2.1.328): `busy` while a turn runs or delegated work
+ * (background agents, teammates) does, `waiting` while a dialog waits on
+ * the user, else `idle`. `waitingFor` names the dialog: a permission
+ * prompt or a question stops a turn in the middle (busy: `wait idle:` must
+ * not fire; pulsar's approvals hook shows the prompt as needs-you), while
+ * `dialog open` (/config, a slash command's menu) is a session at its
+ * prompt: idle, unless delegated work still runs (`delegated`: a subagent
+ * log written within `DELEGATED_QUIET_MS`), which `waiting` hides.
+ */
+function claudeStatus(
+	status: string | undefined,
+	waitingFor?: string,
+	delegated = false,
+): AgentStatus {
 	if (!status) return "unknown";
+	if (status === "waiting")
+		return waitingFor === "dialog open" && !delegated ? "idle" : "busy";
 	return status === "idle" ? "idle" : "busy";
 }
 
-/** Every live Claude Code session with an inbox socket. */
-function scanClaude(): Scanned[] {
+/** A subagent or teammate log written this recently counts as running. */
+const DELEGATED_QUIET_MS = TEAMMATE_QUIET_MS;
+
+/** True when one of the session's subagent logs was written in the last minute. */
+async function delegatedActive(
+	cwd: string | null,
+	sessionId: string,
+): Promise<boolean> {
+	const dir = claudeSessionDir(cwd, sessionId);
+	if (!dir) return false;
+	const folder = join(dir, "subagents");
+	let files: string[];
+	try {
+		files = (await readdir(folder)).filter((f) => f.endsWith(".jsonl"));
+	} catch {
+		return false;
+	}
+	const since = Date.now() - DELEGATED_QUIET_MS;
+	const stats = await Promise.all(files.map((f) => statAsync(join(folder, f))));
+	return stats.some((st) => !!st && st.mtimeMs >= since);
+}
+
+/** Every live Claude Code session with an inbox socket (no blocking reads: it runs in the daemon). */
+async function scanClaude(): Promise<Scanned[]> {
 	let files: string[] = [];
 	try {
-		files = readdirSync(claudeSessionsDir()).filter((f) =>
+		files = (await readdir(claudeSessionsDir())).filter((f) =>
 			/^\d+\.json$/.test(f),
 		);
 	} catch {
 		return [];
 	}
-	const out: Scanned[] = [];
-	for (const file of files) {
-		try {
-			const rec = readClaudeSession(Number(file.slice(0, -5)));
-			if (!rec?.pid || !rec.sessionId || !pidAlive(rec.pid)) continue;
-			out.push({
-				harness: claude.id,
-				sessionId: rec.sessionId,
-				pid: rec.pid,
-				cwd: rec.cwd ?? null,
-				status: claudeStatus(rec.status),
-				model: claudeModel(rec.cwd ?? null, rec.sessionId),
-				meta: {
-					...(rec.messagingSocketPath
-						? { socket: rec.messagingSocketPath }
-						: {}),
-					...(rec.name ? { claudeName: rec.name } : {}),
-				},
-			});
-		} catch (e) {
-			debugLog(`claude scan skipped ${file}: ${(e as Error).message}`);
-		}
-	}
-	return out;
+	const found = await Promise.all(
+		files.map(async (file): Promise<Scanned | null> => {
+			try {
+				const rec = await readClaudeSessionAsync(Number(file.slice(0, -5)));
+				if (!rec?.pid || !rec.sessionId || !pidAlive(rec.pid)) return null;
+				return {
+					harness: claude.id,
+					sessionId: rec.sessionId,
+					pid: rec.pid,
+					cwd: rec.cwd ?? null,
+					status: claudeStatus(
+						rec.status,
+						rec.waitingFor,
+						rec.status === "waiting" &&
+							rec.waitingFor === "dialog open" &&
+							(await delegatedActive(rec.cwd ?? null, rec.sessionId)),
+					),
+					model: await claudeModel(rec.cwd ?? null, rec.sessionId),
+					waitingFor:
+						rec.status === "waiting" ? rec.waitingFor || "a dialog" : null,
+					meta: {
+						...(rec.messagingSocketPath
+							? { socket: rec.messagingSocketPath }
+							: {}),
+						...claudeNameMeta(rec),
+					},
+				};
+			} catch (e) {
+				debugLog(`claude scan skipped ${file}: ${(e as Error).message}`);
+				return null;
+			}
+		}),
+	);
+	return found.filter((s): s is Scanned => s !== null);
 }
 
 /** Reads the inbox token a Claude session publishes for peers. */
-function claudePeerToken(pid: number): string | null {
+async function claudePeerToken(pid: number): Promise<string | null> {
 	try {
 		const dir = claudeSessionsDir();
-		const file = readdirSync(dir).find(
+		const file = (await readdir(dir)).find(
 			(f) => f.startsWith(`${pid}.`) && f.endsWith(".key"),
 		);
-		return file ? readFileSync(join(dir, file), "utf8").trim() : null;
+		return file ? (await readFile(join(dir, file), "utf8")).trim() : null;
 	} catch {
 		return null;
 	}
@@ -131,7 +321,7 @@ function claudePeerToken(pid: number): string | null {
  * through it with Claude's own `crossSessionInbound` setting instead.
  */
 export function claudeEnvelope(fromName: string, body: string): string {
-	const name = `${fromName} via pulsar`.replace(/["<>\n\r]/g, "").slice(0, 120);
+	const name = `${fromName} via Pulsar`.replace(/["<>\n\r]/g, "").slice(0, 120);
 	const safe = body.replace(
 		/<\/?cross-session-message/gi,
 		"<cross_session_message",
@@ -140,48 +330,138 @@ export function claudeEnvelope(fromName: string, body: string): string {
 }
 
 const claudeJson = () => join(homedir(), ".claude.json");
+const claudeSettings = () => join(homedir(), ".claude", "settings.json");
+
+/** What marks pulsar's PermissionRequest hook in Claude's settings. */
+const APPROVAL_HOOK_MARKER = " hook claude-permission";
+/**
+ * Claude's own hook timeout. The command passes it on (`--timeout`), so the
+ * daemon keeps a prompt answerable in the app until a minute before Claude
+ * gives up on the hook (approvalDeadlineMs).
+ */
+export const APPROVAL_HOOK_TIMEOUT_S = 3600;
+
+const shellQuote = (s: string) =>
+	/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
+
+/** The PermissionRequest hook group setup writes. */
+function approvalHookGroup(ctx: Pick<SetupContext, "node" | "cli">) {
+	return {
+		matcher: "*",
+		hooks: [
+			{
+				type: "command",
+				command: `${shellQuote(ctx.node)} ${shellQuote(ctx.cli)}${APPROVAL_HOOK_MARKER} --timeout ${APPROVAL_HOOK_TIMEOUT_S}`,
+				timeout: APPROVAL_HOOK_TIMEOUT_S,
+			},
+		],
+	};
+}
+
+/** The undo record for the approvals hook (`pulsar setup --uninstall`). */
+export const approvalHookUndo = (): Undo => ({
+	type: "hook",
+	file: claudeSettings(),
+	event: "PermissionRequest",
+	marker: APPROVAL_HOOK_MARKER,
+});
+
+/** Adds (or refreshes) pulsar's PermissionRequest hook; returns its undo record. */
+export function installApprovalHook(
+	ctx: Pick<SetupContext, "node" | "cli">,
+): Undo {
+	addHook(
+		claudeSettings(),
+		"PermissionRequest",
+		APPROVAL_HOOK_MARKER,
+		approvalHookGroup(ctx),
+	);
+	return approvalHookUndo();
+}
+
+/** Removes pulsar's PermissionRequest hook; true when there was one. */
+export function removeApprovalHook(): boolean {
+	if (!installedApprovalHook()) return false;
+	removeHook(claudeSettings(), "PermissionRequest", APPROVAL_HOOK_MARKER);
+	return true;
+}
+
+/** The installed hook's timeout in seconds (Claude's default 60 when unset), or null. */
+export function installedApprovalHookTimeout(): number | null {
+	const list = getPath(readJsonc(claudeSettings()), [
+		"hooks",
+		"PermissionRequest",
+	]);
+	if (!Array.isArray(list)) return null;
+	for (const g of list as {
+		hooks?: { command?: unknown; timeout?: unknown }[];
+	}[])
+		for (const h of g?.hooks ?? [])
+			if (
+				typeof h?.command === "string" &&
+				h.command.includes(APPROVAL_HOOK_MARKER)
+			)
+				return typeof h.timeout === "number" ? h.timeout : 60;
+	return null;
+}
+
+/** pulsar's PermissionRequest hook command in ~/.claude/settings.json, if installed. */
+export function installedApprovalHook(): string | null {
+	const list = getPath(readJsonc(claudeSettings()), [
+		"hooks",
+		"PermissionRequest",
+	]);
+	if (!Array.isArray(list)) return null;
+	for (const g of list as { hooks?: { command?: unknown }[] }[])
+		for (const h of g?.hooks ?? [])
+			if (
+				typeof h?.command === "string" &&
+				h.command.includes(APPROVAL_HOOK_MARKER)
+			)
+				return h.command;
+	return null;
+}
 
 export const claude: HarnessDriver = {
-	id: "claude",
-	label: "Claude Code",
-
-	matchProcess(args) {
-		const argv0 = args.split(/\s+/)[0] ?? "";
-		const exe = basename(argv0).toLowerCase();
-		return exe === "claude" || /\/claude\/versions\//.test(argv0);
-	},
-
-	identify({ pid, sessionId, env }) {
-		if (!pid) return {};
-		const rec = readClaudeSession(pid);
-		const meta: Record<string, string> = {};
-		if (rec?.messagingSocketPath) meta.socket = rec.messagingSocketPath;
-		if (rec?.name) meta.claudeName = rec.name;
-		return {
-			sessionId:
-				sessionId ?? rec?.sessionId ?? env.CLAUDE_CODE_SESSION_ID ?? null,
-			...(rec?.cwd ? { cwd: rec.cwd } : {}),
-			meta,
-		};
-	},
+	...claudeIdent,
 
 	scan: { intervalMs: 4000, sessions: scanClaude, tracksPid: true },
+
+	canInterrupt(agent) {
+		return (
+			agent.harness === claude.id &&
+			agent.pid !== null &&
+			tmuxPane(cachedClaudeSession(agent.pid)) !== null
+		);
+	},
+	interrupt(agent) {
+		if (agent.pid === null)
+			return Promise.resolve({
+				result: "unsupported",
+				via: "tmux-escape",
+				detail: "no process",
+			});
+		return interruptClaude(agent.pid);
+	},
 
 	push: {
 		canPush(agent) {
 			return agent.harness === claude.id && agent.pid !== null;
 		},
-		deliver(agent, text, priority, fromName) {
+		async deliver(agent, text, priority, fromName) {
 			const pid = agent.pid!;
 			const socketFile =
-				agent.meta.socket ?? readClaudeSession(pid)?.messagingSocketPath;
+				// Claude's own session file first: a registration's meta is only a
+				// fallback (another client could have claimed the session).
+				(await readClaudeSessionAsync(pid))?.messagingSocketPath ??
+				agent.meta.socket;
 			if (!socketFile)
-				return Promise.resolve({
+				return {
 					ok: false,
 					via: "claude-socket",
 					detail: "session has no inbox socket",
-				});
-			const token = claudePeerToken(pid);
+				};
+			const token = await claudePeerToken(pid);
 			// `next` lands between tool calls; `later` waits for the turn to end and wakes an idle session.
 			const claudePriority = priority === "urgent" ? "next" : "later";
 			const lines = [
@@ -192,7 +472,7 @@ export const claude: HarnessDriver = {
 					priority: claudePriority,
 				}),
 			];
-			return new Promise((resolve) => {
+			return new Promise<DeliveryResult>((resolve) => {
 				const socket = connect(socketFile);
 				let settled = false;
 				const done = (r: DeliveryResult) => {
@@ -220,14 +500,39 @@ export const claude: HarnessDriver = {
 		},
 	},
 
-	sessionLog(agent) {
+	// The main log marks subagent records as sidechains (folded under the
+	// Task call); each subagent's own log is `subagents.transcript`.
+	transcript: {
+		async locate(agent) {
+			const file = agent.sessionId
+				? await claudeTranscript(agent.cwd, agent.sessionId)
+				: null;
+			return file ? { kind: "file", path: file } : null;
+		},
+		parse: parseClaude,
+	},
+
+	subagents: {
+		stamp: claudeSubagentStamp,
+		list: (agent) => listClaudeSubagents(agent),
+		transcript: claudeSubagentTranscript,
+	},
+
+	approvals: {
+		watch: (agent, prompt) =>
+			claudeLocalAnswer(claudeSessionsDir(), agent, prompt),
+	},
+
+	interactions: { classify: classifyClaude, decide: decideClaude },
+
+	async sessionLog(agent) {
 		if (!agent.sessionId) return "";
-		const file = claudeTranscript(agent.cwd, agent.sessionId);
-		return file ? tail(file, 512 * 1024) : "";
+		const file = claudeTranscriptPath(agent.cwd, agent.sessionId);
+		return file ? tailAsync(file, 512 * 1024) : "";
 	},
 
 	setup: {
-		detect: () => !!which("claude") || existsSync(join(homedir(), ".claude")),
+		detect: () => !!which("claude") || exists(join(homedir(), ".claude")),
 		configured: () =>
 			!!getPath(readJsonc(claudeJson()), ["mcpServers", "pulsar"]),
 		plan: (ctx) => [

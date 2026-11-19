@@ -1,39 +1,39 @@
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { jsonAction, mcpCommand } from "../setup/actions.ts";
-import { getPath, readJsonc, runCli } from "../setup/files.ts";
-import { which } from "../util.ts";
-import { piSessionLog } from "./pi-sessions.ts";
+import { exists, getPath, readJsonc, runCli, which } from "../setup/files.ts";
+import {
+	listOmpSubagents,
+	ompSubagentStamp,
+	ompSubagentTranscript,
+} from "./more-subagents.ts";
+import { piSessionFile, piSessionLog } from "./pi-sessions.ts";
+import { parsePi } from "./pi-transcript.ts";
+import { ompIdent } from "./simple-ident.ts";
 import type { HarnessDriver } from "./types.ts";
 
-/** omp command lines (pi's matcher defers to this one: omp ships pi's packages). */
-export function isOmpProcess(args: string): boolean {
-	return /(^|\/)omp(\s|$)/.test(args) || args.includes("@oh-my-pi/");
-}
-
-/** The pulsar extension runs inside omp (its argv), not pi. */
-export function isOmpHost(argv: string): boolean {
-	return /oh-my-pi|(^|\/)omp(\s|$)/.test(argv);
-}
-
 export const omp: HarnessDriver = {
-	id: "omp",
-	label: "omp",
+	...ompIdent,
 
-	matchProcess: isOmpProcess,
+	// omp pads line 1 (the session title) and rewrites it in place: never read it.
+	transcript: {
+		async locate(agent) {
+			const file = await piSessionFile(".omp", agent.cwd, agent.sessionId);
+			return file ? { kind: "file", path: file, headerLine: true } : null;
+		},
+		parse: parsePi,
+	},
 
-	// Push goes through the pulsar extension; omp reports idle with `agent_end`.
-	extension: {
-		isHost: isOmpHost,
-		idleEvents: ["agent_settled", "agent_end"],
+	subagents: {
+		stamp: ompSubagentStamp,
+		list: listOmpSubagents,
+		transcript: ompSubagentTranscript,
 	},
 
 	sessionLog: (agent) => piSessionLog(".omp", agent.cwd),
 
 	setup: {
-		detect: () =>
-			!!which("omp") || existsSync(join(homedir(), ".omp", "agent")),
+		detect: () => !!which("omp") || exists(join(homedir(), ".omp", "agent")),
 		configured: () =>
 			!!getPath(readJsonc(join(homedir(), ".omp", "agent", "mcp.json")), [
 				"mcpServers",
