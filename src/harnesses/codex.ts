@@ -21,9 +21,14 @@ import { listCodexSubagents } from "./more-subagents.ts";
 import type { HarnessDriver, ServerPrompt } from "./types.ts";
 
 const codexFiles = new Map<string, string>();
-/** Threads with no rollout found, and when: the folders are walked again only after `MISS_RETRY_MS`. */
+/** Threads with no rollout found, and when: the folders are walked again only after `codexMissRetry.ms`. */
 const codexMisses = new Map<string, number>();
-const MISS_RETRY_MS = 10_000;
+/**
+ * Shorter than the app's wait before it says a transcript is missing
+ * (web/src/session/TranscriptMissing.tsx): a new thread's rollout shows
+ * before that. Tests shorten it.
+ */
+export const codexMissRetry = { ms: 2000 };
 
 /** Codex rollout: `rollout-…-<thread>.jsonl` in the last month of ~/.codex/sessions. */
 async function codexRolloutAsync(threadId: string): Promise<string | null> {
@@ -37,7 +42,8 @@ async function codexRolloutAsync(threadId: string): Promise<string | null> {
 	)
 		return cached;
 	const missed = codexMisses.get(threadId);
-	if (missed !== undefined && Date.now() - missed < MISS_RETRY_MS) return null;
+	if (missed !== undefined && Date.now() - missed < codexMissRetry.ms)
+		return null;
 	const root = join(
 		process.env.CODEX_HOME ?? join(homedir(), ".codex"),
 		"sessions",

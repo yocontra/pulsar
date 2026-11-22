@@ -225,6 +225,7 @@ function SessionViewImpl({
 				)}
 				{agent && missing && !loading && events.length === 0 && (
 					<TranscriptMissingNotice
+						key={id}
 						missing={missing}
 						harness={agent.harness}
 						subject="agent"

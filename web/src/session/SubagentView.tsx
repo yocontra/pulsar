@@ -39,13 +39,17 @@ export function SubagentView({
 	const parent = useAgent(parentId).data;
 	const parentName =
 		parent?.name ?? (parentId ? findAgent(parentId)?.name : null) ?? "agent";
-	const t = useTranscript(sub ? id : null);
+	// A finished subagent the daemon found no log for keeps none (a Codex
+	// subagent with no rollout): final. A running one may still write it.
+	const settled = sub?.hasTranscript === false && sub.state !== "running";
+	const t = useTranscript(sub ? id : null, settled);
+	const missing = t.missing && settled ? ("unsupported" as const) : t.missing;
 	const [shown, setShown] = useState(WINDOW);
 	const windowed = useMemo(
 		() => t.events.slice(Math.max(0, t.events.length - shown)),
 		[t.events, shown],
 	);
-	const missing =
+	const gone =
 		q.error instanceof ApiError && q.error.code === "not_found" && !sub;
 	const variant = mobile ? "phone" : "desktop";
 
@@ -74,15 +78,16 @@ export function SubagentView({
 						Load earlier messages
 					</button>
 				)}
-				{missing && (
+				{gone && (
 					<div className="ds-banner banner" role="status">
 						This subagent is gone (its parent ended or its log was removed).
 					</div>
 				)}
 				{sub && t.isPending && <TranscriptSkeleton variant={variant} />}
-				{sub && !t.isPending && t.missing && t.events.length === 0 && (
+				{sub && !t.isPending && missing && t.events.length === 0 && (
 					<TranscriptMissingNotice
-						missing={t.missing}
+						key={id}
+						missing={missing}
 						harness={sub.harness}
 						subject="subagent"
 						variant={variant}
