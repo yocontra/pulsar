@@ -23,9 +23,10 @@ import "../styles/desktop.css";
 		<meta name="theme-color" content="#151517" media="(min-width: 1024px) and (prefers-color-scheme: dark)" />
 		<meta name="referrer" content="no-referrer" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<!-- No apple-mobile-web-app-status-bar-style, on purpose. Checked in the
-		     iOS 27 Simulator: with no key, the Home Screen app's status bar takes
-		     the colour of the page's top edge (our header) and the clock turns
+		<!-- No apple-mobile-web-app-status-bar-style, on purpose. Checked with a
+		     test page in the iOS 27 Simulator: with no key, the Home Screen app's
+		     status bar takes the colour of the page's top edge (a sticky header
+		     there; our top bar here) and the clock turns
 		     black or white with the theme, live, so the header runs up behind the
 		     clock with no seam in light or dark. "default" gives a separate system
 		     bar; black-translucent is deprecated (WebKit bug 317153), forces a white
