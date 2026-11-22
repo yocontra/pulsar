@@ -488,11 +488,9 @@ export const api = {
 		request<ChangesSummary>(
 			`/agents/${enc(agentId)}/changes${query({ mode })}`,
 		),
-	/** The pool's token usage, priced on this node; `refresh` reads new session lines first. */
-	usage: (p: { period: UsagePeriod; tz: number; refresh?: boolean }) =>
-		request<UsageReport>(
-			`/usage${query({ period: p.period, tz: p.tz, refresh: p.refresh ? 1 : null })}`,
-		),
+	/** The pool's token usage, priced on this node. */
+	usage: (p: { period: UsagePeriod; tz: number }) =>
+		request<UsageReport>(`/usage${query({ period: p.period, tz: p.tz })}`),
 	/** One agent's tokens, cost and context. */
 	agentUsage: (agentId: string) =>
 		request<AgentUsage>(`/agents/${enc(agentId)}/usage`),

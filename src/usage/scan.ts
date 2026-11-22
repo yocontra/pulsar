@@ -103,6 +103,13 @@ export class UsageScanner {
 	private running: Promise<void> | null = null;
 	/** When the last full scan finished (ms), null before the first. */
 	scannedAt: number | null = null;
+	/**
+	 * Called once at the end of a scan that stored new lines (token rows, an
+	 * agent's context, limit readings); not for a scan that found nothing new.
+	 */
+	onStored: (() => void) | null = null;
+	/** Files committed by the running scan. */
+	private stored = 0;
 
 	private readonly chunk: number;
 	private readonly commitBytes: number;
@@ -128,11 +135,17 @@ export class UsageScanner {
 	scan(now = Date.now()): Promise<void> {
 		this.running ??= this.scanOnce(now).finally(() => {
 			this.running = null;
+			// Also after a failed scan: what it committed before failing is stored.
+			if (this.stored > 0) {
+				this.stored = 0;
+				this.onStored?.();
+			}
 		});
 		return this.running;
 	}
 
 	private async scanOnce(now: number) {
+		this.stored = 0;
 		const since = now - WINDOW_MS;
 		const roots = this.roots();
 		const found: Found[] = [];
@@ -439,6 +452,7 @@ ON CONFLICT (path) DO UPDATE SET
 			db.exec("ROLLBACK");
 			throw e;
 		}
+		this.stored++;
 		this.onCommit?.();
 	}
 

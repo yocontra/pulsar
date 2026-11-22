@@ -62,6 +62,8 @@ const defaultLimits = (
 	},
 ];
 let limits = defaultLimits();
+/** Every token count times this (`scale`: new session lines arrived). */
+let scale = 1;
 let limitSettings: LimitSettings = { enabled: true, thresholds: [80, 95] };
 
 /**
@@ -72,15 +74,18 @@ export function mockUsage(o: {
 	empty?: boolean;
 	reset?: boolean;
 	limits?: (LimitState & { machine: string })[];
+	scale?: number;
 }) {
 	if (o.reset) {
 		custom = {};
 		empty = false;
+		scale = 1;
 		limits = defaultLimits();
 		limitSettings = { enabled: true, thresholds: [80, 95] };
 	}
 	if (typeof o.empty === "boolean") empty = o.empty;
 	if (Array.isArray(o.limits)) limits = o.limits;
+	if (typeof o.scale === "number" && o.scale > 0) scale = o.scale;
 	return { ok: true };
 }
 
@@ -163,7 +168,7 @@ export function usageReport(
 	if (!empty)
 		for (const [i, s] of SOURCES.entries())
 			for (let t = from; t <= now; t += step) {
-				const k = amount(i, t, bucket === "hour") * s.scale;
+				const k = amount(i, t, bucket === "hour") * s.scale * scale;
 				if (k <= 0.01) continue;
 				const tokens = {
 					input: Math.round(k * 40_000),
@@ -213,12 +218,12 @@ export function agentUsage(a: {
 }): AgentUsage {
 	const n = [...a.id].reduce((x, c) => x + c.charCodeAt(0), 0);
 	const tokens = {
-		input: 2_000 + (n % 50) * 100,
-		cacheRead: 400_000 + (n % 90) * 20_000,
-		cacheWrite5m: 30_000,
+		input: Math.round((2_000 + (n % 50) * 100) * scale),
+		cacheRead: Math.round((400_000 + (n % 90) * 20_000) * scale),
+		cacheWrite5m: Math.round(30_000 * scale),
 		cacheWrite1h: 0,
-		output: 8_000 + (n % 30) * 500,
-		records: 20 + (n % 40),
+		output: Math.round((8_000 + (n % 30) * 500) * scale),
+		records: Math.round((20 + (n % 40)) * scale),
 	};
 	const model = a.model ?? "claude-opus-5-5";
 	const p = priceFor(model, priceTable(custom));

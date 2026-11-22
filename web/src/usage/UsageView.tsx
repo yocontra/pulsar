@@ -4,9 +4,8 @@
  * with its per-harness rows, the chart, totals, cost by type and the
  * Model/Day breakdown. Numbers come from one `GET /usage` report.
  */
-import { InfoIcon, RefreshCwIcon } from "lucide-react";
+import { InfoIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { ApiError } from "../api/client.ts";
 import type {
 	UsagePeriod,
 	UsageReport,
@@ -112,7 +111,6 @@ export function UsageView({ variant }: { variant: "desktop" | "phone" }) {
 	});
 	const [model, setModel] = useState<string | null>(null);
 	const [prices, setPrices] = useState(false);
-	const [refreshError, setRefreshError] = useState<string | null>(null);
 	const q = useUsage(prefs.period);
 	const update = (p: Partial<Prefs>) =>
 		setPrefs((old) => {
@@ -141,17 +139,6 @@ export function UsageView({ variant }: { variant: "desktop" | "phone" }) {
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, [variant, model, prices]);
-
-	const refresh = async () => {
-		setRefreshError(null);
-		try {
-			await q.refresh();
-		} catch (e) {
-			setRefreshError(
-				e instanceof ApiError ? e.message : "Couldn't refresh usage.",
-			);
-		}
-	};
 
 	const report = q.data;
 	const mod = /Mac|iP/.test(navigator.platform) ? "⌘" : "Ctrl+";
@@ -235,27 +222,8 @@ export function UsageView({ variant }: { variant: "desktop" | "phone" }) {
 						}))}
 						onChange={(metric) => update({ metric })}
 					/>
-					<button
-						type="button"
-						className="usage-icon-btn"
-						aria-label="Refresh usage"
-						title="Refresh usage"
-						aria-busy={q.refreshing}
-						disabled={q.refreshing}
-						onClick={() => void refresh()}
-					>
-						<RefreshCwIcon
-							className={q.refreshing ? "usage-spin" : ""}
-							aria-hidden="true"
-						/>
-					</button>
 				</div>
 			</header>
-			{refreshError && (
-				<p className="usage-error" role="alert">
-					{refreshError}
-				</p>
-			)}
 			{!report && q.isError && (
 				<p className="usage-error" role="alert">
 					Couldn't load usage.{" "}
@@ -277,7 +245,7 @@ export function UsageView({ variant }: { variant: "desktop" | "phone" }) {
 					breakdown={prefs.breakdown}
 					onBreakdown={(breakdown) => update({ breakdown })}
 					onModel={setModel}
-					dim={q.refreshing || q.isPlaceholderData}
+					dim={q.isPlaceholderData}
 				/>
 			)}
 			{report && model && (

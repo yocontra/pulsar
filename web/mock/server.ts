@@ -1618,6 +1618,7 @@ const SUB_KEYS = new Set([
 	"changes",
 	"subagents",
 	"queue",
+	"git",
 ]);
 
 function parseSubscription(raw: unknown): Subscription {
@@ -1648,6 +1649,7 @@ function parseSubscription(raw: unknown): Subscription {
 		changes: (o.changes ?? null) as Subscription["changes"],
 		subagents: strings("subagents"),
 		queue: strings("queue"),
+		git: strings("git"),
 	};
 }
 
@@ -1700,6 +1702,27 @@ type RealtimeChange =
 	  }
 	/** The agent edits a file in its worktree (the diff viewer goes live). */
 	| { action: "changes"; id: string; path: string; line: string }
+	/**
+	 * New session lines on this machine: token counts times `scale`, and a
+	 * `usage` notice to every stream (as the daemon's scanner sends it).
+	 */
+	| { action: "usage"; scale?: number }
+	/**
+	 * The agent's git state moved (`set`, as `POST /__mock/git` takes it): a
+	 * `git` notice to the streams watching its git status (`all`: to every
+	 * stream, as a branch or PR change goes).
+	 */
+	| {
+			action: "git";
+			id: string;
+			set?: Parameters<typeof gitControl>[1]["set"];
+			all?: boolean;
+	  }
+	/**
+	 * A machine joined, left or changed version: a `machines` notice to every
+	 * stream; `problem` is what this machine's next doctor run finds.
+	 */
+	| { action: "machines"; problem?: string | null }
 	| {
 			action: "receipt";
 			state: ReceiptState;
@@ -1855,8 +1878,31 @@ function realtime(raw: unknown) {
 				const w = s.sub.changes;
 				if (s.push && w?.agent === a.id)
 					write(s, "changes", changesSummary(a, w.mode));
+				// The worktree moved: its git status watchers hear it too.
+				if (s.push && s.sub.git?.includes(a.id))
+					write(s, "git", { agentId: a.id });
 			}
 			out = { ok: true };
+			break;
+		}
+		case "usage": {
+			if (c.scale !== undefined) mockUsage({ scale: c.scale });
+			for (const s of streams.values())
+				if (s.push) write(s, "usage", { at: now });
+			break;
+		}
+		case "git": {
+			const a = agentOr404(c.id);
+			if (c.set) gitControl(a, { set: c.set });
+			for (const s of streams.values())
+				if (s.push && (c.all || s.sub.git?.includes(a.id)))
+					write(s, "git", { agentId: a.id });
+			break;
+		}
+		case "machines": {
+			if (c.problem !== undefined) mockDiagnostics({ problem: c.problem });
+			for (const s of streams.values())
+				if (s.push) write(s, "machines", { at: now });
 			break;
 		}
 		case "receipt": {

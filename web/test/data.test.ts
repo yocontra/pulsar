@@ -524,6 +524,92 @@ describe("the subscription follows mounted queries", () => {
 	});
 });
 
+describe("notices that keep reads live", () => {
+	test("usage and limit re-read the usage reports; usage also agents' usage", () => {
+		const { client, live } = rig();
+		for (const k of [
+			["usage", "7d"],
+			["usage", "24h"],
+			["agentUsage", "a"],
+			["git", "status", "a"],
+		])
+			client.setQueryData(k, { v: 1 });
+		const stale = (k: unknown[]) => client.getQueryState(k)!.isInvalidated;
+		live.onEvent({ type: "usage", data: { at: 1 } });
+		expect(stale(["usage", "7d"])).toBe(true);
+		expect(stale(["usage", "24h"])).toBe(true);
+		expect(stale(["agentUsage", "a"])).toBe(true);
+		expect(stale(["git", "status", "a"])).toBe(false);
+		client.setQueryData(["usage", "7d"], { v: 2 });
+		client.setQueryData(["agentUsage", "a"], { v: 2 });
+		live.onEvent({
+			type: "limit",
+			data: { harness: "codex" } as never,
+		});
+		expect(stale(["usage", "7d"])).toBe(true);
+		expect(stale(["agentUsage", "a"])).toBe(false);
+	});
+
+	test("git re-reads that agent's git status, PR, review and issue, not other agents' or review patches", () => {
+		const { client, live } = rig();
+		const ks = [
+			["git", "status", "a"],
+			["git", "pr", "a"],
+			["git", "review", "a"],
+			["git", "review", "a", "file", "abc", "x.ts"],
+			["issue", "a", "12"],
+			["git", "status", "b"],
+		];
+		for (const k of ks) client.setQueryData(k, { v: 1 });
+		const seen: string[] = [];
+		live.on("git", (e) => seen.push(e.agentId));
+		live.onEvent({ type: "git", data: { agentId: "a" } });
+		const stale = ks.map((k) => client.getQueryState(k)!.isInvalidated);
+		expect(stale).toEqual([true, true, true, false, true, false]);
+		expect(seen).toEqual(["a"]);
+	});
+
+	test("machines reaches its listeners", () => {
+		const { live } = rig();
+		let n = 0;
+		live.on("machines", () => n++);
+		live.onEvent({ type: "machines", data: { at: 1 } });
+		expect(n).toBe(1);
+	});
+
+	test("git status on screen asks for a git subscription; this machine's agents are covered, another machine's poll", () => {
+		const { sub, covered } = deriveSubscription([
+			{ key: ["git", "status", "a"], seq: 1 },
+			{ key: ["git", "status", "m2/b"], seq: 2 },
+			{ key: ["git", "pr", "a"], seq: 3 },
+			{ key: ["usage", "7d"], seq: 4 },
+			{ key: ["agentUsage", "a"], seq: 5 },
+		]);
+		expect(sub.git).toEqual(["a", "m2/b"]);
+		expect(covered.has(hashKey(["git", "status", "a"]))).toBe(true);
+		expect(covered.has(hashKey(["git", "status", "m2/b"]))).toBe(false);
+		// GitHub data has no notice of its own: it keeps its slow poll.
+		expect(covered.has(hashKey(["git", "pr", "a"]))).toBe(false);
+		expect(covered.has(hashKey(["usage", "7d"]))).toBe(true);
+		expect(covered.has(hashKey(["agentUsage", "a"]))).toBe(true);
+		// No git status shown: no `git` key (older daemons see the same body).
+		expect("git" in deriveSubscription([]).sub).toBe(false);
+	});
+
+	test("at most 20 agents' git status is watched; the rest poll", () => {
+		const mounted = Array.from({ length: 25 }, (_, i) => ({
+			key: ["git", "status", `a${i}`],
+			seq: i,
+		}));
+		const { sub, covered } = deriveSubscription(mounted);
+		expect(sub.git).toHaveLength(20);
+		// The newest win.
+		expect(sub.git).toContain("a24");
+		expect(sub.git).not.toContain("a0");
+		expect(covered.has(hashKey(["git", "status", "a0"]))).toBe(false);
+	});
+});
+
 // ------------------------------------------------------------ fallbacks
 
 describe("fallbacks", () => {

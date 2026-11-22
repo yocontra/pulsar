@@ -112,7 +112,7 @@ export default defineConfig<unknown, E2EWorkerOptions>({
 			use: { ...devices["Pixel 7"] },
 		},
 		{
-			// iOS gestures (swipe-back, swipe actions, sheets, pull to refresh),
+			// iOS gestures (swipe-back, swipe actions, sheets; no pull to refresh),
 			// and the phone specs both platforms run (*.phone.e2e.ts).
 			name: "ios",
 			testMatch: /(ios|phone)\.e2e\.ts$/,

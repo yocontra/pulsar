@@ -122,22 +122,6 @@
 	width: 16px;
 	height: 16px;
 }
-.usage-icon-btn:disabled {
-	cursor: default;
-}
-.usage-spin {
-	animation: usage-spin 0.9s linear infinite;
-}
-@keyframes usage-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.usage-spin {
-		animation: none;
-	}
-}
 /* Narrow: the period becomes a compact select; the metric stays. */
 @container usage (max-width: 640px) {
 	.usage-controls .usage-seg[aria-label="Period"] {

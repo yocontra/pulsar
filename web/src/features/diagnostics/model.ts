@@ -1,28 +1,45 @@
 /** Diagnostics data: the queries, and what the page says about a machine. */
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { versionSkew } from "../../../../src/diagnostics/checks.ts";
 import { ApiError, api } from "../../api/client.ts";
 import type { DiagCheck, MachineDiagnostics } from "../../api/types.ts";
-import { queryClient } from "../../data/hooks.ts";
+import { queryClient, useLiveEvent } from "../../data/hooks.ts";
+import { route } from "../../lib/router.ts";
 
 export const diagnosticsKey = ["diagnostics"] as const;
+
+/** How often the open page runs doctor again on every machine (ms). */
+export const RECHECK_MS = 60_000;
 
 /** A machine as the page shows it: its report, or `checking` while it is asked. */
 export type MachineRow = MachineDiagnostics & { checking: boolean };
 
+const shown = () => {
+	const r = route.value;
+	return (
+		r.view === "page" &&
+		r.name === "diagnostics" &&
+		document.visibilityState === "visible"
+	);
+};
+
 /**
  * The pool at once (`GET /diagnostics`), then each machine's report asked
  * in parallel (`GET /diagnostics/:id`), each shown as it arrives. Version
- * skew is worked out again as reports come in. `refresh` asks every
- * machine to run doctor again now.
+ * skew is worked out again as reports come in. Live while the page shows:
+ * every machine runs doctor again each minute, when the tab comes back, and
+ * when a machine joins, leaves or changes version (`machines` notices).
+ * Reports stay on screen while the next ones load.
  */
 export function useDiagnostics() {
-	const [round, setRound] = useState(0);
+	// The first read reuses a recent report; later ones ask for a fresh run
+	// (the daemon throttles fresh runs and caches failures briefly).
+	const fresh = useRef(false);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
 	const list = useQuery(
 		{
-			queryKey: [...diagnosticsKey, "list", round],
+			queryKey: [...diagnosticsKey, "list"],
 			queryFn: () => api.diagnostics(),
 			staleTime: 15_000,
 			retry: 1,
@@ -33,18 +50,41 @@ export function useDiagnostics() {
 	const answers = useQueries(
 		{
 			queries: pending.map((m) => ({
-				queryKey: [...diagnosticsKey, "machine", m.machineId, round],
-				queryFn: () => api.machineDiagnostics(m.machineId, round > 0),
+				queryKey: [...diagnosticsKey, "machine", m.machineId],
+				queryFn: () => api.machineDiagnostics(m.machineId, fresh.current),
 				staleTime: 15_000,
 				retry: false,
 			})),
 		},
 		queryClient,
 	);
+	const recheck = () => {
+		if (!shown()) return;
+		fresh.current = true;
+		setStartedAt(Date.now());
+		void queryClient.invalidateQueries({ queryKey: diagnosticsKey });
+	};
+	const recheckRef = useRef(recheck);
+	recheckRef.current = recheck;
+	const lastRun = useRef(startedAt);
+	lastRun.current = startedAt;
+	useEffect(() => {
+		const t = setInterval(() => recheckRef.current(), RECHECK_MS);
+		const onVisible = () => {
+			if (Date.now() - lastRun.current >= RECHECK_MS) recheckRef.current();
+		};
+		document.addEventListener("visibilitychange", onVisible);
+		return () => {
+			clearInterval(t);
+			document.removeEventListener("visibilitychange", onVisible);
+		};
+	}, []);
+	useLiveEvent("machines", () => recheckRef.current());
 	const byId = new Map(pending.map((m, i) => [m.machineId, answers[i]!]));
 	const merged: MachineRow[] = (list.data?.machines ?? []).map((m) => {
 		const a = byId.get(m.machineId);
 		if (!a) return { ...m, checking: false };
+		// A recheck keeps the last report on screen.
 		if (a.data) return { ...a.data, checking: false };
 		if (a.isError)
 			return {
@@ -63,17 +103,17 @@ export function useDiagnostics() {
 		...m,
 		upgrade: upgrade.get(m.name) ?? null,
 	}));
-	const checking = list.isFetching || machines.some((m) => m.checking);
+	const checking =
+		list.isFetching ||
+		machines.some((m) => m.checking) ||
+		answers.some((a) => a.isFetching);
 	return {
 		list,
 		machines,
 		newest,
+		/** Doctor runs somewhere now (first load or a recheck). */
 		checking,
 		startedAt,
-		refresh: () => {
-			setStartedAt(Date.now());
-			setRound((r) => r + 1);
-		},
 	};
 }
 

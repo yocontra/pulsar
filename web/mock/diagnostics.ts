@@ -179,20 +179,29 @@ function full(): DiagnosticsReport {
 }
 
 /** Mock knobs: hold one machine's answer back (ms), or make it time out. */
-const knobs: { hold: Record<string, number>; timeout: string[] } = {
+const knobs: {
+	hold: Record<string, number>;
+	timeout: string[];
+	problem: string | null;
+} = {
 	hold: {},
 	timeout: [],
+	problem: null,
 };
 
 export function mockDiagnostics(b: {
 	hold?: Record<string, number>;
 	timeout?: string[];
+	/** A problem this machine's next doctor run finds (null: none). */
+	problem?: string | null;
 	reset?: boolean;
 }) {
 	if (b.reset) {
 		knobs.hold = {};
 		knobs.timeout = [];
+		knobs.problem = null;
 	}
+	if (b.problem !== undefined) knobs.problem = b.problem;
 	if (b.hold) knobs.hold = b.hold;
 	if (b.timeout) knobs.timeout = b.timeout;
 	return { ok: true };
@@ -227,6 +236,18 @@ export async function machineDiagnostics(
 			...m,
 			report: null,
 			error: `${m.name} did not answer within 35 s`,
+		};
+	if (m.self && knobs.problem && m.report)
+		return {
+			...m,
+			report: {
+				...m.report,
+				checkedAt: Date.now(),
+				checks: [
+					...m.report.checks,
+					{ group: "daemon", level: "bad", text: knobs.problem, fix: null },
+				],
+			},
 		};
 	return m;
 }

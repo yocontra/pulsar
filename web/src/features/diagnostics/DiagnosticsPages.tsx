@@ -10,7 +10,7 @@ import {
 	IonTitle,
 	IonToolbar,
 } from "../../mobile/ionic.ts";
-import { DiagnosticsView, RefreshControl } from "./DiagnosticsView.tsx";
+import { CheckStatus, DiagnosticsView } from "./DiagnosticsView.tsx";
 import { useDiagnostics } from "./model.ts";
 
 export function DiagnosticsDesktop() {
@@ -40,7 +40,7 @@ export function DiagnosticsPhone() {
 			</IonHeader>
 			<IonContent className="p-plain">
 				<div className="diag-phone-bar">
-					<RefreshControl d={d} />
+					<CheckStatus d={d} />
 				</div>
 				<DiagnosticsView variant="phone" d={d} />
 			</IonContent>

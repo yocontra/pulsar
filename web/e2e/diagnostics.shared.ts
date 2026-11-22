@@ -6,9 +6,9 @@ import { contrastFailures } from "./ui-audit.ts";
  * Diagnostics (web/src/features/diagnostics): the pool from
  * `GET /diagnostics`, then each machine's doctor checks from
  * `GET /diagnostics/:id` as they arrive (web/mock/diagnostics.ts), grouped, with
- * fixes, machine facts and version skew; opened from Settings and Cmd-K;
- * "Check again" asks for a fresh run. Shared by diagnostics.desktop.e2e.ts
- * and diagnostics.ios.e2e.ts.
+ * fixes, machine facts and version skew; opened from Settings and Cmd-K.
+ * It checks again on its own (live.shared.ts covers that). Shared by
+ * diagnostics.desktop.e2e.ts and diagnostics.ios.e2e.ts.
  */
 
 /** The visible page: the phone's top Ionic page, or the desktop's main area. */
@@ -134,27 +134,21 @@ export function diagnosticsSuite(platform: "desktop" | "phone") {
 		expect(await contrastFailures(page, ".diag *")).toEqual([]);
 	});
 
-	test(`Check again runs doctor now (${platform})`, async ({ page }) => {
+	test(`no Check again button: it says when it last checked (${platform})`, async ({
+		page,
+	}) => {
 		await ready(page);
 		await page.evaluate(() => {
 			location.hash = "#/diagnostics";
 		});
 		const v = view(page, phone);
 		await expect(v.locator(".diag-machine")).toHaveCount(4);
-		// Every reachable machine is asked again, fresh.
-		const fresh = ["studio", "mbp-a", "desk"].map((id) =>
-			page.waitForRequest((r) =>
-				r.url().endsWith(`/api/v1/diagnostics/${id}?refresh=1`),
-			),
+		await expect(page.getByTestId("diag-checked")).toHaveText(
+			/^Checked (now|\d+s ago)$/,
 		);
-		const again = page.getByRole("button", { name: "Check again" });
-		if (phone) await again.tap();
-		else await again.click();
-		await Promise.all(fresh);
 		await expect(
-			page.getByRole("button", { name: "Check again" }),
-		).toBeVisible();
-		await expect(v.locator(".diag-machine")).toHaveCount(4);
+			page.getByRole("button", { name: /check again/i }),
+		).toHaveCount(0);
 	});
 
 	test(`Settings opens Diagnostics (${platform})`, async ({ page }) => {

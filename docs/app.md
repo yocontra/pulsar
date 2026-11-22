@@ -128,6 +128,7 @@ The session header has the git actions for the agent's worktree. On a computer: 
 - While an action runs, the button shows its step and a timer. When it is done, the result shows in its place for a few seconds ("Pushed to origin/fix-1378", "Created PR #12"). If git or gh refuses, a notice shows their message: a rejected push, a failed hook, missing credentials.
 - **Push** sets the upstream on the first push and never force-pushes. **Create PR** uses `gh` on the agent's machine (title and body from the commits), so that machine needs `gh` installed and logged in, and a GitHub remote.
 - The PR card shows the PR's state, review status, checks and review comments, with a link to GitHub. **Ask {agent} to fix** sends the failing checks and comments to the agent; you can read and change the text first.
+- The buttons and counts are live: they change as soon as the agent edits files, commits, switches branch or opens a PR. Checks and review comments come from GitHub, so the PR card, the review and the issue card also read GitHub again every 30 to 60 seconds while open.
 
 Each commit, push or PR needs a proven human (Prove Human, once per session) and is recorded in the audit log of the agent's machine. For an agent on another machine, that machine checks your passkey for each step: "Commit, push & PR" asks three times, and on an iPhone you tap **Confirm** before each next step.
 
@@ -154,7 +155,7 @@ The card is read with `gh` on the agent's machine, so that machine needs `gh` in
 
 To comment on a line, hover it and click the comment button (on a phone, tap the line number), then write and press **Comment**. Under a thread, **Reply** answers it and **Resolve** (or **Reopen**) changes its state. **Submit review** sends a summary as **Comment**, **Approve** or **Request changes**. GitHub does not let you approve or request changes on your own PR, so the app turns those off when the agent's `gh` account wrote the PR.
 
-These actions use `gh` on the agent's machine, as that machine's GitHub account. Each one needs a proven human and goes in the agent machine's audit log. For an agent on another machine, that machine checks your passkey for each comment, reply, resolve and review. If the PR gets new commits after you open it, a line comment is refused: reload and comment on the latest code. Text from GitHub shows as plain text.
+These actions use `gh` on the agent's machine, as that machine's GitHub account. Each one needs a proven human and goes in the agent machine's audit log. For an agent on another machine, that machine checks your passkey for each comment, reply, resolve and review. If the PR gets new commits after you open it, a line comment is refused and the review loads the latest code; comment on that. Text from GitHub shows as plain text.
 
 ## Usage
 
@@ -165,7 +166,7 @@ These actions use `gh` on the agent's machine, as that machine's GitHub account.
 - The big number is the total, with the number of sessions. Below it, each harness's share. The chart shows each harness per day (per hour for 24h); point at it for the numbers.
 - **Totals** splits the tokens: processed, cached input, uncached input, output, and what cache reads saved. **Breakdown** lists models or days; click a model for its trend, cache hit rate and cost per million tokens.
 - Cost is an **API estimate**: list prices per million tokens, not what a subscription charges. Set a model's price from its sheet (**Set price**), or all prices from **Model prices…** in the machine menu. Prices apply to every machine and to all past usage. A model with no price (for example a Codex or third-party model) is left out of the cost and named under the info button.
-- Usage updates every minute while the page is open; the refresh button reads new lines first. It keeps 90 days.
+- Usage is live: it updates as soon as this machine reads new session lines (about once a minute), and other machines' numbers update every minute while the page is open. There is no refresh button. It keeps 90 days.
 
 In a session's header (on a computer), a short line shows the session's cost so far and, when the harness reports its context window (Codex), "Context: 42% used".
 
@@ -231,7 +232,7 @@ Search covers prompts, replies, messages between agents and the titles of tool c
 - Under each machine's name: its Pulsar version, how long its daemon has run, event-loop delay, live agents, Tailscale state and version, when its certificate expires, and each harness's version.
 - When machines run different Pulsar versions, a note at the top says which machines to upgrade. A machine too old to answer says so.
 - A machine that is asleep or offline is listed with the reason.
-- This machine shows first; each other machine fills in as it answers, with "Checking…" until then. A machine that doesn't answer within 35 seconds says so. Results are a few seconds old at most; **Check again** runs the checks again on every machine now.
+- This machine shows first; each other machine fills in as it answers, with "Checking…" until then. A machine that doesn't answer within 35 seconds says so. While the page is open, every machine runs the checks again each minute and when a machine joins, leaves or changes its Pulsar version. The last report stays on screen meanwhile, and the top says when this machine was last checked ("Checked 12s ago"). There is no button to check again.
 - Diagnostics only reads. Before a machine sends its report, it replaces home folder paths with `~` and removes anything that looks like a token or password.
 
 ## Settings

@@ -1,43 +1,37 @@
 /** Reads for the usage page and the session header's usage line. */
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { api } from "../api/client.ts";
-import type { UsagePeriod, UsageReport } from "../api/types.ts";
-import { queryClient } from "../data/hooks.ts";
+import type { UsagePeriod } from "../api/types.ts";
+import { queryClient, useCovered } from "../data/hooks.ts";
 import { localTz } from "./model.ts";
 
-/** Session files grow while agents work: re-read this often while open (ms). */
+/**
+ * Fallback re-read (ms): `usage` notices keep this machine's numbers live
+ * (data/live.ts); this covers a reconnecting stream and other machines'
+ * session lines, which send no notice here.
+ */
 const POLL_MS = 60_000;
 
 const usageKey = (period: UsagePeriod) => ["usage", period] as const;
 
 /**
- * The report for a period. The previous period's report stays on screen
- * while the next loads; `refresh` reads new session lines on the daemon
- * first (it answers within a few seconds either way).
+ * The report for a period, live: re-read on each `usage` and `limit`
+ * notice. The previous period's report stays on screen while the next loads.
  */
 export function useUsage(period: UsagePeriod) {
-	const [refreshing, setRefreshing] = useState(false);
-	const q = useQuery(
+	const covered = useCovered(usageKey(period));
+	return useQuery(
 		{
 			queryKey: usageKey(period),
 			queryFn: () => api.usage({ period, tz: localTz() }),
-			refetchInterval: POLL_MS,
+			// Other machines' tokens come only from asking: poll while it shows any.
+			refetchInterval: (q) =>
+				!covered || (q.state.data?.machines.length ?? 0) > 1 ? POLL_MS : false,
 			placeholderData: keepPreviousData,
 			retry: 1,
 		},
 		queryClient,
 	);
-	const refresh = async () => {
-		setRefreshing(true);
-		try {
-			const r = await api.usage({ period, tz: localTz(), refresh: true });
-			queryClient.setQueryData<UsageReport>(usageKey(period), r);
-		} finally {
-			setRefreshing(false);
-		}
-	};
-	return { ...q, refresh, refreshing };
 }
 
 /** Every period's report re-prices after a price edit. */
@@ -45,14 +39,19 @@ export function invalidateUsage() {
 	return queryClient.invalidateQueries({ queryKey: ["usage"] });
 }
 
-/** One agent's usage, for the session header (slow poll, quiet on errors). */
+/**
+ * One agent's usage, for the session header (quiet on errors): live from
+ * `usage` notices for this machine's agents, a slow poll for another
+ * machine's (a pool address) or while the stream is down.
+ */
 export function useAgentUsage(agentId: string, enabled = true) {
+	const covered = useCovered(["agentUsage", agentId]) && !agentId.includes("/");
 	return useQuery(
 		{
 			queryKey: ["agentUsage", agentId],
 			queryFn: () => api.agentUsage(agentId),
 			enabled,
-			refetchInterval: 30_000,
+			refetchInterval: covered ? false : 30_000,
 			staleTime: 15_000,
 			retry: false,
 		},

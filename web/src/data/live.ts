@@ -58,6 +58,8 @@ type Listeners = {
 	notify: ServerEvents["notify"];
 	launch: ServerEvents["launch"];
 	limit: ServerEvents["limit"];
+	machines: ServerEvents["machines"];
+	git: ServerEvents["git"];
 };
 
 export interface LiveOptions {
@@ -103,6 +105,8 @@ export class LiveSync {
 		notify: new Set(),
 		launch: new Set(),
 		limit: new Set(),
+		machines: new Set(),
+		git: new Set(),
 	};
 	private transcriptBatch = new Map<string, TranscriptEvent[]>();
 	private frameQueued = false;
@@ -405,8 +409,23 @@ export class LiveSync {
 				this.emit("launch", e.data);
 				break;
 			case "limit":
-				// A plan usage limit passed a threshold (features/limits).
+				// A plan usage limit passed a threshold (features/limits); the
+				// Usage page shows the new reading.
+				void c.invalidateQueries({ queryKey: ["usage"] });
 				this.emit("limit", e.data);
+				break;
+			case "usage":
+				// New session lines on this machine: token counts and context.
+				void c.invalidateQueries({ queryKey: ["usage"] });
+				void c.invalidateQueries({ queryKey: ["agentUsage"] });
+				break;
+			case "git":
+				invalidateGit(c, e.data.agentId);
+				this.emit("git", e.data);
+				break;
+			case "machines":
+				// A machine joined, left or changed version (features/diagnostics).
+				this.emit("machines", e.data);
 				break;
 			case "security":
 				void c.invalidateQueries({ queryKey: keys.passkeys() });
@@ -472,6 +491,21 @@ export class LiveSync {
 }
 
 export const queryHash = (key: readonly unknown[]) => hashKey(key);
+
+/**
+ * An agent's git state moved: re-read its git status, PR card, PR review
+ * and issue card (only the mounted ones fetch; review file patches are
+ * keyed by the PR head and stay).
+ */
+export function invalidateGit(c: QueryClient, agentId: string) {
+	for (const queryKey of [
+		["git", "status", agentId],
+		["git", "pr", agentId],
+		["git", "review", agentId],
+	])
+		void c.invalidateQueries({ queryKey, exact: true });
+	void c.invalidateQueries({ queryKey: ["issue", agentId] });
+}
 
 /** Replaces an agent's row in every cached read that shows it. */
 export function patchAgentRows(c: QueryClient, row: AgentRow, skip?: string) {

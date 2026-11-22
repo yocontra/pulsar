@@ -68,11 +68,10 @@ async function drag(
 	if (click) await page.mouse.click(from.x, from.y);
 }
 
-/** Home is up and the lazy Ionic pieces (swipe actions, refresher) are in. */
+/** Home is up and the lazy Ionic pieces (swipe actions) are in. */
 async function home(page: Page) {
 	await ready(page);
 	await expect(page.locator("ion-item-sliding").first()).toBeAttached();
-	await expect(page.locator("ion-refresher")).toBeAttached();
 	// The Safari-tab install tip takes a third of this short viewport.
 	const tip = page.getByRole("button", { name: "Dismiss tip" });
 	if (await tip.count()) await tip.tap();
@@ -226,8 +225,11 @@ test.describe("ios gestures", () => {
 		await expect(sheet).toHaveCount(0);
 	});
 
-	test("pull to refresh reloads the tree", async ({ page }) => {
+	test("no pull to refresh: the tree is live, a pull down reads nothing", async ({
+		page,
+	}) => {
 		await home(page);
+		await expect(page.locator("ion-refresher")).toHaveCount(0);
 		let trees = 0;
 		page.on("request", (r) => {
 			if (/\/api\/v1\/tree\b/.test(r.url())) trees++;
@@ -238,13 +240,8 @@ test.describe("ios gestures", () => {
 			{ x: 190, y: 560 },
 			{ steps: 20, ms: 30 },
 		);
-		await expect.poll(() => trees, { timeout: 5000 }).toBeGreaterThan(0);
-		await expect(page.locator("ion-refresher.refresher-active")).toHaveCount(
-			0,
-			{
-				timeout: 5000,
-			},
-		);
+		await page.waitForTimeout(1500);
+		expect(trees).toBe(0);
 	});
 
 	test("sheet: the group composer opens at the medium detent and drags to large", async ({

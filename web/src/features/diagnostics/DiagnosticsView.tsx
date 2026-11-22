@@ -7,7 +7,7 @@ import {
 	CircleCheckIcon,
 	CircleXIcon,
 	InfoIcon,
-	RefreshCwIcon,
+	LoaderCircleIcon,
 	TriangleAlertIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -129,7 +129,7 @@ function Machine({ m }: { m: MachineRow }) {
 				</h2>
 				{m.checking ? (
 					<span className="diag-health is-checking" role="status">
-						<RefreshCwIcon className="diag-spin" aria-hidden="true" />
+						<LoaderCircleIcon className="diag-spin" aria-hidden="true" />
 						Checking…
 					</span>
 				) : (
@@ -166,25 +166,29 @@ function Machine({ m }: { m: MachineRow }) {
 	);
 }
 
-/** Seconds since `start`, ticking while shown. */
-function useElapsed(start: number | null) {
+/** The clock, ticking each second while shown. */
+function useNow() {
 	const [now, setNow] = useState(Date.now());
 	useEffect(() => {
-		if (start === null) return;
 		const t = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(t);
-	}, [start]);
-	return start === null ? 0 : Math.max(0, Math.round((now - start) / 1000));
+	}, []);
+	return now;
 }
 
-/** Refresh, replaced in place by its progress while machines are checked. */
-export function RefreshControl({ d }: { d: Diagnostics }) {
-	const elapsed = useElapsed(d.checking ? d.startedAt : null);
+/**
+ * When this machine was last checked, or the progress while machines are
+ * checked. Text only: the page checks again on its own (model.ts).
+ */
+export function CheckStatus({ d }: { d: Diagnostics }) {
+	const now = useNow();
+	const checkedAt = d.machines.find((m) => m.self)?.report?.checkedAt;
 	if (d.checking) {
 		const left = d.machines.filter((m) => m.checking).length;
+		const elapsed = Math.max(0, Math.round((now - d.startedAt) / 1000));
 		return (
 			<span className="diag-progress" role="status">
-				<RefreshCwIcon className="diag-spin" aria-hidden="true" />
+				<LoaderCircleIcon className="diag-spin" aria-hidden="true" />
 				{left
 					? `Checking ${left} machine${left === 1 ? "" : "s"}…`
 					: "Checking…"}{" "}
@@ -192,11 +196,11 @@ export function RefreshControl({ d }: { d: Diagnostics }) {
 			</span>
 		);
 	}
+	if (!checkedAt) return null;
 	return (
-		<button type="button" className="diag-refresh" onClick={d.refresh}>
-			<RefreshCwIcon aria-hidden="true" />
-			Check again
-		</button>
+		<span className="diag-progress" data-testid="diag-checked">
+			Checked {ago(checkedAt, now)}
+		</span>
 	);
 }
 
@@ -209,17 +213,13 @@ export function DiagnosticsView({
 }) {
 	const { list, machines } = d;
 	const behind = machines.filter((m) => m.upgrade);
-	const checkedAt = machines.find((m) => m.self)?.report?.checkedAt;
 	return (
 		<div className={`diag diag-${variant}`}>
 			{variant === "desktop" && (
 				<header className="diag-head">
 					<h1 className="diag-title">Diagnostics</h1>
-					{checkedAt ? (
-						<span className="diag-muted">Checked {ago(checkedAt)}</span>
-					) : null}
 					<span className="diag-spacer" />
-					<RefreshControl d={d} />
+					<CheckStatus d={d} />
 				</header>
 			)}
 			{list.isError && !list.data && (

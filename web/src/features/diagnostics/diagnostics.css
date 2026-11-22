@@ -74,7 +74,6 @@
 	justify-content: flex-end;
 	padding: 8px 16px 0;
 }
-.diag-refresh,
 .diag-progress {
 	display: inline-flex;
 	align-items: center;
@@ -85,20 +84,10 @@
 	font-size: var(--ds-text-secondary);
 	white-space: nowrap;
 }
-.diag-refresh {
-	border: 1px solid var(--ds-border-strong);
-	background: var(--ds-surface);
-	color: var(--ds-text);
-	cursor: pointer;
-}
-.diag-refresh:hover {
-	background: var(--ds-surface-hover);
-}
 .diag-progress {
 	color: var(--ds-text-2);
 	font-variant-numeric: tabular-nums;
 }
-.diag-refresh svg,
 .diag-progress svg {
 	width: 15px;
 	height: 15px;

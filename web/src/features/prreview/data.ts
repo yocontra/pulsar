@@ -21,6 +21,10 @@ const reviewKey = (id: string) => ["git", "review", id] as const;
 const fileKey = (id: string, head: string | null, path: string) =>
 	["git", "review", id, "file", head, path] as const;
 
+/**
+ * The review, read again on `git` notices (data/live.ts); comments and
+ * threads change on GitHub, which sends no notice, so it also polls slowly.
+ */
 export function useReview(agentId: string) {
 	return useQuery(
 		{

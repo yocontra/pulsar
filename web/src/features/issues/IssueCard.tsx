@@ -25,7 +25,10 @@ import { queryClient } from "../../data/hooks.ts";
 import { ago } from "../../lib/format.ts";
 import { issueAsk } from "./open.ts";
 
-/** The card's data, only while it is open; a slow refresh while shown. */
+/**
+ * The card's data, only while it is open. Read again on `git` notices; the
+ * issue itself changes on GitHub, which sends no notice, so a slow poll.
+ */
 export function useIssue(agentId: string, number: string, open: boolean) {
 	return useQuery(
 		{

@@ -755,6 +755,7 @@ export class Registry {
 		this.finishTags(agent);
 		if (changed || agent.tags.join() !== before.join())
 			this.events.emit("agent", { action: "update", agent: toPublic(agent) });
+		if (changed) this.events.emit("git", { agentId: agent.id });
 	}
 
 	/**
@@ -831,8 +832,10 @@ export class Registry {
 				agent.meta.autoPr = next;
 				changed = true;
 			}
-			if (changed)
+			if (changed) {
 				this.events.emit("agent", { action: "update", agent: toPublic(agent) });
+				this.events.emit("git", { agentId: agent.id });
+			}
 		}
 		// Forget folders no live agent works in any more.
 		for (const cwd of this.repoUrls.keys())

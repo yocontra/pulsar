@@ -359,6 +359,8 @@ const SubscriptionBody = z
 		receipts: z.array(z.string().max(100)).max(50).default([]),
 		/** Agents whose queue strip the app shows. */
 		queue: z.array(z.string().max(300)).max(10).default([]),
+		/** Agents whose git status the app shows. */
+		git: z.array(z.string().max(300)).max(20).default([]),
 		changes: z
 			.object({
 				agent: z.string().max(300),

@@ -1,8 +1,8 @@
 /**
  * Home: needs-you at a glance, pinned, then machines (with their projects) as one
  * inset-grouped, virtualized list that expands in place. Large title that
- * condenses, a search field under it, pull to refresh, swipe actions and
- * long-press menus.
+ * condenses, a search field under it, swipe actions and long-press menus.
+ * Everything is live (the event stream): there is no pull to refresh.
  */
 import { CloudOffIcon, SquarePenIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -24,7 +24,6 @@ import {
 	loadMore,
 	nodes,
 	noteInteraction,
-	refreshAll,
 	resetTree,
 	setExpanded,
 	streamState,
@@ -599,23 +598,7 @@ function SearchField() {
 	);
 }
 
-function Refresher({ lz }: { lz: LazyIonic | null }) {
-	if (!lz) return null;
-	return (
-		<lz.IonRefresher
-			slot="fixed"
-			onIonRefresh={(e: CustomEvent) => {
-				const el = e.target as HTMLIonRefresherElement;
-				void refreshAll().finally(() => el.complete());
-			}}
-		>
-			<lz.IonRefresherContent />
-		</lz.IonRefresher>
-	);
-}
-
 function HomeImpl() {
-	const lz = useIonicLazy();
 	// branches is a plain Map: read the tree version so tree changes re-render
 	// (a used read: the minifier drops bare `x.value;` statements).
 	const version = treeVersion.value;
@@ -642,7 +625,6 @@ function HomeImpl() {
 				</IonToolbar>
 			</IonHeader>
 			<IonContent fullscreen className="p-home" onTouchStart={noteInteraction}>
-				<Refresher lz={lz} />
 				<IonHeader collapse="condense">
 					<IonToolbar>
 						<IonTitle size="large">{HOME_TITLE}</IonTitle>

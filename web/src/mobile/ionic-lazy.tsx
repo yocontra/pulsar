@@ -7,7 +7,6 @@
 import type {
 	ItemSlidingCustomEvent,
 	ModalBreakpointChangeEventDetail,
-	RefresherEventDetail,
 	ToggleChangeEventDetail,
 } from "@ionic/core";
 import {
@@ -46,14 +45,6 @@ import {
 	defineCustomElement as defineNote,
 	IonNote as NoteEl,
 } from "@ionic/core/components/ion-note.js";
-import {
-	defineCustomElement as defineRefresher,
-	IonRefresher as RefresherEl,
-} from "@ionic/core/components/ion-refresher.js";
-import {
-	defineCustomElement as defineRefresherContent,
-	IonRefresherContent as RefresherContentEl,
-} from "@ionic/core/components/ion-refresher-content.js";
 import {
 	defineCustomElement as defineSearchbar,
 	IonSearchbar as SearchbarEl,
@@ -102,25 +93,6 @@ export const IonItemOption = createComponent<InstanceType<typeof ItemOptionEl>>(
 		defineCustomElement: defineItemOption,
 	},
 );
-export const IonRefresher = createComponent<
-	InstanceType<typeof RefresherEl>,
-	{ onIonRefresh: string }
->({
-	tagName: "ion-refresher",
-	elementClass: RefresherEl,
-	react: React,
-	events: { onIonRefresh: "ionRefresh" },
-	defineCustomElement: defineRefresher,
-});
-export const IonRefresherContent = createComponent<
-	InstanceType<typeof RefresherContentEl>
->({
-	tagName: "ion-refresher-content",
-	elementClass: RefresherContentEl,
-	react: React,
-	events: {},
-	defineCustomElement: defineRefresherContent,
-});
 export const IonToggle = createComponent<
 	InstanceType<typeof ToggleEl>,
 	{ onIonChange: string }
@@ -244,6 +216,5 @@ export const IonSpinner = createComponent<InstanceType<typeof SpinnerEl>>({
 export type {
 	ItemSlidingCustomEvent,
 	ModalBreakpointChangeEventDetail,
-	RefresherEventDetail,
 	ToggleChangeEventDetail,
 };

@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api, ProveCancelled } from "../../api/client.ts";
 import type { AgentRow, GitStatus } from "../../api/types.ts";
-import { keys, queryClient } from "../../data/hooks.ts";
+import { keys, queryClient, useCovered } from "../../data/hooks.ts";
 import { toast } from "../../lib/toast.ts";
 import { type Step, working } from "./model.ts";
 import {
@@ -23,14 +23,19 @@ import {
 const gitKey = (id: string) => ["git", "status", id] as const;
 const prKey = (id: string) => ["git", "pr", id] as const;
 
-/** The worktree's git status: a slow poll while the header shows. */
+/**
+ * The worktree's git status while the header shows: kept live by `git`
+ * notices (data/live.ts); it polls only while the stream does not cover it
+ * (reconnecting, or an agent on another machine).
+ */
 export function useGitStatus(agentId: string) {
+	const covered = useCovered(gitKey(agentId));
 	return useQuery(
 		{
 			queryKey: gitKey(agentId),
 			queryFn: () => api.gitStatus(agentId),
 			// Stops on an error (the agent left; an older daemon): no failing poll.
-			refetchInterval: (q) => (q.state.error ? false : 15_000),
+			refetchInterval: (q) => (covered || q.state.error ? false : 15_000),
 			staleTime: 5_000,
 			retry: false,
 		},
@@ -38,7 +43,11 @@ export function useGitStatus(agentId: string) {
 	);
 }
 
-/** The PR card's details, only while it is open. */
+/**
+ * The PR card's details, only while it is open. Read again on `git`
+ * notices (a push, a new PR); CI checks and reviews happen on GitHub,
+ * which sends no notice, so it also polls slowly.
+ */
 export function usePrDetails(agentId: string, open: boolean) {
 	return useQuery(
 		{

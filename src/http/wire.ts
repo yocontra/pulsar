@@ -1322,6 +1322,11 @@ export interface Subscription {
 	subagents?: string[];
 	/** Agents whose queue strip is on screen: `queue` events keep it live. Absent: none. */
 	queue?: string[];
+	/**
+	 * Agents whose git status is on screen (a session header): `git` events
+	 * say when their worktree, HEAD or upstream moved. Absent: none.
+	 */
+	git?: string[];
 }
 
 /** Error bodies: `{error: {code, message}}`, plus a fresh dry run on a `/send` 409. */
@@ -1401,6 +1406,22 @@ export interface ServerEvents {
 	launch: LaunchState;
 	/** An agent's queue (a `queue` subscription): messages not yet in its conversation. */
 	queue: QueueList;
+	/**
+	 * This machine's usage scanner stored new session lines (sent at once
+	 * to every stream): re-read `GET /usage` and agents' usage.
+	 */
+	usage: { at: number };
+	/**
+	 * An agent's git state moved: its branch or PR (every stream), or its
+	 * worktree, HEAD or upstream (a `git` subscription). Re-read its git
+	 * status, PR and review.
+	 */
+	git: { agentId: string };
+	/**
+	 * A machine joined or left the pool, or changed its Pulsar version
+	 * (sent at once to every stream): diagnostics run again.
+	 */
+	machines: { at: number };
 }
 
 export type ServerEventName = keyof ServerEvents;

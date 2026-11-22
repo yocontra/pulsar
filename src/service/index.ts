@@ -542,6 +542,9 @@ export class PulsarService {
 		});
 		this.usageOpts = opts.usage;
 		this.usage = new Usage(this.store, opts.usage);
+		// New session lines: the app's Usage page and usage lines re-read.
+		this.usage.scanner.onStored = () =>
+			this.events.emit("usage", { at: Date.now() });
 		this.messages = new MessageSearch({
 			store: this.store,
 			transcripts: this.transcripts,
@@ -574,6 +577,20 @@ export class PulsarService {
 		return diagnosticsList(
 			{ id: this.machineId, name: this.machine },
 			this.registry.pool?.diagnostics ?? null,
+		);
+	}
+
+	/**
+	 * The pool's machines as Diagnostics lists them (id, name, version,
+	 * reachable): the event hub announces `machines` when it changes.
+	 */
+	machinesKey(): string {
+		const list = diagnosticsList(
+			{ id: this.machineId, name: this.machine },
+			this.registry.pool?.diagnostics ?? null,
+		);
+		return JSON.stringify(
+			list.machines.map((m) => [m.machineId, m.name, m.version, !m.error]),
 		);
 	}
 

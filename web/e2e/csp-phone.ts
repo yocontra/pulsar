@@ -3,8 +3,8 @@ import { expect, type Page } from "@playwright/test";
 /**
  * Ionic under the strict CSP: its component styles arrive as adopted
  * stylesheets (astro.config.mjs patches Stencil), never as <style> tags,
- * and the non-shadow components (header, item-sliding, refresher) and
- * Konsta's tab bar are styled. CSP violations themselves fail every test (fixtures.ts).
+ * and the non-shadow components (header, item-sliding) and Konsta's tab
+ * bar are styled. CSP violations themselves fail every test (fixtures.ts).
  */
 export async function expectIonicStyledUnderCsp(page: Page) {
 	const r = await page.evaluate(() => ({

@@ -78,7 +78,8 @@ type TopicKind =
 	| "notify"
 	| "launches"
 	| "subagents"
-	| "queue";
+	| "queue"
+	| "git";
 
 interface TopicEvent {
 	seq: number;
@@ -178,6 +179,8 @@ function topicsOf(sub: Subscription, login: string): string[] {
 	for (const id of sub.subagents ?? []) keys.push(topicKey("subagents", id));
 	// What waits for an agent, as this login sees it (its own messages are editable).
 	for (const id of sub.queue ?? []) keys.push(topicKey("queue", login, id));
+	// Git status on screen: one worktree watch per agent, shared.
+	for (const id of sub.git ?? []) keys.push(topicKey("git", id));
 	// Receipts are the user's own sends: the topic is per login.
 	for (const id of sub.receipts) keys.push(topicKey("receipts", login, id));
 	return keys;
@@ -200,6 +203,8 @@ export class EventHub {
 	private offBus: (() => void) | null = null;
 	private offApprovals: (() => void) | null = null;
 	private dirty = true;
+	/** The pool's machines and versions, as last announced (`machines`). */
+	private machinesKey = "";
 	private lastSignature = "";
 	private lastMessageWrites = -1;
 
@@ -239,12 +244,31 @@ export class EventHub {
 		const offLimit = this.service.events.on("limit", (data) =>
 			this.publish(topicKey("notify"), "limit", data),
 		);
+		// So do new usage rows and a branch or PR that moved: small notices
+		// that tell the app what to read again.
+		const offUsage = this.service.events.on("usage", (data) =>
+			this.publish(topicKey("notify"), "usage", data),
+		);
+		const offGit = this.service.events.on("git", (data) =>
+			this.publish(topicKey("notify"), "git", data),
+		);
+		// A machine joined, left or changed version: the Diagnostics page runs again.
+		this.machinesKey = this.service.machinesKey();
+		const offPool = this.service.events.on("pool", () => {
+			const key = this.service.machinesKey();
+			if (key === this.machinesKey) return;
+			this.machinesKey = key;
+			this.publish(topicKey("notify"), "machines", { at: Date.now() });
+		});
 		this.offApprovals = () => {
 			offApproval();
 			offSecurity();
 			offNotify();
 			offLaunch();
 			offLimit();
+			offUsage();
+			offGit();
+			offPool();
 		};
 	}
 
@@ -470,6 +494,7 @@ export class EventHub {
 			if (kind === "changes") this.watchChanges(topic);
 			if (kind === "subagents") this.watchSubagents(topic);
 			if (kind === "queue") this.watchQueue(topic);
+			if (kind === "git") this.watchGit(topic);
 		}
 		return topic;
 	}
@@ -566,6 +591,30 @@ export class EventHub {
 		topic.off = this.service.events.on("pool", load);
 	}
 
+	/**
+	 * Git status on screen: the agent's worktree summary is watched (git
+	 * runs only while a connected stream wants it, on agent activity and a
+	 * slow poll; a remote agent through its home node), and each time its
+	 * stamp moves (status, branch, HEAD, upstream) a `git` notice goes out.
+	 * The first summary sets the baseline: the app reads git status itself.
+	 */
+	private watchGit(topic: Topic) {
+		const agentId = topic.args[0] ?? "";
+		let stamp: string | null = null;
+		try {
+			topic.off = this.service.changes.watch(agentId, "worktree", (s) => {
+				if (this.topics.get(topic.key) !== topic) return;
+				const first = stamp === null;
+				if (s.stamp === stamp) return;
+				stamp = s.stamp;
+				if (!first) this.publish(topic.key, "git", { agentId });
+			});
+		} catch {
+			// An unknown agent: nothing to watch; the app's fetch gets a 404.
+			topic.off = null;
+		}
+	}
+
 	/** One worktree watch per open changes viewer, shared by every stream. */
 	private watchChanges(topic: Topic) {
 		const [agentId = "", mode = "worktree"] = topic.args;
@@ -620,7 +669,8 @@ export class EventHub {
 			topic.kind === "approvals" ||
 			topic.kind === "security" ||
 			topic.kind === "notify" ||
-			topic.kind === "launches"
+			topic.kind === "launches" ||
+			topic.kind === "git"
 		) {
 			stream.since.set(key, ++this.seq);
 			return;
@@ -667,7 +717,8 @@ export class EventHub {
 			topic.kind === "approvals" ||
 			topic.kind === "security" ||
 			topic.kind === "notify" ||
-			topic.kind === "launches"
+			topic.kind === "launches" ||
+			topic.kind === "git"
 		)
 			return;
 		const next = this.compute(topic);
@@ -845,6 +896,7 @@ export class EventHub {
 			case "security":
 			case "notify":
 			case "launches":
+			case "git":
 				// Never recomputed: events arrive from the service (see publish).
 				return whole(topic.kind, {});
 		}
@@ -932,7 +984,9 @@ export class EventHub {
 			}
 		for (const [key, topic] of this.topics) {
 			const keep =
-				topic.kind === "transcript" || topic.kind === "changes"
+				topic.kind === "transcript" ||
+				topic.kind === "changes" ||
+				topic.kind === "git"
 					? live.has(key)
 					: used.has(key);
 			if (keep) continue;

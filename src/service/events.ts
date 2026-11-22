@@ -53,6 +53,16 @@ export interface ServiceEvents {
 	limit: LimitWarning;
 	/** A launch from the app moved on (src/service/launch.ts; not a `tail` frame). */
 	launch: LaunchState;
+	/**
+	 * The usage scanner stored new session lines: token counts or an agent's
+	 * context changed (src/usage/scan.ts; not a `tail` frame).
+	 */
+	usage: { at: number };
+	/**
+	 * A local agent's branch, project, repo page or PR moved, as the
+	 * periodic git and PR reads saw it (not a `tail` frame).
+	 */
+	git: { agentId: string };
 }
 
 export type ServiceEvent = keyof ServiceEvents;

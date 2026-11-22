@@ -23,6 +23,11 @@ export interface Mounted {
 const ALWAYS = new Set(["attention", "approvals", "approval"]);
 /** Reads refreshed by `security` notices. */
 const SECURITY = new Set(["passkeys", "sessions"]);
+/**
+ * Reads refreshed by `usage` notices: this machine's new session lines.
+ * A report or agent from another machine also polls (usage/data.ts).
+ */
+const USAGE = new Set(["usage", "agentUsage"]);
 
 export const EMPTY_SUBSCRIPTION: Subscription = {
 	expanded: [],
@@ -114,9 +119,24 @@ export function deriveSubscription(mounted: Mounted[]): {
 		cover(m);
 	}
 
+	// Git status on screen (a session header): `git` notices say when it
+	// moved. Another machine's agent also polls (an older home node may not
+	// stream its worktree).
+	const git: string[] = [];
+	for (const m of of("git")) {
+		if (m.key[1] !== "status") continue;
+		const id = m.key[2] as string;
+		// The daemon takes 20 (the newest win); the rest poll.
+		if (!git.includes(id)) {
+			if (git.length >= 20) continue;
+			git.push(id);
+		}
+		if (!id.includes("/")) cover(m);
+	}
+
 	for (const m of mounted) {
 		const name = m.key[0] as string;
-		if (ALWAYS.has(name) || SECURITY.has(name)) cover(m);
+		if (ALWAYS.has(name) || SECURITY.has(name) || USAGE.has(name)) cover(m);
 	}
 
 	return {
@@ -131,6 +151,7 @@ export function deriveSubscription(mounted: Mounted[]): {
 			...(changes ? { changes } : {}),
 			...(subagents.length ? { subagents: subagents.sort() } : {}),
 			...(queue.length ? { queue: queue.sort() } : {}),
+			...(git.length ? { git: git.sort() } : {}),
 		},
 		covered,
 	};

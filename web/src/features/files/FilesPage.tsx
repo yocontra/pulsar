@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client.ts";
 import type { AgentRow, FileContent, FileEntry } from "../../api/types.ts";
 import { useChangesPeek } from "../../changes/data.ts";
-import { queryClient } from "../../data/hooks.ts";
+import { queryClient, useLiveEvent } from "../../data/hooks.ts";
 import { useAgent } from "../../data/index.ts";
 import { humanSize as formatBytes } from "../../lib/attachments.ts";
 import { fileRoute } from "../../lib/file-links.ts";
@@ -36,10 +36,33 @@ import {
 } from "../../mobile/ionic.ts";
 import { CodeBlock } from "../../session/CodeBlock.tsx";
 import { langForPath } from "../../session/highlight.tsx";
+import { useGitStatus } from "../git/run.ts";
 import "./files.css";
 
 /** Past this, text shows without highlighting. */
 const HIGHLIGHT_MAX = 256 * 1024;
+
+/**
+ * Fallback re-read of the open folder and file (ms). `git` notices cover
+ * what git sees (tracked and untracked files); ignored files (build output)
+ * send none.
+ */
+const POLL_MS = 30_000;
+
+/**
+ * Keeps the open folder and file live: the agent's git status is watched
+ * (its `git` subscription), and each `git` notice for the agent re-reads
+ * what is shown.
+ */
+function useLiveFiles(agentId: string) {
+	useGitStatus(agentId);
+	useLiveEvent("git", (e) => {
+		if (e.agentId !== agentId) return;
+		void queryClient.invalidateQueries({
+			predicate: (q) => q.queryKey[0] === "files" && q.queryKey[2] === agentId,
+		});
+	});
+}
 
 const useTree = (agentId: string, path: string, enabled = true) =>
 	useQuery(
@@ -48,6 +71,7 @@ const useTree = (agentId: string, path: string, enabled = true) =>
 			queryFn: ({ signal }) => api.fileTree(agentId, path, signal),
 			enabled,
 			staleTime: 5_000,
+			refetchInterval: POLL_MS,
 			retry: false,
 		},
 		queryClient,
@@ -60,6 +84,7 @@ const useContent = (agentId: string, path: string, reveal: boolean) =>
 			queryFn: ({ signal }) => api.fileContent(agentId, path, signal, reveal),
 			enabled: !!path,
 			staleTime: 5_000,
+			refetchInterval: POLL_MS,
 			// A shown secret is not kept once its page closes.
 			...(reveal ? { gcTime: 0 } : {}),
 			retry: false,
@@ -73,6 +98,7 @@ function useTarget({ arg, params }: PageProps) {
 	const path = (params.path ?? "").replace(/^\/+|\/+$/g, "");
 	const line = Number(params.line) > 0 ? Number(params.line) : undefined;
 	const agent = useAgent(agentId || null).data as AgentRow | undefined;
+	useLiveFiles(agentId);
 	// Show for a secret-looking file: this file only, until the page changes.
 	const [shown, setShown] = useState<string | null>(null);
 	const key = `${agentId}\u0000${path}`;
