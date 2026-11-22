@@ -114,7 +114,11 @@ export function pulsarCardsSuite(platform: "desktop" | "phone") {
 			await toAll
 				.locator('button.ds-pulsar-chip[data-agent-name="apparish-auth"]')
 				.click();
-			await expect(page).toHaveURL(/#\/a\/claude%3A/);
+			// That agent's own session, not just any (a no-op click stays here).
+			const target = await agentId(request, "name=apparish-auth");
+			await expect(page).toHaveURL(
+				new RegExp(`#/a/${encodeURIComponent(target)}$`),
+			);
 			await page.goBack();
 			await expect(cards.first()).toBeAttached();
 		});

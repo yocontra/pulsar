@@ -16,10 +16,16 @@ export async function openAgent(p: {
 		return true;
 	}
 	try {
-		const page = await api.agents({ selector: p.name, limit: 5 });
-		const a =
-			page.items.find((x) => x.name === p.name || x.id === p.name) ??
-			(page.items.length === 1 ? page.items[0] : undefined);
+		// The exact name first: a bare selector also matches projects and
+		// tags, and the agent can fall outside the first page of those.
+		const exact = await api.agents({ selector: `name=${p.name}`, limit: 2 });
+		let a = exact.items.find((x) => x.name === p.name);
+		if (!a) {
+			const page = await api.agents({ selector: p.name, limit: 5 });
+			a =
+				page.items.find((x) => x.name === p.name || x.id === p.name) ??
+				(page.items.length === 1 ? page.items[0] : undefined);
+		}
 		if (!a) return false;
 		navigate({ view: "agent", id: a.id });
 		return true;
