@@ -67,6 +67,7 @@ import type {
 	Feature,
 	Hello,
 	InteractionAnswer,
+	LimitWarning,
 	ListUpdate,
 	MachineCount,
 	Message,
@@ -138,7 +139,14 @@ import {
 	page as transcriptPage,
 	step as transcriptStep,
 } from "./transcript.ts";
-import { agentUsage, mockUsage, setPrice, usageReport } from "./usage.ts";
+import {
+	agentUsage,
+	mockUsage,
+	setLimitSettings,
+	setPrice,
+	usageLimits,
+	usageReport,
+} from "./usage.ts";
 
 /** How the app names each harness ("handed to Claude Code"). */
 const HARNESS_NAMES: Record<string, string> = {
@@ -1636,6 +1644,8 @@ type RealtimeChange =
 	| { action: "status"; id: string; status: "busy" | "idle" }
 	/** A finished or failed turn the operator should hear about (`notify`). */
 	| { action: "turn"; id: string; kind: "finished" | "failed" }
+	/** A plan usage limit warning (`limit`), as the daemon sends it. */
+	| { action: "limit"; warning: LimitWarning }
 	/** This node holds a push subscription for `endpoint` (no passkey ceremony in tests). */
 	| { action: "push-subscription"; endpoint: string }
 	| { action: "add-agent"; name: string; machine?: string; project?: string }
@@ -1694,6 +1704,10 @@ function realtime(raw: unknown) {
 			const ref = `ref-${turnRefs.size + 1}`;
 			turnRefs.set(ref, a.id);
 			out = { ok: true, ref };
+			break;
+		}
+		case "limit": {
+			for (const s of streams.values()) s.push?.(frame(s, "limit", c.warning));
 			break;
 		}
 		case "push-subscription": {
@@ -2740,9 +2754,20 @@ async function route(
 			throw badRequest((e as Error).message);
 		}
 	}
-	// Mock only: no usage at all, or the defaults back (test isolation).
+	// Plan usage limits and when to warn (web/mock/usage.ts).
+	if (GET && path === "/usage/limits") return json(usageLimits());
+	if (PUT && path === "/usage/limits") {
+		try {
+			return json(setLimitSettings((await jsonBody(req)) as object));
+		} catch (e) {
+			throw badRequest((e as Error).message);
+		}
+	}
+	// Mock only: no usage at all, the defaults back, or other limit readings.
 	if (POST && path === "/__mock/usage")
-		return json(mockUsage((await jsonBody(req)) as { empty?: boolean }));
+		return json(
+			mockUsage((await jsonBody(req)) as Parameters<typeof mockUsage>[0]),
+		);
 	// The home node's challenge for an acting op on another machine.
 	if (POST && path === "/acting/options") {
 		const body = (await jsonBody(req)) as {

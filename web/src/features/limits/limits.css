@@ -1,0 +1,133 @@
+/* Usage limits (features/limits): the Usage page section, the session header note, Settings. */
+.limits-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--ds-space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.limits-row {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) minmax(4rem, 30%) auto;
+	grid-template-areas: "icon name bar used" ". reset reset reset";
+	align-items: center;
+	column-gap: var(--ds-space-2);
+	font-size: var(--ds-text-secondary);
+	font-variant-numeric: tabular-nums;
+}
+.limits-row > :first-child {
+	grid-area: icon;
+}
+.limits-name {
+	grid-area: name;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--ds-text);
+}
+.limits-machine {
+	color: var(--ds-text-3);
+}
+.limits-bar {
+	grid-area: bar;
+	display: block;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--ds-surface-2);
+}
+.limits-bar span {
+	display: block;
+	height: 100%;
+	border-radius: 2px;
+	background: var(--ds-busy);
+}
+.limits-used {
+	grid-area: used;
+	color: var(--ds-text-2);
+	text-align: right;
+}
+.limits-reset {
+	grid-area: reset;
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-caption);
+}
+.limits-row[data-level="near"] .limits-bar span,
+.limits-row[data-level="high"] .limits-bar span {
+	background: var(--ds-needs);
+}
+.limits-row[data-level="reached"] .limits-bar span {
+	background: var(--ds-danger);
+}
+.limits-row[data-level="high"] .limits-used {
+	color: var(--ds-needs-text);
+}
+.limits-row[data-level="reached"] .limits-used {
+	color: var(--ds-danger-text);
+}
+.limits-note {
+	margin: var(--ds-space-2) 0 0;
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-caption);
+}
+
+.limit-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 22px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 11px;
+	background: var(--ds-needs-soft);
+	color: var(--ds-needs-text);
+	font: inherit;
+	font-size: var(--ds-text-caption);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.limit-chip svg {
+	width: 13px;
+	height: 13px;
+}
+.limit-chip[data-level="reached"] {
+	background: var(--ds-danger-soft);
+	color: var(--ds-danger-text);
+}
+.limit-chip:focus-visible {
+	outline: none;
+	box-shadow: var(--ds-focus-ring);
+}
+
+.limits-input {
+	flex: none;
+	width: 8rem;
+	height: 26px;
+	padding: 0 8px;
+	border: 1px solid var(--d-line-strong);
+	border-radius: 6px;
+	background: var(--d-raised);
+	color: var(--d-fg);
+	font: inherit;
+	font-size: 13px;
+}
+.limits-input:focus-visible {
+	outline: 2px solid var(--d-focus);
+	outline-offset: 1px;
+}
+.limits-input:disabled {
+	opacity: 0.6;
+}
+.d-set-help.limits-error,
+.p-limits-error {
+	color: var(--ds-danger);
+}
+.p-limits-error,
+.p-limits-help {
+	white-space: normal;
+	font-size: 0.85rem;
+}
+.p-limits-help {
+	color: var(--ion-color-medium, var(--ds-text-3));
+}

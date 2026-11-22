@@ -57,6 +57,7 @@ type Listeners = {
 	query: ServerEvents["query"];
 	notify: ServerEvents["notify"];
 	launch: ServerEvents["launch"];
+	limit: ServerEvents["limit"];
 };
 
 export interface LiveOptions {
@@ -101,6 +102,7 @@ export class LiveSync {
 		query: new Set(),
 		notify: new Set(),
 		launch: new Set(),
+		limit: new Set(),
 	};
 	private transcriptBatch = new Map<string, TranscriptEvent[]>();
 	private frameQueued = false;
@@ -398,6 +400,10 @@ export class LiveSync {
 			case "launch":
 				// A launch from the app moved on (features/launch).
 				this.emit("launch", e.data);
+				break;
+			case "limit":
+				// A plan usage limit passed a threshold (features/limits).
+				this.emit("limit", e.data);
 				break;
 			case "security":
 				void c.invalidateQueries({ queryKey: keys.passkeys() });

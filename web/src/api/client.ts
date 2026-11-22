@@ -37,6 +37,7 @@ import {
 	type GitStatus,
 	type Hello,
 	type InteractionAnswer,
+	type LimitSettings,
 	type Page,
 	type PasskeyList,
 	type PasskeyRegisterOptions,
@@ -63,6 +64,7 @@ import {
 	type TreeNode,
 	type TreePage,
 	type TreeSort,
+	type UsageLimits,
 	type UsagePeriod,
 	type UsagePrice,
 	type UsageReport,
@@ -473,6 +475,11 @@ export const api = {
 	/** One agent's tokens, cost and context. */
 	agentUsage: (agentId: string) =>
 		request<AgentUsage>(`/agents/${enc(agentId)}/usage`),
+	/** Plan usage limits (every machine's last readings) and when to warn. */
+	usageLimits: () => request<UsageLimits>("/usage/limits"),
+	/** Turn limit warnings on or off, or set their thresholds. */
+	setUsageLimits: (change: Partial<LimitSettings>) =>
+		request<UsageLimits>("/usage/limits", { method: "PUT", body: change }),
 	/** Set a model's price (dollars per million tokens), or null to drop the edit. */
 	setUsagePrice: (
 		model: string,

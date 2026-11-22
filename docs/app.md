@@ -88,6 +88,14 @@ Each commit, push or PR needs a proven human (Prove Human, once per session) and
 
 In a session's header (on a computer), a short line shows the session's cost so far and, when the harness reports its context window (Codex), "Context: 42% used".
 
+### Limits
+
+**Limits** on the Usage page lists the plan usage limits your harnesses reported on each machine: how much of each window is used and when it resets. Codex reports how much of each limit (for example the weekly one) is used. Claude Code, pi and omp only say when a limit is reached, so they show here only then. A window drops off the list once it resets.
+
+When an agent's harness is past a warning threshold, its session header shows it (for example "Weekly limit: 88%"; on a phone, "88%"). Tap it to open Usage.
+
+Pulsar warns you when a limit passes 80% and 95%, and when one is reached: a note in the corner while Pulsar is open (if **In-app notifications** is on), and a notification on devices with notifications on. The notification says only that a limit passed a percent; Usage says which. Each warning comes once per limit window, and again after the window resets. A limit on any machine in the pool warns you; the same account on two machines warns once. Change the thresholds or turn warnings off in Settings → **Usage limits**.
+
 ## New agent
 
 Start an agent on any machine from the app: the pen button in the sidebar header (on a phone, + on Home), Cmd-Option-N, Cmd-K "New agent", "New agent in…" in Cmd-K or a project's right-click menu. A draft opens where a session would: pick the project and machine in the headline ("Add path…" takes any folder there), then the harness and the workspace under the message box. Harnesses that machine doesn't have are marked "Not found". **New worktree** makes a git worktree next to the repo on a new branch from the base branch you pick. Send says why it can't start yet ("Choose a base branch before creating a worktree.").
@@ -134,6 +142,7 @@ The gear button opens Settings:
 - **Show finished subagents**: list finished subagents too, on this device.
 - **Notifications**: turn on "Approval pending" notifications for this browser.
 - **Agent activity**: what happens when an agent you started, messaged or opened in the last 6 hours finishes its turn or stops with an error (an API error or a refused model, not a failing command): **Off**, **Notifications only**, **Sound only** or **Notifications with sound**. Notifications need this browser's notifications on; Sound only works without them. **In-app notifications** shows a short note in the corner while Pulsar is open, with **Open agent**; it closes when you open that agent. While Pulsar is in the background, the app icon and the tab title count what you missed. Kept on this device, and with its notifications on the machine that served the app. A finish on another machine reaches this browser too.
+- **Usage limits**: warn when a plan usage limit passes a threshold or is reached (on by default, at 80% and 95%). On a computer, type up to three percents; on a phone, pick a set. Kept on the machine that served the app, for every device on it.
 - **Passkeys**: every passkey on this machine, with Remove.
 - **Confirmed browsers**: browsers that confirmed with Face ID / Touch ID recently (12 hours on a computer that runs Pulsar, 7 days on a phone or tablet), with Sign out. Sending as you, Stop, answering prompts and removing a passkey need this. Signing out a browser signs out all its open tabs.
 

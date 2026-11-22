@@ -5,6 +5,9 @@
  */
 import type {
 	AgentUsage,
+	LimitSettings,
+	LimitState,
+	UsageLimits,
 	UsagePeriod,
 	UsagePrice,
 	UsageReport,
@@ -41,14 +44,74 @@ const MACHINES = [
 let custom: Record<string, Price> = {};
 let empty = false;
 
-/** Test isolation (`POST /__mock/usage`): no usage at all, or back to defaults. */
-export function mockUsage(o: { empty?: boolean; reset?: boolean }) {
+/** Codex on studio reports its weekly limit; the others only a reached one. */
+const defaultLimits = (
+	now = Date.now(),
+): (LimitState & { machine: string })[] => [
+	{
+		machine: "studio",
+		harness: "codex",
+		account: "codex",
+		window: "m10080",
+		label: "Weekly",
+		usedPercent: 62,
+		reached: false,
+		resetsAt: now + 3 * DAY,
+		at: now - 60_000,
+		plan: "pro",
+	},
+];
+let limits = defaultLimits();
+let limitSettings: LimitSettings = { enabled: true, thresholds: [80, 95] };
+
+/**
+ * Test isolation (`POST /__mock/usage`): no usage at all, back to defaults,
+ * or other limit readings (`limits`).
+ */
+export function mockUsage(o: {
+	empty?: boolean;
+	reset?: boolean;
+	limits?: (LimitState & { machine: string })[];
+}) {
 	if (o.reset) {
 		custom = {};
 		empty = false;
+		limits = defaultLimits();
+		limitSettings = { enabled: true, thresholds: [80, 95] };
 	}
 	if (typeof o.empty === "boolean") empty = o.empty;
+	if (Array.isArray(o.limits)) limits = o.limits;
 	return { ok: true };
+}
+
+/** `GET /usage/limits`. */
+export function usageLimits(): UsageLimits {
+	return { limits, settings: limitSettings };
+}
+
+/** `PUT /usage/limits`: the daemon's checks. */
+export function setLimitSettings(b: Partial<LimitSettings>): UsageLimits {
+	const keys = Object.keys(b);
+	if (keys.some((k) => k !== "enabled" && k !== "thresholds"))
+		throw new Error("enabled, thresholds");
+	const next = { ...limitSettings };
+	if (b.enabled !== undefined) {
+		if (typeof b.enabled !== "boolean") throw new Error("enabled: a boolean");
+		next.enabled = b.enabled;
+	}
+	if (b.thresholds !== undefined) {
+		const t = b.thresholds;
+		if (
+			!Array.isArray(t) ||
+			t.length < 1 ||
+			t.length > 3 ||
+			t.some((n) => !Number.isInteger(n) || n < 1 || n > 99)
+		)
+			throw new Error("thresholds: 1 to 3 whole percents from 1 to 99");
+		next.thresholds = [...new Set(t)].sort((a, b) => a - b);
+	}
+	limitSettings = next;
+	return usageLimits();
 }
 
 /** A repeatable wave: busier on weekdays and in working hours. */
@@ -137,6 +200,8 @@ export function usageReport(
 		prices: prices(),
 		scannedAt: now - 20_000,
 		scanning: false,
+		limits,
+		limitSettings,
 	};
 }
 
@@ -166,5 +231,8 @@ export function agentUsage(a: {
 			? { used: 120_000 + (n % 200) * 1000, window: 400_000 }
 			: { used: 90_000, window: null },
 		model,
+		limits: limits
+			.filter((l) => l.machine === "studio" && a.harness.includes(l.harness))
+			.map(({ machine: _, ...l }) => l),
 	};
 }

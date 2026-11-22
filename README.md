@@ -92,6 +92,7 @@ Run `pulsar qr` and scan the code with your phone, then add the page to your hom
 - Search the pool, and ask "who is editing this file?"
 - Get notifications when an agent needs you, finishes or fails.
 - See token usage and an API cost estimate per harness, model and day.
+- See plan usage limits, with a warning when one passes 80% or 95% or is reached.
 
 Full tour and keyboard shortcuts: [docs/app.md](docs/app.md).
 
