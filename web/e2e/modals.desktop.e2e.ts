@@ -3,7 +3,7 @@
  * click on the backdrop and Escape each close it (modals.shared.ts).
  */
 import type { APIRequestContext, Page } from "@playwright/test";
-import { expect, ready, test } from "./fixtures.ts";
+import { expect, pressUntil, ready, test } from "./fixtures.ts";
 import {
 	blocksConversation,
 	type Modal,
@@ -39,8 +39,9 @@ const MODALS: Modal[] = [
 		name: "palette",
 		open: async (page) => {
 			await ready(page);
-			await page.keyboard.press("ControlOrMeta+k");
-			return dialog(page, "Search the pool");
+			const palette = dialog(page, "Search the pool");
+			await pressUntil(page, "ControlOrMeta+k", palette);
+			return palette;
 		},
 	},
 	{

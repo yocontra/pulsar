@@ -4,6 +4,7 @@ import {
 	agentId,
 	expect,
 	localhostBase,
+	pressUntil,
 	proveInSheet,
 	ready,
 	resetPasskeys,
@@ -763,14 +764,8 @@ test.describe("desktop", () => {
 
 	test("keyboard: help, palette, j/k and Enter", async ({ page }) => {
 		await ready(page);
-		// The tree can paint (from the last-screen snapshot) before the
-		// shortcut handler is attached: press until help opens (it only sets
-		// "show help", so a second press changes nothing).
 		const help = page.getByRole("dialog", { name: "Keyboard shortcuts" });
-		await expect(async () => {
-			await page.keyboard.press("?");
-			await expect(help).toBeVisible({ timeout: 1000 });
-		}).toPass({ timeout: 15_000 });
+		await pressUntil(page, "?", help);
 		await page.keyboard.press("Escape");
 		await page.keyboard.press("ControlOrMeta+k");
 		await page
