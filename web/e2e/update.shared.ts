@@ -163,9 +163,13 @@ export function updateSuite(platform: "desktop" | "phone") {
 		await openAgent(page, request, "name=apparish-auth");
 		await mark(page);
 		await page.waitForTimeout(4_500);
-		await deploy(request, { webBuild: "none" });
 		// The stream reconnects and /hello is asked again.
-		await page.waitForTimeout(3_000);
+		const asked = page.waitForResponse((r) =>
+			r.url().endsWith("/api/v1/hello"),
+		);
+		await deploy(request, { webBuild: "none" });
+		await asked;
+		await page.waitForTimeout(1_000);
 		expect(await marked(page)).toBe(true);
 		await expect(updateToast(page)).toHaveCount(0);
 	});

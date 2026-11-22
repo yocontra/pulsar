@@ -9,6 +9,8 @@ The app is served by every machine in your [agent mesh](../README.md#agent-mesh)
 3. Add it to the home screen. Safari: Share → Add to Home Screen. Android Chrome: menu → Install app.
 4. Open it from the home screen. Notifications work only in the installed app (iOS 16.4 or later).
 
+The open app updates itself when the machine's Pulsar is upgraded: it reloads into the new version when you are not typing, in a dialog or sending, and keeps the page and your unsent message. Until then, a "Pulsar updated" toast offers **Reload**.
+
 ## The pool
 
 The sidebar (the home screen on a phone) lists every agent as a tree: machines, then projects, then agents. A group shows a count only when agents there need you. A machine that can't be reached says why: asleep, daemon down, or an older Pulsar.
