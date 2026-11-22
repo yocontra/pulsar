@@ -1,6 +1,7 @@
 import type {
 	Approval,
 	LaunchState,
+	LimitWarning,
 	SecurityNotice,
 	SubagentCounts,
 	TurnKind,
@@ -48,6 +49,8 @@ export interface ServiceEvents {
 	 * stream and Web Push follow it.
 	 */
 	notify: { kind: TurnKind; agentId: string; at: number };
+	/** A plan usage limit passed a warning threshold or was reached (src/usage/limits.ts). */
+	limit: LimitWarning;
 	/** A launch from the app moved on (src/service/launch.ts; not a `tail` frame). */
 	launch: LaunchState;
 }

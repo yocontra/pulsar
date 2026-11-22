@@ -37,6 +37,9 @@ import type { Registry } from "./registry.ts";
  * (`turns` notify or both), with the agent's opaque id. Each kind has its
  * own `Topic` (the push service replaces an undelivered message of the same
  * topic), so a finish never replaces a pending approval.
+ *
+ * Usage limit warnings (`limit`) go to every subscription, with only the
+ * threshold passed.
  */
 
 export interface PushOptions {
@@ -67,6 +70,7 @@ const TOPICS: Record<PushPayload["kind"], string> = {
 	security: "security",
 	finished: "finished",
 	failed: "failed",
+	limit: "limit",
 };
 
 type Row = Record<string, string | number | null>;
@@ -128,10 +132,20 @@ export class Push {
 				return null;
 			});
 		});
+		// A plan usage limit passed a threshold or was reached (src/usage/limits.ts):
+		// every subscription, with no names (the app's Usage page says which).
+		const offLimit = this.o.events.on("limit", (w) =>
+			this.send({
+				kind: "limit",
+				level: w.level,
+				...(w.reached ? { reached: true as const } : {}),
+			}),
+		);
 		this.off = () => {
 			offApproval();
 			offSecurity();
 			offNotify();
+			offLimit();
 		};
 	}
 

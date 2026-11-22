@@ -156,3 +156,110 @@ export function rootsIn(dir: string): UsageRoots {
 		omp: join(dir, "omp", "sessions"),
 	};
 }
+
+/**
+ * Plan limit lines, shaped like real session files (read-only samples;
+ * account details removed).
+ */
+
+/** Codex: a `token_count` event with `rate_limits` (resets_at in seconds). */
+export function codexLimitLine(o: {
+	t: number;
+	used: number;
+	resetsAt: number;
+	minutes?: number;
+	secondary?: { used: number; minutes: number; resetsAt: number } | null;
+	reachedType?: string | null;
+}): string {
+	return JSON.stringify({
+		timestamp: new Date(o.t).toISOString(),
+		type: "event_msg",
+		payload: {
+			type: "token_count",
+			info: null,
+			rate_limits: {
+				limit_id: "codex",
+				limit_name: null,
+				primary: {
+					used_percent: o.used,
+					window_minutes: o.minutes ?? 10080,
+					resets_at: Math.floor(o.resetsAt / 1000),
+				},
+				secondary: o.secondary
+					? {
+							used_percent: o.secondary.used,
+							window_minutes: o.secondary.minutes,
+							resets_at: Math.floor(o.secondary.resetsAt / 1000),
+						}
+					: null,
+				credits: { has_credits: false, unlimited: false, balance: "0" },
+				individual_limit: null,
+				spend_control_reached: null,
+				plan_type: "pro",
+				rate_limit_reached_type: o.reachedType ?? null,
+			},
+		},
+	});
+}
+
+/** Claude Code: the placeholder reply when the plan's limit is reached. */
+export function claudeLimitLine(o: {
+	t: number;
+	resetsAt: number;
+	type?: string;
+}): string {
+	const info = {
+		status: "rejected",
+		resetsAt: Math.floor(o.resetsAt / 1000),
+		rateLimitType: o.type ?? "seven_day",
+		overageStatus: "rejected",
+		isUsingOverage: false,
+	};
+	return JSON.stringify({
+		isSidechain: false,
+		type: "assistant",
+		timestamp: new Date(o.t).toISOString(),
+		message: {
+			model: "<synthetic>",
+			role: "assistant",
+			content: [
+				{ type: "text", text: "You've hit your weekly limit · resets 7pm" },
+			],
+			usage: { input_tokens: 0, output_tokens: 0 },
+		},
+		apiError: "usage_limit_reached",
+		apiErrorParams: { rate_limit_info: info },
+		quotaLimits: { ...info, upgradePaths: ["overage"] },
+		error: "rate_limit",
+		isApiErrorMessage: true,
+		apiErrorStatus: 429,
+	});
+}
+
+/** pi/omp: an assistant error with status 429 and the provider's limit message. */
+export function piLimitLine(o: {
+	t: number;
+	retryMs: number;
+	text?: string;
+	status?: number;
+}): string {
+	return JSON.stringify({
+		type: "message",
+		id: "e1",
+		timestamp: new Date(o.t).toISOString(),
+		message: {
+			role: "assistant",
+			content: [],
+			provider: "example-go",
+			model: "m-flash",
+			usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			stopReason: "error",
+			timestamp: o.t - 900,
+			errorStatus: o.status ?? 429,
+			errorMessage:
+				o.text ??
+				`429 Example usage limit reached (weekly, resets in 3d 17h). Turn on extra usage at https://example.com/console/org_x. retry-after-ms=${o.retryMs}`,
+			completedAt: o.t,
+		},
+	});
+}

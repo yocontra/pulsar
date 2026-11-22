@@ -606,7 +606,9 @@ export type PushPayload =
 			ref: string;
 			/** Play the notification's sound ("Notifications with sound"). */
 			sound?: true;
-	  };
+	  }
+	/** A plan usage limit passed a threshold (`level`, a percent) or was reached. */
+	| { kind: "limit"; level: number; reached?: true };
 
 /** `GET /attention` items: who waits on the user, approvals first, newest first. */
 export interface AttentionItem {
@@ -1138,6 +1140,8 @@ export interface ServerEvents {
 	 * its turn or stopped with an error (the in-app toast and sound).
 	 */
 	notify: { kind: TurnKind; agentId: string; at: number };
+	/** A plan usage limit passed a warning threshold or was reached. */
+	limit: LimitWarning;
 	gap: {
 		reason: "expired" | "overflow";
 		topic?: "transcript" | "changes";
@@ -1240,6 +1244,10 @@ export interface UsageReport {
 	/** This node's last finished scan of session files (ms), null before the first. */
 	scannedAt: number | null;
 	scanning: boolean;
+	/** Plan usage limits each machine's harnesses last reported (current windows only). */
+	limits?: (LimitState & { machine: string })[];
+	/** When the operator is warned about limits (this node's setting). */
+	limitSettings?: LimitSettings;
 }
 
 /** `GET /agents/:id/usage`: one agent's session so far. */
@@ -1250,6 +1258,54 @@ export interface AgentUsage {
 	/** Tokens in the latest request; `window` when the harness reports it. */
 	context: { used: number; window: number | null } | null;
 	model: string | null;
+	/** Its harness's plan limits on its machine (current windows only). */
+	limits?: LimitState[];
+}
+
+/**
+ * One plan usage limit as a harness last reported it (src/usage/limits.ts).
+ * Codex reports a percentage; Claude Code, pi and omp only say when the
+ * limit is reached (`usedPercent` 100, `reached`).
+ */
+export interface LimitState {
+	harness: string;
+	/** The harness's limit or provider id ("" when it names none). */
+	account: string;
+	/** A stable id for the window ("m10080", "seven_day", "weekly"). */
+	window: string;
+	/** "Weekly", "5-hour". */
+	label: string;
+	usedPercent: number | null;
+	reached: boolean;
+	/** When the window resets (ms), when known. */
+	resetsAt: number | null;
+	/** When the harness reported it (ms). */
+	at: number;
+	plan: string | null;
+}
+
+/** `GET`/`PUT /usage/limits`: every machine's current limits (last readings) and the settings. */
+export interface UsageLimits {
+	limits: (LimitState & { machine: string })[];
+	settings: LimitSettings;
+}
+
+/** `PUT /usage/limits`: warn at these percents and when a limit is reached. */
+export interface LimitSettings {
+	enabled: boolean;
+	/** 1 to 3 whole percents, ascending (default 80 and 95). */
+	thresholds: number[];
+}
+
+/** A limit passed a threshold or was reached (SSE `limit`; Web Push has no names). */
+export interface LimitWarning {
+	harness: string;
+	label: string;
+	/** The threshold passed, or 100 when reached. */
+	level: number;
+	reached: boolean;
+	usedPercent: number | null;
+	resetsAt: number | null;
 }
 
 // ------------------------------------------------------------ attachments

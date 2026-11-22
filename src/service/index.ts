@@ -493,6 +493,17 @@ export class PulsarService {
 		);
 	}
 
+	/**
+	 * Warns (SSE `limit` and Web Push, via the `limit` event) about plan
+	 * limits past a threshold: this machine's latest readings, and the
+	 * peers' (asked now with `withPeers`, else their last answer).
+	 */
+	async warnLimits(withPeers: boolean): Promise<void> {
+		const pool = withPeers ? (this.registry.pool?.usage ?? null) : null;
+		for (const w of await this.usage.limitWarnings(pool))
+			this.events.emit("limit", w);
+	}
+
 	/** One agent's tokens, cost and context (a remote one's from its home node). */
 	async agentUsage(id: string, as: Principal): Promise<AgentUsage> {
 		authorize(as, "usage");
@@ -635,13 +646,21 @@ export class PulsarService {
 			(this.scan &&
 				process.env.NODE_ENV !== "test" &&
 				process.env.PULSAR_USAGE_SCAN !== "0")
-		)
+		) {
 			jobs.every(
 				"usage",
 				this.usageOpts?.intervalMs ?? INTERVALS.usageMs,
-				() => this.usage.scanner.scan(),
+				async () => {
+					await this.usage.scanner.scan();
+					await this.warnLimits(false);
+				},
 				{ runNow: true },
 			);
+			// Peers' plan limits, so a limit on any machine warns here too.
+			jobs.every("limits:pool", INTERVALS.limitsPoolMs, () =>
+				this.warnLimits(true),
+			);
+		}
 		// Subagents: one cheap check per live agent; lists only what moved.
 		if (this.scan)
 			jobs.every("subagents", INTERVALS.subagentsMs, () =>

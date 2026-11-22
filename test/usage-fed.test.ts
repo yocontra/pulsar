@@ -15,14 +15,20 @@ import {
 } from "../src/federation/index.ts";
 import { PoolMembers } from "../src/federation/members.ts";
 import { RemoteUsage } from "../src/federation/usage.ts";
-import type { AgentUsage, UsageReport } from "../src/http/wire.ts";
+import type { AgentUsage, UsageLimits, UsageReport } from "../src/http/wire.ts";
 import { RpcError } from "../src/rpc.ts";
 import { PulsarService } from "../src/service/index.ts";
 import { Store } from "../src/store.ts";
 import { HttpTransport } from "../src/transport/http.ts";
 import { FakeTailnet } from "./fake-tailnet.ts";
 import { until } from "./helpers.ts";
-import { claudeLine, codexLines, rootsIn, write } from "./usage-fixtures.ts";
+import {
+	claudeLine,
+	codexLimitLine,
+	codexLines,
+	rootsIn,
+	write,
+} from "./usage-fixtures.ts";
 
 /**
  * Usage across the pool on an in-process fake tailnet: the viewer sums its
@@ -46,6 +52,7 @@ const FAST: Partial<FederationIntervals> = {
 };
 const HOUR = 3_600_000;
 const T = Math.floor((Date.now() - 2 * HOUR) / HOUR) * HOUR + 60_000;
+const RESET = Math.floor((Date.now() + 72 * HOUR) / 1000) * 1000;
 
 interface Node {
 	name: string;
@@ -114,7 +121,10 @@ beforeAll(async () => {
 	const day = new Date(T).toISOString().slice(0, 10).split("-");
 	write(
 		join(home.dir, "codex", "sessions", ...day, `rollout-x-${THREAD}.jsonl`),
-		codexLines(T, "claude-sonnet-5-5", [[1_000_000, 0, 0]], 200_000),
+		[
+			...codexLines(T, "claude-sonnet-5-5", [[1_000_000, 0, 0]], 200_000),
+			codexLimitLine({ t: Date.now() - 60_000, used: 88, resetsAt: RESET }),
+		],
 	);
 	write(join(viewer.dir, "claude", "projects", "-w", "v1.jsonl"), [
 		claudeLine({ id: "msg_v", t: T, input: 1_000_000, output: 0 }),
@@ -212,6 +222,54 @@ describe("usage across the pool", () => {
 		expect(r.body.tokens.input).toBe(1_000_000);
 		expect(r.body.cost).toBeCloseTo(2, 6);
 		expect(r.body.context).toEqual({ used: 1_000_000, window: 200_000 });
+	});
+
+	test("a home node's plan limits show on the viewer, warn there once, and reach the agent's header", async () => {
+		const r = await api<UsageReport>("viewer", "/usage?period=24h");
+		expect(r.body.limits).toEqual([
+			expect.objectContaining({
+				machine: home.service.machineId,
+				harness: "codex",
+				label: "Weekly",
+				usedPercent: 88,
+				resetsAt: RESET,
+			}),
+		]);
+		const a = await api<AgentUsage>("viewer", `/agents/${enc(address)}/usage`);
+		expect(a.body.limits?.[0]?.usedPercent).toBe(88);
+		const seen: unknown[] = [];
+		const off = viewer.service.events.on("limit", (w) => seen.push(w));
+		await viewer.service.warnLimits(true);
+		await viewer.service.warnLimits(true);
+		off();
+		expect(seen).toEqual([
+			expect.objectContaining({ harness: "codex", level: 80, reached: false }),
+		]);
+		const view = await api<UsageLimits>("viewer", "/usage/limits");
+		expect(view.body.limits.map((l) => l.machine)).toEqual([
+			home.service.machineId,
+		]);
+		expect(view.body.settings).toEqual({ enabled: true, thresholds: [80, 95] });
+	});
+
+	test("PUT /usage/limits saves the thresholds; bad ones are refused", async () => {
+		const ok = await api<UsageLimits>("viewer", "/usage/limits", {
+			method: "PUT",
+			body: JSON.stringify({ enabled: false, thresholds: [90, 70] }),
+		});
+		expect(ok.status).toBe(200);
+		expect(ok.body.settings).toEqual({ enabled: false, thresholds: [70, 90] });
+		for (const body of [{ thresholds: [] }, { thresholds: [100] }, { x: 1 }]) {
+			const bad = await api("viewer", "/usage/limits", {
+				method: "PUT",
+				body: JSON.stringify(body),
+			});
+			expect(bad.status).toBe(400);
+		}
+		await api("viewer", "/usage/limits", {
+			method: "PUT",
+			body: JSON.stringify({ enabled: true, thresholds: [80, 95] }),
+		});
 	});
 
 	test("bad periods are refused", async () => {
