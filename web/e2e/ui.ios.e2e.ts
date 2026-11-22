@@ -263,7 +263,7 @@ test.describe("phone UI", () => {
 			() =>
 				performance
 					.getEntriesByType("resource")
-					.some((e) => e.name.includes("/_app/AskPage.")),
+					.some((e) => e.name.includes("/_app/SettingsPage.")),
 			undefined,
 			{ timeout: 10_000 },
 		);

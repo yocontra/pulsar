@@ -135,10 +135,7 @@ test.describe("desktop UI", () => {
 			);
 			await expectBarInside(page.locator(".d-main .composer"), "composer");
 			await page.keyboard.press("ControlOrMeta+k");
-			await expectBarInside(
-				page.getByRole("radiogroup", { name: "Mode" }),
-				"palette Search/Ask",
-			);
+			await expectBarInside(page.locator(".d-pal-input"), "palette search");
 			await expectBarInside(page.locator(".d-pal-foot"), "palette footer");
 			await page.keyboard.press("Escape");
 			await page.getByRole("button", { name: "Settings" }).first().click();
