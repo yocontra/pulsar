@@ -1716,13 +1716,12 @@ type RealtimeChange =
 	/**
 	 * The agent's transcript page says no transcript was found (`missing`)
 	 * until set to null, as the daemon does before a session file is written
-	 * or located; `delayMs` slows every page (a slow home node).
+	 * or located.
 	 */
 	| {
 			action: "transcript-missing";
 			id: string;
 			missing: "not_found" | "no_session" | "unsupported" | null;
-			delayMs?: number;
 	  }
 	/** The agent edits a file in its worktree (the diff viewer goes live). */
 	| { action: "changes"; id: string; path: string; line: string }
@@ -1737,10 +1736,7 @@ type RealtimeChange =
 /** Transcripts the `transcript-missing` change holds back, by agent id. */
 const transcriptHolds = new Map<
 	string,
-	{
-		missing: "not_found" | "no_session" | "unsupported" | null;
-		delayMs: number;
-	}
+	"not_found" | "no_session" | "unsupported"
 >();
 
 /** What realtime changes touched, so `restore` puts the fixtures back. */
@@ -1865,12 +1861,8 @@ function realtime(raw: unknown) {
 		}
 		case "transcript-missing": {
 			const a = agentOr404(c.id);
-			if (c.missing === null && !c.delayMs) transcriptHolds.delete(a.id);
-			else
-				transcriptHolds.set(a.id, {
-					missing: c.missing,
-					delayMs: c.delayMs ?? 0,
-				});
+			if (c.missing === null) transcriptHolds.delete(a.id);
+			else transcriptHolds.set(a.id, c.missing);
 			break;
 		}
 		case "changes": {
@@ -1954,7 +1946,11 @@ setInterval(() => {
 			const a = agentById.get(session);
 			if (
 				a?.hasTranscript &&
-				!transcriptHolds.get(a.id)?.missing &&
+				!transcriptHolds.has(a.id) &&
+				// A page held back (a slow home node) has nothing to stream onto yet.
+				!faults.rules.some(
+					(f) => f.hold && f.path === `/agents/${a.id}/transcript`,
+				) &&
 				a.status !== "offline" &&
 				(a.fixed ? a !== FIX.xss : true)
 			) {
@@ -2712,14 +2708,13 @@ async function route(
 		seg.length === 3
 	) {
 		const a = agentOr404(seg[1]!);
-		const hold = transcriptHolds.get(a.id);
-		if (hold?.delayMs) await new Promise((r) => setTimeout(r, hold.delayMs));
-		if (hold?.missing)
+		const held = transcriptHolds.get(a.id);
+		if (held)
 			return json({
 				events: [],
 				cursor: null,
 				available: false,
-				missing: hold.missing,
+				missing: held,
 			});
 		if (!a.hasTranscript)
 			return json({

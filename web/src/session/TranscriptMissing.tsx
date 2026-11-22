@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { harnessName } from "../components/ui/agent-avatar.tsx";
 import type { TranscriptMissing } from "../data/patch.ts";
+import { e2eNumber } from "../lib/e2e.ts";
 import { TranscriptSkeleton } from "./ConversationView.tsx";
 
 /**
@@ -8,6 +9,9 @@ import { TranscriptSkeleton } from "./ConversationView.tsx";
  * says why. A new session's log is usually written within a second or two.
  */
 export const TRANSCRIPT_WAIT_MS = 6000;
+
+/** The wait; an end-to-end test may set it (`__pulsarE2E.transcriptWaitMs`). */
+const waitMs = () => e2eNumber("transcriptWaitMs") ?? TRANSCRIPT_WAIT_MS;
 
 /**
  * What a conversation shows while it has no events and no transcript was
@@ -36,7 +40,7 @@ export function TranscriptMissingNotice({
 	useEffect(() => {
 		setWaited(false);
 		if (!pending) return;
-		const t = setTimeout(() => setWaited(true), TRANSCRIPT_WAIT_MS);
+		const t = setTimeout(() => setWaited(true), waitMs());
 		return () => clearTimeout(t);
 	}, [pending, missing]);
 

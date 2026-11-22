@@ -10,10 +10,45 @@ import { expect, test } from "./fixtures.ts";
  * and iOS (WebKit) suites.
  */
 
-/** The page asks again every 2 s while not found (data/queries.ts POLL_MS). */
-const FOUND_MS = 5000;
-/** The notice says why after 6 s (session/TranscriptMissing.tsx). */
-const NOTICE_MS = 9000;
+/**
+ * Time-independent: the init script sets the app's notice wait and its
+ * not-found poll (`__pulsarE2E`), and the tests wait for requests and
+ * states, never for time.
+ */
+async function setup(page: Page, waitMs: number, pollMs = 100) {
+	await page.addInitScript(
+		([wait, poll]) => {
+			const w = window as { __pulsarE2E?: Record<string, unknown> };
+			w.__pulsarE2E = {
+				...(w.__pulsarE2E ?? {}),
+				transcriptWaitMs: wait,
+				transcriptPollMs: poll,
+			};
+		},
+		[waitMs, pollMs] as const,
+	);
+}
+
+/** Resolves on the next transcript page request for `id`. */
+const nextPage = (page: Page, id: string) =>
+	page.waitForRequest((r) =>
+		r.url().includes(`/agents/${encodeURIComponent(id)}/transcript`),
+	);
+
+/** Long enough that the notice never shows during a test. */
+const NEVER = 3_600_000;
+
+async function mock(
+	request: APIRequestContext,
+	what: "faults" | "release",
+	body: object,
+) {
+	const res = await request.post(`/api/v1/__mock/${what}`, {
+		headers: { "X-Pulsar": "1" },
+		data: body,
+	});
+	expect(res.ok()).toBe(true);
+}
 
 async function change(request: APIRequestContext, body: object) {
 	const res = await request.post("/api/v1/__mock/realtime", {
@@ -75,18 +110,20 @@ export function transcriptLoadingSuite(phone: boolean) {
 			id,
 			missing: "not_found",
 		});
+		await setup(page, NEVER);
 		await watchForNone(page);
 		await open(page, id);
 		await expect(skeleton(page)).toBeVisible();
-		// Several "not found" pages later: still loading, no notice.
-		await page.waitForTimeout(2500);
+		// Two more "not found" pages: still loading, no notice.
+		await nextPage(page, id);
+		await nextPage(page, id);
 		await expect(skeleton(page)).toBeVisible();
 		await expect(notice(page)).toHaveCount(0);
 		await expect(events(page)).toHaveCount(0);
 		// Found: the next page shows it, with no reload (the stream covers
 		// the key, so only the not-found poll can bring it).
 		await change(request, { action: "transcript-missing", id, missing: null });
-		await expect(events(page).first()).toBeVisible({ timeout: FOUND_MS });
+		await expect(events(page).first()).toBeVisible();
 		await expect(skeleton(page)).toHaveCount(0);
 		await expect(notice(page)).toHaveCount(0);
 		expect(await sawNone(page)).toBeNull();
@@ -97,18 +134,32 @@ export function transcriptLoadingSuite(phone: boolean) {
 		request,
 	}) => {
 		const id = await freshAgent(request);
-		await change(request, {
-			action: "transcript-missing",
-			id,
-			missing: null,
-			delayMs: 2500,
+		// The page waits at the mock until released (a slow home node).
+		await mock(request, "faults", {
+			rules: [{ method: "GET", path: `/agents/${id}/transcript`, hold: id }],
 		});
-		await watchForNone(page);
-		await open(page, id);
-		await expect(skeleton(page)).toBeVisible();
-		await expect(events(page).first()).toBeVisible({ timeout: FOUND_MS });
-		expect(await sawNone(page)).toBeNull();
-		await expect(notice(page)).toHaveCount(0);
+		try {
+			await setup(page, NEVER);
+			await watchForNone(page);
+			await open(page, id);
+			await expect
+				.poll(async () => {
+					const res = await request.get(
+						`/api/v1/__mock/held?hold=${encodeURIComponent(id)}`,
+						{ headers: { "X-Pulsar": "1" } },
+					);
+					return ((await res.json()) as { waiting: number }).waiting;
+				})
+				.toBeGreaterThan(0);
+			await expect(skeleton(page)).toBeVisible();
+			await expect(notice(page)).toHaveCount(0);
+			await mock(request, "release", { hold: id });
+			await expect(events(page).first()).toBeVisible();
+			expect(await sawNone(page)).toBeNull();
+			await expect(notice(page)).toHaveCount(0);
+		} finally {
+			await mock(request, "faults", {});
+		}
 	});
 
 	test("still not found: the reason, with Retry", async ({ page, request }) => {
@@ -118,27 +169,28 @@ export function transcriptLoadingSuite(phone: boolean) {
 			id,
 			missing: "no_session",
 		});
+		// No wait: the notice shows with the first "not found" page; no poll,
+		// so only Retry asks again.
+		await setup(page, 0, NEVER);
 		await watchForNone(page);
 		await open(page, id);
 		const n = notice(page);
-		await expect(n).toHaveAttribute("data-transcript-missing", "no_session", {
-			timeout: NOTICE_MS,
-		});
+		await expect(n).toHaveAttribute("data-transcript-missing", "no_session");
 		await expect(n).toContainText("No transcript yet.");
 		await expect(n).toContainText("hasn't started a session for this agent");
 		await expect(skeleton(page)).toHaveCount(0);
 		// Retry asks for the page now (still missing: the notice stays).
 		const retry = n.getByRole("button", { name: "Retry" });
-		const asked = page.waitForRequest((r) =>
-			r.url().includes(`/agents/${encodeURIComponent(id)}/transcript`),
-		);
+		const asked = nextPage(page, id);
 		if (phone) await retry.tap();
 		else await retry.click();
 		await asked;
 		await expect(n).toHaveAttribute("data-transcript-missing", "no_session");
-		// Found: it shows without a reload.
+		await expect(events(page)).toHaveCount(0);
+		// Found: it shows without a reload (the live stream brings it, as the
+		// daemon's watcher does once it finds the file).
 		await change(request, { action: "transcript-missing", id, missing: null });
-		await expect(events(page).first()).toBeVisible({ timeout: FOUND_MS });
+		await expect(events(page).first()).toBeVisible();
 		await expect(notice(page)).toHaveCount(0);
 		expect(await sawNone(page)).toBeNull();
 	});
