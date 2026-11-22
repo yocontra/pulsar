@@ -76,9 +76,11 @@ export const test = base.extend<
 				if (/Viewport argument key "interactive-widget"/.test(m.text())) return;
 				// Linux WebKit logs a cancelled request as a console error.
 				if (cancelledFetch(m.text())) return;
+				// Mermaid and the libraries it loads (d3, and cytoscape for some
+				// diagram kinds) try inline styles; the CSP refuses them, by design.
 				if (
 					/Content Security Policy/.test(m.text()) &&
-					/\/(mermaid|d3-)[^/]*\.js/.test(url)
+					/\/(mermaid|d3-|cytoscape)[^/]*\.js/.test(url)
 				)
 					return;
 				errors.push(m.text());

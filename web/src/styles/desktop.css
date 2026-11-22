@@ -1618,7 +1618,8 @@
 }
 .d-sh-id {
 	flex: 1;
-	min-width: 0;
+	/* The agent's name always has room, however many actions there are. */
+	min-width: 160px;
 }
 .d-sh-line1 {
 	display: flex;
@@ -1631,9 +1632,16 @@
 .d-sh-line1 > .ds-status {
 	position: relative;
 	top: 2px;
+	/* In a crowded header the pill clips before the name does. */
+	min-width: 0;
+	flex-shrink: 4;
+	overflow: hidden;
 }
 .d-sh-line1 h1 {
 	margin: 0;
+	/* The name comes first; the status pill takes what is left. */
+	flex-shrink: 0;
+	max-width: 100%;
 	font-size: 15px;
 	line-height: 20px;
 	font-weight: 650;
@@ -1712,13 +1720,19 @@
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	flex: none;
+	/* Many actions (git, issue, files, find…) must not squeeze the title
+	   away: the actions give way, and the model label gives way first. */
+	flex: 0 1 auto;
+	min-width: 0;
 }
 .d-sh-model {
 	display: inline-flex;
 	align-items: center;
 	color: var(--d-fg-3);
 	font-size: 12.5px;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
 }
 .d-stop {
 	color: var(--ds-danger-text);

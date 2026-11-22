@@ -127,7 +127,6 @@ import {
 import { CHART, SAMPLE_PDF, SCREENSHOT } from "./images.ts";
 import { issueControl, issueDetails } from "./issues.ts";
 import { launchRoute } from "./launch.ts";
-import { searchMessages, warmSearch } from "./search.ts";
 import {
 	prReview,
 	prReviewAct,
@@ -135,6 +134,7 @@ import {
 	prReviewFile,
 	resetPrReview,
 } from "./prreview.ts";
+import { searchMessages, warmSearch } from "./search.ts";
 import {
 	forParentBody,
 	subagentById,
