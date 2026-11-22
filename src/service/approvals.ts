@@ -148,9 +148,8 @@ export interface ApprovalsOptions {
  */
 export const APPROVAL_TIMEOUT_MS = 540_000;
 /**
- * Questions and plans from such a hook, and extension or harness-server
- * prompts that don't say how long they wait: the operator may be away from
- * the terminal. Under the hook's own 3600 s limit (src/hook.ts).
+ * Questions and plans from such a hook: the operator may be away from the
+ * terminal. Under the hook's own 3600 s limit (src/hook.ts).
  */
 export const INTERACTION_TIMEOUT_MS = 3_540_000;
 
@@ -171,6 +170,9 @@ export function approvalDeadlineMs(
 	const ms = hookTimeoutS * 1000;
 	return Math.min(MAX_TIMER_MS, Math.max(ms - 60_000, ms * 0.9));
 }
+
+/** The longest an extension or harness-server prompt waits for the app: a day. */
+const MAX_ASK_MS = 86_400_000;
 
 /** A prompt asked again with less than this left goes to the terminal at once. */
 const MIN_LEFT_MS = 5_000;
@@ -489,10 +491,8 @@ export class Approvals {
 			grant: null,
 			sessionRules: req.kind === "permission" ? req.sessionRules : null,
 			source: req.readOnly ? "readonly" : "extension",
-			timeoutMs: Math.min(
-				req.timeoutMs ?? INTERACTION_TIMEOUT_MS,
-				INTERACTION_TIMEOUT_MS,
-			),
+			// No limit of its own (the local dialog waits): a day.
+			timeoutMs: Math.min(req.timeoutMs ?? MAX_ASK_MS, MAX_ASK_MS),
 			transcriptPath: null,
 			inputHash,
 		});

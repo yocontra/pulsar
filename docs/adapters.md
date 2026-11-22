@@ -38,7 +38,7 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 Limits:
 
 - **Claude Code** holds a peer message for approval when the session skips permission prompts. `pulsar setup` asks to set `crossSessionInbound: "accept"` in `~/.claude/settings.json` to deliver these. When the session shows a dialog in the terminal, the app shows the agent as needing you.
-- **Codex** reports no busy or idle state, so `wait idle:` never resolves for a Codex agent. A Codex TUI that is not attached to Codex's app-server may not show a message until you resume it. Setup sets `default_tools_approval_mode = "approve"` for Pulsar's tools and `tool_timeout_sec = 1900`, so `ask` and `wait` can block.
+- **Codex** approvals and questions can be answered from the app for sessions that run in Codex's app-server (the default). A session started with `codex --no-daemon` shows them read-only. "Allow for session" is not offered. Codex reports no busy or idle state, so `wait idle:` never resolves for a Codex agent. A Codex TUI that is not attached to Codex's app-server may not show a message until you resume it. Setup sets `default_tools_approval_mode = "approve"` for Pulsar's tools and `tool_timeout_sec = 1900`, so `ask` and `wait` can block.
 - **OpenCode**: an idle TUI with no running session shows its folder's most recent session as "Idle · last session". Pulsar does not push into it until that session loads Pulsar's tools. If the daemon finds an `opencode` older than 2.0 first on its PATH, `pulsar doctor` says so.
 - **pi, omp**: the only harnesses where a receipt reaches "in its conversation".
 

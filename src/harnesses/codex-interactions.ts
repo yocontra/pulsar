@@ -5,12 +5,12 @@ import { statAsync, tailAsync } from "../util.ts";
 import type { ServerPrompt } from "./types.ts";
 
 /**
- * Codex: shown, not answered. Codex sends
- * approvals and `request_user_input` only to the app-server client that
- * started the turn (its TUI), and no hook covers `request_user_input`, so
- * the app can't answer them. The rollout records the model's call before
- * the answer, so an unanswered call there is a pending prompt: the app
- * shows a read-only card ("Waiting for an answer in the terminal").
+ * Codex prompts read from the rollout, shown read-only: the fallback for a
+ * thread the app-server daemon doesn't run (a TUI started with
+ * `--no-daemon`), whose prompts only its own terminal can answer. Threads
+ * in the daemon are answered from the app (codex-watch.ts). The rollout
+ * records the model's call before the answer, so an unanswered call there
+ * is a pending prompt: the app shows a read-only card.
  */
 
 interface Line {
@@ -90,15 +90,23 @@ export function codexPendingIn(
 
 /** `request_user_input` arguments: `{questions: [{id, header, question, options, isOther, isSecret}]}`. */
 function questionPrompt(args: string | undefined): InteractionPrompt | null {
-	let a: { questions?: Record<string, unknown>[] };
+	let a: { questions?: unknown };
 	try {
 		a = JSON.parse(args ?? "");
 	} catch {
 		return null;
 	}
+	return codexQuestions(a.questions);
+}
+
+/** Codex's questions (`request_user_input`, the app-server's `requestUserInput`) as a card. */
+export function codexQuestions(questions: unknown): InteractionPrompt | null {
+	const list = Array.isArray(questions)
+		? (questions as Record<string, unknown>[])
+		: [];
 	return cleanPrompt({
 		kind: "question",
-		questions: (a.questions ?? []).map((q, i) => ({
+		questions: list.map((q, i) => ({
 			id: q.id ?? `q${i}`,
 			question: q.question,
 			header: q.header,

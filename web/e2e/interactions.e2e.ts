@@ -189,7 +189,31 @@ test.describe("interactions", () => {
 		await expect(card.getByRole("radio", { name: /OAuth/ })).toHaveCount(0);
 	});
 
-	test("Codex: shown read-only, answered only in its terminal", async ({
+	test("Codex in its app-server: answered from the app", async ({
+		page,
+		request,
+		context,
+	}) => {
+		const id = await agentId(request, "name=codex@apparish");
+		await page.goto(localhostBase());
+		await withPasskey(page, request, context);
+		await change(request, { action: "interaction", id, kind: "codex-live" });
+		const card = await open(page, id);
+		await expect(card).toContainText("Codex asks");
+		await expect(card).not.toContainText(
+			"Waiting for an answer in the terminal",
+		);
+		await card.getByRole("radio", { name: /staging/ }).check();
+		await card
+			.getByRole("button", { name: /^Send answer( · Face ID)?$/ })
+			.click();
+		await proveInSheet(page);
+		await expect(page.locator(".prompt-outcome")).toContainText(
+			/Answered: staging by You/,
+		);
+	});
+
+	test("Codex with --no-daemon: shown read-only, answered only in its terminal", async ({
 		page,
 		request,
 	}) => {

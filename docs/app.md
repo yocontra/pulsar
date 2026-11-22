@@ -106,6 +106,8 @@ Starting needs a proven human (another machine asks for its own passkey check). 
 
 An agent's permission prompt shows in Needs you and in its session as a card: the tool, every argument exactly as the agent sent it (spaces, tabs, newlines and hidden characters are marked), the folder and branch, and a countdown. Choose Allow once, Allow for session (the rules it adds are listed) or Deny with a note. The prompt also stays on the machine; whichever answer comes first wins, and the card says where it was answered.
 
+A card stays answerable for a day, also when Pulsar restarts. Codex prompts can be answered unless the session was started with `codex --no-daemon`.
+
 Answering needs [Prove Human](#prove-human). If you haven't proven yet, the check opens in place, and your answer goes on after it.
 
 ## Prove Human

@@ -6,6 +6,13 @@ import type { Registry } from "./registry.ts";
 type Source = NonNullable<HarnessDriver["serverInteractions"]>;
 
 /**
+ * How long a card for a server prompt stays answerable: the harness waits
+ * on its prompt with no limit of its own, so a day; a prompt still waiting
+ * then opens a new card.
+ */
+export const SERVER_PROMPT_TIMEOUT_MS = 86_400_000;
+
+/**
  * Relays prompts a harness keeps on its own server (OpenCode) into
  * interactions: a new pending prompt opens one (like an extension's
  * `interaction.ask`); the app's answer is sent back through the harness's
@@ -15,9 +22,18 @@ type Source = NonNullable<HarnessDriver["serverInteractions"]>;
 export class ServerInteractions {
 	/** Per open prompt: aborted when it leaves the harness's list (answered there). */
 	private open = new Map<string, AbortController>();
-	private readonly o: { registry: Registry; approvals: Approvals };
+	private readonly o: {
+		registry: Registry;
+		approvals: Approvals;
+		timeoutMs?: number;
+	};
 
-	constructor(o: { registry: Registry; approvals: Approvals }) {
+	constructor(o: {
+		registry: Registry;
+		approvals: Approvals;
+		/** How long a card waits (tests shorten it). */
+		timeoutMs?: number;
+	}) {
 		this.o = o;
 	}
 
@@ -60,7 +76,7 @@ export class ServerInteractions {
 						input: p.input,
 						prompt: p.prompt,
 						sessionRules: p.sessionRules,
-						timeoutMs: null,
+						timeoutMs: this.o.timeoutMs ?? SERVER_PROMPT_TIMEOUT_MS,
 						...(p.readOnly ? { readOnly: true } : {}),
 					},
 				);
@@ -71,7 +87,9 @@ export class ServerInteractions {
 			}
 			void asked
 				.then(async (r) => {
-					if (!r) return;
+					// The card's time ran out while the harness still waits: the
+					// next poll opens a new one, so it stays answerable.
+					if (!r) return drop();
 					const ok = await source.reply(p, r).catch(() => false);
 					if (ok) return;
 					// The app showed it answered, but the harness still waits:

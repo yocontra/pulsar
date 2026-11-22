@@ -16,8 +16,9 @@ import {
 } from "./codex-rpc.ts";
 import { codexStatuses } from "./codex-status.ts";
 import { parseCodex } from "./codex-transcript.ts";
+import { CodexWatch } from "./codex-watch.ts";
 import { listCodexSubagents } from "./more-subagents.ts";
-import type { HarnessDriver } from "./types.ts";
+import type { HarnessDriver, ServerPrompt } from "./types.ts";
 
 const codexFiles = new Map<string, string>();
 /** Threads with no rollout found, and when: the folders are walked again only after `MISS_RETRY_MS`. */
@@ -81,6 +82,13 @@ const modelCache = new Map<
 	string,
 	{ size: number; mtimeMs: number; model: string | null }
 >();
+
+let watch: CodexWatch | null = null;
+/** The daemon's one client on Codex's app-server (made on first use). */
+const codexWatch = () => {
+	watch ??= new CodexWatch();
+	return watch;
+};
 
 export const codex: HarnessDriver = {
 	...codexIdent,
@@ -168,11 +176,26 @@ export const codex: HarnessDriver = {
 	// Spawned threads; their transcript is the thread's own (`transcript.locate`).
 	subagents: { list: listCodexSubagents },
 
+	// Threads in the app-server daemon: answered from the app (codex-watch.ts).
+	// Others (`--no-daemon`): read from the rollout, answered in the terminal.
 	serverInteractions: {
 		intervalMs: 2000,
-		pending: (agents) => codexPending(agents, codexRolloutAsync),
-		// Codex answers only in its own TUI.
-		reply: async () => false,
+		async pending(agents) {
+			const live = agents.filter((a) => a.sessionId && a.status !== "gone");
+			await codexWatch()
+				.sync(live.map((a) => a.sessionId!))
+				.catch(() => false);
+			const out: ServerPrompt[] = [];
+			const rest = [];
+			for (const a of live)
+				if (codexWatch().covers(a.sessionId!))
+					for (const p of codexWatch().prompts(a.sessionId!))
+						out.push({ ...p, sessionId: a.sessionId! });
+				else rest.push(a);
+			out.push(...(await codexPending(rest, codexRolloutAsync)));
+			return out;
+		},
+		reply: (p, r) => codexWatch().reply(p, r),
 	},
 
 	names: { intervalMs: 5000, read: (agents) => codexNames(agents) },

@@ -13,7 +13,10 @@ import {
 } from "../src/harnesses/opencode-interactions.ts";
 import type { ServerPrompt, ServerReply } from "../src/harnesses/types.ts";
 import { PulsarService } from "../src/service/index.ts";
-import { ServerInteractions } from "../src/service/server-interactions.ts";
+import {
+	SERVER_PROMPT_TIMEOUT_MS,
+	ServerInteractions,
+} from "../src/service/server-interactions.ts";
 import { Store } from "../src/store.ts";
 import { longestLoopBlock } from "./loop-probe.ts";
 import { SoftAuthenticator } from "./webauthn.ts";
@@ -102,7 +105,7 @@ describe("OpenCode forms", () => {
 	});
 });
 
-function setup(shared?: Store) {
+function setup(shared?: Store, timeoutMs?: number) {
 	const store = shared ?? new Store(":memory:");
 	const service = new PulsarService({
 		store,
@@ -117,6 +120,7 @@ function setup(shared?: Store) {
 	const relay = new ServerInteractions({
 		registry: service.registry,
 		approvals: service.approvals,
+		...(timeoutMs ? { timeoutMs } : {}),
 	});
 	cleanups.push(() => relay.stop());
 	return { service, relay };
@@ -288,6 +292,26 @@ describe("server interactions: prompts shown again", () => {
 		b.service.approvals.expireStale();
 		await b.relay.poll("opencode", s.source);
 		expect(pending()).toEqual([["ls"], ["echo hi > a.txt"]]);
+	});
+
+	test("a card waits a day; one whose time ran out while the harness still waits opens again", async () => {
+		const long = setup();
+		await enroll(long.service);
+		await long.relay.poll("opencode", fakeServer([PERM]).source);
+		const day = long.service.approvals.pendingFor(agentId(long.service))[0]!;
+		expect(day.expiresAt - day.createdAt).toBe(SERVER_PROMPT_TIMEOUT_MS);
+
+		const { service, relay } = setup(undefined, 30);
+		await enroll(service);
+		const s = fakeServer([PERM]);
+		await relay.poll("opencode", s.source);
+		const first = service.approvals.pendingFor(agentId(service))[0]!.requestId;
+		await new Promise((r) => setTimeout(r, 60));
+		expect(service.approvals.get(first)?.state).toBe("expired");
+		await relay.poll("opencode", s.source);
+		const again = service.approvals.pendingFor(agentId(service));
+		expect(again).toHaveLength(1);
+		expect(again[0]!.requestId).not.toBe(first);
 	});
 
 	test("a prompt that leaves the list and comes back opens a new card", async () => {

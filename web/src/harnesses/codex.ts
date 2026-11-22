@@ -6,8 +6,7 @@ export const codex: HarnessUi = {
 	id: "codex",
 	title(approval) {
 		if (approval.tool === "request_user_input") return "Codex asks";
-		if (approval.readOnly) return "Codex approval";
-		return null;
+		return "Codex approval";
 	},
 	name: "Codex",
 	// Mark: drawn for Pulsar (a C around a prompt chevron); OpenAI publishes

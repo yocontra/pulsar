@@ -541,7 +541,8 @@ export function makeInteraction(a: MockAgent, kind: string): Approval {
 		sessionRules: null,
 	};
 	switch (kind) {
-		case "codex": {
+		case "codex":
+		case "codex-live": {
 			const questions = [
 				{
 					id: "env",
@@ -555,7 +556,8 @@ export function makeInteraction(a: MockAgent, kind: string): Approval {
 			return {
 				...base,
 				kind: "question",
-				readOnly: true,
+				// A session in Codex's app-server is answered from the app.
+				...(kind === "codex" ? { readOnly: true as const } : {}),
 				tool: "request_user_input",
 				input: {},
 				prompt: { kind: "question", questions },

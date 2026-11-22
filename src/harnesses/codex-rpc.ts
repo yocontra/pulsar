@@ -10,7 +10,7 @@ import { lazyCrypto } from "../lazy.ts";
  * `codex queue` uses). Enough for one short request/response exchange.
  */
 
-function codexControlSocket(): string {
+export function codexControlSocket(): string {
 	const home = process.env.CODEX_HOME ?? join(homedir(), ".codex");
 	return join(home, "app-server-control", "app-server-control.sock");
 }
@@ -51,7 +51,7 @@ class CodexRpcError extends Error {
 }
 
 /** One text frame, masked (clients must mask). */
-function frame(text: string): Buffer {
+export function frame(text: string): Buffer {
 	const data = Buffer.from(text);
 	const n = data.length;
 	const head =
@@ -73,6 +73,38 @@ function frame(text: string): Buffer {
 	return Buffer.concat([head, mask, body]);
 }
 
+/** The upgrade request for the control socket. */
+export function handshake(): string {
+	return (
+		"GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+		`Sec-WebSocket-Key: ${lazyCrypto().randomBytes(16).toString("base64")}\r\nSec-WebSocket-Version: 13\r\n\r\n`
+	);
+}
+
+/** The complete text frames at the start of `buf` (server frames are unmasked), and the rest. */
+export function takeFrames(buf: Buffer): { texts: string[]; rest: Buffer } {
+	const texts: string[] = [];
+	for (;;) {
+		if (buf.length < 2) break;
+		const op = buf[0]! & 0x0f;
+		let n = buf[1]! & 0x7f;
+		let off = 2;
+		if (n === 126) {
+			if (buf.length < 4) break;
+			n = buf.readUInt16BE(2);
+			off = 4;
+		} else if (n === 127) {
+			if (buf.length < 10) break;
+			n = Number(buf.readBigUInt64BE(2));
+			off = 10;
+		}
+		if (buf.length < off + n) break;
+		if (op === 1) texts.push(buf.subarray(off, off + n).toString());
+		buf = buf.subarray(off + n);
+	}
+	return { texts, rest: buf };
+}
+
 /**
  * Opens a session, runs `calls` in order (each after the previous answer)
  * and closes. Resolves with each call's result; rejects on the first error.
@@ -84,7 +116,7 @@ export async function codexRpc(
 	const path = opts.socket ?? codexControlSocket();
 	const sock: Socket = connect(path);
 	const timeout = opts.timeoutMs ?? 5000;
-	let buf = Buffer.alloc(0);
+	let buf: Buffer = Buffer.alloc(0);
 	let upgraded = false;
 	let waiting: ((msg: Record<string, unknown>) => void) | null = null;
 	let fail: (e: Error) => void = () => {};
@@ -113,29 +145,13 @@ export async function codexRpc(
 				buf = buf.subarray(end + 4);
 				resolve();
 			}
-			for (;;) {
-				if (buf.length < 2) return;
-				const op = buf[0]! & 0x0f;
-				let n = buf[1]! & 0x7f;
-				let off = 2;
-				if (n === 126) {
-					if (buf.length < 4) return;
-					n = buf.readUInt16BE(2);
-					off = 4;
-				} else if (n === 127) {
-					if (buf.length < 10) return;
-					n = Number(buf.readBigUInt64BE(2));
-					off = 10;
-				}
-				if (buf.length < off + n) return;
-				const payload = buf.subarray(off, off + n).toString();
-				buf = buf.subarray(off + n);
-				if (op !== 1) continue;
+			const { texts, rest } = takeFrames(buf);
+			buf = rest;
+			for (const payload of texts)
 				try {
 					const msg = JSON.parse(payload) as Record<string, unknown>;
 					if ("id" in msg && !("method" in msg)) waiting?.(msg);
 				} catch {}
-			}
 		});
 	});
 	const send = (o: unknown) => sock.write(frame(JSON.stringify(o)));
@@ -156,10 +172,7 @@ export async function codexRpc(
 			}),
 		]);
 	try {
-		sock.write(
-			"GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
-				`Sec-WebSocket-Key: ${lazyCrypto().randomBytes(16).toString("base64")}\r\nSec-WebSocket-Version: 13\r\n\r\n`,
-		);
+		sock.write(handshake());
 		await Promise.race([failed, opened]);
 		await ask(0, "initialize", {
 			clientInfo: { name: "pulsar", version: "1" },

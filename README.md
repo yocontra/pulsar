@@ -101,8 +101,10 @@ Full tour and keyboard shortcuts: [docs/app.md](docs/app.md).
 | Claude Code | Yes | Yes, in tmux |
 | OpenCode | Yes | Yes |
 | omp, pi | Yes | Yes |
-| Codex | Read-only | Yes |
+| Codex | Yes¹ | Yes |
 | Cursor, Gemini CLI | No | No |
+
+¹ A session started with `codex --no-daemon` shows its prompts read-only.
 
 Details per harness, setup flags and environment variables: [docs/adapters.md](docs/adapters.md).
 
