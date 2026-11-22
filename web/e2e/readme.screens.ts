@@ -141,20 +141,13 @@ test.describe("readme screens", () => {
 		}
 	});
 
-	test("phone session", async ({ page, request }) => {
+	test("phone home", async ({ page }) => {
 		only("phone");
 		await phoneChrome(page);
 		await faceId(page);
-		// The pending approval, ready for Face ID, at the bottom of the session.
-		const id = await agentId(request, "name=apparish-auth");
+		// Home: Needs you and the machines, with no session chrome to truncate.
 		await home(page);
-		await page.goto(`/#/a/${encodeURIComponent(id)}`);
-		await page.locator(".p-nav-title h1").first().waitFor();
-		await page.getByText("Rebuild and run the auth tests").last().waitFor();
-		await page.waitForTimeout(1500);
-		const jump = page.getByRole("button", { name: "Jump to latest" });
-		if (await jump.isVisible()) await jump.click();
-		await page.waitForTimeout(800);
-		await shot(page, "phone-session");
+		await page.getByText("Needs You").first().waitFor();
+		await shot(page, "phone-home");
 	});
 });

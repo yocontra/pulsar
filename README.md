@@ -80,11 +80,11 @@ Machines signed in as you link on their own. There are no pairing codes. `pulsar
 
 Run `pulsar qr` and scan the code with your phone, then add the page to your home screen. On a computer, run `pulsar ui`.
 
-<p align="center"><img src="docs/assets/screenshots/phone-session.webp" alt="Phone: an agent's session with a Bash approval ready to allow with Face ID" width="300"></p>
+<p align="center"><img src="docs/assets/screenshots/phone-home.webp" alt="Phone: the Agents home screen with Needs you (a Bash approval and a question) and the machines with their projects" width="300"></p>
 
 - See every machine, project and agent, with a "Needs you" list.
 - Watch each session live: replies, tool calls, diffs, code and images.
-- Answer permission prompts and questions. The prompt also stays in the terminal, and the first answer wins.
+- Answer permission prompts and questions. The prompt also stays in the terminal.
 - Message one agent or a group. Attach files and images, and mention files with `@`.
 - Stop an agent's turn.
 - Start a new agent on any machine, in a folder or a new git worktree.
