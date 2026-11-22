@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RemoteTranscriptReader } from "../src/federation/transcripts.ts";
 import { claudeTranscript } from "../src/harnesses/claude.ts";
+import { codexMissRetry } from "../src/harnesses/codex.ts";
 import { driverFor, extensionHostFor } from "../src/harnesses/index.ts";
 import {
 	hostSessionId,
@@ -24,6 +25,7 @@ import {
 } from "../src/harnesses/pi-sessions.ts";
 import { isOmpHost } from "../src/harnesses/simple-ident.ts";
 import type { HarnessDriver } from "../src/harnesses/types.ts";
+import { RpcError } from "../src/rpc.ts";
 import {
 	type Caller,
 	type Principal,
@@ -486,6 +488,33 @@ describe("locate", () => {
 		expect(await claudeTranscript("/work/late", "sess-late")).toBe(
 			join(folder, "sess-late.jsonl"),
 		);
+	});
+
+	test("codex: a rollout written after a miss is found within the retry window", async () => {
+		process.env.CODEX_HOME = dir;
+		const saved = codexMissRetry.ms;
+		codexMissRetry.ms = 50;
+		try {
+			const day = join(dir, "sessions", "2026", "11", "22");
+			mkdirSync(day, { recursive: true });
+			const ref = {
+				harness: "codex",
+				sessionId: "0000cccc-1111-4222-8333-444455556666",
+				cwd: "/work/demo",
+			};
+			expect(await support("codex").locate(ref)).toBeNull();
+			const name = `rollout-2026-11-22T01-00-00-${ref.sessionId}.jsonl`;
+			copyFileSync(CODEX, join(day, name));
+			// Inside the window: the miss stands (no walk on every tick).
+			expect(await support("codex").locate(ref)).toBeNull();
+			await Bun.sleep(60);
+			expect(await support("codex").locate(ref)).toEqual({
+				kind: "file",
+				path: join(day, name),
+			});
+		} finally {
+			codexMissRetry.ms = saved;
+		}
 	});
 
 	test("pi/omp: the host session id picks its file, not the newest", async () => {
@@ -1157,6 +1186,15 @@ describe("why there is no transcript", () => {
 		);
 		pages.push({ events: [], cursor: null, available: false, missing: "?" });
 		expect((await reader.page("m1/pi:pid:1", null)).missing).toBe("not_found");
+		// A home node that does not answer: an error to retry, never "none".
+		const failing = new RemoteTranscriptReader({
+			act: async () => {
+				throw new RpcError("unreachable", "m1 is unreachable");
+			},
+		} as unknown as ConstructorParameters<typeof RemoteTranscriptReader>[0]);
+		await expect(failing.page("m1/pi:pid:1", null)).rejects.toMatchObject({
+			code: "unreachable",
+		});
 		pages.push({ events: [], cursor: null, available: true });
 		expect(await reader.page("m1/pi:pid:1", null)).toEqual({
 			events: [],
@@ -1168,7 +1206,8 @@ describe("why there is no transcript", () => {
 
 describe("omp host detection", () => {
 	test("omp as one Bun binary is omp, not pi", () => {
-		// What the extension sees inside omp 15 (process.execPath, argv0, argv).
+		// What the extension sees inside omp built as one Bun binary
+		// (process.execPath, argv0, argv).
 		const omp =
 			"/Users/me/.bun/bin/omp omp bun /$bunfs/root/omp-darwin-arm64 --resume";
 		expect(isOmpHost("bun /$bunfs/root/omp-darwin-arm64")).toBe(true);

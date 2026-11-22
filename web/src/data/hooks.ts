@@ -327,7 +327,11 @@ export function approvalItemFrom(
  * An agent's transcript: the newest page plus any older pages loaded, with
  * live events merged by id (replace in place, append new). A gap re-pages.
  */
-export function useTranscript(agentId: string | null) {
+export function useTranscript(
+	agentId: string | null,
+	/** No transcript will come (a finished subagent with no log): stop asking. */
+	settled = false,
+) {
 	const def = transcriptDef(
 		queryClient,
 		agentId ?? "",
@@ -339,7 +343,7 @@ export function useTranscript(agentId: string | null) {
 	// stream sends events only once the daemon finds it, so ask again.
 	const q = useLive<TranscriptData>(def, {
 		enabled: agentId !== null,
-		pollWhile: transcriptPending,
+		...(settled ? {} : { pollWhile: transcriptPending }),
 	});
 	const loadEarlier = useCallback(
 		() =>
