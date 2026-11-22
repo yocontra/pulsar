@@ -1,4 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useStickToBottomContext } from "use-stick-to-bottom";
 import { ApiError } from "../api/client.ts";
 import type { AgentRow } from "../api/types.ts";
@@ -141,18 +149,45 @@ function SessionViewImpl({
 		settle.current = setTimeout(() => setStreaming(NONE), 1500);
 	});
 
-	const loadEarlier = async () => {
+	// "Load earlier" keeps the operator's place: the message at the top of
+	// the screen stays where it was while earlier ones land above it. (Scroll
+	// anchoring can't: the button sits at scroll offset 0, where none applies.)
+	const keep = useRef<{
+		marks: { el: Element; top: number }[];
+		sc: HTMLElement;
+	} | null>(null);
+	const loadEarlier = async (e: React.MouseEvent<HTMLButtonElement>) => {
 		atEnd.current = false;
-		if (begin > 0) {
-			setStart(Math.max(0, begin - 100));
-			return;
+		const sc = e.currentTarget.closest<HTMLElement>(".ds-scroller > div");
+		if (sc) {
+			// The turns whose top is on screen. The first turn may be replaced
+			// (earlier events can join it, which changes its key); others stay.
+			const box = sc.getBoundingClientRect();
+			const marks = Array.from(sc.querySelectorAll(".ds-conv > *"))
+				.map((el) => ({ el, top: el.getBoundingClientRect().top }))
+				.filter((m) => m.top >= box.top && m.top < box.bottom)
+				.slice(0, 6);
+			keep.current = marks.length ? { marks, sc } : null;
 		}
-		if (!cursor) return;
-		const grew = await t.loadEarlier();
-		setStart(Math.max(0, grew - 100));
+		try {
+			if (begin > 0) setStart(Math.max(0, begin - 100));
+			else if (cursor) setStart(Math.max(0, (await t.loadEarlier()) - 100));
+		} finally {
+			// Content above settles over a few frames (code, images): hold the
+			// place until then.
+			setTimeout(() => {
+				keep.current = null;
+			}, 1000);
+		}
 	};
 
 	const begin = atEnd.current ? Math.max(0, events.length - WINDOW) : start;
+	useLayoutEffect(() => {
+		const m = keep.current?.marks.find((m) => m.el.isConnected);
+		if (!m) return;
+		const moved = m.el.getBoundingClientRect().top - m.top;
+		if (Math.abs(moved) >= 1) keep.current!.sc.scrollTop += moved;
+	});
 	const windowed = useMemo(
 		() => events.slice(begin, begin + WINDOW),
 		[events, begin],

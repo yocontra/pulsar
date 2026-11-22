@@ -37,6 +37,7 @@ export function ConversationView({
 			</StickToBottom.Content>
 			{pill ?? <JumpToLatest />}
 			<StopFollowing />
+			<AnchorWhileReading />
 		</StickToBottom>
 	);
 }
@@ -55,6 +56,37 @@ function StopFollowing() {
 		el.addEventListener("pulsar:stop-follow", stop);
 		return () => el.removeEventListener("pulsar:stop-follow", stop);
 	}, [scrollRef, stopScroll]);
+	return null;
+}
+
+/** How far above the end the operator counts as reading (use-stick-to-bottom's "near the bottom"). */
+const READING_PX = 70;
+
+/**
+ * Scroll anchoring only while the operator reads above the end
+ * (`data-reading`, conversation.css): content that loads above them (a
+ * turn's changes, images, code) leaves what they read in place. At the end,
+ * use-stick-to-bottom alone follows it; anchoring there would fight it.
+ * Set in the scroll event itself: the library's own state arrives a task
+ * later, after content may already have moved.
+ */
+function AnchorWhileReading() {
+	const { scrollRef } = useStickToBottomContext();
+	useEffect(() => {
+		const el = scrollRef.current;
+		if (!el) return;
+		let last = el.scrollTop;
+		const update = () => {
+			const fromEnd = el.scrollHeight - el.scrollTop - el.clientHeight;
+			// Only a move up starts reading: use-stick-to-bottom only scrolls down,
+			// and content can grow between its scroll and this event.
+			if (fromEnd <= READING_PX) el.removeAttribute("data-reading");
+			else if (el.scrollTop < last) el.setAttribute("data-reading", "");
+			last = el.scrollTop;
+		};
+		el.addEventListener("scroll", update, { passive: true });
+		return () => el.removeEventListener("scroll", update);
+	}, [scrollRef]);
 	return null;
 }
 

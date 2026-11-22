@@ -19,9 +19,15 @@
 	min-height: 0;
 	height: 100%;
 	overflow-y: auto;
+	/* At the end, use-stick-to-bottom follows it; anchoring would fight it. */
 	overflow-anchor: none;
 	overscroll-behavior: contain;
 	scrollbar-gutter: stable;
+}
+/* Reading above the end (AnchorWhileReading): content that loads above
+   the operator leaves what they read in place. */
+.ds-scroller > div:first-child[data-reading] {
+	overflow-anchor: auto;
 }
 .ds-column {
 	display: flex;
