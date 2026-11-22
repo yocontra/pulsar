@@ -819,10 +819,13 @@ export interface ReceiptsPage {
 /**
  * `GET /agents/:id/transcript?cursor=`: newest page first; pass `cursor` back
  * for older events, null once the start is reached. `available: false` means
- * the harness keeps no transcript.
+ * no transcript was found, and `missing` says why: `unsupported` (the
+ * harness keeps none: final), `no_session` (no session id yet) or
+ * `not_found` (no file yet: it shows once found; ask again).
  */
 export interface TranscriptPage extends TranscriptPageBase {
 	available: boolean;
+	missing?: "unsupported" | "no_session" | "not_found";
 }
 
 /**

@@ -251,9 +251,7 @@ test.describe("subagents (desktop)", () => {
 			"data-messaging",
 			"direct",
 		);
-		await expect(pageEl).toContainText(
-			"doesn't share this subagent's transcript",
-		);
+		await expect(pageEl).toContainText("No transcript for this subagent.");
 		const sent = page.waitForRequest((r) => r.url().endsWith("/api/v1/send"));
 		await pageEl.locator(".composer-input").fill("look at src/");
 		await page.keyboard.press("ControlOrMeta+Enter");

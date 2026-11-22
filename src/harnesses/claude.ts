@@ -164,13 +164,47 @@ function claudeTranscriptPath(
 	);
 }
 
-/** The transcript file when it exists. */
-async function claudeTranscript(
+/** Transcripts found outside their cwd's folder, by session id. */
+const movedTranscripts = new Map<string, string>();
+/** Session ids no project folder held, and when: walked again after `MOVED_RETRY_MS`. */
+const movedMisses = new Map<string, number>();
+const MOVED_RETRY_MS = 5000;
+
+/**
+ * The transcript file when it exists. Claude Code names the project folder
+ * for the folder the session started in; an agent that moved since
+ * (`set_identity` with a worktree's cwd) is found in whichever folder holds
+ * its session's file.
+ */
+export async function claudeTranscript(
 	cwd: string | null,
 	sessionId: string,
 ): Promise<string | null> {
 	const file = claudeTranscriptPath(cwd, sessionId);
-	return file && (await statAsync(file)) ? file : null;
+	if (file && (await statAsync(file))) return file;
+	if (!isClaudeSessionId(sessionId)) return null;
+	const root = join(configDir(), "projects");
+	const key = `${root}\0${sessionId}`;
+	const moved = movedTranscripts.get(key);
+	if (moved && (await statAsync(moved))) return moved;
+	const missed = movedMisses.get(key);
+	if (missed !== undefined && Date.now() - missed < MOVED_RETRY_MS) return null;
+	let folders: string[] = [];
+	try {
+		folders = await readdir(root);
+	} catch {}
+	for (const folder of folders) {
+		const path = join(root, folder, `${sessionId}.jsonl`);
+		if (path !== file && (await statAsync(path))) {
+			if (movedTranscripts.size > 1000) movedTranscripts.clear();
+			movedTranscripts.set(key, path);
+			movedMisses.delete(key);
+			return path;
+		}
+	}
+	if (movedMisses.size > 1000) movedMisses.clear();
+	movedMisses.set(key, Date.now());
+	return null;
 }
 
 /** The model each transcript named last, by file, kept while the file is unchanged. */
@@ -500,6 +534,7 @@ export const claude: HarnessDriver = {
 				: null;
 			return file ? { kind: "file", path: file } : null;
 		},
+		needsSession: true,
 		parse: parseClaude,
 		turnFailed: claudeTurnFailed,
 	},

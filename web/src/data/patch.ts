@@ -136,11 +136,35 @@ export function applyResults(
 
 // ------------------------------------------------------------ transcripts
 
+/** Why no transcript was found (see `TranscriptPage.missing`). */
+export type TranscriptMissing = "unsupported" | "no_session" | "not_found";
+
 export interface TranscriptData {
 	events: TranscriptEvent[];
 	/** Older history: pass back for the previous page; null at the start. */
 	cursor: string | null;
 	available: boolean;
+	/** Set while `available` is false: why. Only `unsupported` is final. */
+	missing?: TranscriptMissing;
+}
+
+/** Whether a transcript may still turn up: fetch the page again until it does. */
+export function transcriptPending(d: TranscriptData | undefined): boolean {
+	return !!d && !d.available && d.missing !== "unsupported";
+}
+
+/**
+ * `available` and `missing` for what we hold: events of the transcript make
+ * it available whatever one page says; else the page's answer, where a bare
+ * `available: false` (an older daemon) is a miss, never "no transcript".
+ */
+function availability(
+	page: { available: boolean; missing?: TranscriptMissing },
+	events: TranscriptEvent[],
+): Pick<TranscriptData, "available" | "missing"> {
+	if (page.available || events.some((e) => !isLocal(e)))
+		return { available: true };
+	return { available: false, missing: page.missing ?? "not_found" };
 }
 
 export { LOCAL_PREFIX };
@@ -218,7 +242,11 @@ export function applyTranscriptLive(
 	d: TranscriptData,
 	live: TranscriptEvent[],
 ): TranscriptData {
-	return { ...d, events: reconcileLocal(mergeLive(d.events, live).events) };
+	const events = reconcileLocal(mergeLive(d.events, live).events);
+	// Live events from the transcript: it was found.
+	return live.some((e) => !isLocal(e))
+		? { events, cursor: d.cursor, available: true }
+		: { ...d, events };
 }
 
 /** A history page: add only ids we lack, never overwrite (session/items.ts rules). */
@@ -228,6 +256,7 @@ export function applyTranscriptPage(
 		events: TranscriptEvent[];
 		cursor: string | null;
 		available: boolean;
+		missing?: TranscriptMissing;
 	},
 	older: boolean,
 	/**
@@ -262,7 +291,7 @@ export function applyTranscriptPage(
 		return {
 			events: reconcileLocal(mergeHistory(held.filter(isLocal), page.events)),
 			cursor: page.cursor,
-			available: page.available || page.events.length > 0,
+			...availability(page, page.events),
 		};
 	const events = reconcileLocal(mergeHistory(held, page.events));
 	return {
@@ -271,6 +300,6 @@ export function applyTranscriptPage(
 		cursor: older || !d ? page.cursor : d.cursor,
 		// A transcript we hold events of is available, whatever one page says
 		// (an older home node answers `false` when its file lookup misses).
-		available: page.available || events.some((e) => !isLocal(e)),
+		...availability(page, events),
 	};
 }

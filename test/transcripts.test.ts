@@ -14,14 +14,22 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { driverFor } from "../src/harnesses/index.ts";
-import { piSessionFile } from "../src/harnesses/pi-sessions.ts";
+import { RemoteTranscriptReader } from "../src/federation/transcripts.ts";
+import { claudeTranscript } from "../src/harnesses/claude.ts";
+import { driverFor, extensionHostFor } from "../src/harnesses/index.ts";
+import {
+	hostSessionId,
+	locatePiStyle,
+	piSessionFile,
+} from "../src/harnesses/pi-sessions.ts";
+import { isOmpHost } from "../src/harnesses/simple-ident.ts";
 import type { HarnessDriver } from "../src/harnesses/types.ts";
 import {
 	type Caller,
 	type Principal,
 	PulsarService,
 } from "../src/service/index.ts";
+import { driverMissing, subagentMissing } from "../src/service/transcripts.ts";
 import { Store } from "../src/store.ts";
 import {
 	dedupe,
@@ -452,6 +460,101 @@ describe("locate", () => {
 		expect(await piSessionFile(".omp", "/elsewhere", null, dir)).toBeNull();
 	});
 
+	test("claude: a session whose agent moved folders is found by id", async () => {
+		process.env.CLAUDE_CONFIG_DIR = dir;
+		// Claude Code names the folder for where the session started; the
+		// agent later said it works in a worktree (set_identity cwd).
+		const started = join(dir, "projects", "-work-demo");
+		mkdirSync(started, { recursive: true });
+		copyFileSync(CLAUDE, join(started, "sess-moved.jsonl"));
+		expect(
+			await support("claude").locate({
+				harness: "claude",
+				sessionId: "sess-moved",
+				cwd: "/work/demo/.claude/worktrees/feature",
+			}),
+		).toEqual({ kind: "file", path: join(started, "sess-moved.jsonl") });
+	});
+
+	test("claude: a file written after the first miss is found at once", async () => {
+		process.env.CLAUDE_CONFIG_DIR = dir;
+		const folder = join(dir, "projects", "-work-late");
+		mkdirSync(folder, { recursive: true });
+		expect(await claudeTranscript("/work/late", "sess-late")).toBeNull();
+		copyFileSync(CLAUDE, join(folder, "sess-late.jsonl"));
+		// Its own folder is checked every time (no miss window there).
+		expect(await claudeTranscript("/work/late", "sess-late")).toBe(
+			join(folder, "sess-late.jsonl"),
+		);
+	});
+
+	test("pi/omp: the host session id picks its file, not the newest", async () => {
+		const folder = join(dir, ".omp", "agent", "sessions", "-tmp");
+		mkdirSync(folder, { recursive: true });
+		const mine = join(folder, "2026-11-20T04-03-57-433Z_01a1f720.jsonl");
+		const newer = join(folder, "2026-11-22T07-43-06-660Z_01a20235.jsonl");
+		writeFileSync(mine, "");
+		writeFileSync(newer, "");
+		// Two omp sessions in one folder, registered by pid: each one's
+		// extension reports its own session as resumeKey.
+		const agent = {
+			harness: "omp",
+			sessionId: null,
+			cwd: join(dir, "tmp"),
+			meta: { resumeKey: "omp:01a1f720" },
+		};
+		expect(hostSessionId(agent)).toBe("01a1f720");
+		expect(await locatePiStyle("omp", agent, dir)).toEqual({
+			kind: "file",
+			path: mine,
+			headerLine: true,
+		});
+		// A new session (/new, resume, fork) moves the key, and the file.
+		expect(
+			await locatePiStyle(
+				"omp",
+				{ ...agent, meta: { resumeKey: "omp:01a20235" } },
+				dir,
+			),
+		).toEqual({ kind: "file", path: newer, headerLine: true });
+	});
+
+	test("pi/omp: an omp session an older extension registered as pi", async () => {
+		// omp as one Bun binary looked like pi to the extension: the agent is
+		// `pi`, its session lives in ~/.omp (title line and all).
+		const folder = join(dir, ".omp", "agent", "sessions", "-tmp");
+		mkdirSync(folder, { recursive: true });
+		const file = join(folder, "2026-11-20T04-03-57-433Z_01a1f720.jsonl");
+		writeFileSync(file, "");
+		const agent = {
+			harness: "pi",
+			sessionId: null,
+			cwd: join(dir, "tmp"),
+			meta: { resumeKey: "pi:01a1f720" },
+		};
+		expect(await locatePiStyle("pi", agent, dir)).toEqual({
+			kind: "file",
+			path: file,
+			headerLine: true,
+		});
+		// No session id and nothing in ~/.pi: not found (never another's file).
+		expect(await locatePiStyle("pi", { ...agent, meta: {} }, dir)).toBeNull();
+	});
+
+	test("pi/omp: a session in another folder than the agent's cwd, by id", async () => {
+		const folder = join(dir, ".pi", "agent", "sessions", "--work-demo--");
+		mkdirSync(folder, { recursive: true });
+		const file = join(folder, "2026-11-10T13-00-00-000Z_ccc.jsonl");
+		writeFileSync(file, "");
+		expect(
+			await locatePiStyle(
+				"pi",
+				{ harness: "pi", sessionId: "ccc", cwd: "/work/demo/sub" },
+				dir,
+			),
+		).toEqual({ kind: "file", path: file });
+	});
+
 	test("omp marks its header line; OpenCode has no transcript in v1", () => {
 		expect(driverFor("opencode")?.transcript).toBeUndefined();
 		for (const id of ["claude", "codex", "pi", "omp"])
@@ -744,6 +847,48 @@ describe("tailer", () => {
 		expect(c.events.map((e) => e.id)).toEqual(["l1", "l2"]);
 	});
 
+	test("a session that moves to another file is followed after a gap", async () => {
+		const first = join(dir, "first.jsonl");
+		const second = join(dir, "second.jsonl");
+		writeFileSync(first, line("a1", "one"));
+		writeFileSync(second, line("b0", "history of the new session"));
+		sources.set("p", fileSource(first));
+		make({ resolveMs: 30 });
+		const c = collector();
+		tailer.subscribe("p", c.fn);
+		await tailer.ready("p");
+		appendFileSync(first, line("a2", "two"));
+		await c.wait(1);
+		// The harness started another session (new, resume, fork).
+		sources.set("p", fileSource(second));
+		await until(() => c.events.some((e) => e.id.startsWith("gap:")), 2000);
+		appendFileSync(first, line("a3", "old session, not followed"));
+		appendFileSync(second, line("b1", "live in the new session"));
+		await until(() => c.events.some((e) => e.id === "b1"), 2000);
+		const ids = c.events.map((e) => (e.id.startsWith("gap:") ? "gap" : e.id));
+		// Its history comes from the newest page (the gap says re-read it).
+		expect(ids).toEqual(["a2", "gap", "b1"]);
+		expect((await tailer.read("p"))!.events.map((e) => e.id)).toEqual([
+			"b0",
+			"b1",
+		]);
+	});
+
+	test("a lookup that misses keeps following the file", async () => {
+		const file = join(dir, "kept.jsonl");
+		writeFileSync(file, line("k1", "one"));
+		sources.set("p", fileSource(file));
+		make({ resolveMs: 20 });
+		const c = collector();
+		tailer.subscribe("p", c.fn);
+		await tailer.ready("p");
+		sources.delete("p");
+		await Bun.sleep(80);
+		appendFileSync(file, line("k2", "two"));
+		await c.wait(1);
+		expect(c.events.map((e) => e.id)).toEqual(["k2"]);
+	});
+
 	test("poll sources: pages pass through; live emits new and changed events", async () => {
 		let current: TranscriptEvent[] = [
 			{ id: "o1", ts: 1, role: "user", kind: "text", text: "hi" },
@@ -868,10 +1013,12 @@ describe("service transcripts", () => {
 
 	test("agents without a transcript, unknown agents, bad cursors", async () => {
 		const bare = add("no-log");
+		// The harness keeps transcripts; this one is not found (yet).
 		expect(await service.transcripts.page(bare.id)).toEqual({
 			events: [],
 			cursor: null,
 			available: false,
+			missing: "not_found",
 		});
 		await expect(service.transcripts.page("pi:nobody")).rejects.toMatchObject({
 			code: "not_found",
@@ -944,5 +1091,77 @@ describe("service transcripts", () => {
 		});
 		op.close();
 		expect(service.transcripts.tailer.watching).toBe(0);
+	});
+});
+
+describe("why there is no transcript", () => {
+	const agent = (harness: string, sessionId: string | null) =>
+		({ harness, sessionId, cwd: "/work/demo", meta: {} }) as unknown as Agent;
+
+	test("by harness: none kept, no session yet, or not found yet", () => {
+		expect(driverMissing(agent("opencode", "ses_1"))).toBe("unsupported");
+		expect(driverMissing(agent("cursor", null))).toBe("unsupported");
+		// A Codex app-server before it learns its thread.
+		expect(driverMissing(agent("codex", null))).toBe("no_session");
+		expect(driverMissing(agent("claude", null))).toBe("no_session");
+		expect(driverMissing(agent("codex", "t1"))).toBe("not_found");
+		// pi and omp register by pid and find the file by folder.
+		expect(driverMissing(agent("pi", null))).toBe("not_found");
+		expect(driverMissing(agent("omp", null))).toBe("not_found");
+		expect(subagentMissing(agent("opencode", "ses_1"))).toBe("unsupported");
+		expect(subagentMissing(agent("claude", "s"))).toBe("not_found");
+	});
+
+	test("a remote page: the home node's reason; an older one's bare false is a miss", async () => {
+		const pages: unknown[] = [];
+		const reader = new RemoteTranscriptReader({
+			act: async () => ({ page: pages.shift() }),
+		} as unknown as ConstructorParameters<typeof RemoteTranscriptReader>[0]);
+		pages.push({ events: [], cursor: null, available: false });
+		expect(await reader.page("m1/pi:pid:1", null)).toEqual({
+			events: [],
+			cursor: null,
+			available: false,
+			missing: "not_found",
+		});
+		pages.push({
+			events: [],
+			cursor: null,
+			available: false,
+			missing: "unsupported",
+		});
+		expect((await reader.page("m1/opencode:x", null)).missing).toBe(
+			"unsupported",
+		);
+		pages.push({ events: [], cursor: null, available: false, missing: "?" });
+		expect((await reader.page("m1/pi:pid:1", null)).missing).toBe("not_found");
+		pages.push({ events: [], cursor: null, available: true });
+		expect(await reader.page("m1/pi:pid:1", null)).toEqual({
+			events: [],
+			cursor: null,
+			available: true,
+		});
+	});
+});
+
+describe("omp host detection", () => {
+	test("omp as one Bun binary is omp, not pi", () => {
+		// What the extension sees inside omp 15 (process.execPath, argv0, argv).
+		const omp =
+			"/Users/me/.bun/bin/omp omp bun /$bunfs/root/omp-darwin-arm64 --resume";
+		expect(isOmpHost("bun /$bunfs/root/omp-darwin-arm64")).toBe(true);
+		expect(extensionHostFor(omp)?.id).toBe("omp");
+		expect(
+			extensionHostFor("/usr/local/bin/node /x/node_modules/@oh-my-pi/cli.js")
+				?.id,
+		).toBe("omp");
+		// pi stays pi.
+		expect(
+			extensionHostFor(
+				"/opt/homebrew/bin/node node /opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/dist/cli.js",
+			)?.id,
+		).toBe("pi");
+		expect(extensionHostFor("/usr/local/bin/pi pi")?.id).toBe("pi");
+		expect(isOmpHost("/usr/local/bin/compose")).toBe(false);
 	});
 });

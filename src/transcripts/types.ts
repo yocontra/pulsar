@@ -327,6 +327,11 @@ export interface TranscriptSupport<A> {
 	/** The session's transcript, or null when it has none (yet). */
 	locate(agent: A): TranscriptSource | null | Promise<TranscriptSource | null>;
 	/**
+	 * `locate` needs the harness's session id: an agent with none (a Codex
+	 * app-server before it learns its thread) has no transcript to find yet.
+	 */
+	needsSession?: boolean;
+	/**
 	 * Events in `chunk`: one or more complete JSONL lines from a file source.
 	 * Unknown or malformed lines are skipped.
 	 */

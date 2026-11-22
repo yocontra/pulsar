@@ -1,7 +1,11 @@
 import { RpcError } from "../rpc.ts";
 import type { Principal } from "../service/caller.ts";
 import type { RemoteTranscripts } from "../service/pool.ts";
-import type { TranscriptPageResult } from "../service/transcripts.ts";
+import {
+	TRANSCRIPT_MISSING,
+	type TranscriptMissing,
+	type TranscriptPageResult,
+} from "../service/transcripts.ts";
 import { gapEvent, type TranscriptListener } from "../transcripts/tailer.ts";
 import type {
 	ImageType,
@@ -86,6 +90,16 @@ export class RemoteTranscriptReader implements RemoteTranscripts {
 			events: rewrite(address, page.events),
 			cursor: typeof page.cursor === "string" ? page.cursor : null,
 			available: page.available !== false,
+			// An older home node says only `available: false`: a miss, never "none".
+			...(page.available === false
+				? {
+						missing: TRANSCRIPT_MISSING.includes(
+							page.missing as TranscriptMissing,
+						)
+							? page.missing
+							: "not_found",
+					}
+				: {}),
 		};
 	}
 

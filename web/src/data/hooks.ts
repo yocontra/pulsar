@@ -34,7 +34,11 @@ import type {
 import { useNow } from "./clock.ts";
 import { keys } from "./keys.ts";
 import { type ApprovalSeen, OUTCOME_MS } from "./live.ts";
-import type { ListData, TranscriptData } from "./patch.ts";
+import {
+	type ListData,
+	type TranscriptData,
+	transcriptPending,
+} from "./patch.ts";
 import {
 	agentsPageFn,
 	type Count,
@@ -63,14 +67,28 @@ export function useCovered(queryKey: readonly unknown[]): boolean {
 /** A live query from a definition; `enabled: false` waits (e.g. no id yet). */
 export function useLive<T>(
 	def: LiveDef<T>,
-	opts: { enabled?: boolean; keepPrevious?: boolean } = {},
+	opts: {
+		enabled?: boolean;
+		keepPrevious?: boolean;
+		/**
+		 * Fetch again every `def.poll` while this holds, even when the event
+		 * stream covers the key (data the stream never fills in, such as a
+		 * transcript not found yet).
+		 */
+		pollWhile?: (data: T | undefined) => boolean;
+	} = {},
 ): UseQueryResult<T> {
 	const covered = useCovered(def.queryKey);
+	const pollWhile = opts.pollWhile;
 	return useQuery(
 		{
 			queryKey: def.queryKey,
 			queryFn: def.queryFn,
-			refetchInterval: covered ? false : def.poll,
+			refetchInterval: !covered
+				? def.poll
+				: pollWhile
+					? (query) => (pollWhile(query.state.data) ? def.poll : false)
+					: false,
 			...(def.staleTime !== undefined ? { staleTime: def.staleTime } : {}),
 			enabled: opts.enabled ?? true,
 			...(opts.keepPrevious ? { placeholderData: keepPreviousData } : {}),
@@ -317,7 +335,12 @@ export function useTranscript(agentId: string | null) {
 		watchTranscript,
 		() => live.streamId,
 	);
-	const q = useLive<TranscriptData>(def, { enabled: agentId !== null });
+	// Not found yet (a session file not written, a lookup that missed): the
+	// stream sends events only once the daemon finds it, so ask again.
+	const q = useLive<TranscriptData>(def, {
+		enabled: agentId !== null,
+		pollWhile: transcriptPending,
+	});
 	const loadEarlier = useCallback(
 		() =>
 			agentId
@@ -330,6 +353,7 @@ export function useTranscript(agentId: string | null) {
 		events: q.data?.events ?? EMPTY_EVENTS,
 		cursor: q.data?.cursor ?? null,
 		available: q.data?.available ?? true,
+		missing: q.data?.available === false ? q.data.missing : undefined,
 		loadEarlier,
 	};
 }

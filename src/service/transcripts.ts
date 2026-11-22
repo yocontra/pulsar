@@ -12,9 +12,35 @@ import type { Principal } from "./caller.ts";
 import { OPERATOR_ID } from "./caller.ts";
 import { isLocalSubagentId, type RemoteTranscripts } from "./pool.ts";
 
+/**
+ * Why a page has no transcript behind it:
+ * - `unsupported`: the harness keeps none Pulsar can read (it never will).
+ * - `no_session`: the harness keeps one per session, and the agent has no
+ *   session id yet (a Codex app-server before it learns its thread).
+ * - `not_found`: no file for the session yet (not written, or a lookup
+ *   that missed); it shows once found.
+ */
+export type TranscriptMissing = "unsupported" | "no_session" | "not_found";
+
+export const TRANSCRIPT_MISSING: readonly TranscriptMissing[] = [
+	"unsupported",
+	"no_session",
+	"not_found",
+];
+
 export interface TranscriptPageResult extends TranscriptPage {
-	/** False when the agent's harness keeps no transcript pulsar can read. */
+	/** False when no transcript was found; `missing` says why. */
 	available: boolean;
+	/** Set when `available` is false. */
+	missing?: TranscriptMissing;
+}
+
+/** Why a local agent has no transcript, from its harness driver. */
+export function driverMissing(agent: Agent): TranscriptMissing {
+	const support = driverFor(agent.harness)?.transcript;
+	if (!support) return "unsupported";
+	if (support.needsSession && !agent.sessionId) return "no_session";
+	return "not_found";
 }
 
 /** An agent's transcript through its harness driver. */
@@ -31,6 +57,14 @@ export async function driverTranscript(
 				...(support.turnFailed ? { turnFailed: support.turnFailed } : {}),
 			}
 		: null;
+}
+
+/** Why a local subagent has no transcript: its parent's harness keeps none, or not found yet. */
+export function subagentMissing(agent: Agent): TranscriptMissing {
+	const driver = driverFor(agent.harness);
+	return driver?.subagents?.transcript || driver?.transcript
+		? "not_found"
+		: "unsupported";
 }
 
 /**
@@ -57,11 +91,16 @@ export class Transcripts {
 	}
 	/** Finds a local subagent its parent has not listed yet (set by the service). */
 	private readonly ensure: (agentId: string) => Promise<unknown>;
+	/** Why an agent with no transcript found has none. */
+	private readonly missing: (agent: Agent) => TranscriptMissing;
 
 	constructor(
 		lookup: (agentId: string) => Agent | undefined,
 		opts: {
 			pollMs?: number;
+			resolveMs?: number;
+			/** Why an agent has no transcript; the driver's answer by default. */
+			missing?: (agent: Agent) => TranscriptMissing;
 			resolve?: (
 				agent: Agent,
 			) => ResolvedTranscript | null | Promise<ResolvedTranscript | null>;
@@ -71,6 +110,9 @@ export class Transcripts {
 		this.lookup = lookup;
 		this.ensure = opts.ensure ?? (async () => {});
 		const resolve = opts.resolve ?? driverTranscript;
+		// A custom resolver (tests, subagents) knows no harness: not found yet.
+		this.missing =
+			opts.missing ?? (opts.resolve ? () => "not_found" : driverMissing);
 		this.resolve = resolve;
 		this.tailer = new TranscriptTailer({
 			resolve: (id) => {
@@ -78,6 +120,7 @@ export class Transcripts {
 				return agent ? resolve(agent) : null;
 			},
 			...(opts.pollMs ? { pollMs: opts.pollMs } : {}),
+			...(opts.resolveMs ? { resolveMs: opts.resolveMs } : {}),
 		});
 	}
 
@@ -137,10 +180,15 @@ export class Transcripts {
 			return this.remote!.page(agentId, cursor ?? null, as);
 		// The operator (a presence check from a terminal) has no transcript.
 		if (agentId === OPERATOR_ID)
-			return { events: [], cursor: null, available: false };
+			return {
+				events: [],
+				cursor: null,
+				available: false,
+				missing: "unsupported",
+			};
 		if (isLocalSubagentId(agentId) && !this.lookup(agentId))
 			await this.ensure(agentId);
-		this.agent(agentId);
+		const agent = this.agent(agentId);
 		// Subscribe first, then page: a live watcher's offset is set first, so
 		// nothing falls between the page and the stream.
 		await this.tailer.ready(agentId);
@@ -153,7 +201,12 @@ export class Transcripts {
 		}
 		return page
 			? { ...page, available: true }
-			: { events: [], cursor: null, available: false };
+			: {
+					events: [],
+					cursor: null,
+					available: false,
+					missing: this.missing(agent),
+				};
 	}
 
 	/**

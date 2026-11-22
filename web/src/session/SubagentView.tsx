@@ -4,7 +4,6 @@ import { ApiError } from "../api/client.ts";
 import type { SubagentRow } from "../api/types.ts";
 import { Composer } from "../components/Composer.tsx";
 import { kindWord, SubagentStateWord } from "../components/SubagentRows.tsx";
-import { harnessName } from "../components/ui/agent-avatar.tsx";
 import { useNow } from "../data/clock.ts";
 import { useAgent, useSubagent, useTranscript } from "../data/index.ts";
 import { AgentAvatar } from "../ds/index.ts";
@@ -13,6 +12,7 @@ import { navigate } from "../lib/router.ts";
 import { findAgent } from "../lib/store.ts";
 import { ConversationView, TranscriptSkeleton } from "./ConversationView.tsx";
 import { Transcript } from "./Transcript.tsx";
+import { TranscriptMissingNotice } from "./TranscriptMissing.tsx";
 
 /** At most this many events in the DOM; older ones behind "load earlier". */
 const WINDOW = 300;
@@ -80,11 +80,14 @@ export function SubagentView({
 					</div>
 				)}
 				{sub && t.isPending && <TranscriptSkeleton variant={variant} />}
-				{sub && !t.isPending && (!sub.hasTranscript || !t.available) && (
-					<div className="ds-banner banner" role="status">
-						{harnessName(sub.harness)} doesn't share this subagent's transcript
-						with Pulsar.
-					</div>
+				{sub && !t.isPending && t.missing && t.events.length === 0 && (
+					<TranscriptMissingNotice
+						missing={t.missing}
+						harness={sub.harness}
+						subject="subagent"
+						variant={variant}
+						onRetry={() => void t.refetch()}
+					/>
 				)}
 				<Transcript
 					events={windowed}
