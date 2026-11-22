@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import {
 	copies,
+	expectCopyOutside,
 	expectRefs,
 	fileUrl,
 	openGallery,
@@ -24,16 +25,9 @@ test.describe("file viewer", () => {
 	}) => {
 		const id = await openGallery(page);
 		await expectRefs(page);
-		// Taps without scrolling the long gallery: on WebKit, scrolling it to
-		// its last reply logs a ResizeObserver loop error by itself (reported
-		// separately; it has nothing to do with file references).
-		const before = page.url();
-		await ref(page, "run log").dispatchEvent("click");
-		await expect(page.getByText("Path copied")).toBeVisible();
-		expect(await copies(page)).toContain("/tmp/demo-run.log");
-		expect(page.url()).toBe(before);
+		await expectCopyOutside(page);
 
-		await ref(page, "QA report").dispatchEvent("click");
+		await ref(page, "QA report").click();
 		await expect(page).toHaveURL(fileUrl(id, "out/qa/report.html"));
 		const p = top(page);
 		await expect(p.locator("ion-title")).toContainText("report.html");
