@@ -16,7 +16,6 @@ import { observer } from "../../lib/signals.ts";
 import { findAgent } from "../../lib/store.ts";
 import { BackButton } from "../../mobile/BackButton.tsx";
 import {
-	IonButton,
 	IonButtons,
 	IonContent,
 	IonHeader,
@@ -95,17 +94,23 @@ function Overview({
 	r,
 	tab,
 	setTab,
+	onReview,
 }: {
 	agent: AgentRow;
 	r: GitPrReview;
 	tab: Tab;
 	setTab: (t: Tab) => void;
+	onReview: () => void;
 }) {
 	const open = openThreads(r.threads);
 	const sum = checksSummary(r.checks);
 	return (
 		<div className="prv-phone">
 			<PrHead r={r} />
+			{/* In the page, not the top bar (it has no room for more buttons). */}
+			<button type="button" className="m-btn wide" onClick={onReview}>
+				Submit review
+			</button>
 			<div className="cv-modes prv-seg" role="tablist" aria-label="Review">
 				{TABS.map((t) => (
 					<button
@@ -228,11 +233,6 @@ function ReviewPhoneImpl({ arg, params }: PageProps) {
 							{agent && <span className="p-nav-sub">{agent.name}</span>}
 						</span>
 					</IonTitle>
-					{ready && !file && (
-						<IonButtons slot="end">
-							<IonButton onClick={() => setSheet(true)}>Review</IonButton>
-						</IonButtons>
-					)}
 				</IonToolbar>
 			</IonHeader>
 			<IonContent className="p-plain">
@@ -243,7 +243,13 @@ function ReviewPhoneImpl({ arg, params }: PageProps) {
 				) : file ? (
 					<FilePage agent={agent!} r={r!} path={file} />
 				) : (
-					<Overview agent={agent!} r={r!} tab={tab} setTab={setTab} />
+					<Overview
+						agent={agent!}
+						r={r!}
+						tab={tab}
+						setTab={setTab}
+						onReview={() => setSheet(true)}
+					/>
 				)}
 			</IonContent>
 			{ready && !file && (

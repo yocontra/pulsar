@@ -107,7 +107,10 @@ test.describe("PR review (phone)", () => {
 		await expect(
 			page.locator(".prv-phone:not(.prv-phone-file) .prv-title"),
 		).toBeVisible();
-		await page.getByRole("button", { name: "Review", exact: true }).click();
+		await page
+			.locator(".prv-phone:not(.prv-phone-file)")
+			.getByRole("button", { name: "Submit review" })
+			.click();
 		const sheet = page.locator("ion-modal.g-modal");
 		await expect(sheet.getByRole("heading", { level: 2 })).toHaveText(
 			"Submit review",
