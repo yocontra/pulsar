@@ -204,6 +204,25 @@
 	padding: 0 0 8px;
 	font-size: 13px;
 }
+.fv-secret {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 16px;
+	padding: 12px 14px;
+	border: 1px solid var(--ds-border);
+	border-radius: 8px;
+	background: var(--ds-surface);
+	font-size: 14px;
+}
+.fv-secret p {
+	margin: 0;
+	color: var(--ds-text-2);
+}
+.fv-secret strong {
+	color: var(--ds-text);
+}
 .fv-loading {
 	min-height: 120px;
 }

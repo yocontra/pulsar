@@ -1445,7 +1445,8 @@ export interface FileTree {
 /**
  * `GET /agents/:id/files/content?path=`: one file of the agent's folder.
  * `text` up to 1 MB (`truncated` past it); an image's bytes come from the
- * same route with `raw=1`.
+ * same route with `raw=1`. A secret-looking file (`.env`, keys) is
+ * `sensitive` until asked with `reveal=1`.
  */
 export interface FileContent {
 	agent: string;
@@ -1453,7 +1454,8 @@ export interface FileContent {
 	available: boolean;
 	/** `no_cwd`, `not_found`, `not_file`, `refused` (in `.git`), `unavailable`, `unsupported`. */
 	reason?: string;
-	kind?: "text" | "image" | "binary" | "too_large";
+	/** `sensitive`: the name looks like a secret; ask again with `reveal=1` to show it. */
+	kind?: "text" | "image" | "binary" | "too_large" | "sensitive";
 	/** Bytes on disk. */
 	size?: number;
 	text?: string;

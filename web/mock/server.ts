@@ -2657,7 +2657,8 @@ async function route(
 		if (seg[3] === "content") {
 			const path = q.get("path");
 			if (!path) throw badRequest("path: required");
-			if (q.get("raw") !== "1") return json(mockContent(a.id, path));
+			if (q.get("raw") !== "1")
+				return json(mockContent(a.id, path, q.get("reveal") === "1"));
 			const image = mockImage(path);
 			if (!image)
 				throw new ApiError(

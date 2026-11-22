@@ -77,6 +77,7 @@ test.describe("file viewer", () => {
 			"docs",
 			"out",
 			"src",
+			".env.local",
 			"package.json",
 			"README.md",
 		]);
@@ -123,6 +124,24 @@ test.describe("file viewer", () => {
 				.getByRole("complementary", { name: "Changes" })
 				.locator(".cv-file.current"),
 		).toContainText("refresh.ts");
+	});
+
+	test("a secret-looking file shows only after Show", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=apparish-auth");
+		await page.goto(`/#/file/${encodeURIComponent(id)}?path=.env.local`);
+		const main = page.getByRole("main", { name: "Files" });
+		await expect(main).toContainText("This file may hold secrets");
+		await expect(main).not.toContainText("API_TOKEN");
+		await main.getByRole("button", { name: "Show", exact: true }).click();
+		await expect(main.locator(".ds-code")).toContainText("API_TOKEN=");
+		// Another file, then back: hidden again.
+		await page.goto(`/#/file/${encodeURIComponent(id)}?path=README.md`);
+		await expect(main.locator(".ds-code")).toContainText("# demo");
+		await page.goto(`/#/file/${encodeURIComponent(id)}?path=.env.local`);
+		await expect(main).toContainText("This file may hold secrets");
 	});
 
 	test("a path that isn't there says so", async ({ page, request }) => {

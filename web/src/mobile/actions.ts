@@ -4,6 +4,7 @@
  */
 import type { AgentRow, TreeNode } from "../api/types.ts";
 import { issueOf, showIssue } from "../features/issues/open.ts";
+import { fileRoute } from "../lib/file-links.ts";
 import { tagValue } from "../lib/format.ts";
 import { branchLink, prLink, repoLink } from "../lib/links.ts";
 import { navigate } from "../lib/router.ts";
@@ -102,6 +103,10 @@ export async function agentMenu(a: AgentRow) {
 			text: "Open Conversation",
 			handler: () => navigate({ view: "agent", id: a.id }),
 		},
+		// The file viewer (features/files), for an agent with a folder.
+		...(a.cwd && !a.id.includes("/sub:")
+			? [{ text: "Files", handler: () => navigate(fileRoute(a.id, "")) }]
+			: []),
 		...linkButtons(a),
 		...(issueOf(a)
 			? [

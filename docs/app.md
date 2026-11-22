@@ -69,11 +69,12 @@ The Changes view reads the worktree with git and never writes to it (only the gi
 
 ## Files
 
-**Files** shows the files in the agent's folder, read-only. On a computer, the folder button in the session header opens it in the main pane: a folder tree on the left, the open file on the right, and the path above (click a folder in the path to list it). Esc goes back. On a phone, a file link opens it as a page; tap a folder in the path or in a list to open it.
+**Files** shows the files in the agent's folder, read-only. On a computer, the folder button in the session header opens it in the main pane: a folder tree on the left, the open file on the right, and the path above (click a folder in the path to list it). Esc goes back. On a phone, **Files** in the agent's ••• menu opens it, and so does a file link; each folder and file opens as a page.
 
 - Text files show with highlighting and line numbers (the first 1 MB; no highlighting past 256 KB). PNG, JPEG, GIF and WebP images show as images. Other files say what they are and their size.
 - **Copy path** copies the file's full path on the agent's machine.
 - **Open in Changes** shows when the file has uncommitted changes, and opens its diff.
+- A file whose name looks like it holds secrets (`.env` files other than `.example` copies, keys and certificates such as `.pem` or `id_rsa`, `.npmrc`, `.netrc`, `credentials…`) is hidden until you tap **Show**. Pulsar reads it only then, and only for that file.
 - Folders list what git tracks plus new files it doesn't ignore. A folder git ignores, or a folder outside any repo, lists what is in it.
 
 Files opens any file inside the agent's folder, also files git ignores (an agent often links to its own output), but never a file in `.git`, never through a symbolic link that leads out of the folder, and never a path outside it. The same people who can read an agent's transcript can read its files: you, from the app on any of your machines (the agent's machine reads them), and the agent itself. Tagged devices you allowed get nothing. An agent on a machine with an older Pulsar shows "Update it to browse files".

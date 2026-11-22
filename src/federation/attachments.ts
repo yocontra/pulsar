@@ -20,7 +20,13 @@ const VIEW_IMAGES = new Set([
 	"image/gif",
 	"image/webp",
 ]);
-const CONTENT_KINDS = new Set(["text", "image", "binary", "too_large"]);
+const CONTENT_KINDS = new Set([
+	"text",
+	"image",
+	"binary",
+	"too_large",
+	"sensitive",
+]);
 /** The viewer's caps, so a peer can't send more (src/service/files.ts). */
 const TREE_MAX = 2000;
 const TEXT_MAX = 1024 * 1024;
@@ -82,8 +88,13 @@ export class RemoteFilesRelay {
 		address: string,
 		path: string,
 		as?: Principal,
+		reveal = false,
 	): Promise<FileContent> {
-		const r = await this.ask(address, { op: "files.read", path }, as);
+		const r = await this.ask(
+			address,
+			{ op: "files.read", path, ...(reveal ? { reveal } : {}) },
+			as,
+		);
 		if (!r)
 			return { agent: address, path, available: false, reason: "unsupported" };
 		const c = (r.content ?? {}) as Record<string, unknown>;
@@ -136,7 +147,7 @@ export class RemoteFilesRelay {
 		address: string,
 		action:
 			| { op: "files.tree"; path: string }
-			| { op: "files.read"; path: string; raw?: boolean },
+			| { op: "files.read"; path: string; raw?: boolean; reveal?: boolean },
 		as?: Principal,
 	): Promise<Record<string, unknown> | null> {
 		try {

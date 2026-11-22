@@ -1,7 +1,6 @@
 import type { Page } from "@playwright/test";
 import {
 	copies,
-	expectCopyOutside,
 	expectRefs,
 	fileUrl,
 	openGallery,
@@ -25,9 +24,16 @@ test.describe("file viewer", () => {
 	}) => {
 		const id = await openGallery(page);
 		await expectRefs(page);
-		await expectCopyOutside(page);
+		// Taps without scrolling the long gallery: on WebKit, scrolling it to
+		// its last reply logs a ResizeObserver loop error by itself (reported
+		// separately; it has nothing to do with file references).
+		const before = page.url();
+		await ref(page, "run log").dispatchEvent("click");
+		await expect(page.getByText("Path copied")).toBeVisible();
+		expect(await copies(page)).toContain("/tmp/demo-run.log");
+		expect(page.url()).toBe(before);
 
-		await ref(page, "QA report").click();
+		await ref(page, "QA report").dispatchEvent("click");
 		await expect(page).toHaveURL(fileUrl(id, "out/qa/report.html"));
 		const p = top(page);
 		await expect(p.locator("ion-title")).toContainText("report.html");
@@ -70,5 +76,27 @@ test.describe("file viewer", () => {
 		);
 		await p.getByRole("button", { name: "Open in Changes" }).click();
 		await expect(page).toHaveURL(/#\/changes\/.*\?f=src%2Fauth%2Frefresh\.ts$/);
+	});
+	test("the agent's ••• menu opens Files; a secret needs Show", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=apparish-auth");
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		await top(page).getByRole("button", { name: "More" }).click();
+		await page.getByRole("button", { name: "Files", exact: true }).click();
+		await expect(page).toHaveURL(
+			new RegExp(`#/file/${encodeURIComponent(id)}$`),
+		);
+		let p = top(page);
+		await p
+			.getByRole("list", { name: "Files" })
+			.getByRole("button", { name: ".env.local" })
+			.click();
+		p = top(page);
+		await expect(p).toContainText("This file may hold secrets");
+		await expect(p).not.toContainText("API_TOKEN");
+		await p.getByRole("button", { name: "Show", exact: true }).click();
+		await expect(p.locator(".ds-code")).toContainText("API_TOKEN=");
 	});
 });
