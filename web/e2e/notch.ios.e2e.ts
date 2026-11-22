@@ -290,7 +290,7 @@ const SCREENS: Screen[] = [
 		"prove human",
 		async (page) => {
 			await ready(page);
-			await page.getByRole("button", { name: "Settings" }).tap();
+			await page.getByTestId("tab-settings").tap();
 			await page.getByRole("button", { name: /^Prove Human/ }).tap();
 			await page.getByRole("dialog", { name: "Prove Human" }).waitFor();
 		},

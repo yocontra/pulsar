@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { contrastFailures } from "./ui-audit.ts";
 
-/** The usage page on the phone: Home's header button pushes it (web/mock/usage.ts). */
+/** The usage page on the phone: the Usage tab opens it (web/mock/usage.ts). */
 
 const top = (page: Page) =>
 	page.locator("ion-nav > .ion-page:not(.ion-page-hidden)").last();
@@ -10,11 +10,7 @@ const top = (page: Page) =>
 test.describe("usage page", () => {
 	test("Home → Usage → toggles → model sheet → back", async ({ page }) => {
 		await page.goto("/");
-		await page
-			.locator("ion-header")
-			.first()
-			.getByRole("button", { name: "Usage" })
-			.click();
+		await page.getByTestId("tab-usage").click();
 		await expect(page).toHaveURL(/#\/usage$/);
 		const p = top(page);
 		await expect(p.getByTestId("usage-total")).toHaveText(/^\$[\d,.]+$/);

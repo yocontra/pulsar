@@ -132,7 +132,7 @@ const MODALS: Modal[] = [
 		name: "prove human",
 		open: async (page) => {
 			await home(page);
-			await page.getByRole("button", { name: "Settings" }).tap();
+			await page.getByTestId("tab-settings").tap();
 			await page.getByRole("button", { name: /^Prove Human/ }).tap();
 			return page.locator(".prove-backdrop");
 		},

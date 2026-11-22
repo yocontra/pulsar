@@ -92,19 +92,6 @@ export function navigate(
 }
 
 /**
- * Go back `n` entries this tab pushed (at most to the first): the phone pops
- * to a tab's root, or back to Agents from another tab. False when there is
- * nothing to pop.
- */
-export function popBy(n: number, opts: { animated?: boolean } = {}): boolean {
-	const k = Math.min(n, depth);
-	if (k <= 0) return false;
-	pendingPop = opts.animated === false ? "none" : "pop";
-	history.go(-k);
-	return true;
-}
-
-/**
  * The phone, opened straight on a page (a link, a notification, a reload of
  * a tab): give the Home under it a real history entry, so the system back
  * (Android) returns to Home before it leaves the app.

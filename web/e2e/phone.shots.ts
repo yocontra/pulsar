@@ -351,7 +351,7 @@ test.describe("phone screens", () => {
 
 	test("settings", async ({ page }) => {
 		await home(page);
-		await page.getByRole("button", { name: "Settings" }).tap();
+		await page.getByTestId("tab-settings").tap();
 		await page.waitForTimeout(1200);
 		await shot(page, "11-settings");
 		await page.locator("ion-content.p-settings").evaluate(async (c) => {
@@ -513,7 +513,7 @@ test.describe("phone screens", () => {
 	test("prove human", async ({ page }) => {
 		await home(page);
 		// Prove Human leads the phone's Settings.
-		await page.getByRole("button", { name: "Settings" }).tap();
+		await page.getByTestId("tab-settings").tap();
 		await page.getByRole("button", { name: /^Prove Human/ }).tap();
 		await page.getByRole("dialog", { name: "Prove Human" }).waitFor();
 		await page.waitForTimeout(600);
@@ -550,7 +550,7 @@ test.describe("phone screens", () => {
 		});
 		await home(page);
 		// Prove Human leads the phone's Settings.
-		await page.getByRole("button", { name: "Settings" }).tap();
+		await page.getByTestId("tab-settings").tap();
 		await page.getByRole("button", { name: /^Prove Human/ }).tap();
 		const sheet = page.getByRole("dialog", { name: "Prove Human" });
 		await sheet.getByText(/Proven as/).waitFor();

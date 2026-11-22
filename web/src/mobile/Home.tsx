@@ -4,13 +4,7 @@
  * condenses, a search field under it, pull to refresh, swipe actions and
  * long-press menus.
  */
-import {
-	CloudOffIcon,
-	SettingsIcon,
-	SparklesIcon,
-	SquarePenIcon,
-	XIcon,
-} from "lucide-react";
+import { CloudOffIcon, SparklesIcon, SquarePenIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { TreeNode } from "../api/types.ts";
 import {
@@ -636,14 +630,8 @@ function HomeImpl() {
 			<IonHeader translucent>
 				<IonToolbar>
 					<IonButtons slot="start">
-						<IonButton
-							aria-label="Settings"
-							onClick={() => navigate({ view: "settings" })}
-						>
-							<SettingsIcon />
-						</IonButton>
-						{/* Settings and Ask on the left balance the feature buttons on the right, or the
-						    collapsed title runs under the buttons. */}
+						{/* Settings is a tab (mobile/tabs.ts). Ask on the left balances the
+						    feature buttons on the right, or the collapsed title runs under them. */}
 						<IonButton
 							aria-label="Ask"
 							onClick={() => navigate({ view: "ask" })}

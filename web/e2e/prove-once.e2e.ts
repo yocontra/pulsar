@@ -71,8 +71,7 @@ async function expectProven(page: Page, yes: boolean) {
 	// The desktop sidebar or the phone's Settings, by hash: a full
 	// navigation would be a reload.
 	await home(page);
-	if (phone())
-		await page.getByRole("button", { name: "Settings", exact: true }).click();
+	if (phone()) await page.getByTestId("tab-settings").click();
 	await expect(
 		page.getByRole("button", { name: /^Prove Human: / }).first(),
 	).toHaveAttribute(
@@ -244,10 +243,7 @@ test.describe("Prove Human once", () => {
 
 		// Sign out in the second tab: the first tab is signed out too.
 		await home(second);
-		if (phone())
-			await second
-				.getByRole("button", { name: "Settings", exact: true })
-				.click();
+		if (phone()) await second.getByTestId("tab-settings").click();
 		await second
 			.getByRole("button", { name: /^Prove Human: / })
 			.first()

@@ -25,10 +25,6 @@ const UsageDesktop = lazy<PageProps>(() =>
 const UsagePhone = lazy<PageProps>(() =>
 	import("../../usage/UsagePages.tsx").then((m) => ({ default: m.UsagePhone })),
 );
-const PhoneButton = lazy<object>(
-	() => import("../../usage/PhoneButton.tsx"),
-	none,
-);
 const AgentUsage = lazy<{ agentId: string }>(
 	() => import("../../usage/AgentUsage.tsx"),
 	none,
@@ -43,7 +39,8 @@ registerSlot("sidebar.header", {
 	id: "usage",
 	component: observer(({ mobile }: SlotProps["sidebar.header"]) => {
 		if (!offered()) return null;
-		if (mobile) return <PhoneButton />;
+		// The phone reaches Usage from its tab bar (mobile/tabs.ts).
+		if (mobile) return null;
 		return (
 			<button
 				type="button"

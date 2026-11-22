@@ -15,9 +15,9 @@
  *   (Opened straight on a tab or a page, lib/router `seatHome` puts the
  *   Agents entry under it.) docs/app.md, "On a phone".
  * - Each tab keeps its root's scroll position only.
- * - Tapping the active tab pops to its root, or scrolls the root to the top.
+ * - Tapping the active tab scrolls its root to the top (or pops to it).
  */
-import { hrefFor, navigate, popBy, type Route, stack } from "../lib/router.ts";
+import { hrefFor, navigate, type Route, stack } from "../lib/router.ts";
 import { computed } from "../lib/signals.ts";
 
 export type TabId = "agents" | "needs" | "usage" | "settings";
@@ -45,13 +45,17 @@ export function tabStart(s: Route[]): number {
 /** The tab that holds the stack's top page. */
 export const activeTab = computed<TabId>(() => {
 	const s = stack.value;
+	// A tab's route on top is that tab, however it got there (a link that
+	// set the hash): the bar shows and switches from there.
+	const top = tabOf(s[s.length - 1]);
+	if (top) return top;
 	return tabStart(s) === 1 ? (tabOf(s[1]) ?? "agents") : "agents";
 });
 
 /** The top page is a tab's root: the tab bar shows. */
 export const atTabRoot = computed(() => {
 	const s = stack.value;
-	return s.length - 1 === tabStart(s);
+	return tabOf(s[s.length - 1]) !== null;
 });
 
 // ---------------------------------------------------------------- scroll
@@ -97,7 +101,8 @@ export function selectTab(id: TabId) {
 	const start = tabStart(s);
 	if (id === cur) {
 		const above = s.length - 1 - start;
-		if (above > 0) popBy(above);
+		// lib/router follows history (popstate), without animating.
+		if (above > 0 && !tabOf(s[s.length - 1])) history.go(-above);
 		else
 			void document
 				.querySelector<HTMLIonContentElement>(
@@ -109,8 +114,11 @@ export function selectTab(id: TabId) {
 	rememberScroll(cur);
 	const tab = TABS.find((t) => t.id === id);
 	if (!tab) return;
-	if (id === "agents") popBy(s.length - 1, { animated: false });
-	else if (cur === "agents" && s.length === 1)
+	// Agents is the stack's first entry: go back to it. Leaving Agents
+	// pushes the one tab entry; between other tabs it is replaced.
+	if (id === "agents") {
+		if (s.length > 1) history.go(-(s.length - 1));
+	} else if (cur === "agents" && s.length === 1)
 		navigate(tab.route, { animated: false });
 	else navigate(tab.route, { replace: true });
 	restoreScroll(id);
