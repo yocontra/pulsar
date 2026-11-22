@@ -127,11 +127,18 @@ export function transcriptLoadingSuite(phone: boolean) {
 		await expect(n).toContainText("No transcript yet.");
 		await expect(n).toContainText("hasn't started a session for this agent");
 		await expect(skeleton(page)).toHaveCount(0);
-		await change(request, { action: "transcript-missing", id, missing: null });
+		// Retry asks for the page now (still missing: the notice stays).
 		const retry = n.getByRole("button", { name: "Retry" });
+		const asked = page.waitForRequest((r) =>
+			r.url().includes(`/agents/${encodeURIComponent(id)}/transcript`),
+		);
 		if (phone) await retry.tap();
 		else await retry.click();
-		await expect(events(page).first()).toBeVisible();
+		await asked;
+		await expect(n).toHaveAttribute("data-transcript-missing", "no_session");
+		// Found: it shows without a reload.
+		await change(request, { action: "transcript-missing", id, missing: null });
+		await expect(events(page).first()).toBeVisible({ timeout: FOUND_MS });
 		await expect(notice(page)).toHaveCount(0);
 		expect(await sawNone(page)).toBeNull();
 	});
