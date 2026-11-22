@@ -145,13 +145,12 @@ test.describe("readme screens", () => {
 		only("phone");
 		await phoneChrome(page);
 		await faceId(page);
-		// A working agent with tool cards and a message from a peer: clean
-		// demo data, unlike apparish-auth's approval fixture.
-		const id = await agentId(request, "name=codex@apparish");
+		// The pending approval, ready for Face ID, at the bottom of the session.
+		const id = await agentId(request, "name=apparish-auth");
 		await home(page);
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
 		await page.locator(".p-nav-title h1").first().waitFor();
-		await page.getByText("Heads up: I'm rebasing").last().waitFor();
+		await page.getByText("Rebuild and run the auth tests").last().waitFor();
 		await page.waitForTimeout(1500);
 		const jump = page.getByRole("button", { name: "Jump to latest" });
 		if (await jump.isVisible()) await jump.click();

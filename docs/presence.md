@@ -15,7 +15,7 @@ Both name the exact change and who asked. For example, on macOS:
 
 > "osascript" is trying to confirm a Pulsar change: forget pulsar-meshnode and its machine id (pulsar mesh) (asked by agent claude@pulsar (claude) on studio).
 
-Say no in either place and the change is refused. With no answer in 3 minutes, it times out. Every check asks again; a past yes never counts for the next change.
+Say no in either place and the change is refused. With no answer in 3 minutes, it times out. A browser you already proved in can answer a card with no new Face ID, so anyone who can use your unlocked, proven browser or phone can confirm.
 
 On a headless server reached over SSH, with no system prompt and no app yet, a person at a real terminal can confirm by typing back a word the daemon prints. An agent's request never gets this fallback.
 

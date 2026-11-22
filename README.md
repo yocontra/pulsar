@@ -80,7 +80,7 @@ Machines signed in as you link on their own. There are no pairing codes. `pulsar
 
 Run `pulsar qr` and scan the code with your phone, then add the page to your home screen. On a computer, run `pulsar ui`.
 
-<p align="center"><img src="docs/assets/screenshots/phone-session.webp" alt="Phone: a working Codex session with tool-call cards and a message from another agent" width="300"></p>
+<p align="center"><img src="docs/assets/screenshots/phone-session.webp" alt="Phone: an agent's session with a Bash approval ready to allow with Face ID" width="300"></p>
 
 - See every machine, project and agent, with a "Needs you" list.
 - Watch each session live: replies, tool calls, diffs, code and images.
@@ -89,7 +89,7 @@ Run `pulsar qr` and scan the code with your phone, then add the page to your hom
 - Stop an agent's turn.
 - Start a new agent on any machine, in a folder or a new git worktree.
 - Review an agent's changes, then commit, push and open a PR.
-- Search agents and messages, and ask "who is editing this file?"
+- Search the pool, and ask "who is editing this file?"
 - Get notifications when an agent needs you, finishes or fails.
 - See token usage and an API cost estimate per harness, model and day.
 
@@ -103,7 +103,7 @@ Full tour and keyboard shortcuts: [docs/app.md](docs/app.md).
 | Codex | Read-only | Yes |
 | Cursor, Gemini CLI | No | No |
 
-Details per harness: [docs/adapters.md](docs/adapters.md).
+Details per harness, setup flags and environment variables: [docs/adapters.md](docs/adapters.md).
 
 ## Prove Human
 
@@ -116,9 +116,10 @@ The app asks before you:
 - stop an agent;
 - start an agent;
 - commit, push or open a PR;
-- upload files.
+- upload files;
+- turn on notifications.
 
-You prove once per device. It lasts 12 hours in a computer's browser and 7 days on a phone. An action on another machine asks again, because each machine checks for itself.
+You prove once in each machine's app. It lasts 12 hours in a computer's browser and 7 days on a phone. An action on an agent on another machine asks again, because each machine checks for itself.
 
 Some commands change who can reach your agents: `pulsar mesh allow`, `deny`, `forget`, `owner`, and `pulsar passkeys remove`. Agents can run them too, so each one waits until you confirm it with Touch ID (or Windows Hello, or polkit) on that machine, or with your passkey in the app. Details: [docs/presence.md](docs/presence.md).
 
@@ -129,9 +130,10 @@ pulsar ls [selector]               # who is online
 pulsar send '*' "main is frozen"   # send as the operator
 pulsar ask "who is editing src/auth/session.ts"
 pulsar interrupt codex@apparish    # stop an agent's current turn
-pulsar ui | qr                     # open the app
-pulsar mesh [on|off]               # the agent mesh
-pulsar doctor                      # find and fix problems
+pulsar ui                          # open the app in your browser
+pulsar qr                          # QR code of the app, for your phone
+pulsar mesh                        # mesh status; `pulsar mesh on` / `off`
+pulsar doctor                      # check the daemon, harnesses and mesh
 ```
 
 `pulsar --help` lists everything.

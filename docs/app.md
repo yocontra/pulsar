@@ -112,6 +112,7 @@ It asks before you:
 - start an agent;
 - commit, push or open a PR;
 - upload attachments;
+- turn on notifications;
 - remove a passkey or confirm a pool change.
 
 You prove once, and the whole app knows it. It lasts 12 hours in a computer's browser and 7 days on a phone or tablet. All open tabs share it. On a computer, a reload with no other tab open asks again. Settings → Confirmed browsers lists proven browsers, with Sign out.
