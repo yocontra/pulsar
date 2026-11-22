@@ -1,3 +1,4 @@
+import type { PoolDiagnostics } from "../federation/diagnostics.ts";
 import type {
 	Approval,
 	ApprovalDecision,
@@ -153,6 +154,8 @@ export interface PoolView extends ActingRelay {
 	readonly approvals: RemoteApprovals;
 	/** Token usage of other machines and their agents (absent before usage existed). */
 	readonly usage?: PoolUsage;
+	/** Other machines' doctor reports (absent before Diagnostics existed). */
+	readonly diagnostics?: PoolDiagnostics;
 	/**
 	 * The sender of a message that came from a peer (`<machineId>/<id>`), or
 	 * null when the id is not such an address.

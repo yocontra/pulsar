@@ -19,7 +19,11 @@ import {
 	peerLine,
 	runMeshSetup,
 } from "../src/setup/mesh.ts";
-import { meshChecks, parseLsofListen } from "../src/setup/mesh-doctor.ts";
+import {
+	type MeshFacts,
+	meshChecks,
+	parseLsofListen,
+} from "../src/setup/mesh-doctor.ts";
 import {
 	type CommandResult,
 	installService,
@@ -629,6 +633,7 @@ describe("pulsar doctor: mesh checks", () => {
 		return { cert, key };
 	}
 
+	let lastFacts: MeshFacts | null = null;
 	async function doctor(opts: {
 		ts?: RunResult | Record<string, unknown>;
 		lsof?: string;
@@ -659,7 +664,7 @@ describe("pulsar doctor: mesh checks", () => {
 			if (opts.otherCli) env.installDir = join(root, "elsewhere");
 		}
 		const lines: string[] = [];
-		await meshChecks(
+		lastFacts = await meshChecks(
 			{
 				tailscale: run,
 				run: env.run,
@@ -671,8 +676,8 @@ describe("pulsar doctor: mesh checks", () => {
 			},
 			{
 				ok: (m) => lines.push(`✓ ${m}`),
-				bad: (m) => lines.push(`✗ ${m}`),
-				note: (m) => lines.push(`· ${m}`),
+				bad: (m, f) => lines.push(`✗ ${f ? `${m}: ${f}` : m}`),
+				note: (m, f) => lines.push(`· ${f ? `${m}: ${f}` : m}`),
 			},
 		);
 		return lines;
@@ -695,6 +700,17 @@ describe("pulsar doctor: mesh checks", () => {
 			"· iphone (iOS): offline",
 			"✓ laptop (macOS): Pulsar 2.0.0",
 		]);
+		// The app's machine facts come from the same run.
+		expect(lastFacts).toEqual({
+			tailscale: {
+				state: "running",
+				version: "1.104.7",
+				dnsName: DNS,
+				magicDns: true,
+			},
+			certDays: expect.any(Number),
+		});
+		expect(lastFacts!.certDays).toBeGreaterThanOrEqual(89);
 	});
 
 	test("problems each get a one-line fix", async () => {

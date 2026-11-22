@@ -92,6 +92,8 @@ export const HTTP_OPS = [
 	...ACTING_OPS,
 	/** Token usage and model prices (reading, and editing a price). */
 	"usage",
+	/** Every machine's `pulsar doctor` report (read-only). */
+	"diagnostics",
 ] as const;
 
 /**
@@ -174,6 +176,7 @@ const USER_OPS: ReadonlySet<Op> = new Set<Op>([
 	"acting.options",
 	...ACTING_OPS,
 	"usage",
+	"diagnostics",
 ]);
 
 /** What the human operator may do only with a passkey session (`verified`, Prove Human). */

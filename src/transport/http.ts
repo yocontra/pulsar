@@ -268,6 +268,8 @@ const Q = {
 		/** Read new session lines first (waits a few seconds at most). */
 		refresh: z.enum(["0", "1"]).optional(),
 	}),
+	/** `refresh=1`: run doctor now on every machine, not a recent report. */
+	diagnostics: z.object({ refresh: z.enum(["0", "1"]).optional() }),
 };
 
 const PriceNumber = z.number().min(0).max(10_000);
@@ -1464,6 +1466,23 @@ export class HttpTransport {
 			return c.json({
 				prices: this.service.usage.setPrice(body.model, body.price),
 			});
+		});
+		// Diagnostics: the pool at once, then each machine's `pulsar doctor`
+		// report, run by its own daemon (read-only; the app asks in parallel).
+		api.get("/diagnostics", (c) =>
+			c.json(this.service.diagnosticsList(who(c))),
+		);
+		api.get("/diagnostics/:machine", async (c) => {
+			const q = parse(Q.diagnostics, c.req.query());
+			const machine = c.req.param("machine");
+			if (machine.length > 200) throw new RpcError("bad_request", "machine");
+			return c.json(
+				await this.service.machineDiagnostics(
+					who(c),
+					machine,
+					q.refresh === "1",
+				),
+			);
 		});
 		// Plan usage limits (this node's and the peers' last readings) and when to warn.
 		api.get("/usage/limits", (c) => {

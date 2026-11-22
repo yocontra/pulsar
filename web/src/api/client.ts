@@ -28,6 +28,7 @@ import {
 	type ChangesSummary,
 	type DecideRequest,
 	type DecideResponse,
+	type DiagnosticsReport,
 	type DryRun,
 	type FacetKey,
 	type FacetsResponse,
@@ -43,6 +44,7 @@ import {
 	type InteractionAnswer,
 	type IssueDetails,
 	type LimitSettings,
+	type MachineDiagnostics,
 	type Page,
 	type PasskeyList,
 	type PasskeyRegisterOptions,
@@ -480,6 +482,13 @@ export const api = {
 	/** One agent's tokens, cost and context. */
 	agentUsage: (agentId: string) =>
 		request<AgentUsage>(`/agents/${enc(agentId)}/usage`),
+	/** Every machine in the pool, at once; each report comes from `machineDiagnostics`. */
+	diagnostics: () => request<DiagnosticsReport>("/diagnostics"),
+	/** One machine's `pulsar doctor` report; `refresh` runs doctor again now. */
+	machineDiagnostics: (machineId: string, refresh = false) =>
+		request<MachineDiagnostics>(
+			`/diagnostics/${enc(machineId)}${query({ refresh: refresh ? 1 : null })}`,
+		),
 	/** Plan usage limits (every machine's last readings) and when to warn. */
 	usageLimits: () => request<UsageLimits>("/usage/limits"),
 	/** Turn limit warnings on or off, or set their thresholds. */

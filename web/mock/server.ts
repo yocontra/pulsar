@@ -115,6 +115,11 @@ import {
 } from "./data.ts";
 import { mockContent, mockImage, mockTree } from "./files.ts";
 import {
+	diagnosticsList,
+	machineDiagnostics,
+	mockDiagnostics,
+} from "./diagnostics.ts";
+import {
 	GitMockError,
 	gitCommit,
 	gitControl,
@@ -195,6 +200,7 @@ const FEATURES: Feature[] = [
 		"issues",
 		"search",
 		"prreview",
+		"diagnostics",
 		...((process.env.PULSAR_MOCK_FEATURES ?? "")
 			.split(",")
 			.map((f) => f.trim())
@@ -2878,6 +2884,22 @@ async function route(
 		);
 		return json({ ok: true, op: b.op });
 	}
+	// Diagnostics: the pool at once, then each machine (web/mock/diagnostics.ts).
+	if (GET && path === "/diagnostics") return json(diagnosticsList());
+	if (GET && seg[0] === "diagnostics" && seg.length === 2) {
+		const refresh = q.get("refresh");
+		if (refresh !== null && refresh !== "0" && refresh !== "1")
+			throw badRequest("refresh: 0 or 1");
+		const m = await machineDiagnostics(seg[1]!);
+		if (!m) throw notFound("no such machine in the pool");
+		return json(m);
+	}
+	if (POST && path === "/__mock/diagnostics")
+		return json(
+			mockDiagnostics(
+				(await jsonBody(req)) as Parameters<typeof mockDiagnostics>[0],
+			),
+		);
 	// Token usage (web/mock/usage.ts).
 	if (GET && path === "/usage") {
 		const period = q.get("period") ?? "7d";

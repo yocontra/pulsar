@@ -142,8 +142,11 @@ export function Slot<K extends SlotName>({
 export interface SettingsSection extends Entry {
 	/** The section heading (desktop nav and heading, phone group title). */
 	title: string;
-	/** Desktop body, under the heading (rows in a `d-card d-set-card` list). */
-	desktop?: ComponentType;
+	/**
+	 * Desktop body, under the heading (rows in a `d-card d-set-card` list).
+	 * `close` closes Settings (a layer over the page), e.g. before navigating.
+	 */
+	desktop?: ComponentType<{ close: () => void }>;
 	/** Phone body: IonItems inside the group's inset list. */
 	phone?: ComponentType;
 	/** Shown only while this is true (e.g. a feature the daemon offers). */

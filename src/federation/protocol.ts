@@ -310,7 +310,9 @@ export type FedAction =
 	/** Launch reads on the receiver itself (src/service/launch.ts). */
 	| { op: "launch.status"; id: string }
 	| { op: "launch.options" }
-	| { op: "launch.refs"; cwd: string };
+	| { op: "launch.refs"; cwd: string }
+	/** The receiver's own `pulsar doctor` report, redacted (src/diagnostics/local.ts). */
+	| { op: "diag.read"; fresh?: boolean };
 
 /** Up frames, batched in `POST /fed/v1/frames`. */
 export type UpFrame =
