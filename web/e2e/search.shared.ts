@@ -52,7 +52,10 @@ export function searchSuite(platform: "desktop" | "phone") {
 			await expect(first.locator("mark").first()).toHaveText(/fake|timers/i);
 			await first.click();
 		} else {
-			await page.keyboard.press("ControlOrMeta+k");
+			// The sidebar's Search item (Cmd-K's twin): the tree can paint from
+			// the last-screen snapshot before the key handler is attached, and
+			// Cmd-K toggles, so pressing it again isn't safe.
+			await page.locator("button.d-nav-item", { hasText: "Search" }).click();
 			const dialog = page.getByRole("dialog", { name: "Search the pool" });
 			await dialog.getByLabel("Search").fill("fake timers");
 			await expect(
