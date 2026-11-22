@@ -181,6 +181,11 @@ export class CodexWatch {
 		this.now = opts.now ?? Date.now;
 	}
 
+	/** Whether the client is connected to the app-server now. */
+	get connected(): boolean {
+		return this.sock !== null;
+	}
+
 	/** Whether this thread's prompts come from here (answerable), not the rollout. */
 	covers(threadId: string): boolean {
 		if (this.subscribed.has(threadId)) return true;
@@ -230,6 +235,15 @@ export class CodexWatch {
 			}
 		}
 		return true;
+	}
+
+	/** The model call ids (rollout `call_id`) of the thread's pending requests. */
+	callIds(threadId: string): Set<string> {
+		const out = new Set<string>();
+		for (const r of this.requests.values())
+			if (r.threadId === threadId && typeof r.params.itemId === "string")
+				out.add(r.params.itemId);
+		return out;
 	}
 
 	/** The thread's pending prompts, as cards. */

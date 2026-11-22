@@ -84,6 +84,10 @@ const modelCache = new Map<
 >();
 
 let watch: CodexWatch | null = null;
+/** Rollout prompts of answerable threads the app-server hasn't sent: first seen. */
+const orphans = new Map<string, number>();
+/** How long such a prompt waits for the app-server before its read-only card shows. */
+const ORPHAN_MS = 10_000;
 /** The daemon's one client on Codex's app-server (made on first use). */
 const codexWatch = () => {
 	watch ??= new CodexWatch();
@@ -186,13 +190,31 @@ export const codex: HarnessDriver = {
 				.sync(live.map((a) => a.sessionId!))
 				.catch(() => false);
 			const out: ServerPrompt[] = [];
-			const rest = [];
+			const covered = new Map<string, Set<string>>();
 			for (const a of live)
-				if (codexWatch().covers(a.sessionId!))
+				if (codexWatch().covers(a.sessionId!)) {
+					covered.set(a.sessionId!, codexWatch().callIds(a.sessionId!));
 					for (const p of codexWatch().prompts(a.sessionId!))
 						out.push({ ...p, sessionId: a.sessionId! });
-				else rest.push(a);
-			out.push(...(await codexPending(rest, codexRolloutAsync)));
+				}
+			const now = Date.now();
+			const seen = new Set<string>();
+			for (const p of await codexPending(live, codexRolloutAsync)) {
+				const calls = covered.get(p.sessionId);
+				if (!calls) {
+					out.push(p);
+					continue;
+				}
+				// A call the app-server never sent this client: shown read-only
+				// after a while, so a prompt never goes missing.
+				if (calls.has(p.key)) continue;
+				const id = `${p.sessionId}:${p.key}`;
+				seen.add(id);
+				const since = orphans.get(id) ?? now;
+				orphans.set(id, since);
+				if (now - since >= ORPHAN_MS) out.push(p);
+			}
+			for (const id of orphans.keys()) if (!seen.has(id)) orphans.delete(id);
 			return out;
 		},
 		reply: (p, r) => codexWatch().reply(p, r),

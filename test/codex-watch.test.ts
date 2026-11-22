@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codex } from "../src/harnesses/codex.ts";
@@ -37,6 +37,11 @@ function watchOn(f: FakeCodex) {
 }
 
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+/** Waits (a few seconds at most) for the fake's frames to arrive. */
+async function until(ok: () => boolean) {
+	for (let i = 0; i < 400 && !ok(); i++) await tick(5);
+	expect(ok()).toBe(true);
+}
 
 const exec = (threadId: string, itemId: string, command = "rm -rf build") => ({
 	kind: "command",
@@ -84,7 +89,7 @@ describe("Codex prompts answered from the app (app-server client)", () => {
 		);
 		const w = watchOn(f);
 		await w.sync([T1]);
-		await tick();
+		await until(() => w.prompts(T1).length > 0);
 		const [p] = w.prompts(T1);
 		expect(p).toMatchObject({
 			kind: "permission",
@@ -128,7 +133,7 @@ describe("Codex prompts answered from the app (app-server client)", () => {
 				},
 			],
 		});
-		await tick();
+		await until(() => w.prompts(T1).length > 0);
 		const [p] = w.prompts(T1);
 		expect(p!.kind).toBe("question");
 		expect(p!.prompt).toMatchObject({
@@ -160,11 +165,11 @@ describe("Codex prompts answered from the app (app-server client)", () => {
 			itemId: "call_p",
 			startedAtMs: 1,
 		});
-		await tick();
+		await until(() => w.prompts(T1).length > 0);
 		const [p] = w.prompts(T1);
 		expect(p!.tool).toBe("apply_patch");
 		f.answerElsewhere(id);
-		await tick();
+		await until(() => w.prompts(T1).length === 0);
 		expect(w.prompts(T1)).toEqual([]);
 		expect(await w.reply({ ...p!, sessionId: T1 }, ALLOW)).toBe(false);
 		expect(f.answers).toEqual([]);
@@ -185,7 +190,7 @@ describe("Codex prompts answered from the app (app-server client)", () => {
 			...exec(T1, "call_stdin"),
 			kind: "writeStdin",
 		});
-		await tick();
+		await until(() => w.prompts(T1).length === 2);
 		const ps = w.prompts(T1);
 		// Shown, read-only; the dynamic tool call isn't shown at all.
 		expect(ps.map((p) => [p.tool, p.readOnly])).toEqual([
@@ -204,10 +209,10 @@ describe("Codex prompts answered from the app (app-server client)", () => {
 			"item/commandExecution/requestApproval",
 			exec(T1, "call_r"),
 		);
-		await tick();
+		await until(() => w.prompts(T1).length > 0);
 		const key = w.prompts(T1)[0]!.key;
 		f.dropClients();
-		await tick();
+		while (w.connected) await tick(5);
 		// Still shown (no flicker while reconnecting)...
 		expect(w.covers(T1)).toBe(true);
 		expect(w.prompts(T1).map((p) => p.key)).toEqual([key]);
@@ -216,7 +221,9 @@ describe("Codex prompts answered from the app (app-server client)", () => {
 			false,
 		);
 		await w.sync([T1]);
-		await tick();
+		// The replay comes with the resume (maybe in a later chunk).
+		await until(() => w.connected);
+		await tick(50);
 		const [p] = w.prompts(T1);
 		expect(p!.key).toBe(key);
 		expect(await w.reply({ ...p!, sessionId: T1 }, ALLOW)).toBe(true);
@@ -285,6 +292,18 @@ describe("the Codex driver's prompts", () => {
 		cleanups.push(() => f.close());
 		f.loaded.add(T1);
 		f.request("item/commandExecution/requestApproval", exec(T1, "call_d"));
+		// T1's rollout: the delivered call, and one the app-server never sends.
+		const day = join(home, "sessions", "2026", "11", "21");
+		mkdirSync(day, { recursive: true });
+		const approval = (call_id: string, command: string[]) =>
+			JSON.stringify({
+				type: "event_msg",
+				payload: { type: "exec_approval_request", call_id, command },
+			});
+		writeFileSync(
+			join(day, `rollout-2026-11-21T10-00-00-${T1}.jsonl`),
+			`${approval("call_d", ["rm", "-rf", "build"])}\n${approval("call_x", ["ls"])}\n`,
+		);
 		const agent = (sessionId: string) =>
 			({
 				id: `codex:${sessionId}`,
@@ -294,11 +313,21 @@ describe("the Codex driver's prompts", () => {
 			}) as Agent;
 		const source = codex.serverInteractions!;
 		await source.pending([agent(T1), agent(T2)]);
-		await tick();
+		await until(() => f.clients > 0);
+		await tick(50);
 		const ps: ServerPrompt[] = await source.pending([agent(T1), agent(T2)]);
 		expect(ps).toHaveLength(1);
 		expect(ps[0]).toMatchObject({ sessionId: T1, tool: "exec" });
 		expect(ps[0]!.readOnly).toBeUndefined();
+		// Ten seconds on, the undelivered call shows read-only (never missing).
+		setSystemTime(new Date(Date.now() + 11_000));
+		cleanups.push(() => setSystemTime());
+		const later = await source.pending([agent(T1), agent(T2)]);
+		expect(later.map((p) => [p.key.endsWith("call_d"), p.readOnly])).toEqual([
+			[true, undefined],
+			[false, true],
+		]);
+		expect(later[1]!.key).toBe("call_x");
 		expect(await source.reply(ps[0]!, ALLOW)).toBe(true);
 		expect(f.answers).toHaveLength(1);
 	});
