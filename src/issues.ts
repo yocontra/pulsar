@@ -109,6 +109,18 @@ export const BODY_MAX = 4000;
  * repo (a fork), else the remote the branch pushes to, else `origin`.
  */
 export async function issueRepo(cwd: string): Promise<string | null> {
+	const hit = repos.get(cwd);
+	if (hit && Date.now() - hit.at < REPO_TTL_MS) return hit.slug;
+	const slug = await readIssueRepo(cwd);
+	repos.set(cwd, { at: Date.now(), slug });
+	return slug;
+}
+
+/** Each folder's issue repo, re-read after `REPO_TTL_MS` (remotes rarely change). */
+const repos = new Map<string, { at: number; slug: string | null }>();
+const REPO_TTL_MS = 5 * 60_000;
+
+async function readIssueRepo(cwd: string): Promise<string | null> {
 	const read = async (args: string[]) => {
 		const r = await runGit(cwd, args, {
 			mode: "read",
@@ -317,6 +329,7 @@ export async function issueFromPr(
 
 /** Forget cached gh reads (tests). */
 export function forgetIssues() {
+	repos.clear();
 	cards.clear();
 	prRefs.clear();
 }

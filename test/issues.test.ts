@@ -359,7 +359,10 @@ describe("detection in the daemon", () => {
 					.map((a) => a.id),
 			).toEqual([byBranch.id]);
 
-			// The branch moves on: the detected tag goes.
+			// A re-register keeps pulsar's tag as pulsar's: the branch moves on
+			// and the detected tag goes.
+			reg(svc, "s-br", { branch: "fix-1378" });
+			expect(issueTags(svc, byBranch.id)).toEqual(["issue:1378"]);
 			svc.registry.get(byBranch.id)!.branch = "main";
 			await svc.issues.refresh();
 			expect(issueTags(svc, byBranch.id)).toEqual([]);
