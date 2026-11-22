@@ -1,3 +1,4 @@
+import "./window-shim.ts";
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -8,9 +9,11 @@ import { parsePi } from "../../src/harnesses/pi-transcript.ts";
 import { newParseState } from "../../src/transcripts/types.ts";
 import { galleryEvents } from "../mock/blocks.ts";
 import type { TranscriptEvent } from "../src/api/types.ts";
+import { registerPage } from "../src/lib/registry.tsx";
 import { buildItems } from "../src/session/items.ts";
 import { toMessages } from "../src/session/messages.ts";
 import { TurnChanges } from "../src/session/TurnChanges.tsx";
+import { TurnFileLink } from "../src/session/TurnFileLink.tsx";
 import {
 	type TurnChanges as Changes,
 	turnChanges,
@@ -68,7 +71,7 @@ describe("turn changes: harness gallery", () => {
 	test("omp: edit and write count; an xd:// device write does not", () => {
 		const turns = [...summaries(section("omp")).values()];
 		expect(turns.map(rows)).toEqual([
-			["modified src/parse.ts +1 -1", "added src/fast.ts +1 -0"],
+			["modified src/parse.ts +1 -1", "written src/fast.ts +1 -0"],
 		]);
 	});
 
@@ -209,7 +212,7 @@ describe("turn changes: OpenCode tool parts", () => {
 		expect(rows(t)).toEqual([
 			"modified src/a.ts +1 -1",
 			"modified src/b.ts +3 -2",
-			"added src/c.ts +2 -0",
+			"written src/c.ts +2 -0",
 			"modified src/d.ts +1 -1",
 		]);
 	});
@@ -239,7 +242,7 @@ describe("turn changes: rules", () => {
 		];
 		const turns = summaries(events);
 		expect([...turns.values()].map(rows)).toEqual([
-			["modified a.ts +1 -1", "added b.ts +1 -0"],
+			["modified a.ts +1 -1", "written b.ts +1 -0"],
 			["modified a.ts +1 -1"],
 		]);
 		// The summary sits on the turn's last assistant message.
@@ -358,7 +361,7 @@ describe("turn changes: rules", () => {
 		]);
 	});
 
-	test("an overwrite is a modified file; a new file is added", () => {
+	test("a write is added or modified only when its result says which", () => {
 		const t = turnChanges(
 			buildItems([
 				...call(
@@ -375,6 +378,18 @@ describe("turn changes: rules", () => {
 			CWD,
 		);
 		expect(rows(t)).toEqual(["modified a.ts +1 -0", "added b.ts +1 -0"]);
+		// "Wrote b.ts" says neither.
+		const w = turnChanges(
+			buildItems(
+				call(
+					"write",
+					{ path: `${CWD}/c.ts`, content: "c" },
+					{ text: "Wrote c.ts" },
+				),
+			),
+			CWD,
+		);
+		expect(rows(w)).toEqual(["written c.ts +1 -0"]);
 	});
 });
 
@@ -389,5 +404,38 @@ describe("turn changes: the summary row", () => {
 		expect(html).toContain("−3");
 		expect(html).toContain('data-turn-changes="4"');
 		expect(html).toContain('aria-expanded="false"');
+	});
+});
+
+describe("turn changes: caching", () => {
+	test("the same applied calls give the same object; a new call a new one", () => {
+		const events = [
+			...call("Edit", {
+				file_path: `${CWD}/a.ts`,
+				old_string: "1",
+				new_string: "2",
+			}),
+		];
+		const a = turnChanges(buildItems(events), CWD);
+		expect(turnChanges(buildItems(events), CWD)).toBe(a);
+		events.push(...call("Write", { file_path: `${CWD}/b.ts`, content: "b" }));
+		const b = turnChanges(buildItems(events), CWD);
+		expect(b).not.toBe(a);
+		expect(rows(b)).toEqual(["modified a.ts +1 -1", "written b.ts +1 -0"]);
+	});
+});
+
+describe("turn changes: the file viewer link", () => {
+	test("shows only while a file viewer page is registered", () => {
+		const link = () =>
+			renderToStaticMarkup(<TurnFileLink agentId="m:1" path="src/a.ts" />);
+		expect(link()).toBe("");
+		const off = registerPage({ name: "file", desktop: () => null });
+		try {
+			expect(link()).toContain('aria-label="Open src/a.ts"');
+		} finally {
+			off();
+		}
+		expect(link()).toBe("");
 	});
 });

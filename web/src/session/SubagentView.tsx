@@ -89,7 +89,16 @@ export function SubagentView({
 				<Transcript
 					events={windowed}
 					variant={variant}
-					agent={sub ? { name: sub.name, harness: sub.harness } : null}
+					agent={
+						sub
+							? {
+									name: sub.name,
+									harness: sub.harness,
+									// A running subagent's last turn has no change summary yet.
+									state: sub.state === "running" ? "busy" : undefined,
+								}
+							: null
+					}
 					working={sub?.state === "running" && windowed.at(-1)?.role === "user"}
 				/>
 			</ConversationView>

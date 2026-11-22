@@ -18,7 +18,13 @@ import type { DiffItem } from "./Diff.tsx";
 import type { Item } from "./items.ts";
 import type { ChatMessage } from "./messages.ts";
 
-export type TurnFileStatus = "added" | "modified" | "deleted" | "moved";
+/** `written`: a whole-file write with no word on whether the file was new. */
+export type TurnFileStatus =
+	| "added"
+	| "modified"
+	| "written"
+	| "deleted"
+	| "moved";
 
 export interface TurnFile {
 	/** The absolute path when the folder is known, else as the tool gave it. */
@@ -100,7 +106,8 @@ function pieces(name: string, input: unknown, result?: string): Piece[] {
 			const hunks: Piece["hunks"] = [];
 			for (const line of f.lines) {
 				if (line.startsWith("@@")) {
-					hunks.push({ label: line, rows: [] });
+					// A bare `@@` says nothing: label only `@@ fn` context lines.
+					hunks.push({ label: line.trim() === "@@" ? "" : line, rows: [] });
 					continue;
 				}
 				const sign = line[0];
@@ -119,7 +126,7 @@ function pieces(name: string, input: unknown, result?: string): Piece[] {
 				path: f.path,
 				status,
 				...(f.moveTo ? { moveTo: f.moveTo } : {}),
-				hunks: hunks.filter((h) => h.rows.length || h.label),
+				hunks: hunks.filter((h) => h.rows.length),
 			};
 		});
 	}
@@ -160,12 +167,17 @@ function pieces(name: string, input: unknown, result?: string): Piece[] {
 		];
 	}
 	if (kind === "write") {
-		// An overwrite says so (Claude: "The file … has been updated").
-		const created = !/updated|overwr/i.test(result ?? "");
+		// Claude says which: "File created successfully" / "has been updated".
+		const r = result ?? "";
+		const status: TurnFileStatus = /updated|overwr/i.test(r)
+			? "modified"
+			: /creat|new file/i.test(r)
+				? "added"
+				: "written";
 		return [
 			{
 				path,
-				status: created ? "added" : "modified",
+				status,
 				hunks: [
 					{
 						label: "",
@@ -246,18 +258,39 @@ function editCalls(parts: Item[], out: Extract<Item, { t: "tool" }>[] = []) {
 	return out;
 }
 
+// The same applied calls give the same object, so an open summary doesn't
+// re-render while later turns stream. Keyed by the turn's first applied call.
+const turns = new WeakMap<
+	TranscriptEvent,
+	{ sig: string; value: TurnChanges }
+>();
+
 /** The files these parts (one turn's) changed, or null when none. */
 export function turnChanges(
 	parts: Item[],
+	cwd?: string | null,
+): TurnChanges | null {
+	const calls = editCalls(parts).filter((it) => applied(it.call!, it.result));
+	if (!calls.length) return null;
+	const head = calls[0]!.call!;
+	const sig = `${cwd ?? ""}\n${calls.map((it) => `${it.call!.id}:${it.result?.id ?? ""}`).join(",")}`;
+	const hit = turns.get(head);
+	if (hit?.sig === sig) return hit.value;
+	const value = build(calls, cwd);
+	if (value) turns.set(head, { sig, value });
+	return value;
+}
+
+function build(
+	calls: Extract<Item, { t: "tool" }>[],
 	cwd?: string | null,
 ): TurnChanges | null {
 	const files = new Map<
 		string,
 		{ file: TurnFile; hunks: Piece["hunks"]; firstStatus: TurnFileStatus }
 	>();
-	for (const it of editCalls(parts)) {
+	for (const it of calls) {
 		const call = it.call!;
-		if (!applied(call, it.result)) continue;
 		const base = call.tool?.cwd ?? cwd;
 		for (const piece of callPieces(call, it.result)) {
 			let key = absolute(piece.path, base);
@@ -281,8 +314,7 @@ export function turnChanges(
 			} else if (piece.status === "deleted") entry.file.status = "deleted";
 			else if (entry.file.status === "deleted")
 				// Deleted, then written again in the same turn.
-				entry.file.status =
-					piece.status === "added" ? "modified" : piece.status;
+				entry.file.status = "modified";
 			entry.hunks.push(...piece.hunks);
 			if (piece.moveTo) {
 				// The file lives on under its new name.
@@ -348,7 +380,7 @@ export function turnSummaries(
 	messages: ChatMessage[],
 	cwd?: string | null,
 	busy = false,
-): Map<string, TurnChanges> {
+): ReadonlyMap<string, TurnChanges> {
 	const out = new Map<string, TurnChanges>();
 	let parts: Item[] = [];
 	let lastId: string | null = null;

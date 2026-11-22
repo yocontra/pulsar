@@ -5,7 +5,7 @@
  * from the turn's edit calls (turn-changes.ts), so nothing is fetched.
  */
 import { ChevronRightIcon, FileDiffIcon } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { lazy, memo, Suspense, useState } from "react";
 import { plural } from "../lib/format.ts";
 import { DiffBody } from "./Diff.tsx";
 import { langForPath, useTokens } from "./highlight.tsx";
@@ -20,12 +20,14 @@ const OpenFile = lazy(() =>
 const LETTER: Record<TurnFile["status"], string> = {
 	added: "A",
 	modified: "M",
+	written: "W",
 	deleted: "D",
 	moved: "R",
 };
 const LABEL: Record<TurnFile["status"], string> = {
 	added: "Added",
 	modified: "Modified",
+	written: "Written",
 	deleted: "Deleted",
 	moved: "Moved",
 };
@@ -39,6 +41,9 @@ function Stat({ added, removed }: { added: number; removed: number }) {
 	);
 }
 
+/** Rows drawn before "Show N more lines" (a long Write is all additions). */
+const ROWS = 400;
+
 function FileDiffView({
 	file,
 	layout,
@@ -49,6 +54,7 @@ function FileDiffView({
 	const lang = langForPath(file.path);
 	const A = useTokens(file.before, file.before ? lang : null);
 	const B = useTokens(file.after, file.after ? lang : null);
+	const [full, setFull] = useState(false);
 	if (!file.items.length)
 		return (
 			<p className="ds-turnchg-note">
@@ -57,18 +63,30 @@ function FileDiffView({
 					: "No lines to show."}
 			</p>
 		);
+	const more = full ? 0 : file.items.length - ROWS;
 	return (
-		<DiffBody
-			items={file.items}
-			A={A}
-			B={B}
-			layout={layout}
-			className="ds-turnchg-diff"
-		/>
+		<>
+			<DiffBody
+				items={more > 0 ? file.items.slice(0, ROWS) : file.items}
+				A={A}
+				B={B}
+				layout={layout}
+				className="ds-turnchg-diff"
+			/>
+			{more > 0 && (
+				<button
+					type="button"
+					className="ds-turnchg-more"
+					onClick={() => setFull(true)}
+				>
+					Show {plural(more, "more line")}
+				</button>
+			)}
+		</>
 	);
 }
 
-export function TurnChanges({
+export const TurnChanges = memo(function TurnChanges({
 	changes,
 	layout,
 	agentId,
@@ -175,4 +193,4 @@ export function TurnChanges({
 			)}
 		</section>
 	);
-}
+});
