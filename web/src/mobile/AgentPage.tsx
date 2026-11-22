@@ -18,6 +18,7 @@ import SessionView from "../session/SessionView.tsx";
 import type { MessageAction } from "../session/Transcript.tsx";
 import { agentMenu } from "./actions.ts";
 import { BackButton } from "./BackButton.tsx";
+import { now } from "./clock.ts";
 import {
 	IonButton,
 	IonButtons,
@@ -109,7 +110,10 @@ function AgentPageImpl({ id }: { id: string }) {
 	const { handlers: messageMenu, messageActions } = useMessageMenu();
 	const a = findAgent(id);
 	const att = approvalItem(id);
-	const pending = att?.approval?.state === "pending";
+	// An expired prompt no longer waits on the app: its card says so, and
+	// the banner goes (the shared clock ticks every 15 s).
+	const pending =
+		att?.approval?.state === "pending" && att.approval.expiresAt > now.value;
 	// A deep link (`#/approval/<id>`, a push): the card in view and focused.
 	const deep = route.value.view === "approval" && route.value.id === id;
 	useEffect(() => {

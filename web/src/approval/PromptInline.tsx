@@ -30,9 +30,14 @@ function PromptInlineImpl({
 		// The card's chunk may still be loading: wait for its first control.
 		const go = () => {
 			const el = ref.current;
-			const first = el?.querySelector<HTMLElement>(
-				"button:not(:disabled), input:not(:disabled), textarea:not(:disabled)",
-			);
+			// The card's own controls first (an answer, Allow): a code block's
+			// copy button in a plan is not where focus belongs.
+			const enabled =
+				"button:not(:disabled), input:not(:disabled), textarea:not(:disabled)";
+			const first =
+				el?.querySelector<HTMLElement>(
+					`:is(.ix-q, .ix-actions, .approval-actions, .m-ap-actions) :is(${enabled})`,
+				) ?? el?.querySelector<HTMLElement>(enabled);
 			if (el && (first || tries > 20)) {
 				// Its end (the buttons) in view, above the floating "Jump to
 				// latest" lane (scroll-margin-bottom in conversation.css).
