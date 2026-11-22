@@ -201,13 +201,6 @@ const SCREENS: Screen[] = [
 		},
 	],
 	[
-		"ask",
-		async (page) => {
-			await page.goto("/#/ask");
-			await page.locator(".p-ask-empty").waitFor();
-		},
-	],
-	[
 		"broadcast",
 		async (page) => {
 			await ready(page);

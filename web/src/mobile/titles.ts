@@ -14,8 +14,6 @@ export function pageTitle(r: Route): string {
 			return "Subagent";
 		case "needs":
 			return "Needs You";
-		case "ask":
-			return "Ask";
 		case "settings":
 			return "Settings";
 		case "ids":

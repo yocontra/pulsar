@@ -11,9 +11,8 @@ export type Route =
 	| { view: "approval"; id: string }
 	/** An agent's worktree changes: the phone's page, the desktop's panel. */
 	| { view: "changes"; id: string; file?: string }
-	/** Phone only: settings and Ask are screens of their own. */
+	/** Phone only: settings is a screen of its own. */
 	| { view: "settings" }
-	| { view: "ask" }
 	/**
 	 * A page a feature registered (lib/registry.tsx `registerPage`):
 	 * `#/<name>/<arg>?<params>`.
@@ -36,6 +35,7 @@ const BUILT_IN = new Set([
 	"approval",
 	"changes",
 	"settings",
+	// Ask was removed; old `#/ask` links land on Home.
 	"ask",
 ]);
 const pageNames = new Set<string>();
@@ -96,7 +96,7 @@ export function parseHash(hash: string): Route {
 		case "settings":
 			return { view: "settings" };
 		case "ask":
-			return { view: "ask" };
+			return { view: "home" };
 		default: {
 			const name = parts[0] ?? "";
 			if (!pageNames.has(name)) return { view: "home" };
@@ -134,8 +134,6 @@ export function hrefFor(r: Route): string {
 			return `#/changes/${e(r.id)}${r.file ? `?f=${e(r.file)}` : ""}`;
 		case "settings":
 			return "#/settings";
-		case "ask":
-			return "#/ask";
 		case "page": {
 			const qs = new URLSearchParams(r.params ?? {}).toString();
 			return `#/${e(r.name)}${r.arg ? `/${e(r.arg)}` : ""}${qs ? `?${qs}` : ""}`;

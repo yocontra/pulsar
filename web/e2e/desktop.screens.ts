@@ -116,19 +116,6 @@ test.describe("desktop screens", () => {
 		await shot(page, "08b-palette-query");
 	});
 
-	test("ask", async ({ page }) => {
-		await home(page);
-		// The boot guard's one automatic reload is spent: the inline Retry.
-		await page.evaluate(() =>
-			sessionStorage.setItem("pulsar:boot-retry", String(Date.now())),
-		);
-		await page.keyboard.press("ControlOrMeta+k");
-		await page.waitForTimeout(400);
-		await page.keyboard.type("? who is editing src/auth/session.ts");
-		await page.waitForTimeout(1800);
-		await shot(page, "09-ask");
-	});
-
 	test("settings", async ({ page }) => {
 		await home(page);
 		await page.getByRole("button", { name: "Settings" }).first().click();

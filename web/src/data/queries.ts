@@ -8,7 +8,6 @@ import type {
 	AgentRow,
 	AgentSort,
 	Approval,
-	AskRequest,
 	AttentionList,
 	FacetKey,
 	Hello,
@@ -178,11 +177,6 @@ export const defs = {
 	search: (q: string) => ({
 		queryKey: keys.search(q),
 		queryFn: ({ signal }: { signal: AbortSignal }) => api.search(q, signal),
-		poll: 5000 as const,
-	}),
-	ask: (req: AskRequest) => ({
-		queryKey: keys.ask(req),
-		queryFn: () => api.ask(req),
 		poll: 5000 as const,
 	}),
 	sessions: () => ({

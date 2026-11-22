@@ -8,7 +8,6 @@ import {
 	SearchIcon,
 	SettingsIcon,
 	SmartphoneIcon,
-	SparklesIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "../api/client.ts";
@@ -23,7 +22,6 @@ import {
 } from "../lib/registry.tsx";
 import { navigate } from "../lib/router.ts";
 import { attention, recent } from "../lib/store.ts";
-import { AskPanel } from "./AskPanel.tsx";
 import { showHelp, showQr, showSettings } from "./chrome.tsx";
 import { Layer } from "./desktop/Layer.tsx";
 import { needsLine } from "./TreeDesktop.tsx";
@@ -41,21 +39,17 @@ type Item = {
 const ICO = "d-pal-ico";
 
 /**
- * Cmd-K: search machines, projects, agents and tags on the server, run an
- * action, or switch to Ask (Tab, or start with "?") to find who works on
- * what. Arrow keys move, Enter opens, Esc closes.
+ * Cmd-K: search machines, projects, agents and tags on the server, or run
+ * an action. Arrow keys move, Enter opens, Esc closes.
  */
 export default function Palette({ onClose }: { onClose: () => void }) {
 	const [q, setQ] = useState("");
-	const [mode, setMode] = useState<"search" | "ask">("search");
-	const asking = mode === "ask";
-	const question = q.replace(/^\?\s*/, "");
 	const [res, setRes] = useState<SearchResponse | null>(null);
 	const [idx, setIdx] = useState(0);
 	const input = useRef<HTMLInputElement>(null);
 	const list = useRef<HTMLDivElement>(null);
 	useEffect(() => {
-		if (!q.trim() || asking) {
+		if (!q.trim()) {
 			setRes(null);
 			return;
 		}
@@ -70,13 +64,13 @@ export default function Palette({ onClose }: { onClose: () => void }) {
 			clearTimeout(t);
 			ctrl.abort();
 		};
-	}, [q, asking]);
+	}, [q]);
 	// Results of the providers features registered (lib/registry.tsx).
 	const [found, setFound] = useState<Record<string, PaletteResult[]>>({});
 	useEffect(() => {
 		const providers = paletteProviders.list();
 		setFound({});
-		if (!q.trim() || asking || providers.length === 0) return;
+		if (!q.trim() || providers.length === 0) return;
 		const ctrl = new AbortController();
 		const t = setTimeout(() => {
 			for (const p of providers)
@@ -90,7 +84,7 @@ export default function Palette({ onClose }: { onClose: () => void }) {
 			clearTimeout(t);
 			ctrl.abort();
 		};
-	}, [q, asking]);
+	}, [q]);
 
 	const done = (fn: () => void) => () => {
 		onClose();
@@ -140,15 +134,6 @@ export default function Palette({ onClose }: { onClose: () => void }) {
 			});
 		const actions: [string, ReactNode, ReactNode, () => void][] = [
 			[
-				"Ask who works on something",
-				<SparklesIcon key="i" className={ICO} />,
-				<Kbd key="k" keys={["Tab"]} />,
-				() => {
-					setMode("ask");
-					input.current?.focus();
-				},
-			],
-			[
 				"Broadcast to everyone",
 				<MegaphoneIcon key="i" className={ICO} />,
 				<Kbd key="k" keys={["mod", "shift", "B"]} />,
@@ -184,7 +169,7 @@ export default function Palette({ onClose }: { onClose: () => void }) {
 			});
 	}
 	// Commands features registered: all with no query, else those that match.
-	const commandItems: Item[] = (asking ? [] : matchingCommands(q)).map((c) => ({
+	const commandItems: Item[] = matchingCommands(q).map((c) => ({
 		key: `cmd-${c.id}`,
 		group: c.group ?? "Actions",
 		label: c.label,
@@ -265,14 +250,6 @@ export default function Palette({ onClose }: { onClose: () => void }) {
 	}, [sel]);
 
 	const onKey = (e: React.KeyboardEvent) => {
-		// Tab switches Search → Ask. In Ask, Tab moves on to the answers
-		// (checkboxes, "Ask them directly") like any form.
-		if (e.key === "Tab" && !asking && !e.shiftKey) {
-			e.preventDefault();
-			setMode("ask");
-			return;
-		}
-		if (asking) return;
 		if (e.key === "ArrowDown") {
 			e.preventDefault();
 			setIdx(Math.min(items.length - 1, sel + 1));
@@ -299,117 +276,65 @@ export default function Palette({ onClose }: { onClose: () => void }) {
 			}}
 		>
 			<div className="d-pal-input">
-				{asking ? (
-					<SparklesIcon className="d-pal-lead ask" aria-hidden="true" />
-				) : (
-					<SearchIcon className="d-pal-lead" aria-hidden="true" />
-				)}
+				<SearchIcon className="d-pal-lead" aria-hidden="true" />
 				<input
 					ref={input}
 					value={q}
-					placeholder={
-						asking
-							? "Ask who is working on something…"
-							: "Search agents, machines, projects…"
-					}
-					aria-label={asking ? "Ask" : "Search"}
+					placeholder="Search agents, machines, projects…"
+					aria-label="Search"
 					autoComplete="off"
 					spellCheck={false}
 					onChange={(e) => {
-						const v = (e.target as HTMLInputElement).value;
-						// "?" first switches to Ask.
-						if (!asking && v.startsWith("?")) {
-							setMode("ask");
-							setQ(v.slice(1).trimStart());
-						} else setQ(v);
+						setQ((e.target as HTMLInputElement).value);
 						setIdx(0);
 					}}
 					onKeyDown={onKey}
 				/>
-				<div className="d-seg" role="radiogroup" aria-label="Mode">
-					{(["search", "ask"] as const).map((m) => (
-						<button
-							key={m}
-							type="button"
-							role="radio"
-							aria-checked={(m === "ask") === asking}
-							onClick={() => {
-								setMode(m);
-								input.current?.focus();
-							}}
-						>
-							{m === "search" ? "Search" : "Ask"}
-						</button>
-					))}
-				</div>
 			</div>
 			<div className="d-pal-body">
-				{asking ? (
-					<AskPanel question={question} onClose={onClose} />
-				) : (
-					<div
-						className="d-pal-list palette-list"
-						ref={list}
-						role="listbox"
-						aria-label="Results"
-					>
-						{items.map((it, i) => {
-							const head = it.group !== lastGroup;
-							lastGroup = it.group;
-							return (
-								<div key={it.key} role="presentation">
-									{head && <div className="d-pal-group">{it.group}</div>}
-									<button
-										type="button"
-										role="option"
-										aria-selected={i === sel}
-										data-idx={i}
-										className={`d-pal-row row${i === sel ? " focused" : ""}`}
-										onClick={it.go}
-										onMouseMove={() => i !== sel && setIdx(i)}
-									>
-										{it.icon}
-										<span className="d-pal-text">
-											<span className="d-pal-label">{it.label}</span>
-											{it.sub && <span className="d-pal-sub">{it.sub}</span>}
-										</span>
-										{it.trail && (
-											<span className="d-pal-trail">{it.trail}</span>
-										)}
-									</button>
-								</div>
-							);
-						})}
-						{res && items.length === 0 && (
-							<div className="d-pal-empty">
-								No matches for “{q}”. Try Ask <Kbd keys={["Tab"]} /> to search
-								what agents are doing.
+				<div
+					className="d-pal-list palette-list"
+					ref={list}
+					role="listbox"
+					aria-label="Results"
+				>
+					{items.map((it, i) => {
+						const head = it.group !== lastGroup;
+						lastGroup = it.group;
+						return (
+							<div key={it.key} role="presentation">
+								{head && <div className="d-pal-group">{it.group}</div>}
+								<button
+									type="button"
+									role="option"
+									aria-selected={i === sel}
+									data-idx={i}
+									className={`d-pal-row row${i === sel ? " focused" : ""}`}
+									onClick={it.go}
+									onMouseMove={() => i !== sel && setIdx(i)}
+								>
+									{it.icon}
+									<span className="d-pal-text">
+										<span className="d-pal-label">{it.label}</span>
+										{it.sub && <span className="d-pal-sub">{it.sub}</span>}
+									</span>
+									{it.trail && <span className="d-pal-trail">{it.trail}</span>}
+								</button>
 							</div>
-						)}
-					</div>
-				)}
+						);
+					})}
+					{res && items.length === 0 && (
+						<div className="d-pal-empty">No matches for “{q}”.</div>
+					)}
+				</div>
 			</div>
 			<footer className="d-pal-foot" aria-hidden="true">
-				{asking ? (
-					<>
-						<span>
-							<Kbd keys={["Tab"]} /> Answers
-						</span>
-						<span>Nobody is woken until you ask them directly</span>
-					</>
-				) : (
-					<>
-						<span>
-							<Kbd keys={["up", "down"]} /> Move
-						</span>
-						<span>
-							<Kbd keys={["enter"]} /> Open
-						</span>
-						<span>
-							<Kbd keys={["Tab"]} /> Ask
-						</span>
-					</>
-				)}
+				<span>
+					<Kbd keys={["up", "down"]} /> Move
+				</span>
+				<span>
+					<Kbd keys={["enter"]} /> Open
+				</span>
 				<span className="d-pal-foot-end">
 					<Kbd keys={["esc"]} /> Close
 				</span>

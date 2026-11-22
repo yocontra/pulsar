@@ -18,8 +18,6 @@ import {
 	type Approval,
 	type ApprovalDecision,
 	type ApprovalOptions,
-	type AskRequest,
-	type AskResponse,
 	type AttachmentManifest,
 	type AttachmentPut,
 	type AttachmentUpload,
@@ -455,9 +453,6 @@ export const api = {
 			throw err;
 		}
 	},
-	/** Who works on what, from what the daemon knows; wakes nobody. */
-	ask: (body: AskRequest) =>
-		request<AskResponse>("/ask", { method: "POST", body }),
 	/** Messages not yet in an agent's conversation (the queue strip). */
 	queue: (agentId: string) =>
 		request<QueueList>(`/agents/${enc(agentId)}/queue`),

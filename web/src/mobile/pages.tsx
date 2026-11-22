@@ -23,7 +23,6 @@ const Needs = page<object>(() => import("./NeedsPage.tsx"));
 const Subagent = page<{ id: string }>(() =>
 	import("./AgentPage.tsx").then((m) => ({ default: m.SubagentPage })),
 );
-const Ask = page<object>(() => import("./AskPage.tsx"));
 const Settings = page<object>(() => import("./SettingsPage.tsx"));
 const Ids = page<{ ids: string[] }>(() => import("./IdsPage.tsx"));
 const Changes = page<{ id: string; file?: string }>(
@@ -40,8 +39,6 @@ export function preloadPage(r: Route): Promise<unknown> {
 			return Subagent.preload();
 		case "needs":
 			return Needs.preload();
-		case "ask":
-			return Ask.preload();
 		case "settings":
 			return Settings.preload();
 		case "ids":
@@ -57,7 +54,7 @@ export function preloadPage(r: Route): Promise<unknown> {
 
 /** Every page chunk, fetched in the background after the first paint. */
 export function preloadPages() {
-	prefetch([Agent, Needs, Ask, Settings, Ids].map((p) => p.preload));
+	prefetch([Agent, Needs, Settings, Ids].map((p) => p.preload));
 }
 
 /** A feature's page (its own chunk) once the lazy Ionic styles are in. */
@@ -78,8 +75,6 @@ export function PageFor({ route }: { route: Route }) {
 			return <Subagent id={route.id} />;
 		case "needs":
 			return <Needs />;
-		case "ask":
-			return <Ask />;
 		case "settings":
 			return <Settings />;
 		case "ids":

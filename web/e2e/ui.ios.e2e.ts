@@ -71,13 +71,6 @@ const SCREENS: Screen[] = [
 		},
 	],
 	[
-		"ask",
-		async (page) => {
-			await page.goto("/#/ask");
-			await page.locator(".p-ask-empty").waitFor();
-		},
-	],
-	[
 		"broadcast",
 		async (page) => {
 			await home(page);
@@ -148,20 +141,6 @@ test.describe("phone UI", () => {
 				compose.getByRole("button", { name: /^Send to/ }).boundingBox(),
 			]);
 			expect(sendAll!.width).toBeGreaterThan(c!.width - 40);
-
-			// A fresh load: the broadcast sheet above would cover the Ask page.
-			await page.goto("about:blank");
-			await page.goto("/#/ask");
-			await page
-				.getByPlaceholder("Ask about your agents")
-				.fill("who is editing src/auth/session.ts");
-			await page.locator(".d-check").first().waitFor();
-			await page.locator(".d-check").first().check();
-			const bar = page.locator(".p-ask-results .ask-actions");
-			await expectBarInside(bar, "Ask bar", ins);
-			// A docked material bar, not transparent text over the list.
-			const bg = await bar.evaluate((e) => getComputedStyle(e).backgroundColor);
-			expect(bg).not.toBe("rgba(0, 0, 0, 0)");
 		});
 
 	test("agent rows and needs badges line up", async ({ page }) => {

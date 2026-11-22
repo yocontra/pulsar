@@ -365,18 +365,6 @@ test.describe("phone screens", () => {
 		await shot(page, "11b-settings-scrolled");
 	});
 
-	test("ask", async ({ page }) => {
-		await home(page);
-		await page.getByRole("button", { name: "Ask" }).tap();
-		await page.waitForTimeout(900);
-		await shot(page, "12-ask");
-		await page
-			.locator(".p-ask ion-searchbar input")
-			.fill("who is editing src/auth/session.ts");
-		await page.waitForTimeout(1500);
-		await shot(page, "12b-ask-answer");
-	});
-
 	test("boot loading", async ({ page }) => {
 		// WebKit can't screenshot while a script is pending: serve the page
 		// without its scripts, which leaves the static boot shell up.

@@ -4,7 +4,6 @@
  */
 import type {
 	AgentSort,
-	AskRequest,
 	ChangesMode,
 	FacetKey,
 	TreeGroup,
@@ -50,7 +49,6 @@ export const keys = {
 	sessions: () => ["sessions"] as const,
 	passkeys: () => ["passkeys"] as const,
 	pushKey: () => ["pushKey"] as const,
-	ask: (req: AskRequest) => ["ask", req] as const,
 };
 
 export type KeyName = keyof typeof keys;

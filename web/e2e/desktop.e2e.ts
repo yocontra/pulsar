@@ -283,36 +283,28 @@ test.describe("desktop", () => {
 		).toBeVisible();
 	});
 
-	test("ask: who works on a file, with evidence, then ask them directly", async ({
+	test("the palette has no Ask mode; an old #/ask link lands on Home", async ({
 		page,
-		request,
-		context,
 	}) => {
-		// Asking directly is a send as the user: it needs a passkey session.
-		await page.goto(`${localhostBase()}/`);
-		await withPasskey(page, request, context);
-		await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
+		await ready(page);
 		await page.keyboard.press("ControlOrMeta+K");
-		await page.getByRole("radio", { name: "Ask" }).click();
-		await page
-			.getByLabel("Ask", { exact: true })
-			.fill("who is editing src/auth/session.ts");
-		const matches = page.locator(".ask-match");
-		await expect(matches.first()).toBeVisible();
-		await expect(matches.first().locator(".evidence")).toContainText(
-			/Edited src\/auth\/session\.ts \d+[smhd] ago/,
-		);
+		const search = page.getByLabel("Search", { exact: true });
+		await expect(search).toBeFocused();
+		await expect(page.getByRole("radiogroup", { name: "Mode" })).toHaveCount(0);
+		await expect(page.getByText("Ask who works on something")).toHaveCount(0);
+		// "?" and Tab no longer switch modes: the input stays a search.
+		await search.fill("?studio");
+		await expect(search).toHaveValue("?studio");
+		await search.press("Tab");
+		await expect(page.getByLabel("Ask", { exact: true })).toHaveCount(0);
+		await page.keyboard.press("Escape");
+		await page.goto("/#/ask");
+		await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
 		await expect(
-			page.getByRole("button", { name: /^Ask them directly \(3\)$/ }),
-		).toBeVisible();
-		// Pick only the top match.
-		await matches.nth(1).getByRole("checkbox").uncheck();
-		await matches.nth(2).getByRole("checkbox").uncheck();
-		await page.getByRole("button", { name: "Ask them directly (1)" }).click();
-		// A send as the operator: Prove Human first, then it sends.
-		await proveInSheet(page);
-		await expect(page.locator(".ask-replies .receipt-summary")).toBeVisible();
-		await page.screenshot({ path: `${SHOTS}desktop-ask.png` });
+			page.getByRole("navigation", { name: "Main" }).getByRole("button", {
+				name: "Home",
+			}),
+		).toHaveAttribute("aria-current", "page");
 	});
 
 	test("message an agent and see receipts", async ({ page }) => {

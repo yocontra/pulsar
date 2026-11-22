@@ -102,7 +102,7 @@ test.describe("Prove Human once", () => {
 		await realtime(request, { action: "restore" });
 	});
 
-	test("prove once (ad hoc, from a prompt), then send, Stop, Ask, a prompt and a question: no second check", async ({
+	test("prove once (ad hoc, from a prompt), then send, Stop, a prompt and a question: no second check", async ({
 		page,
 		request,
 	}) => {
@@ -196,18 +196,6 @@ test.describe("Prove Human once", () => {
 				.click();
 			await expect(page.locator(".toast")).toContainText(busy.name);
 			await expect(sheet(page)).toHaveCount(0);
-
-			// 6. Ask them directly (a send as the operator): no Prove Human.
-			await page.keyboard.press("ControlOrMeta+K");
-			await page.getByRole("radio", { name: "Ask" }).click();
-			await page
-				.getByLabel("Ask", { exact: true })
-				.fill("who is editing src/auth/session.ts");
-			await expect(page.locator(".ask-match").first()).toBeVisible();
-			await page.getByRole("button", { name: /^Ask them directly/ }).click();
-			await expect(page.locator(".ask-replies .receipt-summary")).toBeVisible();
-			await expect(sheet(page)).toHaveCount(0);
-			await page.keyboard.press("Escape");
 		}
 
 		// One WebAuthn ceremony in all.

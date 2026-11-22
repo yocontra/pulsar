@@ -429,35 +429,6 @@ test.describe("real daemon @real", () => {
 		);
 	});
 
-	test("ask: answered from the real logs, then ask directly @real", async ({
-		page,
-		request,
-		context,
-	}) => {
-		await passkey(page, request, context);
-		await open(page, request, LOCAL);
-		await page.keyboard.press("ControlOrMeta+K");
-		const box = page.getByLabel("Search", { exact: true });
-		// "?" switches the palette to Ask.
-		await box.fill("?who is editing src/auth/session.ts");
-		const first = page.locator(".ask-match").first();
-		await expect(first).toContainText("fixer");
-		await expect(first.locator(".evidence")).toContainText(
-			/Edited src\/auth\/session\.ts/,
-		);
-		await page
-			.getByLabel("Ask", { exact: true })
-			.fill("?what is reviewer doing");
-		await expect(page.locator(".ask-match").first()).toContainText("reviewer");
-		await page.getByRole("button", { name: /^Ask them directly/ }).click();
-		// Asking agents directly speaks as the operator: Prove Human first, then it sends.
-		await proveInSheet(page);
-		await expect(page.locator(".ask-replies .reply").first()).toContainText(
-			"reviewer got: what is reviewer doing",
-			{ timeout: 10_000 },
-		);
-	});
-
 	test("broadcast: the audience, then send (the dry run runs inside Send) @real", async ({
 		page,
 		request,

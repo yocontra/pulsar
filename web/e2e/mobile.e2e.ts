@@ -83,6 +83,16 @@ test.describe("mobile", () => {
 		await expect(studio).toHaveAttribute("data-expanded", "false");
 	});
 
+	test("an old #/ask link lands on Home; Home has no Ask button", async ({
+		page,
+	}) => {
+		await page.goto("/#/ask");
+		await expect(page.locator("ion-content.p-home")).toBeVisible();
+		await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
+		await expect(page.getByRole("button", { name: "Ask" })).toHaveCount(0);
+		await expect(page.locator(".p-ask, .p-ask-empty")).toHaveCount(0);
+	});
+
 	test("Ionic is styled under the strict CSP (Chromium)", async ({ page }) => {
 		await ready(page);
 		await expect(page.locator("ion-item-sliding").first()).toBeAttached();
@@ -99,9 +109,6 @@ test.describe("mobile", () => {
 		await expect(page.locator(".p-settings")).toBeVisible();
 		await page.waitForTimeout(500);
 		await expectCleanCopy(page, "Settings", ".p-settings");
-		await page.goto("/#/ask");
-		await expect(page.locator(".p-ask")).toBeVisible();
-		await expectCleanCopy(page, "Ask", ".p-ask");
 		await openSession(page);
 		await expectCleanCopy(page, "Agent header", ".p-agent-header");
 	});

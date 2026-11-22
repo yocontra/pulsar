@@ -365,6 +365,10 @@ describe("hardening", () => {
 			id: "claude:x",
 		});
 	});
+	test("an old #/ask link (Ask was removed) shows home", () => {
+		expect(parseHash("#/ask")).toEqual({ view: "home" });
+		expect(parseHash("#/ask/x")).toEqual({ view: "home" });
+	});
 });
 
 describe("session token persistence (L4)", () => {

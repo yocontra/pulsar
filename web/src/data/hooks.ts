@@ -23,7 +23,6 @@ import {
 import type {
 	AgentRow,
 	AgentSort,
-	AskRequest,
 	AttentionItem,
 	FacetKey,
 	TranscriptEvent,
@@ -376,13 +375,6 @@ export const useSubagent = (id: string) => useLive(defs.subagent(id));
 export const useSessions = () => useLive(defs.sessions());
 export const usePasskeys = () => useLive(defs.passkeys());
 export const usePushKey = () => useLive(defs.pushKey());
-
-/** Who works on what (`POST /ask`; wakes nobody). Null: no question yet. */
-export const useAsk = (req: AskRequest | null) =>
-	useLive(defs.ask(req ?? { question: "" }), {
-		enabled: req !== null && req.question.trim() !== "",
-		keepPrevious: true,
-	});
 
 export { useNow };
 

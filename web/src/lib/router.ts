@@ -2,7 +2,7 @@
  * Hash routes on a history-backed stack, so Android back and the in-app back
  * button behave the same. `#/a/<agentId>` session, `#/n/<nodeId>` scoped
  * composer, `#/broadcast?s=<selector>` builder, `#/needs` needs-you list,
- * `#/approval/<agentId>` approval card, `#/settings`, `#/ask` (phone).
+ * `#/approval/<agentId>` approval card, `#/settings` (phone).
  *
  * `stack` mirrors the history entries this tab pushed, for the phone's
  * navigation stack: screens below the top stay mounted (scroll kept) and the
