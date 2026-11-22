@@ -388,6 +388,21 @@ describe("stream events patch the right keys", () => {
 		expect(older.events.map((e) => e.text)).toEqual(["par", "live, newer"]);
 	});
 
+	test("a page that says unavailable never hides a transcript we hold", () => {
+		const held: TranscriptData = {
+			events: [ev("x", 1)],
+			cursor: null,
+			available: true,
+		};
+		// An older home node answers `false` when its file lookup misses.
+		const flap = { events: [], cursor: null, available: false };
+		expect(applyTranscriptPage(held, flap, false, new Set()).available).toBe(
+			true,
+		);
+		// Nothing held: the page decides (a harness without a transcript).
+		expect(applyTranscriptPage(undefined, flap, false).available).toBe(false);
+	});
+
 	test("a full snapshot keeps the order the user sees", () => {
 		const held: ListData<TreeNode> = {
 			items: [leaf("a"), leaf("b"), leaf("c")],

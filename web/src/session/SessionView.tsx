@@ -197,12 +197,15 @@ function SessionViewImpl({
 						</button>
 					</div>
 				)}
-				{agent && (!agent.hasTranscript || !available) && !loading && (
-					<div className="ds-banner banner" role="status">
-						{harnessName(agent.harness)} doesn't share a live transcript yet.
-						You can still message this agent; replies show below.
-					</div>
-				)}
+				{agent &&
+					(!agent.hasTranscript || !available) &&
+					!loading &&
+					events.length === 0 && (
+						<div className="ds-banner banner" role="status">
+							{harnessName(agent.harness)} doesn't share a live transcript yet.
+							You can still message this agent; replies show below.
+						</div>
+					)}
 				<Transcript
 					events={windowed}
 					variant={mobile ? "phone" : "desktop"}

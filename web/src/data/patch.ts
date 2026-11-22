@@ -262,13 +262,15 @@ export function applyTranscriptPage(
 		return {
 			events: reconcileLocal(mergeHistory(held.filter(isLocal), page.events)),
 			cursor: page.cursor,
-			available: page.available,
+			available: page.available || page.events.length > 0,
 		};
 	const events = reconcileLocal(mergeHistory(held, page.events));
 	return {
 		events,
 		// The newest page refreshes what we hold; keep the older cursor we reached.
 		cursor: older || !d ? page.cursor : d.cursor,
-		available: page.available,
+		// A transcript we hold events of is available, whatever one page says
+		// (an older home node answers `false` when its file lookup misses).
+		available: page.available || events.some((e) => !isLocal(e)),
 	};
 }
