@@ -131,10 +131,16 @@ export async function locatePiStyle(
 	home = process.env.HOME || homedir(),
 ): Promise<TranscriptSource | null> {
 	const other = harness === "pi" ? "omp" : "pi";
-	const source = (h: keyof typeof PI_STYLE, path: string): TranscriptSource =>
-		h === "omp"
-			? { kind: "file", path, headerLine: true }
-			: { kind: "file", path };
+	const source = (
+		h: keyof typeof PI_STYLE,
+		path: string,
+		guess = false,
+	): TranscriptSource => ({
+		kind: "file",
+		path,
+		...(h === "omp" ? { headerLine: true } : {}),
+		...(guess ? { guess: true } : {}),
+	});
 	const id = hostSessionId(agent);
 	if (id) {
 		for (const h of [harness, other] as const) {
@@ -143,7 +149,7 @@ export async function locatePiStyle(
 		}
 	}
 	const file = await piSessionFile(PI_STYLE[harness], agent.cwd, null, home);
-	return file ? source(harness, file) : null;
+	return file ? source(harness, file, true) : null;
 }
 
 /** pi-style session log: the end of the newest session file for a folder ("" when none). */

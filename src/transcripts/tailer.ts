@@ -27,7 +27,8 @@ import {
  *   `fs.watch` as a hint. Only complete lines are parsed; a file that shrinks
  *   or is replaced restarts from its first line. Every `resolveMs` the
  *   watcher resolves the source again; when it names another file (the
- *   session moved), it follows that one from its end after a gap.
+ *   session moved), it follows that one from its end after a gap. A
+ *   guessed file (`guess`: no session id) never replaces the one followed.
  *
  * Ordering: subscribe first, then page. Events are keyed by `id`, so the
  * overlap between a page and the live stream only replaces events in place.
@@ -579,6 +580,8 @@ class Watcher {
 			);
 		}
 		if (this.closed || next?.source.kind !== "file") return;
+		// The newest file of a folder may be another session's: keep ours.
+		if (next.source.guess && next.source.path !== this.path) return;
 		if (next.source.path === this.path) {
 			this.resolved = next;
 			return;
