@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { openAgent } from "./composer.shared.ts";
-import { expect, test } from "./fixtures.ts";
+import { agentId, expect, test } from "./fixtures.ts";
 
 /**
  * Dictation in the composer (features/voice) with a fake recognizer in
@@ -146,6 +146,32 @@ export function voiceSuite(platform: "desktop" | "phone") {
 		await expect(
 			page.getByText("ship it", { exact: true }).last(),
 		).toBeVisible();
+	});
+
+	test(`leaving the agent releases the mic and keeps the words (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		await fakeSpeech(page);
+		const composer = await openAgent(page, request, "name=apparish-auth");
+		const input = composer.locator(".composer-input");
+		await composer.getByRole("button", { name: "Dictate" }).click();
+		await speech(page, "say", "keep me");
+		await expect(input).toHaveValue("keep me");
+		// The field itself, to read it after its composer is gone.
+		const field = await input.elementHandle();
+		const other = await agentId(request, "name=codex@apparish");
+		await page.evaluate((id) => {
+			location.hash = `#/a/${encodeURIComponent(id)}`;
+		}, other);
+		await expect
+			.poll(() => field!.evaluate((el) => el.isConnected))
+			.toBe(false);
+		expect(await speech(page, "calls")).toEqual(["start", "abort"]);
+		await speech(page, "say", "keep me", " and more");
+		expect(
+			await field!.evaluate((el) => (el as HTMLTextAreaElement).value),
+		).toBe("keep me");
 	});
 
 	test(`Esc cancels and puts the draft back (${platform})`, async ({

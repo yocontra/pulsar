@@ -191,6 +191,16 @@ describe("dictation", () => {
 		expect(field.value).toBe("");
 	});
 
+	test("cancel after the operator typed (no result since) keeps their text", () => {
+		const { d, rec, field } = setup();
+		d.start();
+		rec().say("a");
+		field.replace("typed", 5);
+		d.cancel();
+		expect(field.value).toBe("typed");
+		expect(d.state).toBe("idle");
+	});
+
 	test("errors read plainly, keep the words and end; abort says nothing", () => {
 		const { d, rec, errors, field } = setup();
 		d.start();
