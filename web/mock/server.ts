@@ -1535,6 +1535,13 @@ function write<K extends ServerEventName>(
 	event: K,
 	data: ServerEvents[K],
 ) {
+	if (event === "transcript") {
+		const agent = (data as { agent: string }).agent;
+		// A quiet transcript sends no live events: only its pages show it.
+		if (transcriptQuiet.has(agent)) return;
+		if (stream.push)
+			transcriptFrames.set(agent, (transcriptFrames.get(agent) ?? 0) + 1);
+	}
 	stream.push?.(frame(stream, event, data));
 }
 
@@ -1693,7 +1700,14 @@ type RealtimeChange =
 	| { action: "limit"; warning: LimitWarning }
 	/** This node holds a push subscription for `endpoint` (no passkey ceremony in tests). */
 	| { action: "push-subscription"; endpoint: string }
-	| { action: "add-agent"; name: string; machine?: string; project?: string }
+	| {
+			action: "add-agent";
+			name: string;
+			machine?: string;
+			project?: string;
+			/** Random (weighted) when absent. */
+			harness?: string;
+	  }
 	/** A permission prompt for `tool` (Bash when absent). */
 	| { action: "needs-you"; id: string; tool?: string }
 	/** An interaction of one kind (question, plan, confirm, select, input). */
@@ -1716,12 +1730,14 @@ type RealtimeChange =
 	/**
 	 * The agent's transcript page says no transcript was found (`missing`)
 	 * until set to null, as the daemon does before a session file is written
-	 * or located.
+	 * or located. `quiet: true` stops its live events (until `quiet: false`
+	 * or `restore`), so only the not-found poll can show it.
 	 */
 	| {
 			action: "transcript-missing";
 			id: string;
 			missing: "not_found" | "no_session" | "unsupported" | null;
+			quiet?: boolean;
 	  }
 	/** The agent edits a file in its worktree (the diff viewer goes live). */
 	| { action: "changes"; id: string; path: string; line: string }
@@ -1738,6 +1754,11 @@ const transcriptHolds = new Map<
 	string,
 	"not_found" | "no_session" | "unsupported"
 >();
+
+/** Agents whose transcript sends no live events (`transcript-missing` `quiet`). */
+const transcriptQuiet = new Set<string>();
+/** Live transcript frames sent to open streams, by agent (`GET /__mock/transcript-frames`). */
+const transcriptFrames = new Map<string, number>();
 
 /** What realtime changes touched, so `restore` puts the fixtures back. */
 const rtSaved = new Map<string, MockAgent>();
@@ -1787,6 +1808,7 @@ function realtime(raw: unknown) {
 			if (!m) throw notFound(`no machine ${c.machine}`);
 			const a = makeAgent(m, c.project ?? "apparish", {
 				name: c.name,
+				...(c.harness ? { harness: c.harness } : {}),
 				status: "idle",
 				fixed: true,
 				lastActive: now,
@@ -1863,6 +1885,8 @@ function realtime(raw: unknown) {
 			const a = agentOr404(c.id);
 			if (c.missing === null) transcriptHolds.delete(a.id);
 			else transcriptHolds.set(a.id, c.missing);
+			if (c.quiet === true) transcriptQuiet.add(a.id);
+			else if (c.quiet === false) transcriptQuiet.delete(a.id);
 			break;
 		}
 		case "changes": {
@@ -1890,6 +1914,7 @@ function realtime(raw: unknown) {
 		}
 		case "restore": {
 			transcriptHolds.clear();
+			transcriptQuiet.clear();
 			resetChanges();
 			resetGit();
 			resetPrReview();
@@ -2502,6 +2527,16 @@ async function route(
 		holds.delete(b.hold);
 		return json({ ok: true });
 	}
+	// Mock only: live transcript frames an agent's viewers were sent, and
+	// how many open streams follow it.
+	if (GET && path === "/__mock/transcript-frames")
+		return json({
+			frames: transcriptFrames.get(q.get("id") ?? "") ?? 0,
+			// Open streams following it (the app's query is then covered).
+			watching: [...streams.values()].filter(
+				(st) => st.push && st.sub.session === q.get("id"),
+			).length,
+		});
 	if (GET && path === "/__mock/held")
 		return json({ waiting: holds.get(q.get("hold") ?? "")?.waiting ?? 0 });
 	const fault =

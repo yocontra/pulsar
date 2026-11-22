@@ -50,6 +50,15 @@ async function mock(
 	expect(res.ok()).toBe(true);
 }
 
+/** Live transcript frames sent for `id`, and the streams following it. */
+async function frames(request: APIRequestContext, id: string) {
+	const res = await request.get(
+		`/api/v1/__mock/transcript-frames?id=${encodeURIComponent(id)}`,
+		{ headers: { "X-Pulsar": "1" } },
+	);
+	return (await res.json()) as { frames: number; watching: number };
+}
+
 async function change(request: APIRequestContext, body: object) {
 	const res = await request.post("/api/v1/__mock/realtime", {
 		headers: { "X-Pulsar": "1" },
@@ -63,6 +72,8 @@ async function change(request: APIRequestContext, body: object) {
 async function freshAgent(request: APIRequestContext): Promise<string> {
 	const { id } = await change(request, {
 		action: "add-agent",
+		// A harness that keeps transcripts (the mock's OpenCode keeps none).
+		harness: "claude",
 		name: `tl-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`,
 	});
 	return id!;
@@ -126,6 +137,46 @@ export function transcriptLoadingSuite(phone: boolean) {
 		await expect(events(page).first()).toBeVisible();
 		await expect(skeleton(page)).toHaveCount(0);
 		await expect(notice(page)).toHaveCount(0);
+		expect(await sawNone(page)).toBeNull();
+	});
+
+	test("found while the stream is quiet: the poll alone shows it", async ({
+		page,
+		request,
+	}) => {
+		const id = await freshAgent(request);
+		// No live events for this agent at all: only a page can show it.
+		await change(request, {
+			action: "transcript-missing",
+			id,
+			missing: "not_found",
+			quiet: true,
+		});
+		await setup(page, NEVER);
+		await watchForNone(page);
+		await open(page, id);
+		await expect(skeleton(page)).toBeVisible();
+		// The stream covers the transcript, and the page still asks again.
+		await expect.poll(async () => (await frames(request, id)).watching).toBe(1);
+		await nextPage(page, id);
+		await nextPage(page, id);
+		await expect(events(page)).toHaveCount(0);
+		const found = page.waitForResponse(
+			async (r) =>
+				r.url().includes(`/agents/${encodeURIComponent(id)}/transcript`) &&
+				((await r.json()) as { available: boolean }).available,
+		);
+		await change(request, {
+			action: "transcript-missing",
+			id,
+			missing: null,
+			quiet: true,
+		});
+		await found;
+		await expect(events(page).first()).toBeVisible();
+		await expect(notice(page)).toHaveCount(0);
+		// Nothing came live: the poll brought it.
+		expect(await frames(request, id)).toEqual({ frames: 0, watching: 1 });
 		expect(await sawNone(page)).toBeNull();
 	});
 
