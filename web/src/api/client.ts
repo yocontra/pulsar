@@ -54,6 +54,8 @@ import {
 	type PushSettings,
 	type PushSettingsRequest,
 	type PushSubscribeRequest,
+	type QueueActResult,
+	type QueueList,
 	type ReceiptsPage,
 	type ReconfirmCode,
 	type SearchResponse,
@@ -456,6 +458,23 @@ export const api = {
 	/** Who works on what, from what the daemon knows; wakes nobody. */
 	ask: (body: AskRequest) =>
 		request<AskResponse>("/ask", { method: "POST", body }),
+	/** Messages not yet in an agent's conversation (the queue strip). */
+	queue: (agentId: string) =>
+		request<QueueList>(`/agents/${enc(agentId)}/queue`),
+	/**
+	 * Withdraw, send now or edit one queued message. Someone else's message
+	 * needs `assertion` on another machine (see `acting`).
+	 */
+	queueAct: (
+		agentId: string,
+		messageId: string,
+		action: "withdraw" | "promote" | "edit",
+		extra: { body?: string; assertion?: unknown } = {},
+	) =>
+		request<QueueActResult>(
+			`/agents/${enc(agentId)}/queue/${enc(messageId)}/${action}`,
+			{ method: "POST", body: extra },
+		),
 	receipts: (messageId: string, cursor?: string | null) =>
 		request<ReceiptsPage>(
 			`/messages/${enc(messageId)}/receipts${query({ cursor })}`,
@@ -807,7 +826,9 @@ export type ActingOp =
 	| "git.comment"
 	| "git.reply"
 	| "git.resolve"
-	| "git.review";
+	| "git.review"
+	| "queue.withdraw"
+	| "queue.promote";
 
 /**
  * One attached file's bytes into an open upload (`PUT`, streamed; XHR for

@@ -801,6 +801,7 @@ const STATE_ORDER: ReceiptState[] = [
 	"failed",
 	"expired",
 	"dead",
+	"withdrawn",
 ];
 
 /** Receipts in plain words, live from the stream. */

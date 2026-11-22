@@ -1,0 +1,221 @@
+/* The queue strip above the composer's text field (Queue.tsx). */
+
+.q-strip {
+	width: 100%;
+	margin: 8px 12px 0;
+	max-width: calc(100% - 24px);
+	border: 1px solid var(--ds-border);
+	border-radius: var(--ds-radius-lg, 10px);
+	background: var(--ds-surface-2);
+	font-size: var(--ds-text-footnote, 13px);
+	color: var(--ds-text-2);
+}
+.m-composer .q-strip {
+	margin: 0 0 8px;
+	max-width: 100%;
+}
+.q-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	min-height: 32px;
+	padding: 4px 10px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
+}
+.m-composer .q-head {
+	min-height: 40px;
+}
+.q-head:focus-visible,
+.q-btn:focus-visible,
+.q-area:focus-visible {
+	outline: 2px solid var(--ds-focus);
+	outline-offset: 1px;
+}
+.q-head svg {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	color: var(--ds-text-3);
+}
+.q-title {
+	flex: none;
+	font-weight: var(--ds-weight-semibold, 600);
+	color: var(--ds-text);
+}
+.q-peek {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--ds-text-3);
+}
+.q-list {
+	display: flex;
+	flex-direction: column;
+	max-height: 40vh;
+	margin: 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+	border-top: 1px solid var(--ds-border);
+}
+.q-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 2px 10px;
+	align-items: center;
+	padding: 6px 10px;
+}
+.q-row + .q-row {
+	border-top: 1px solid var(--ds-hairline, var(--ds-border));
+}
+.q-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	grid-column: 1;
+}
+.q-from {
+	font-weight: var(--ds-weight-medium, 500);
+	color: var(--ds-text);
+}
+.q-chip,
+.q-prio {
+	padding: 0 6px;
+	border-radius: var(--ds-radius-full, 999px);
+	font-size: var(--ds-text-caption, 12px);
+	line-height: 18px;
+	background: var(--ds-surface-3);
+	color: var(--ds-text-2);
+}
+.q-chip.is-idle,
+.q-chip.is-sending {
+	background: var(--ds-busy-soft);
+	color: var(--ds-busy-text);
+}
+.q-chip.is-held,
+.q-chip.is-retrying {
+	background: var(--ds-needs-soft);
+	color: var(--ds-needs-text);
+}
+.q-chip.is-offline {
+	background: var(--ds-danger-soft);
+	color: var(--ds-danger-text);
+}
+.q-age {
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-caption, 12px);
+}
+.q-body {
+	grid-column: 1;
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--ds-text-2);
+}
+.q-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 4px;
+	grid-column: 2;
+	grid-row: 1 / span 2;
+}
+.q-tip {
+	display: inline-flex;
+}
+.q-btn {
+	height: 26px;
+	padding: 0 8px;
+	border: 1px solid var(--ds-control-border, var(--ds-border));
+	border-radius: var(--ds-radius-sm, 6px);
+	background: var(--ds-control, var(--ds-surface));
+	color: var(--ds-text);
+	font: inherit;
+	font-size: var(--ds-text-caption, 12px);
+	cursor: pointer;
+}
+.m-composer .q-btn {
+	height: 32px;
+	padding: 0 10px;
+}
+.q-btn:hover:not(:disabled) {
+	background: var(--ds-control-hover, var(--ds-surface-hover));
+}
+.q-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.q-btn.is-danger {
+	color: var(--ds-danger-text);
+}
+.q-btn.is-primary {
+	border-color: transparent;
+	background: var(--ds-primary);
+	color: var(--ds-on-primary);
+}
+.q-progress {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 26px;
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-caption, 12px);
+}
+.q-spin {
+	width: 14px;
+	height: 14px;
+	animation: q-spin 900ms linear infinite;
+}
+@keyframes q-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.q-spin {
+		animation: none;
+	}
+}
+.q-edit {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	grid-column: 1 / span 2;
+}
+.q-edit .q-actions {
+	grid-row: auto;
+}
+.q-area {
+	width: 100%;
+	padding: 6px 8px;
+	border: 1px solid var(--ds-control-border, var(--ds-border));
+	border-radius: var(--ds-radius-sm, 6px);
+	background: var(--ds-surface);
+	color: var(--ds-text);
+	font: inherit;
+	resize: vertical;
+}
+.q-note {
+	margin: 0;
+	padding: 6px 10px;
+	border-top: 1px solid var(--ds-border);
+	color: var(--ds-text-3);
+}
+/* Phone: actions under the text, full width. */
+.m-composer .q-row {
+	grid-template-columns: minmax(0, 1fr);
+}
+.m-composer .q-actions {
+	grid-column: 1;
+	grid-row: auto;
+	justify-content: flex-start;
+}

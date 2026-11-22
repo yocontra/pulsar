@@ -86,6 +86,7 @@ Run `pulsar qr` and scan the code with your phone, then add the page to your hom
 - Watch each session live: replies, tool calls, diffs, code and images.
 - Answer permission prompts and questions. The prompt also stays in the terminal.
 - Message one agent or a group. Attach files and images, and mention files with `@`.
+- See the messages that wait for an agent, and cancel, send now or edit them before they arrive.
 - Stop an agent's turn.
 - Start a new agent on any machine, in a folder or a new git worktree.
 - Review an agent's changes, then commit, push and open a PR.

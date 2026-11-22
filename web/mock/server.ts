@@ -139,6 +139,15 @@ import {
 	prReviewFile,
 	resetPrReview,
 } from "./prreview.ts";
+import {
+	enqueue,
+	QueueMockError,
+	queueAct,
+	queueList,
+	queueReset,
+	type SeedItem,
+	stateForWake,
+} from "./queue.ts";
 import { searchMessages, warmSearch } from "./search.ts";
 import {
 	forParentBody,
@@ -1193,6 +1202,15 @@ function doSendOnce(input: SendInput): DryRun | SendDone {
 	// One live recipient: its transcript records the push as the operator's
 	// turn (like the daemon's frame), so the bubble shows its delivery state.
 	const only = targets.length === 1 ? targets[0]! : null;
+	// An agent that won't take it now: it waits in the queue strip.
+	const waits = only ? stateForWake(only.wake, priority) : null;
+	if (only && waits)
+		enqueue(only.id, {
+			messageId: id,
+			body: message.body,
+			state: waits,
+			priority,
+		});
 	// Like the daemon's frame: proven, the operator's own turn; unproven, the
 	// app's (a peer line). After `echoMs` (faults), so the echo can come late.
 	if (only && wakeOf(only, priority) !== "queued") {
@@ -1232,6 +1250,7 @@ const RECEIPT_ORDER: Record<ReceiptState, number> = {
 	done: 9,
 	nacked: 10,
 	expired: 11,
+	withdrawn: 13,
 	dead: 12,
 };
 
@@ -1312,7 +1331,8 @@ type TopicKind =
 	| "query"
 	| "results"
 	| "receipts"
-	| "transcript";
+	| "transcript"
+	| "queue";
 
 interface Computed {
 	event: ServerEventName;
@@ -1371,6 +1391,7 @@ function topicsOf(sub: Subscription): string[] {
 		);
 	}
 	for (const id of sub.receipts) keys.push(topicKey("receipts", id));
+	for (const id of sub.queue ?? []) keys.push(topicKey("queue", id));
 	return keys;
 }
 
@@ -1499,6 +1520,8 @@ function compute(key: string): Computed | null {
 		}
 		case "transcript":
 			return null;
+		case "queue":
+			return whole("queue", { ...queueList(a) });
 	}
 }
 
@@ -1627,6 +1650,7 @@ const SUB_KEYS = new Set([
 	"receipts",
 	"changes",
 	"subagents",
+	"queue",
 ]);
 
 function parseSubscription(raw: unknown): Subscription {
@@ -1656,6 +1680,7 @@ function parseSubscription(raw: unknown): Subscription {
 		receipts: strings("receipts"),
 		changes: (o.changes ?? null) as Subscription["changes"],
 		subagents: strings("subagents"),
+		queue: strings("queue"),
 	};
 }
 
@@ -2862,6 +2887,58 @@ async function route(
 		const a = named.find((x) => x.fixed) ?? named[0];
 		if (!a) throw notFound(`no agent ${b.agent}`);
 		return json(gitControl(a, b));
+	}
+	// The queue strip (web/mock/queue.ts). Someone else's message needs the
+	// acting check (Prove Human here, the home node's for an address).
+	if (seg[0] === "agents" && seg[2] === "queue") {
+		const raw = seg[1]!;
+		agentOr404(raw.includes("/") ? raw.slice(raw.indexOf("/") + 1) : raw);
+		try {
+			if (GET && seg.length === 3) return json(queueList(raw));
+			if (POST && seg.length === 5) {
+				const action = seg[4] as "withdraw" | "promote" | "edit";
+				if (!["withdraw", "promote", "edit"].includes(action))
+					throw notFound("no such endpoint");
+				const b = (await jsonBody(req)) as {
+					body?: unknown;
+					assertion?: unknown;
+				};
+				const r = await queueAct(raw, seg[3]!, action, b?.body, () =>
+					requireActing(
+						req,
+						`queue.${action}`,
+						{ agent: raw },
+						{ messageId: seg[3] },
+						b?.assertion,
+					),
+				);
+				for (const st of streams.values()) if (st.push) refresh(st);
+				return json(r);
+			}
+		} catch (e) {
+			if (e instanceof QueueMockError)
+				throw new ApiError(e.status, e.code, e.message);
+			throw e;
+		}
+	}
+	// Mock only: seed or clear queue strips (the e2e tests).
+	if (POST && path === "/__mock/queue") {
+		const b = (await jsonBody(req)) as {
+			reset?: boolean;
+			agent?: string;
+			items?: SeedItem[];
+		};
+		if (b.reset) queueReset();
+		let agentId: string | undefined;
+		if (b.agent) {
+			const named = agents.filter((x) => x.name === b.agent);
+			const a = named.find((x) => x.fixed) ?? named[0];
+			if (!a) throw notFound(`no agent ${b.agent}`);
+			agentId = a.id;
+			for (const item of b.items ?? []) enqueue(a.id, item);
+		}
+		for (const st of streams.values()) if (st.push) refresh(st);
+		return json({ ok: true, agentId });
 	}
 	// Mock only: a stand-in acting op (the web client's api.acting flow).
 	if (POST && path === "/__mock/acting") {

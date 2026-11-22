@@ -389,6 +389,9 @@ export class LiveSync {
 			case "transcript":
 				this.queueTranscript(e.data.agent, e.data.events);
 				break;
+			case "queue":
+				c.setQueryData(keys.queue(e.data.agentId), e.data);
+				break;
 			case "changes":
 				c.setQueryData(keys.changes(e.data.agent, e.data.mode), e.data);
 				if (e.data.mode === "worktree")

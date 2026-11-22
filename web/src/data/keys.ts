@@ -36,6 +36,8 @@ export const keys = {
 		["facets", selector, facet, q, top] as const,
 	search: (q: string) => ["search", q] as const,
 	receipts: (messageId: string) => ["receipts", messageId] as const,
+	/** Messages not yet in an agent's conversation (the `queue` topic). */
+	queue: (agentId: string) => ["queue", agentId] as const,
 	transcript: (agentId: string) => ["transcript", agentId] as const,
 	/** An agent's worktree changes (the `changes` topic while it is the newest). */
 	changes: (agentId: string, mode: ChangesMode) =>

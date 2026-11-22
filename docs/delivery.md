@@ -27,6 +27,7 @@ The app and the CLI show where each message is:
 | failed | It could not be delivered (for example, the other machine stayed offline for 24 hours) |
 | expired | It was not done within 24 hours |
 | gave up | Pulsar delivered it 5 times with no answer |
+| withdrawn | The operator cancelled it in the app before it reached the session |
 
 For Claude Code, Codex and OpenCode, Pulsar cannot see inside the session, so a receipt stays at "handed over" until the agent reads, works on or answers the message.
 
@@ -42,6 +43,18 @@ A dropped connection or a daemon restart does not count as a restart: the messag
 A repeat shows its attempt in the message, for example `attempt 2 of 5 after codex@x restarted, check before you redo it`. If the work is already done, the agent answers again; answers are idempotent.
 
 A message to a group or a broadcast is delivered again only after a session restart, and the first reply settles the sender's wait.
+
+## The queue
+
+The app shows each agent's queue: messages that are not in its conversation yet. These are messages waiting in the inbox, held, waiting for a retry, in your machine's outbox for an agent on another machine, and messages the harness has but shows only when the current turn ends. The operator can act on each one:
+
+- **Withdraw** works only while the message waits in Pulsar (the inbox, held, a retry, the outbox). The receipt becomes `withdrawn`, a final state. The message leaves the inbox, and it is never delivered again. If the sender waits with `await_reply`, the wait ends at once, and the sender gets a notice in its inbox.
+- **Send now** pushes the message at once as urgent, also a held one. For the outbox, the machine is tried now.
+- **Edit** changes the operator's own message while no recipient has it. An edit without Face ID / Touch ID loses the operator tag: the agent sees the message as "not verified as your operator".
+
+When the harness has the message already, Pulsar can't take it back.
+
+For the operator's own messages, the same rule applies as for sending. For a message from an agent, the app asks for Face ID / Touch ID; for an agent on another machine, that machine checks the passkey itself. The app lists the queue of an agent on another machine from that machine, and adds what waits in this machine's outbox. Messages that wait in a third machine's outbox are not shown.
 
 ## Giving up
 

@@ -1758,3 +1758,66 @@ describe("passkey sessions", () => {
 		expect(o.status).toBe(403);
 	});
 });
+
+describe("queue strip", () => {
+	test("lists, streams and withdraws what waits for an agent; another sender's needs a session", async () => {
+		const agent = addAgent("zz-queue");
+		const sent = await post("/api/v1/send", {
+			ids: [agent.id],
+			body: "when you get a moment",
+		});
+		const messageId = (sent.body.message as { id: string }).id;
+		const list = await json<{ items: { messageId: string; mine: boolean }[] }>(
+			`/api/v1/agents/${encodeURIComponent(agent.id)}/queue`,
+		);
+		expect(list.status).toBe(200);
+		expect(list.body.items).toEqual([
+			expect.objectContaining({ messageId, mine: true, state: "next-turn" }),
+		]);
+
+		const s = await openEvents();
+		const ready = await s.wait((e) => e.event === "ready");
+		await api(`/api/v1/subscriptions/${ready.data.streamId as string}`, {
+			method: "PUT",
+			body: JSON.stringify({ queue: [agent.id] }),
+		});
+		await s.wait(
+			(e) =>
+				e.event === "queue" &&
+				e.data.agentId === agent.id &&
+				(e.data.items as unknown[]).length === 1,
+		);
+		const q = `/api/v1/agents/${encodeURIComponent(agent.id)}/queue/${messageId}`;
+		expect((await post(`${q}/edit`, {})).status).toBe(400);
+		const w = await post(`${q}/withdraw`, {});
+		expect(w.status).toBe(200);
+		expect(w.body.receipt).toMatchObject({ state: "withdrawn" });
+		await s.wait(
+			(e) =>
+				e.event === "queue" &&
+				e.data.agentId === agent.id &&
+				(e.data.items as unknown[]).length === 0,
+			5000,
+		);
+		s.close();
+
+		// Another agent's message: Prove Human first.
+		const other = await service.mailbox.send(extAgent, {
+			to: agent.id,
+			body: "from the pi agent",
+			priority: "normal",
+			replyTo: null,
+			expectReply: false,
+		});
+		const q2 = `/api/v1/agents/${encodeURIComponent(agent.id)}/queue/${other.message.id}`;
+		const refused = await post(`${q2}/withdraw`, {});
+		expect(refused.status).toBe(401);
+		expect((refused.body.error as { code: string }).code).toBe(
+			"session_required",
+		);
+		expect((await postAs(`${q2}/edit`, { body: "x" })).status).toBe(403);
+		const ok = await postAs(`${q2}/withdraw`, {});
+		expect(ok.status).toBe(200);
+		expect(ok.body.receipt).toMatchObject({ state: "withdrawn" });
+	});
+});

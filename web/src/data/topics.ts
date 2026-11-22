@@ -106,6 +106,14 @@ export function deriveSubscription(mounted: Mounted[]): {
 		cover(m);
 	}
 
+	// Queue strips on screen (the composer of an open agent).
+	const queue: string[] = [];
+	for (const m of of("queue")) {
+		const id = m.key[1] as string;
+		if (!queue.includes(id)) queue.push(id);
+		cover(m);
+	}
+
 	for (const m of mounted) {
 		const name = m.key[0] as string;
 		if (ALWAYS.has(name) || SECURITY.has(name)) cover(m);
@@ -122,6 +130,7 @@ export function deriveSubscription(mounted: Mounted[]): {
 			// Only while a changes viewer is open (older subscriptions stay as they were).
 			...(changes ? { changes } : {}),
 			...(subagents.length ? { subagents: subagents.sort() } : {}),
+			...(queue.length ? { queue: queue.sort() } : {}),
 		},
 		covered,
 	};

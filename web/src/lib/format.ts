@@ -156,6 +156,7 @@ export const RECEIPT_WORDS: Record<ReceiptState, string> = {
 	nacked: "Declined",
 	expired: "Expired",
 	dead: "Gave up",
+	withdrawn: "Withdrawn",
 };
 
 /** The value of an agent's `key:value` tag (`pr`, `worktree`), or null. */

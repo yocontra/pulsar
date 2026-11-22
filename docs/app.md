@@ -32,6 +32,23 @@ The composer at the bottom sends to this agent. Choose how urgent it is:
 
 Receipts follow each send: handed over, in its conversation, read, replied. Replies show under the message.
 
+**Queued** messages show in a strip above the composer: messages to this agent, from you and from other agents, that are not in its conversation yet. Each one says why it waits and how long ago it was sent:
+
+| State | Meaning |
+| --- | --- |
+| Waiting for idle | The agent's session has it and shows it when the current turn ends |
+| Next turn | It waits in the agent's inbox (a Don't wake message, or an agent Pulsar can't push to) |
+| Held | The agent holds its messages |
+| Retrying | A push failed, or Pulsar delivers it again soon |
+| Machine offline | The agent's machine can't be reached; your machine sends it when it is back |
+| Sending | On its way to the agent's machine |
+
+- **Cancel** withdraws it before the agent sees it. Its receipt says "Withdrawn". An agent that waits for an answer to it stops waiting and gets a note.
+- **Send now** delivers it at once as Urgent (also a held one). For a message to an offline machine, it tries the machine again.
+- **Edit** changes the text of your own message before it arrives.
+
+Your own messages need no extra check, as for sending. Another agent's message needs Face ID / Touch ID; on another machine, that machine checks it. When the session already has the message, Cancel, Send now and Edit are off: use Stop to end the turn so it arrives now. On the phone, the strip starts folded: tap it to see the messages.
+
 **Attach files** with the paperclip (on the phone: Photo Library or Choose Files), by dropping files on the composer, or by pasting an image. A paste of 32 KB of text or more becomes a `.txt` file. Up to 10 files per message: images up to 10 MB, other files up to 25 MB. Each file uploads when you add it, after one Face ID / Touch ID check for the batch. Its tile shows its progress, and Retry if the upload fails. Send waits until every file is uploaded. Pulsar saves the files on the agent's own machine, readable only by your user, and deletes them after 7 days. The message names each file by its path, and the agent opens the files from there. Your message shows the files as chips.
 
 **Mention a file**: type `@` to search the files in the agent's folder (what git tracks, plus new files it doesn't ignore). Use the arrow keys and Enter or Tab to insert `@path`. Mentions show as chips above the field, and Backspace deletes a mention in one step.
