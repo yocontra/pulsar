@@ -1,14 +1,14 @@
 /**
- * The phone agent header's issue button: opens the issue card in a sheet.
- * The agent menu's "Show Issue" (`showIssue`) opens it too.
+ * The phone's issue sheet. No top-bar button (the bar is full): the agent
+ * menu's "Issue #N" (`showIssue`, from the ••• button or a long-press)
+ * opens it. Rendered in the agent header's slot, it shows nothing else.
  */
-import { CircleDotIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { AgentRow } from "../../api/types.ts";
 import { CloseX } from "../../components/CloseX.tsx";
 import { observer } from "../../lib/signals.ts";
-import { IonButton, IonContent } from "../../mobile/ionic.ts";
+import { IonContent } from "../../mobile/ionic.ts";
 import { useIonicLazy } from "../../mobile/lazyIonic.ts";
 import { IssueCard, useAsked } from "./IssueCard.tsx";
 import "./issues.css";
@@ -20,30 +20,13 @@ function IssuePhone({ agent, number }: Props) {
 	const [open, setOpen] = useState(false);
 	// Mounted from the first open until it has animated out.
 	const [mounted, setMounted] = useState(false);
-	const button = useRef<HTMLIonButtonElement | null>(null);
 	const show = () => {
 		setMounted(true);
 		setOpen(true);
 	};
 	useAsked(agent.id, show);
-	// The top bar's title keeps clear of one more button (issues.css).
-	useEffect(() => {
-		const title = button.current
-			?.closest("ion-toolbar")
-			?.querySelector("ion-title");
-		title?.classList.add("i-has-issue");
-		return () => title?.classList.remove("i-has-issue");
-	}, []);
 	return (
 		<>
-			<IonButton
-				ref={button}
-				className="i-phone-btn"
-				aria-label={`Issue #${number}`}
-				onClick={show}
-			>
-				<CircleDotIcon aria-hidden="true" />
-			</IonButton>
 			{/* Portaled to ion-app, like the git sheet (Ionic moves it there). */}
 			{lz &&
 				mounted &&

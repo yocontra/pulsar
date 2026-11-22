@@ -81,7 +81,7 @@ Each commit, push or PR needs a proven human (Prove Human, once per session) and
 
 ## Issues
 
-When an agent works on a GitHub issue, its session header shows the issue (**#N**) and its rows in the sidebar and on Home show **#N** before the activity. Click the chip (on a phone, the issue button in the agent's top bar) to open the issue card: title, state, labels, assignees, the start of the description, and a link to GitHub. Right-click the agent in the sidebar, or open the agent's menu on a phone, and pick **Show issue #N** to open the card from there.
+When an agent works on a GitHub issue, its session header shows the issue (**#N**) and its rows in the sidebar and on Home show **#N** before the activity. Click the chip to open the issue card: title, state, labels, assignees, the start of the description, and a link to GitHub. You can also right-click the agent in the sidebar and pick **Show issue #N**. On a phone, tap ••• in the agent's top bar (or long-press the agent on Home) and pick **Issue #N**; the card opens in a sheet.
 
 Pulsar finds the issue, in this order:
 

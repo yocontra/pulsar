@@ -1,6 +1,6 @@
 /**
- * GitHub issue chip in the session header (desktop and phone): the issue
- * the agent works on, opening its card. Metadata and a lazy chunk only
+ * GitHub issue chip in the desktop session header, opening the issue
+ * card; on the phone, the sheet the agent menu's "Issue #N" opens. Metadata and a lazy chunk only
  * (this file loads at start); the chunk loads only for an agent with an
  * issue.
  */

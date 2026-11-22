@@ -3,10 +3,10 @@ import { agentId, expect, localhostBase, test } from "./fixtures.ts";
 import { contrastFailures } from "./ui-audit.ts";
 
 /**
- * Phone issue awareness (web/src/features/issues/IssuePhone.tsx): the
- * agent header's issue button opens the card in a sheet; the Home row
- * shows the issue; the agent menu's "Show Issue #1378" opens the same
- * sheet (web/mock/issues.ts). apparish-auth works on #1378.
+ * Phone issue awareness (web/src/features/issues/IssuePhone.tsx): no
+ * top-bar button; the agent menu's "Issue #1378" (•••) opens the card in a
+ * sheet; the Home row shows the issue (web/mock/issues.ts). apparish-auth
+ * works on #1378.
  */
 
 const H = { "X-Pulsar": "1" };
@@ -27,21 +27,32 @@ async function sheet(page: Page) {
 	return s;
 }
 
+/** The agent page's ••• menu, then "Issue #1378". */
+async function fromMenu(page: Page) {
+	await page
+		.locator("ion-header.p-agent-header")
+		.getByRole("button", { name: "More" })
+		.click();
+	await page.getByRole("button", { name: "Issue #1378" }).click();
+}
+
 test.describe("issue sheet", () => {
 	test.afterEach(async ({ request }) => {
 		await ghMode(request, "ok");
 	});
 
-	test("the header button opens the card in a sheet", async ({
+	test("the ••• menu opens the card in a sheet; no top-bar button", async ({
 		page,
 		request,
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
 		await page.goto(`${localhostBase()}/#/a/${encodeURIComponent(id)}`);
-		await page
-			.locator("ion-header.p-agent-header")
-			.getByRole("button", { name: "Issue #1378" })
-			.click();
+		const head = page.locator("ion-header.p-agent-header");
+		await expect(head.locator("h1")).toHaveText("apparish-auth");
+		await expect(head.getByRole("button", { name: "Issue #1378" })).toHaveCount(
+			0,
+		);
+		await fromMenu(page);
 		const s = await sheet(page);
 		await expect(s.locator(".i-title a")).toHaveText(
 			"#1378 Token refresh races with logout",
@@ -60,20 +71,13 @@ test.describe("issue sheet", () => {
 		).toBeVisible();
 		await expect(s.getByRole("link", { name: "Open on GitHub" })).toBeVisible();
 		expect(await contrastFailures(page, ".i-sheet *")).toEqual([]);
-		// The title still fits beside the extra button.
-		await expect(
-			page.locator("ion-header.p-agent-header ion-title.i-has-issue"),
-		).toHaveCount(1);
 		await s.getByRole("button", { name: "Close" }).click();
 		await expect(page.getByRole("dialog", { name: "Issue #1378" })).toHaveCount(
 			0,
 		);
 	});
 
-	test("the Home row shows the issue; the agent menu opens the sheet", async ({
-		page,
-		request,
-	}) => {
+	test("the Home row shows the issue", async ({ page, request }) => {
 		const id = await agentId(request, "name=apparish-auth");
 		await page.goto(`${localhostBase()}/`);
 		await page.locator('[data-tree-node="m:studio"]').first().waitFor();
@@ -89,11 +93,7 @@ test.describe("issue sheet", () => {
 		const row = page.locator(".p-row.is-agent", { hasText: "apparish-auth" });
 		await expect(row.first().locator(".p-issue")).toHaveText("#1378");
 		await page.goto(`${localhostBase()}/#/a/${encodeURIComponent(id)}`);
-		await page
-			.locator("ion-header.p-agent-header")
-			.getByRole("button", { name: "More" })
-			.click();
-		await page.getByRole("button", { name: "Show Issue #1378" }).click();
+		await fromMenu(page);
 		const s = await sheet(page);
 		await expect(s).toContainText("Token refresh races with logout");
 	});
@@ -102,10 +102,7 @@ test.describe("issue sheet", () => {
 		await ghMode(request, "logged_out");
 		const id = await agentId(request, "name=apparish-auth");
 		await page.goto(`${localhostBase()}/#/a/${encodeURIComponent(id)}`);
-		await page
-			.locator("ion-header.p-agent-header")
-			.getByRole("button", { name: "Issue #1378" })
-			.click();
+		await fromMenu(page);
 		const s = await sheet(page);
 		await expect(s).toContainText(
 			"gh is not logged in on studio. Run gh auth login there.",
