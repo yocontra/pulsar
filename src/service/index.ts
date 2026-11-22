@@ -89,7 +89,13 @@ import { Router } from "./router.ts";
 import { ServerInteractions } from "./server-interactions.ts";
 import { Sessions } from "./sessions.ts";
 import { Subagents } from "./subagents.ts";
-import { driverTranscript, Transcripts } from "./transcripts.ts";
+import {
+	driverMissing,
+	driverTranscript,
+	subagentMissing,
+	type TranscriptMissing,
+	Transcripts,
+} from "./transcripts.ts";
 import { Turns } from "./turns.ts";
 import { UserSessions } from "./user-sessions.ts";
 import { clampInt, toPublic } from "./util.ts";
@@ -133,7 +139,10 @@ export interface ServiceOptions {
 	/** Where an agent's transcript is; the harness driver's by default (tests use fixtures). */
 	transcripts?: {
 		pollMs?: number;
+		resolveMs?: number;
 		resolve?: (agent: Agent) => ResolvedTranscript | null;
+		/** Why an agent has no transcript (default: its driver's answer). */
+		missing?: (agent: Agent) => TranscriptMissing;
 	};
 	/** Attachments: the folder they are saved in (tests use a temp folder). */
 	attachments?: { dir?: () => string };
@@ -486,6 +495,13 @@ export class PulsarService {
 						? this.subagents.transcript(agent)
 						: resolveTranscript(agent),
 				ensure: (id) => this.subagents.row(id),
+				missing: (agent) =>
+					opts.transcripts?.missing?.(agent) ??
+					(agent.meta.subagentOf
+						? subagentMissing(agent)
+						: opts.transcripts?.resolve
+							? "not_found"
+							: driverMissing(agent)),
 			},
 		);
 		this.turns = new Turns({

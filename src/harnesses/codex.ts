@@ -173,6 +173,7 @@ export const codex: HarnessDriver = {
 				: null;
 			return file ? { kind: "file", path: file } : null;
 		},
+		needsSession: true,
 		parse: parseCodex,
 		turnFailed: codexTurnFailed,
 	},

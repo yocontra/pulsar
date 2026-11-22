@@ -164,7 +164,11 @@ export default function pulsarExtension(
 			return false;
 		}
 	};
-	const host = extensionHostFor(process.argv.join(" "));
+	// The executable path too: a host built as one Bun binary (omp) has only
+	// `bun /$bunfs/root/<entry>` in its argv.
+	const host = extensionHostFor(
+		[process.execPath, process.argv0, ...process.argv].join(" "),
+	);
 	const harness = host?.id ?? "unknown";
 	const client = new DaemonClient();
 	let stopped = false;

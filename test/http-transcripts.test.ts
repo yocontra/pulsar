@@ -208,6 +208,7 @@ describe("transcript pages", () => {
 			events: [],
 			cursor: null,
 			available: false,
+			missing: "not_found",
 		});
 		const unknown = await api("/api/v1/agents/pi%3Anobody/transcript");
 		expect(unknown.status).toBe(404);

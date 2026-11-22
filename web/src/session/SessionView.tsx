@@ -5,7 +5,6 @@ import type { AgentRow } from "../api/types.ts";
 import { focusPrompt } from "../approval/focus.ts";
 import { PromptInline, promptCallId } from "../approval/PromptInline.tsx";
 import { Composer } from "../components/Composer.tsx";
-import { harnessName } from "../components/ui/agent-avatar.tsx";
 import { useAgent, useLiveEvent, useTranscript } from "../data/index.ts";
 import { observer } from "../lib/signals.ts";
 import {
@@ -20,6 +19,7 @@ import {
 	TranscriptSkeleton,
 } from "./ConversationView.tsx";
 import { Transcript, type TranscriptProps } from "./Transcript.tsx";
+import { TranscriptMissingNotice } from "./TranscriptMissing.tsx";
 
 const TerminalCard = lazy(() => import("../approval/TerminalCard.tsx"));
 
@@ -65,6 +65,11 @@ function SessionViewImpl({
 			: null;
 	const loading = t.isPending;
 	const available = t.available && (agent?.hasTranscript ?? true);
+	// Why there is no transcript, from the page (never from a cached row
+	// alone). A fresh row whose harness keeps none settles it for a daemon
+	// too old to say `missing: unsupported`.
+	const missing =
+		t.missing && row?.hasTranscript === false ? "unsupported" : t.missing;
 	const cursor = t.cursor;
 	const [start, setStart] = useState(() => Math.max(0, events.length - WINDOW));
 	// Text a live event replaced in place is still streaming; it settles
@@ -218,15 +223,15 @@ function SessionViewImpl({
 						</button>
 					</div>
 				)}
-				{agent &&
-					(!agent.hasTranscript || !available) &&
-					!loading &&
-					events.length === 0 && (
-						<div className="ds-banner banner" role="status">
-							{harnessName(agent.harness)} doesn't share a live transcript yet.
-							You can still message this agent; replies show below.
-						</div>
-					)}
+				{agent && missing && !loading && events.length === 0 && (
+					<TranscriptMissingNotice
+						missing={missing}
+						harness={agent.harness}
+						subject="agent"
+						variant={mobile ? "phone" : "desktop"}
+						onRetry={() => void t.refetch()}
+					/>
+				)}
 				<Transcript
 					events={windowed}
 					variant={mobile ? "phone" : "desktop"}

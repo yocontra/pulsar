@@ -1713,6 +1713,17 @@ type RealtimeChange =
 			role?: "assistant" | "user" | "peer";
 			from?: string;
 	  }
+	/**
+	 * The agent's transcript page says no transcript was found (`missing`)
+	 * until set to null, as the daemon does before a session file is written
+	 * or located; `delayMs` slows every page (a slow home node).
+	 */
+	| {
+			action: "transcript-missing";
+			id: string;
+			missing: "not_found" | "no_session" | "unsupported" | null;
+			delayMs?: number;
+	  }
 	/** The agent edits a file in its worktree (the diff viewer goes live). */
 	| { action: "changes"; id: string; path: string; line: string }
 	| {
@@ -1722,6 +1733,15 @@ type RealtimeChange =
 			messageId?: string;
 	  }
 	| { action: "restore" };
+
+/** Transcripts the `transcript-missing` change holds back, by agent id. */
+const transcriptHolds = new Map<
+	string,
+	{
+		missing: "not_found" | "no_session" | "unsupported" | null;
+		delayMs: number;
+	}
+>();
 
 /** What realtime changes touched, so `restore` puts the fixtures back. */
 const rtSaved = new Map<string, MockAgent>();
@@ -1843,6 +1863,16 @@ function realtime(raw: unknown) {
 			out = { ok: true, event: e.id };
 			break;
 		}
+		case "transcript-missing": {
+			const a = agentOr404(c.id);
+			if (c.missing === null && !c.delayMs) transcriptHolds.delete(a.id);
+			else
+				transcriptHolds.set(a.id, {
+					missing: c.missing,
+					delayMs: c.delayMs ?? 0,
+				});
+			break;
+		}
 		case "changes": {
 			const a = agentOr404(c.id);
 			if (!editChanges(a, c.path, c.line)) throw notFound("no repo");
@@ -1867,6 +1897,7 @@ function realtime(raw: unknown) {
 			break;
 		}
 		case "restore": {
+			transcriptHolds.clear();
 			resetChanges();
 			resetGit();
 			resetPrReview();
@@ -1923,6 +1954,7 @@ setInterval(() => {
 			const a = agentById.get(session);
 			if (
 				a?.hasTranscript &&
+				!transcriptHolds.get(a.id)?.missing &&
 				a.status !== "offline" &&
 				(a.fixed ? a !== FIX.xss : true)
 			) {
@@ -2680,8 +2712,22 @@ async function route(
 		seg.length === 3
 	) {
 		const a = agentOr404(seg[1]!);
+		const hold = transcriptHolds.get(a.id);
+		if (hold?.delayMs) await new Promise((r) => setTimeout(r, hold.delayMs));
+		if (hold?.missing)
+			return json({
+				events: [],
+				cursor: null,
+				available: false,
+				missing: hold.missing,
+			});
 		if (!a.hasTranscript)
-			return json({ events: [], cursor: null, available: false });
+			return json({
+				events: [],
+				cursor: null,
+				available: false,
+				missing: "unsupported",
+			});
 		const m = machineByName.get(a.machineId)!;
 		// Simulated federation: a sleeping machine can't serve its transcripts.
 		if (m.link === "asleep" || m.link === "daemon-down")

@@ -11,9 +11,13 @@ export function isOmpProcess(args: string): boolean {
 	return /(^|\/)omp(\s|$)/.test(args) || args.includes("@oh-my-pi/");
 }
 
-/** The pulsar extension runs inside omp (its argv), not pi. */
+/**
+ * The pulsar extension runs inside omp, not pi. `argv` is the host's
+ * executable path and argv: omp built as one Bun binary runs as
+ * `bun /$bunfs/root/omp-<platform>-<arch>`, with `omp` only in its path.
+ */
 export function isOmpHost(argv: string): boolean {
-	return /oh-my-pi|(^|\/)omp(\s|$)/.test(argv);
+	return /oh-my-pi|(^|\/)omp(-[\w.-]+)?(\s|$)/.test(argv);
 }
 
 export const piIdent = {

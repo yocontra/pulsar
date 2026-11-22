@@ -82,7 +82,10 @@ export interface HarnessName {
 }
 
 /** The parts of an agent a driver reads to find its model or session log. */
-export type SessionRef = Pick<Agent, "harness" | "sessionId" | "cwd">;
+export type SessionRef = Pick<Agent, "harness" | "sessionId" | "cwd"> & {
+	/** The agent's meta: `resumeKey` names the host session of a pid-keyed agent. */
+	meta?: Record<string, string>;
+};
 
 export interface DeliveryResult {
 	ok: boolean;

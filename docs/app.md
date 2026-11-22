@@ -61,6 +61,8 @@ Your own messages need no extra check, as for sending. Another agent's message n
 
 **Stop** (in the header, or Cmd-.) interrupts the agent's current turn after you confirm. While the agent works and your draft is empty, the composer's Send button turns into a red Stop button. Stop shows only when Pulsar can reach the agent this way; see [Stop](adapters.md#stop) for each harness.
 
+**No transcript yet**: a new session's transcript can take a moment to appear (the harness writes its log after the first message). The conversation shows as loading and fills in once Pulsar finds the log. After a few seconds it says why it is still empty, with Retry. Harnesses that keep no transcript Pulsar can read (OpenCode, Cursor, Gemini CLI, VS Code) show "No transcript for this agent"; you can still message them.
+
 ## Subagents
 
 An agent that runs subagents (Claude Code tasks and agent-team members, Codex spawned threads, omp tasks, OpenCode child sessions) shows "3 subagents · 1 running" under its row in the sidebar, collapsed. Click it to list them, running ones first; a subagent started by another subagent sits under it. Click one to open its own transcript in the main pane, with the parent's name above it to go back. On a phone, the agent's page has a Subagents line under the title bar; tap it, then tap a subagent to open its page. In a parent's transcript, an expanded subagent card has **Open** to go to that subagent's page.

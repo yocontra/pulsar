@@ -243,7 +243,13 @@ export function subagentTranscript(id: string) {
 	ensure();
 	const sub = subagentById(id);
 	if (!sub) return null;
-	if (!sub.hasTranscript) return { events: [], cursor: null, available: false };
+	if (!sub.hasTranscript)
+		return {
+			events: [],
+			cursor: null,
+			available: false,
+			missing: "unsupported" as const,
+		};
 	return { events: logs.get(id) ?? [], cursor: null, available: true };
 }
 

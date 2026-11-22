@@ -29,11 +29,13 @@ import {
 import { observeLive } from "../src/data/observe.ts";
 import {
 	applyListUpdate,
+	applyTranscriptLive,
 	applyTranscriptPage,
 	type ListData,
 	LOCAL_TTL_MS,
 	reconcileLocal,
 	type TranscriptData,
+	transcriptPending,
 } from "../src/data/patch.ts";
 import { isStopping, localSend } from "../src/data/pending.ts";
 import { createPrefetcher } from "../src/data/prefetch.ts";
@@ -401,6 +403,53 @@ describe("stream events patch the right keys", () => {
 		);
 		// Nothing held: the page decides (a harness without a transcript).
 		expect(applyTranscriptPage(undefined, flap, false).available).toBe(false);
+	});
+
+	test("not found is a miss to ask again about; only unsupported is final", () => {
+		const page = (missing?: "unsupported" | "no_session" | "not_found") => ({
+			events: [],
+			cursor: null,
+			available: false,
+			...(missing ? { missing } : {}),
+		});
+		// An older daemon says only `available: false`: a miss, never "none".
+		const bare = applyTranscriptPage(undefined, page(), false);
+		expect(bare.missing).toBe("not_found");
+		expect(transcriptPending(bare)).toBe(true);
+		const noSession = applyTranscriptPage(undefined, page("no_session"), false);
+		expect(noSession.missing).toBe("no_session");
+		expect(transcriptPending(noSession)).toBe(true);
+		const none = applyTranscriptPage(undefined, page("unsupported"), false);
+		expect(none.missing).toBe("unsupported");
+		expect(transcriptPending(none)).toBe(false);
+		// Found: available, and no reason left over.
+		const found = applyTranscriptPage(
+			bare,
+			{ events: [ev("a", 1)], cursor: null, available: true },
+			false,
+			new Set(),
+		);
+		expect(found).toMatchObject({ available: true });
+		expect(found.missing).toBeUndefined();
+		expect(transcriptPending(found)).toBe(false);
+		expect(transcriptPending(undefined)).toBe(false);
+	});
+
+	test("live events of the transcript make it available", () => {
+		const held = applyTranscriptPage(
+			undefined,
+			{
+				events: [],
+				cursor: null,
+				available: false,
+				missing: "not_found",
+			},
+			false,
+		);
+		const after = applyTranscriptLive(held, [ev("a", 1)]);
+		expect(after.available).toBe(true);
+		expect(after.missing).toBeUndefined();
+		expect(after.events.map((e) => e.id)).toEqual(["a"]);
 	});
 
 	test("a full snapshot keeps the order the user sees", () => {

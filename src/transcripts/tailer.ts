@@ -25,7 +25,9 @@ import {
  * - `subscribe(agentId, fn)` streams live events. All subscribers to one
  *   agent share one watcher (ref-counted): a size poll every `pollMs` with
  *   `fs.watch` as a hint. Only complete lines are parsed; a file that shrinks
- *   or is replaced restarts from its first line.
+ *   or is replaced restarts from its first line. Every `resolveMs` the
+ *   watcher resolves the source again; when it names another file (the
+ *   session moved), it follows that one from its end after a gap.
  *
  * Ordering: subscribe first, then page. Events are keyed by `id`, so the
  * overlap between a page and the live stream only replaces events in place.
@@ -77,6 +79,12 @@ export interface TailerOptions {
 	resolve: TranscriptResolver;
 	/** Size poll interval for file sources (and the default for poll sources). */
 	pollMs?: number;
+	/**
+	 * How often a watcher following a file asks for the source again: the
+	 * session may have moved to another file (a new, resumed or forked
+	 * session), which it then follows after a gap.
+	 */
+	resolveMs?: number;
 	/** First read-back window for a history page; it doubles while the page is short. */
 	pageBytes?: number;
 	/** Largest read-back window for one page. */
@@ -98,6 +106,7 @@ export type ImageResult =
 
 const DEFAULTS = {
 	pollMs: 1000,
+	resolveMs: 5000,
 	pageBytes: 256 * 1024,
 	maxPageBytes: 8 * 1024 * 1024,
 	pageEvents: 200,
@@ -473,6 +482,8 @@ class Watcher {
 	private closed = false;
 	/** The first attach follows the file from its end; later ones read it from the start. */
 	private attached = false;
+	/** When the source was last resolved (a file source is checked again after `resolveMs`). */
+	private resolvedAt = 0;
 	/** One tick at a time; a tick asked for meanwhile runs right after. */
 	private running: Promise<void> | null = null;
 	private again = false;
@@ -517,6 +528,7 @@ class Watcher {
 	 */
 	private async attach(initial: boolean) {
 		let resolved: ResolvedTranscript | null = null;
+		this.resolvedAt = Date.now();
 		try {
 			resolved = await this.opts.resolve(this.agentId);
 		} catch (e) {
@@ -548,6 +560,48 @@ class Watcher {
 			this.state = newParseState({ atStart: true, cwd: resolved.cwd ?? null });
 		}
 		this.watchFile();
+	}
+
+	/**
+	 * Resolves the source again. Another file (the session moved: new,
+	 * resumed, forked) is followed from its end, after a gap that makes
+	 * viewers re-read the newest page. A miss keeps the file it follows: a
+	 * lookup can fail for a moment.
+	 */
+	private async follow() {
+		this.resolvedAt = Date.now();
+		let next: ResolvedTranscript | null = null;
+		try {
+			next = await this.opts.resolve(this.agentId);
+		} catch (e) {
+			debugLog(
+				`transcript resolve ${this.agentId} failed: ${(e as Error).message}`,
+			);
+		}
+		if (this.closed || next?.source.kind !== "file") return;
+		if (next.source.path === this.path) {
+			this.resolved = next;
+			return;
+		}
+		const path = next.source.path;
+		const st = await statOrNull(path);
+		if (!st || this.closed) return;
+		debugLog(`transcript ${this.agentId}: now following ${path}`);
+		this.resolved = next;
+		this.path = path;
+		this.ino = st.ino;
+		const start = await contentStart(path, next.source.headerLine);
+		this.start = start ?? 0;
+		this.skipping = false;
+		if (start !== null) {
+			this.offset = await lastLineEnd(path, start, st.size);
+			await this.prime(next);
+		} else {
+			this.offset = this.start;
+			this.state = newParseState({ atStart: true, cwd: next.cwd ?? null });
+		}
+		this.watchFile();
+		this.emit([gapEvent()]);
 	}
 
 	/** Parses the end of the history so results find their calls; nothing is emitted. */
@@ -625,7 +679,15 @@ class Watcher {
 				if (!this.resolved || this.closed) return;
 			}
 			if (this.resolved.source.kind === "poll") await this.poll(false);
-			else await this.readFile(this.resolved);
+			else {
+				await this.readFile(this.resolved);
+				if (
+					this.resolved &&
+					!this.closed &&
+					Date.now() - this.resolvedAt >= this.opts.resolveMs
+				)
+					await this.follow();
+			}
 		} catch (e) {
 			debugLog(`transcript tick ${this.agentId}: ${(e as Error).message}`);
 		}

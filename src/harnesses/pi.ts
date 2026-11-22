@@ -9,7 +9,7 @@ import {
 	which,
 } from "../setup/files.ts";
 import { piTurnFailed } from "../transcripts/turn-outcome.ts";
-import { piSessionFile, piSessionLog } from "./pi-sessions.ts";
+import { locatePiStyle, piSessionLog } from "./pi-sessions.ts";
 import { parsePi } from "./pi-transcript.ts";
 import { piIdent } from "./simple-ident.ts";
 import type { HarnessDriver } from "./types.ts";
@@ -18,10 +18,7 @@ export const pi: HarnessDriver = {
 	...piIdent,
 
 	transcript: {
-		async locate(agent) {
-			const file = await piSessionFile(".pi", agent.cwd, agent.sessionId);
-			return file ? { kind: "file", path: file } : null;
-		},
+		locate: (agent) => locatePiStyle("pi", agent),
 		parse: parsePi,
 		turnFailed: piTurnFailed,
 	},
