@@ -83,6 +83,8 @@ export interface HarnessName {
 
 /** The parts of an agent a driver reads to find its model or session log. */
 export type SessionRef = Pick<Agent, "harness" | "sessionId" | "cwd"> & {
+	/** The agent's process, when known (pi and omp find their open session file by it). */
+	pid?: number | null;
 	/** The agent's meta: `resumeKey` names the host session of a pid-keyed agent. */
 	meta?: Record<string, string>;
 };

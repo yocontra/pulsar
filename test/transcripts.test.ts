@@ -9,6 +9,7 @@ import {
 	readFileSync,
 	rmSync,
 	truncateSync,
+	utimesSync,
 	writeFileSync,
 	writeSync,
 } from "node:fs";
@@ -22,6 +23,7 @@ import {
 	hostSessionId,
 	locatePiStyle,
 	piSessionFile,
+	sessionFolderNames,
 } from "../src/harnesses/pi-sessions.ts";
 import { isOmpHost } from "../src/harnesses/simple-ident.ts";
 import type { HarnessDriver } from "../src/harnesses/types.ts";
@@ -582,6 +584,73 @@ describe("locate", () => {
 				dir,
 			),
 		).toEqual({ kind: "file", path: file });
+	});
+
+	test("pi/omp folder names, as the real folders are named", () => {
+		const home = "/Users/me";
+		// omp: home-relative (`-tmp`, `-Projects-pg_accel`); pi: the full path.
+		expect(sessionFolderNames("/Users/me/tmp", home)).toEqual([
+			"--Users-me-tmp--",
+			"-tmp",
+		]);
+		expect(sessionFolderNames("/Users/me/Projects/pg_accel", home)).toEqual([
+			"--Users-me-Projects-pg_accel--",
+			"-Projects-pg_accel",
+		]);
+		expect(sessionFolderNames(home, home)).toEqual(["--Users-me--", "-"]);
+		// Outside the home folder both use the full path.
+		expect(sessionFolderNames("/Volumes/Silo/security-research", home)).toEqual(
+			["--Volumes-Silo-security-research--"],
+		);
+		// A dot is tried kept and as `-`.
+		expect(sessionFolderNames("/Users/me/Projects/a.io", home)).toEqual([
+			"--Users-me-Projects-a.io--",
+			"--Users-me-Projects-a-io--",
+			"-Projects-a.io",
+			"-Projects-a-io",
+		]);
+	});
+
+	test("pi/omp: no session id: the file the process has open, not the newest", async () => {
+		// Two omp sessions in ~/tmp, registered as pi by an older extension
+		// (no resumeKey): lsof names the one this pid writes.
+		const folder = join(dir, ".omp", "agent", "sessions", "-tmp");
+		mkdirSync(join(folder, "2026-11-20T04-03-57-433Z_01a1f720"), {
+			recursive: true,
+		});
+		const mine = join(folder, "2026-11-20T04-03-57-433Z_01a1f720.jsonl");
+		const newer = join(folder, "2026-11-22T07-43-06-660Z_01a20235.jsonl");
+		const sub = join(
+			folder,
+			"2026-11-20T04-03-57-433Z_01a1f720",
+			"0-Task.jsonl",
+		);
+		writeFileSync(mine, "");
+		writeFileSync(sub, "");
+		writeFileSync(newer, "");
+		utimesSync(mine, 1000, 1000);
+		utimesSync(newer, 2000, 2000);
+		const agent = {
+			harness: "pi",
+			sessionId: null,
+			cwd: join(dir, "tmp"),
+			pid: 84724,
+		};
+		const asked: number[] = [];
+		const openFiles = async (pid: number) => {
+			asked.push(pid);
+			return [sub, mine, "/usr/lib/dyld", join(dir, "notes.jsonl")];
+		};
+		expect(await locatePiStyle("pi", agent, dir, openFiles)).toEqual({
+			kind: "file",
+			path: mine,
+			headerLine: true,
+		});
+		expect(asked).toEqual([84724]);
+		// lsof finds nothing (not running, or no file yet): the newest, a guess.
+		expect(
+			await locatePiStyle("omp", { ...agent, pid: 1 }, dir, async () => []),
+		).toEqual({ kind: "file", path: newer, headerLine: true, guess: true });
 	});
 
 	test("omp marks its header line; OpenCode has no transcript in v1", () => {

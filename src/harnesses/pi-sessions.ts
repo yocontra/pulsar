@@ -1,6 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { exec } from "../exec.ts";
 import type { TranscriptSource } from "../transcripts/types.ts";
 import { tailAsync } from "../util.ts";
 import type { SessionRef } from "./types.ts";
@@ -11,12 +12,78 @@ import type { SessionRef } from "./types.ts";
  * (omp uses the `--…--` form only outside the home folder).
  */
 export function sessionFolderNames(cwd: string, home = homedir()): string[] {
-	const dashed = (p: string) => p.replace(/^\//, "").replace(/\//g, "-");
-	const names = [`--${dashed(cwd)}--`];
+	// `/` becomes `-`; other characters a folder name may not keep are tried
+	// as `-` too (an unverified encoding costs one missed readdir).
+	const forms = (p: string) => {
+		const plain = p.replace(/^\//, "").replace(/\//g, "-");
+		const strict = plain.replace(/[^A-Za-z0-9_.-]/g, "-");
+		const nodots = strict.replace(/\./g, "-");
+		return [...new Set([plain, strict, nodots])];
+	};
+	const names = forms(cwd).map((d) => `--${d}--`);
 	if (cwd === home) names.push("-");
 	else if (cwd.startsWith(`${home}/`))
-		names.push(`-${dashed(cwd.slice(home.length))}`);
-	return names;
+		for (const d of forms(cwd.slice(home.length))) names.push(`-${d}`);
+	return [...new Set(names)];
+}
+
+/** Lists the files a process has open (`lsof`); [] when it can't tell. */
+export type OpenFiles = (pid: number) => Promise<string[]>;
+
+const lsofOpenFiles: OpenFiles = async (pid) => {
+	if (process.platform === "win32") return [];
+	const r = await exec("lsof", ["-n", "-P", "-w", "-Fn", "-p", String(pid)], {
+		timeoutMs: 3000,
+		maxBuffer: 4 * 1024 * 1024,
+		lane: "background",
+	});
+	// lsof exits 1 when it could not read some descriptors: use what it listed.
+	return r.stdout
+		.split("\n")
+		.filter((l) => l.startsWith("n/"))
+		.map((l) => l.slice(1));
+};
+
+/** A process's open files, briefly (a watcher's tick must not run lsof each time). */
+const openByPid = new Map<
+	number,
+	{ at: number; list: OpenFiles; files: Promise<string[]> }
+>();
+const PID_CACHE_MS = 5000;
+
+/**
+ * The session file a running pi or omp process has open:
+ * `~/<dir>/agent/sessions/<folder>/<file>.jsonl` (a file one level deeper
+ * is a subagent's). Exact for a live session with no session id.
+ */
+export async function openSessionFile(
+	dir: string,
+	pid: number,
+	home = homedir(),
+	openFiles: OpenFiles = lsofOpenFiles,
+): Promise<string | null> {
+	const root = join(home, dir, "agent", "sessions");
+	let hit = openByPid.get(pid);
+	if (!hit || Date.now() - hit.at >= PID_CACHE_MS || hit.list !== openFiles) {
+		if (openByPid.size > 1000) openByPid.clear();
+		hit = {
+			at: Date.now(),
+			list: openFiles,
+			files: openFiles(pid).catch(() => []),
+		};
+		openByPid.set(pid, hit);
+	}
+	let file: string | null = null;
+	let newest = -1;
+	for (const path of await hit.files) {
+		if (!path.endsWith(".jsonl") || dirname(dirname(path)) !== root) continue;
+		const t = (await stat(path).catch(() => null))?.mtimeMs ?? -1;
+		if (t > newest) {
+			newest = t;
+			file = path;
+		}
+	}
+	return file;
 }
 
 /**
@@ -121,14 +188,17 @@ export async function piSessionFile(
 const PI_STYLE = { pi: ".pi", omp: ".omp" } as const;
 
 /**
- * A pi-style agent's transcript. With a host session id: that session's
- * file, in this harness's folder or the other pi-style one (an omp session
- * an older extension registered as pi); else the newest file for its cwd.
+ * A pi-style agent's transcript, in this harness's folder or the other
+ * pi-style one (an omp session an older extension registered as pi):
+ * 1. with a host session id, that session's file;
+ * 2. else the session file its process has open (exact while it runs);
+ * 3. else the newest file for its cwd (a guess).
  */
 export async function locatePiStyle(
 	harness: keyof typeof PI_STYLE,
 	agent: SessionRef,
 	home = process.env.HOME || homedir(),
+	openFiles: OpenFiles = lsofOpenFiles,
 ): Promise<TranscriptSource | null> {
 	const other = harness === "pi" ? "omp" : "pi";
 	const source = (
@@ -145,6 +215,17 @@ export async function locatePiStyle(
 	if (id) {
 		for (const h of [harness, other] as const) {
 			const file = await piSessionFileById(PI_STYLE[h], agent.cwd, id, home);
+			if (file) return source(h, file);
+		}
+	}
+	if (agent.pid) {
+		for (const h of [harness, other] as const) {
+			const file = await openSessionFile(
+				PI_STYLE[h],
+				agent.pid,
+				home,
+				openFiles,
+			);
 			if (file) return source(h, file);
 		}
 	}
