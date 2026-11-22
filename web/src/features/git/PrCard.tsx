@@ -8,6 +8,7 @@ import {
 	CircleDotIcon,
 	CircleIcon,
 	ExternalLinkIcon,
+	FileDiffIcon,
 	GitPullRequestIcon,
 	LoaderIcon,
 	MessageSquareIcon,
@@ -21,6 +22,8 @@ import type {
 	GitPrDetails,
 } from "../../api/types.ts";
 import { ExtLink } from "../../components/ExtLink.tsx";
+import { navigate } from "../../lib/router.ts";
+import { can } from "../../lib/store.ts";
 import { toast } from "../../lib/toast.ts";
 import { fixRequest } from "./model.ts";
 import { usePrDetails } from "./run.ts";
@@ -66,6 +69,7 @@ export function PrCard({
 	fallback,
 	mobile,
 	onAsk,
+	onReview,
 }: {
 	agent: AgentRow;
 	/** The PR from the status, shown while the details load. */
@@ -73,6 +77,8 @@ export function PrCard({
 	mobile: boolean;
 	/** Opens the confirm for "Ask {agent} to fix" with this text. */
 	onAsk: (text: string) => void;
+	/** Closes what holds the card before "Review" opens the review page. */
+	onReview?: () => void;
 }) {
 	const q = usePrDetails(agent.id, true);
 	const d = q.data;
@@ -169,6 +175,19 @@ export function PrCard({
 				</section>
 			)}
 			<div className="g-pr-foot">
+				{can("prreview") && (
+					<button
+						type="button"
+						className={mobile ? "m-btn gray wide" : "d-btn sm"}
+						onClick={() => {
+							onReview?.();
+							navigate({ view: "page", name: "pr", arg: agent.id });
+						}}
+					>
+						<FileDiffIcon aria-hidden="true" />
+						Review
+					</button>
+				)}
 				<button
 					type="button"
 					className={mobile ? "m-btn tinted wide" : "d-btn sm"}

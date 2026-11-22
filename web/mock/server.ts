@@ -129,6 +129,13 @@ import { issueControl, issueDetails } from "./issues.ts";
 import { launchRoute } from "./launch.ts";
 import { searchMessages, warmSearch } from "./search.ts";
 import {
+	prReview,
+	prReviewAct,
+	prReviewControl,
+	prReviewFile,
+	resetPrReview,
+} from "./prreview.ts";
+import {
 	forParentBody,
 	subagentById,
 	subagentCounts,
@@ -1823,6 +1830,7 @@ function realtime(raw: unknown) {
 		case "restore": {
 			resetChanges();
 			resetGit();
+			resetPrReview();
 			for (const a of rtAdded) {
 				agents.splice(agents.indexOf(a), 1);
 				agentById.delete(a.id);
@@ -2690,6 +2698,55 @@ async function route(
 		stepMs: Number(process.env.PULSAR_MOCK_LAUNCH_MS ?? 600),
 	});
 	if (launched !== null) return json(launched);
+	// PR review (web/mock/prreview.ts): reads, and the four acting ops.
+	if (
+		seg[0] === "agents" &&
+		seg[2] === "git" &&
+		(["review", "comment", "reply", "resolve"].includes(seg[3]!) ||
+			(seg[3] === "review" && seg[4] === "file"))
+	) {
+		const raw = seg[1]!;
+		const a = agentOr404(
+			raw.includes("/") ? raw.slice(raw.indexOf("/") + 1) : raw,
+		);
+		try {
+			if (GET && seg[3] === "review" && seg.length === 4)
+				return json(prReview(a));
+			if (GET && seg[3] === "review" && seg[4] === "file") {
+				const p = url.searchParams.get("path");
+				if (!p) throw badRequest("path: required");
+				return json(prReviewFile(a, p));
+			}
+			if (POST && seg.length === 4) {
+				const body = await jsonBody(req);
+				if (!body || typeof body !== "object" || Array.isArray(body))
+					throw badRequest("the body must be an object");
+				const { assertion, ...params } = body as Record<string, unknown>;
+				await requireActing(
+					req,
+					`git.${seg[3]}`,
+					{ agent: raw },
+					params,
+					assertion,
+				);
+				return json(prReviewAct(a, seg[3]!, params));
+			}
+		} catch (e) {
+			if (e instanceof GitMockError)
+				throw new ApiError(e.status, e.code, e.message);
+			throw e;
+		}
+	}
+	// Mock only: the gh account wrote the PR or not; fail the next write.
+	if (POST && path === "/__mock/prreview") {
+		const b = (await jsonBody(req)) as { agent: string } & Parameters<
+			typeof prReviewControl
+		>[1];
+		const named = agents.filter((x) => x.name === b.agent);
+		const a = named.find((x) => x.fixed) ?? named[0];
+		if (!a) throw notFound(`no agent ${b.agent}`);
+		return json(prReviewControl(a, b));
+	}
 	// Git actions (web/mock/git.ts). An agent address (`<machine>/<id>`)
 	// stands for an agent on another machine: its acts need that machine's
 	// passkey check, like the daemon's home-node proof.

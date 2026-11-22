@@ -328,6 +328,7 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 													setAsk(t);
 													setView("ask");
 												}}
+												onReview={close}
 											/>
 										</div>
 									)}

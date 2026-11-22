@@ -126,6 +126,7 @@ function PrChip({
 								setOpen(false);
 								onAsk(t);
 							}}
+							onReview={() => setOpen(false)}
 						/>
 					)}
 				</Popover.Content>

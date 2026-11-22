@@ -27,11 +27,17 @@ export function parsePatch(patch: string): ParsedPatch {
 	let hunks = 0;
 	let inHunk = false;
 	let oldMode = "";
+	// The file's line numbers, from each hunk header ("@@ -12,7 +12,9 @@").
+	let oldLine = 0;
+	let newLine = 0;
 	const lines = patch.split("\n");
 	if (lines[lines.length - 1] === "") lines.pop();
 	for (const line of lines) {
 		if (line.startsWith("@@")) {
 			inHunk = true;
+			const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+			oldLine = m ? Number(m[1]) : 0;
+			newLine = m ? Number(m[2]) : 0;
 			items.push({ hunk: line, key: `h${hunks++}` });
 			continue;
 		}
@@ -54,17 +60,34 @@ export function parsePatch(patch: string): ParsedPatch {
 		const sign = line[0];
 		const text = line.slice(1);
 		if (sign === "+") {
-			const row: DiffRow = { sign: "+", b: after.length, text };
+			const row: DiffRow = {
+				sign: "+",
+				b: after.length,
+				text,
+				newLine: newLine++,
+			};
 			after.push(text);
 			items.push(row);
 			added++;
 		} else if (sign === "-") {
-			const row: DiffRow = { sign: "-", a: before.length, text };
+			const row: DiffRow = {
+				sign: "-",
+				a: before.length,
+				text,
+				oldLine: oldLine++,
+			};
 			before.push(text);
 			items.push(row);
 			removed++;
 		} else if (sign === " " || line === "") {
-			items.push({ sign: " ", a: before.length, b: after.length, text });
+			items.push({
+				sign: " ",
+				a: before.length,
+				b: after.length,
+				text,
+				oldLine: oldLine++,
+				newLine: newLine++,
+			});
 			before.push(text);
 			after.push(text);
 		}
