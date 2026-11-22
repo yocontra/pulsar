@@ -1843,6 +1843,10 @@
 	color: var(--d-fg);
 	font-size: 14px;
 }
+/* A closing note (expired, read only, the outcome) under the details. */
+.prompt-inline .approval-card > :is(p.muted, p.outcome) {
+	margin-top: 12px;
+}
 .prompt-inline .approval-card > header {
 	display: flex;
 	align-items: center;

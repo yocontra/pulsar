@@ -164,6 +164,7 @@ export function AgentStatus({
 	now,
 	variant = "plain",
 	className,
+	short = false,
 }: {
 	state: AgentState;
 	/** When the agent entered this state (ms); adds "40m" to Idle. */
@@ -178,13 +179,19 @@ export function AgentStatus({
 	now?: number;
 	variant?: "soft" | "plain";
 	className?: string;
+	/** Short words for a narrow title bar ("Needs approval"). */
+	short?: boolean;
 }) {
 	const words =
 		state === "needs-you"
 			? needsReason === "approval"
-				? "Waiting for approval"
+				? short
+					? "Needs approval"
+					: "Waiting for approval"
 				: needsReason === "terminal"
-					? "Waiting in the terminal"
+					? short
+						? "In the terminal"
+						: "Waiting in the terminal"
 					: "Needs you"
 			: state === "idle"
 				? lastSession

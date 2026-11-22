@@ -6,7 +6,7 @@
 import { EllipsisIcon, ShieldCheckIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import type { Approval } from "../api/types.ts";
-import { focusPrompt } from "../approval/focus.ts";
+import { focusPrompt, promptOnScreen } from "../approval/focus.ts";
 import { ChangesButton } from "../changes/ChangesButton.tsx";
 import { shortModel } from "../lib/format.ts";
 import { Slot } from "../lib/registry.tsx";
@@ -127,7 +127,7 @@ function AgentPageImpl({ id }: { id: string }) {
 							<h1>{a?.name ?? "Agent"}</h1>
 							{a && (
 								<span className="p-nav-sub">
-									<AgentStatus a={a} reason />
+									<AgentStatus a={a} reason short />
 									<span className="p-nav-sub-more">
 										{a.model
 											? ` · ${shortModel(a.model)}`
@@ -152,7 +152,7 @@ function AgentPageImpl({ id }: { id: string }) {
 				{subagentsLabel(a?.subagents, showFinished.value) && (
 					<SubagentsSection agentId={id} />
 				)}
-				{pending && att?.approval && (
+				{pending && att?.approval && promptOnScreen.value !== id && (
 					<IonToolbar className="p-approval-bar">
 						<button
 							type="button"

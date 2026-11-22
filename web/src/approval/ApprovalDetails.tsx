@@ -98,7 +98,12 @@ export function ApprovalDetails({
 				</span>
 			</p>
 
-			<section className="ds-ap-input" aria-label="Exactly what it runs">
+			<section
+				className="ds-ap-input"
+				aria-label="Exactly what it runs"
+				// The input's hash, to compare with the agent's own screen.
+				title={readOnly ? undefined : `Input ${ap.inputHash}`}
+			>
 				<ToolInput tool={ap.tool} input={ap.input} />
 			</section>
 

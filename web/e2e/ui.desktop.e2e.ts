@@ -6,7 +6,14 @@
  * on rendered screens in both themes, with a screenshot per screen.
  */
 import type { Page } from "@playwright/test";
-import { agentId, expect, ready, test } from "./fixtures.ts";
+import {
+	agentId,
+	expect,
+	localhostBase,
+	ready,
+	test,
+	withPasskey,
+} from "./fixtures.ts";
 import {
 	baselineY,
 	contrastFailures,
@@ -144,6 +151,45 @@ test.describe("desktop UI", () => {
 				"appearance",
 			);
 		});
+
+	test("settings: every card's rows share one inset; a clicked section stays current", async ({
+		page,
+		request,
+		context,
+	}) => {
+		// A passkey, so the Proven devices card has rows (WebAuthn needs a host name).
+		await page.goto(localhostBase());
+		await withPasskey(page, request, context);
+		await page.reload();
+		await page.getByRole("button", { name: "Settings" }).first().click();
+		const keys = page.locator('section[aria-labelledby="set-keys"] .d-set-row');
+		await expect(keys.first()).toBeVisible();
+		// Each row's first child, measured from its card's left edge.
+		const insets = await page
+			.locator(".d-settings .d-set-card > .d-set-row")
+			.evaluateAll((rows) =>
+				rows.map((r) => {
+					const card = r.parentElement!.getBoundingClientRect();
+					const first = r.firstElementChild!.getBoundingClientRect();
+					return Math.round(first.left - card.left);
+				}),
+			);
+		expect(insets.length).toBeGreaterThan(4);
+		expect(new Set(insets)).toEqual(new Set([insets[0]]));
+		// A section near the bottom can't scroll to the top: it stays current.
+		const nav = page.getByRole("navigation", { name: "Settings sections" });
+		await nav.getByRole("button", { name: "Machines" }).click();
+		await page.mouse.move(0, 0);
+		await expect(nav.locator('[aria-current="true"]')).toHaveText("Machines");
+		// Once the smooth scroll has reached the bottom, still Machines.
+		const box = page.locator(".d-set-scroll");
+		await expect
+			.poll(() =>
+				box.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop),
+			)
+			.toBeLessThanOrEqual(2);
+		await expect(nav.locator('[aria-current="true"]')).toHaveText("Machines");
+	});
 
 	test("agent rows, needs badges and the header pill line up", async ({
 		page,

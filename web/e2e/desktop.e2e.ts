@@ -616,6 +616,42 @@ test.describe("desktop", () => {
 		await expect(spec).toHaveAttribute("target", "_blank");
 		await expect(spec).toHaveAttribute("rel", "noopener noreferrer");
 		await expect(t).not.toContainText("the spec [blocked]");
+		// File paths are file references, never links into the app's origin.
+		expect(
+			await t
+				.locator(
+					'a[href*="/Users/"], a[href*="notes.md"], a[href^="file:"], a[href="#usage"]',
+				)
+				.count(),
+		).toBe(0);
+		const ref = t.getByRole("button", { name: "compare page" });
+		await expect(ref).toHaveAttribute(
+			"title",
+			"Copy /Users/me/demo/.qa/compare.html",
+		);
+		await expect(t.getByRole("button", { name: "a file url" })).toHaveAttribute(
+			"title",
+			"Copy /tmp/a b.txt",
+		);
+		await expect(t.getByText("a section", { exact: true })).toBeVisible();
+		await page.evaluate(() => {
+			(window as { __copied?: string }).__copied = "";
+			Object.defineProperty(navigator, "clipboard", {
+				configurable: true,
+				value: {
+					writeText: async (s: string) => {
+						(window as { __copied?: string }).__copied = s;
+					},
+				},
+			});
+		});
+		const before = page.url();
+		await ref.click();
+		await expect(page.getByText("Path copied")).toBeVisible();
+		expect(
+			await page.evaluate(() => (window as { __copied?: string }).__copied),
+		).toBe("/Users/me/demo/.qa/compare.html");
+		expect(page.url()).toBe(before);
 		// Links only to http(s)/mailto.
 		expect(
 			await page

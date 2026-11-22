@@ -130,12 +130,16 @@ export function harnessName(h: string) {
 export function AgentStatus({
 	a,
 	reason = false,
+	short = false,
 }: {
 	a: AgentRow;
 	reason?: boolean;
+	/** Short words, for the agent page's title bar. */
+	short?: boolean;
 }) {
 	return (
 		<DsAgentStatus
+			short={short}
 			state={a.state}
 			since={a.stateSince}
 			needsReason={reason ? a.needsYou?.reason : undefined}

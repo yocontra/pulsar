@@ -8,7 +8,7 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
 import type { AttentionItem } from "../api/types.ts";
 import { observer } from "../lib/signals.ts";
-import { promptFocus } from "./focus.ts";
+import { promptFocus, promptOnScreen } from "./focus.ts";
 import { OutcomeLine } from "./OutcomeLine.tsx";
 
 const ApprovalCard = lazy(() => import("./ApprovalCard.tsx"));
@@ -47,6 +47,23 @@ function PromptInlineImpl({
 		let timer = setTimeout(go, 0);
 		return () => clearTimeout(timer);
 	}, [want]);
+
+	// Tell the page whether the card is on screen (the phone's banner).
+	const agentId = item.agent.id;
+	const pending = ap.state === "pending";
+	useEffect(() => {
+		const el = ref.current;
+		if (!el || !pending || typeof IntersectionObserver === "undefined") return;
+		const io = new IntersectionObserver(([e]) => {
+			if (e?.isIntersecting) promptOnScreen.value = agentId;
+			else if (promptOnScreen.peek() === agentId) promptOnScreen.value = null;
+		});
+		io.observe(el);
+		return () => {
+			io.disconnect();
+			if (promptOnScreen.peek() === agentId) promptOnScreen.value = null;
+		};
+	}, [agentId, pending]);
 
 	if (ap.state !== "pending" && ap.outcome)
 		return <OutcomeLine outcome={ap.outcome} />;

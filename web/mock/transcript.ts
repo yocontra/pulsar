@@ -291,7 +291,7 @@ function xssHistory(log: Log, agent: MockAgent): TranscriptEvent[] {
 	push({
 		role: "assistant",
 		kind: "text",
-		text: 'Docs: [the spec](https://example.com/spec?x=1). Pixels: ![px](https://evil.example/pixel.gif) and <img src="https://evil.example/p2.gif"> and [data link](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==) and <a href="vbscript:msgbox(1)">vb</a> and <form action="https://evil.example"><button>go</button></form>',
+		text: 'Docs: [the spec](https://example.com/spec?x=1). Pixels: ![px](https://evil.example/pixel.gif) and <img src="https://evil.example/p2.gif"> and [data link](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==) and <a href="vbscript:msgbox(1)">vb</a> and <form action="https://evil.example"><button>go</button></form>. Files: [compare page](/Users/me/demo/.qa/compare.html), [notes](./docs/notes.md), [a file url](file:///tmp/a%20b.txt) and [a section](#usage).',
 	});
 	const bad = ev(log, agent, {
 		role: "user",

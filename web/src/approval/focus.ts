@@ -7,6 +7,12 @@ import { signal } from "../lib/signals.ts";
 
 export const promptFocus = signal<{ agentId: string; n: number } | null>(null);
 
+/**
+ * The agent whose inline prompt card is on screen now (PromptInline): the
+ * phone's "Approval needed" banner hides while the card itself shows.
+ */
+export const promptOnScreen = signal<string | null>(null);
+
 let n = 0;
 export function focusPrompt(agentId: string) {
 	promptFocus.value = { agentId, n: ++n };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, ProveCancelled, setSessionToken } from "../api/client.ts";
 import type { PasskeyInfo, UserSessionInfo } from "../api/types.ts";
 import { showQr } from "../components/chrome.tsx";
@@ -160,14 +160,28 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 		),
 		...extra.map((x) => [`set-x-${x.id}`, x.title] as const),
 	];
+	// A clicked section stays current while its smooth scroll runs (one
+	// near the bottom never reaches the top, so the spy would pick another).
+	const jumping = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const jump = (id: string) => {
 		setActive(id);
+		if (jumping.current) clearTimeout(jumping.current);
+		jumping.current = setTimeout(() => {
+			jumping.current = null;
+		}, 1000);
 		document
 			.getElementById(id)
 			?.closest("section")
 			?.scrollIntoView({ block: "start", behavior: "smooth" });
 	};
+	useEffect(
+		() => () => {
+			if (jumping.current) clearTimeout(jumping.current);
+		},
+		[],
+	);
 	const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+		if (jumping.current) return;
 		const box = e.currentTarget;
 		const top = box.getBoundingClientRect().top;
 		let cur: string = shown[0]![0];
@@ -175,8 +189,8 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 			const el = document.getElementById(id);
 			if (el && el.getBoundingClientRect().top - top < 80) cur = id;
 		}
-		// At the bottom the last sections can't reach the top: the last one
-		// is current (a click on it scrolls here).
+		// Scrolled to the bottom by hand: the last sections can't reach the
+		// top, so the last one is current.
 		if (
 			box.scrollTop > 0 &&
 			box.scrollTop + box.clientHeight >= box.scrollHeight - 2

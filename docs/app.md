@@ -20,7 +20,7 @@ The sidebar (the home screen on a phone) lists every agent as a tree: machines, 
 
 ## A session
 
-Open an agent to watch its session live: your prompts, its replies and thinking (collapsed), tool calls as one line each (Edit and Write expand to a diff), code with highlighting, math, Mermaid diagrams, tables and images. Older events load with "Load earlier". Agent text is shown as text: raw HTML, scripts and remote images never run or load.
+Open an agent to watch its session live: your prompts, its replies and thinking (collapsed), tool calls as one line each (Edit and Write expand to a diff), code with highlighting, math, Mermaid diagrams, tables and images. Older events load with "Load earlier". Agent text is shown as text: raw HTML, scripts and remote images never run or load. Web links open in a new tab. A link to a file path (`/Users/…/report.html`, `./src/a.ts`, `file://…`) is not a web page: click it to open the file in Changes when the agent changed it, or to copy the path.
 
 The composer at the bottom sends to this agent. Choose how urgent it is:
 
@@ -104,7 +104,7 @@ Starting needs a proven human (another machine asks for its own passkey check). 
 
 ## Approvals
 
-An agent's permission prompt shows in Needs you and in its session as a card: the tool, every argument exactly as the agent sent it (spaces, tabs, newlines and hidden characters are marked), the folder and branch, and a countdown. Choose Allow once, Allow for session (the rules it adds are listed) or Deny with a note. The prompt also stays on the machine; whichever answer comes first wins, and the card says where it was answered.
+An agent's permission prompt shows in Needs you and in its session as a card: the tool, every argument exactly as the agent sent it (spaces, tabs, newlines and hidden characters are marked, hidden characters as red tags), the folder and branch, and a countdown. Choose Allow once, Allow for session (the rules it adds are listed) or Deny with a note. The prompt also stays on the machine; whichever answer comes first wins, and the card says where it was answered.
 
 A card stays answerable for a day, also when Pulsar restarts. Codex prompts can be answered unless the session was started with `codex --no-daemon`.
 
