@@ -503,7 +503,7 @@ function MarkdownImage({
 			src={finalSrc}
 			alt={alt ?? ""}
 			className="h-auto max-w-full rounded-md"
-			loading="lazy"
+			// Not lazy: blob: or data: bytes already in memory (see ImageThumb).
 		/>
 	);
 }
