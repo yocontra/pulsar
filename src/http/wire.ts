@@ -93,7 +93,7 @@ export type SubagentState = "running" | "idle" | "done";
  */
 export type SubagentKind = "task" | "teammate" | "thread" | "session";
 
-/** `AgentRow.subagents`. */
+/** `AgentRow.subagents`: what the list holds (not those that finished more than a day ago). */
 export interface SubagentCounts {
 	total: number;
 	running: number;

@@ -362,12 +362,31 @@ describe("dead subagents", () => {
 		});
 	});
 
-	test("a gone parent's subagents are all done", async () => {
-		const found = await driverFor("claude")!.subagents!.list({
-			...lead2,
-			status: "gone",
-		});
-		expect(found.every((f) => f.state === "done")).toBe(true);
+	test("a gone parent's subagents are all done on the next sweep", async () => {
+		// Alive again in its team, then the parent session ends.
+		writeClaudeTeam(
+			join(dir, "claude"),
+			"team2",
+			SESSION2,
+			[{ name: "mate", joinedAt: Date.now() - 60 * 60_000 }],
+			{ mtime: Date.now() + 10_000 },
+		);
+		await service.subagents.refresh(lead2.id);
+		expect(service.subagents.counts(lead2.id)?.done).toBe(1);
+		service.registry.get(lead2.id)!.status = "gone";
+		try {
+			await service.subagents.sweep();
+			expect(service.subagents.counts(lead2.id)).toEqual({
+				total: 2,
+				running: 0,
+				done: 2,
+			});
+			// Listing it again (someone opens it) keeps them done.
+			await service.subagents.refresh(lead2.id);
+			expect(service.subagents.counts(lead2.id)?.done).toBe(2);
+		} finally {
+			service.registry.get(lead2.id)!.status = "busy";
+		}
 	});
 });
 

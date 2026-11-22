@@ -184,7 +184,21 @@ export class Subagents {
 		return run;
 	}
 
+	/** A parent that is gone or whose process died: none of its subagents can be alive. */
+	private dead(agent: Agent): boolean {
+		return (
+			agent.status === "gone" ||
+			!this.registry.live().some((a) => a.id === agent.id)
+		);
+	}
+
 	private apply(agent: Agent, e: Entry, found: FoundSubagent[]) {
+		if (this.dead(agent))
+			found = found.map((f) =>
+				f.state === "done"
+					? f
+					: { ...f, state: "done", finishedAt: f.finishedAt ?? f.updatedAt },
+			);
 		const driver = driverFor(agent.harness);
 		const messaging = messagingFor(driver, agent.name);
 		const hasTranscript = Boolean(
@@ -233,7 +247,9 @@ export class Subagents {
 
 	/**
 	 * The sweep: one cheap check per live agent; lists again only where the
-	 * stamp moved, a child still runs, or (API harnesses) someone watches.
+	 * stamp moved, a child still runs, a child is idle (every LIVE_SWEEP_MS),
+	 * finished ones may age out (every STALE_SWEEP_MS), or (API harnesses)
+	 * someone watches. A known parent that is gone has all its children done.
 	 * Sequential, so it never floods the disk or a harness server.
 	 */
 	async sweep() {
@@ -272,8 +288,12 @@ export class Subagents {
 				await this.refresh(agent.id);
 		}
 		// Parents that left: drop them (they come back listed if they return).
-		for (const id of this.entries.keys())
-			if (!this.registry.get(id)) this.entries.delete(id);
+		// Parents still known but gone: their subagents are all done.
+		for (const [id, e] of this.entries) {
+			const agent = this.registry.get(id);
+			if (!agent) this.entries.delete(id);
+			else if (e.live > 0 && this.dead(agent)) this.apply(agent, e, e.found);
+		}
 	}
 
 	/** Someone looks at this parent: keep it current. */
