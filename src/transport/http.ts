@@ -364,6 +364,8 @@ const SubscriptionBody = z
 			.nullable()
 			.default(null),
 		receipts: z.array(z.string().max(100)).max(50).default([]),
+		/** Agents whose queue strip the app shows. */
+		queue: z.array(z.string().max(300)).max(10).default([]),
 		changes: z
 			.object({
 				agent: z.string().max(300),
@@ -1397,6 +1399,39 @@ export class HttpTransport {
 						{ agent: c.req.param("id") },
 						params,
 						assertion,
+					),
+				);
+			});
+		// The queue strip (src/service/queue.ts): what has not reached an agent's
+		// conversation yet. The operator's own messages act as a send does;
+		// anyone else's are acting ops (Prove Human, or the home node's check).
+		api.get("/agents/:id/queue", async (c) =>
+			c.json(await this.service.queue.list(who(c), c.req.param("id"))),
+		);
+		for (const action of ["withdraw", "promote", "edit"] as const)
+			api.post(`/agents/:id/queue/:messageId/${action}`, async (c) => {
+				const raw = await jsonBody(c);
+				if (!raw || typeof raw !== "object" || Array.isArray(raw))
+					throw new RpcError("bad_request", "the body must be an object");
+				const { assertion, body } = raw as Record<string, unknown>;
+				if (body !== undefined && typeof body !== "string")
+					throw new RpcError("bad_request", "`body` must be a string");
+				// As for a send: a session this daemon no longer knows is refused.
+				if (
+					/^Bearer\s+\S+$/i.test(c.req.header("authorization") ?? "") &&
+					!c.get("session")
+				)
+					requireSession(c);
+				return c.json(
+					await this.service.queue.act(
+						who(c),
+						c.req.param("id"),
+						c.req.param("messageId"),
+						action,
+						{
+							...(body !== undefined ? { body } : {}),
+							...(assertion !== undefined ? { assertion } : {}),
+						},
 					),
 				);
 			});

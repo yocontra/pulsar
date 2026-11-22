@@ -416,7 +416,8 @@ function toPending(r: Row): PendingDelivery {
 }
 
 /** Final states as an SQL list. */
-const FINAL_SQL = "('replied', 'done', 'nacked', 'expired', 'dead')";
+const FINAL_SQL =
+	"('replied', 'done', 'nacked', 'expired', 'dead', 'withdrawn')";
 const PENDING_SELECT = `SELECT r.*, m.tracked, m.created_at FROM receipts r
 	JOIN messages m ON m.id = r.message_id
 	WHERE m.tracked > 0 AND r.state NOT IN ${FINAL_SQL}`;
@@ -978,6 +979,71 @@ export class Store {
 	}
 
 	/**
+	 * An agent's receipts that may not be in its conversation yet (waiting,
+	 * held, handed to the harness), oldest first, with each message and the
+	 * next scheduler time (the queue strip, src/service/queue.ts).
+	 */
+	queueFor(
+		agentId: string,
+		limit = 200,
+	): { message: Message; receipt: Receipt; dueAt: number | null }[] {
+		const rows = this.db
+			.prepare(
+				`SELECT m.*, r.message_id AS r_message_id, r.agent_id AS r_agent_id,
+				   r.agent_name AS r_agent_name, r.state AS r_state, r.via AS r_via,
+				   r.detail AS r_detail, r.updated_at AS r_updated_at,
+				   r.attempt AS r_attempt, r.due_at AS r_due_at
+				 FROM messages m JOIN receipts r ON r.message_id = m.id
+				 WHERE r.agent_id = ? AND r.state IN ('queued', 'held', 'sent')
+				 ORDER BY m.created_at ASC LIMIT ?`,
+			)
+			.all(agentId, limit) as Row[];
+		return rows.map((r) => ({
+			message: toMessage(r),
+			receipt: {
+				messageId: String(r.r_message_id),
+				agentId: String(r.r_agent_id),
+				agentName: String(r.r_agent_name),
+				state: r.r_state as ReceiptState,
+				via: (r.r_via as string | null) ?? null,
+				detail: (r.r_detail as string | null) ?? null,
+				updatedAt: Number(r.r_updated_at),
+				attempt: Number(r.r_attempt ?? 1),
+			},
+			dueAt: r.r_due_at == null ? null : Number(r.r_due_at),
+		}));
+	}
+
+	/**
+	 * Withdraws one receipt while it is still waiting or held (never one the
+	 * harness has). Returns false when it already moved on.
+	 */
+	withdrawReceipt(
+		messageId: string,
+		agentId: string,
+		detail: string,
+		now: number,
+	): boolean {
+		this.writes++;
+		const r = this.db
+			.prepare(
+				`UPDATE receipts SET state = 'withdrawn', via = 'operator', detail = ?,
+				   updated_at = ?, due_at = NULL
+				 WHERE message_id = ? AND agent_id = ? AND state IN ('queued', 'held')`,
+			)
+			.run(detail, now, messageId, agentId);
+		return Number(r.changes) > 0;
+	}
+
+	/** Replaces a stored message's body (an edit before delivery). */
+	setMessageBody(messageId: string, body: string) {
+		this.writes++;
+		this.db
+			.prepare("UPDATE messages SET body = ? WHERE id = ?")
+			.run(body, messageId);
+	}
+
+	/**
 	 * Moves an agent's receipts to a new id (a session re-registered). Where the
 	 * new id already has a receipt for the same message, that one is kept and the
 	 * old id's copy is dropped.
@@ -1176,6 +1242,31 @@ export class Store {
 				 WHERE peer_machine = ? AND message_id = ?`,
 			)
 			.run(next, error.slice(0, 500), peer, messageId);
+	}
+
+	/**
+	 * Drops one target from a peer's outbox entry; the entry goes once no
+	 * target is left. False when the target was not waiting there.
+	 */
+	outboxDropTarget(peer: string, messageId: string, targetId: string): boolean {
+		const row = this.db
+			.prepare(
+				"SELECT target_ids FROM outbox WHERE peer_machine = ? AND message_id = ?",
+			)
+			.get(peer, messageId) as Row | undefined;
+		if (!row) return false;
+		const ids = JSON.parse(String(row.target_ids)) as string[];
+		if (!ids.includes(targetId)) return false;
+		const left = ids.filter((id) => id !== targetId);
+		this.writes++;
+		if (left.length === 0) this.outboxDone(peer, messageId);
+		else
+			this.db
+				.prepare(
+					"UPDATE outbox SET target_ids = ? WHERE peer_machine = ? AND message_id = ?",
+				)
+				.run(JSON.stringify(left), peer, messageId);
+		return true;
 	}
 
 	/** Makes every entry for a peer due now (its link came back). */

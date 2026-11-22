@@ -400,17 +400,22 @@ export class Deliveries {
 
 	/**
 	 * A tracked message ended without an answer (`nacked`, `dead`,
-	 * `expired`): the sender's `ask` stops waiting, and on a dead letter the
-	 * sender gets a notice. Also runs for receipts a peer sends back.
+	 * `expired`, `withdrawn`): the sender's `ask` stops waiting, and on a
+	 * dead letter or a withdrawal the sender gets a notice. Also runs for
+	 * receipts a peer sends back.
 	 */
 	settle(messageId: string, receipt: Receipt) {
-		if (!["nacked", "dead", "expired"].includes(receipt.state)) return;
+		if (!["nacked", "dead", "expired", "withdrawn"].includes(receipt.state))
+			return;
 		const message = this.store.getMessage(messageId);
 		if (message?.tracked !== 2) return;
 		// A copy a peer delivered: the receipt goes back; the origin settles.
 		if (this.store.originOf(messageId)) return;
 		this.waiters.resolveReplyWaiters(messageId, {
-			event: receipt.state === "nacked" ? "nacked" : "dead",
+			event:
+				receipt.state === "nacked" || receipt.state === "withdrawn"
+					? receipt.state
+					: "dead",
 			receipt,
 		});
 		if (receipt.state === "nacked") return;
@@ -426,7 +431,10 @@ export class Deliveries {
 			fromId: NOTICE_SENDER_ID,
 			fromName: "pulsar",
 			to: sender.id,
-			body: `Your message ${message.id} to ${receipt.agentName} was not done: ${receipt.state === "dead" ? "gave up" : "expired"} (${receipt.detail ?? "no reason"}). It said: ${message.body.slice(0, 200)}`,
+			body:
+				receipt.state === "withdrawn"
+					? `Your message ${message.id} to ${receipt.agentName} was withdrawn by the operator before it arrived. It said: ${message.body.slice(0, 200)}`
+					: `Your message ${message.id} to ${receipt.agentName} was not done: ${receipt.state === "dead" ? "gave up" : "expired"} (${receipt.detail ?? "no reason"}). It said: ${message.body.slice(0, 200)}`,
 			priority: "fyi",
 			replyTo: null,
 			expectReply: false,

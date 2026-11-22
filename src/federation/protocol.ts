@@ -196,6 +196,7 @@ const MAP_DOWN: Partial<Record<ReceiptState, ReceiptState>> = {
 	nacked: "failed",
 	expired: "failed",
 	dead: "failed",
+	withdrawn: "failed",
 };
 
 /** A receipt for the wire; new states map down for a peer without `receipts2`. */
@@ -303,6 +304,20 @@ export type FedAction =
 			agent: string | null;
 			params: unknown;
 			assertion: unknown;
+	  }
+	/*
+	 * The queue strip (src/service/queue.ts): what waits for one of the
+	 * receiver's agents, and an action on one of the operator's own messages
+	 * there (as a send: the receiver checks the message is theirs). Anyone
+	 * else's message goes through `acting.*` (`queue.withdraw` / `queue.promote`).
+	 */
+	| { op: "queue.list"; agent: string }
+	| {
+			op: "queue.act";
+			agent: string;
+			messageId: string;
+			action: "withdraw" | "promote" | "edit";
+			body?: string;
 	  }
 	/** The receiver's own token usage (unpriced), and one of its agents'. */
 	| { op: "usage.rows"; period: UsagePeriod; tz: number }

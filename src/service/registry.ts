@@ -1112,6 +1112,11 @@ export class Registry {
 		}
 	}
 
+	/** An edit by an unproven caller: the message is pushed as unverified from now on. */
+	unverifyMessage(messageId: string) {
+		this.verifiedMessages.delete(messageId);
+	}
+
 	/** The name a verified operator send is tagged with (Tailscale display name, else login). */
 	operatorNameOf(sender: Agent): string {
 		const login = sender.id.startsWith(USER_PREFIX)

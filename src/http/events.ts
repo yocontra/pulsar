@@ -9,6 +9,7 @@ import type { TranscriptEvent } from "../transcripts/types.ts";
 import type {
 	ChangesMode,
 	ChangesSummary,
+	QueueItem,
 	SubagentRow,
 	Subscription,
 } from "./wire.ts";
@@ -76,7 +77,8 @@ type TopicKind =
 	| "security"
 	| "notify"
 	| "launches"
-	| "subagents";
+	| "subagents"
+	| "queue";
 
 interface TopicEvent {
 	seq: number;
@@ -102,6 +104,10 @@ interface Topic {
 	last?: ChangesSummary | null;
 	/** Remote subagent topics: the home node's last list. */
 	remote?: SubagentRow[];
+	/** Queue topics of a remote agent: the home node's last list, and a reload. */
+	remoteQueue?: QueueItem[];
+	queuePartial?: string | null;
+	reloadQueue?: () => void;
 }
 
 interface Connection {
@@ -170,6 +176,8 @@ function topicsOf(sub: Subscription, login: string): string[] {
 	if (sub.changes)
 		keys.push(topicKey("changes", sub.changes.agent, sub.changes.mode));
 	for (const id of sub.subagents ?? []) keys.push(topicKey("subagents", id));
+	// What waits for an agent, as this login sees it (its own messages are editable).
+	for (const id of sub.queue ?? []) keys.push(topicKey("queue", login, id));
 	// Receipts are the user's own sends: the topic is per login.
 	for (const id of sub.receipts) keys.push(topicKey("receipts", login, id));
 	return keys;
@@ -461,6 +469,7 @@ export class EventHub {
 			if (kind === "transcript") this.tailTranscript(topic);
 			if (kind === "changes") this.watchChanges(topic);
 			if (kind === "subagents") this.watchSubagents(topic);
+			if (kind === "queue") this.watchQueue(topic);
 		}
 		return topic;
 	}
@@ -508,6 +517,51 @@ export class EventHub {
 				},
 				() => {},
 			);
+		load();
+		topic.off = this.service.events.on("pool", load);
+	}
+
+	/**
+	 * A queue strip on screen. A local agent's queue is computed from the
+	 * store on each tick; a remote agent's home-node part is fetched when the
+	 * topic opens, on each pool change and after this node's messages change.
+	 */
+	private watchQueue(topic: Topic) {
+		const [login = "", id = ""] = topic.args;
+		const agent = this.service.registry.find(id);
+		const remote = this.service.registry.pool?.queue;
+		if (!agent || !id.includes("/") || !remote) return;
+		const user = { kind: "human" as const, login, node: "" };
+		let loading = false;
+		let again = false;
+		const load = () => {
+			if (loading) {
+				again = true;
+				return;
+			}
+			loading = true;
+			void remote
+				.list(agent.id, user)
+				.then(
+					(items) => {
+						topic.remoteQueue = items;
+						topic.queuePartial = null;
+					},
+					(e: Error) => {
+						topic.queuePartial = `${agent.machine ?? "its machine"} did not answer: ${e.message}`;
+					},
+				)
+				.finally(() => {
+					loading = false;
+					if (this.topics.get(topic.key) !== topic) return;
+					this.refresh(topic.key);
+					if (again) {
+						again = false;
+						load();
+					}
+				});
+		};
+		topic.reloadQueue = load;
 		load();
 		topic.off = this.service.events.on("pool", load);
 	}
@@ -757,6 +811,26 @@ export class EventHub {
 						: { missing: true }),
 				});
 			}
+			case "queue": {
+				const user = { kind: "human" as const, login: a, node: "" };
+				const queue = this.service.queue;
+				const agent = this.service.registry.find(b);
+				if (!agent) return whole("queue", { agentId: b, items: [] });
+				if (!b.includes("/"))
+					return whole("queue", {
+						agentId: b,
+						items: safe(() => queue.local(user, agent), []),
+					});
+				const list = [
+					...safe(() => queue.outbox(user, agent), []),
+					...(topic.remoteQueue ?? []),
+				].sort((x, y) => x.createdAt - y.createdAt);
+				return whole("queue", {
+					agentId: b,
+					items: list,
+					...(topic.queuePartial ? { partial: topic.queuePartial } : {}),
+				});
+			}
 			case "subagents": {
 				const list = this.service.registry.get(a)
 					? this.service.subagents.cached(a)
@@ -810,6 +884,10 @@ export class EventHub {
 			this.lastMessageWrites = writes;
 			for (const [key, topic] of this.topics)
 				if (topic.kind === "receipts") this.refresh(key);
+				else if (topic.kind === "queue") {
+					topic.reloadQueue?.();
+					this.refresh(key);
+				}
 		}
 		const sig = this.signature();
 		if (!this.dirty && sig === this.lastSignature) return;

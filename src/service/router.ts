@@ -204,6 +204,11 @@ export class Router {
 				);
 	}
 
+	/** True when a message can be pushed into the agent's session now (extension or harness driver). */
+	canPush(target: Agent): boolean {
+		return !!this.sessions.extensionFor(target.id) || !!pushFor(target);
+	}
+
 	/** Pushes what arrived while the session had no pulsar connection. */
 	async flushQueued(agent: Agent, maxAttempts?: number) {
 		for (const msg of this.store.unread(agent.id)) {

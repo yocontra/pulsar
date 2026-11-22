@@ -83,6 +83,7 @@ import { isLocalSubagentId, type PoolView } from "./pool.ts";
 import { PrReviewOps } from "./pr-review.ts";
 import { Presence } from "./presence.ts";
 import { Push, type PushOptions } from "./push.ts";
+import { Queue } from "./queue.ts";
 import { Registry } from "./registry.ts";
 import { Router } from "./router.ts";
 import { ServerInteractions } from "./server-interactions.ts";
@@ -218,6 +219,8 @@ export class PulsarService {
 	readonly git: GitOps;
 	readonly issues: IssueOps;
 	readonly prReview: PrReviewOps;
+	/** The queue strip: messages not yet in an agent's conversation (withdraw, send now, edit). */
+	readonly queue: Queue;
 	/** This node's passkeys (approvals and passkey sessions share them). */
 	readonly passkeys: Passkeys;
 	/** Passkey sessions: what the app shows to act as the user. */
@@ -369,6 +372,14 @@ export class PulsarService {
 			registry: this.registry,
 			acting: this.acting,
 			pool: () => this.registry.pool,
+		});
+		this.queue = new Queue({
+			store: this.store,
+			registry: this.registry,
+			router: this.router,
+			deliveries: this.deliveries,
+			events: this.events,
+			acting: this.acting,
 		});
 		this.presence = new Presence({
 			native:

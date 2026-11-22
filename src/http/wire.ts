@@ -1312,6 +1312,8 @@ export interface Subscription {
 	 * agent page): `subagents` events keep them live. Absent: none.
 	 */
 	subagents?: string[];
+	/** Agents whose queue strip is on screen: `queue` events keep it live. Absent: none. */
+	queue?: string[];
 }
 
 /** Error bodies: `{error: {code, message}}`, plus a fresh dry run on a `/send` 409. */
@@ -1389,6 +1391,8 @@ export interface ServerEvents {
 	subagents: ListUpdate<SubagentRow> & { agentId: string };
 	/** A launch started from the app moved on (sent at once to every stream). */
 	launch: LaunchState;
+	/** An agent's queue (a `queue` subscription): messages not yet in its conversation. */
+	queue: QueueList;
 }
 
 export type ServerEventName = keyof ServerEvents;
@@ -1809,4 +1813,57 @@ export interface DiagnosticsReport {
 	machines: MachineDiagnostics[];
 	/** The newest Pulsar version in the pool. */
 	newest: string | null;
+/**
+ * Why a queued message has not reached the agent's conversation yet:
+ * `idle` the harness has it and lands it when the turn ends, `next-turn` it
+ * waits in the inbox, `held` the agent holds its messages, `retrying` a
+ * push failed or a redelivery waits, `offline` the agent's machine can't be
+ * reached, `sending` it is on its way to that machine.
+ */
+export type QueueState =
+	| "idle"
+	| "next-turn"
+	| "held"
+	| "retrying"
+	| "offline"
+	| "sending";
+
+/** One message in an agent's queue (`GET /agents/:id/queue`). */
+export interface QueueItem {
+	messageId: string;
+	/** The recipient as the app names it (a pool address on another machine). */
+	agentId: string;
+	from: { id: string; name: string };
+	/** The operator sent it from the app (on any of their machines). */
+	mine: boolean;
+	body: string;
+	priority: Priority;
+	createdAt: number;
+	state: QueueState;
+	detail: string | null;
+	attempt: number;
+	/** The next try (retrying), or null. */
+	dueAt: number | null;
+	/** `home`: on the agent's machine. `outbox`: on this node, waiting for that machine. */
+	where: "home" | "outbox";
+	canWithdraw: boolean;
+	canPromote: boolean;
+	canEdit: boolean;
+	/** Why an action is not offered, for its tooltip. */
+	why: { withdraw?: string; promote?: string; edit?: string };
+}
+
+/** `GET /agents/:id/queue` (also the `queue` SSE payload). */
+export interface QueueList {
+	agentId: string;
+	items: QueueItem[];
+	/** Set when the agent's machine did not answer: only this node's part is listed. */
+	partial?: string | null;
+}
+
+/** What a queue action did. */
+export interface QueueActResult {
+	ok: true;
+	/** The recipient's receipt afterwards. */
+	receipt: Receipt | null;
 }

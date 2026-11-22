@@ -113,7 +113,9 @@ export type ReceiptState =
 	/** Its time to live passed before it was done. */
 	| "expired"
 	/** Pulsar gave up after the last attempt. */
-	| "dead";
+	| "dead"
+	/** The operator withdrew it before it reached the session (the queue strip). */
+	| "withdrawn";
 
 /** Every receipt state, for validation (HTTP filters, peer receipts). */
 export const RECEIPT_STATES: readonly ReceiptState[] = [
@@ -130,6 +132,7 @@ export const RECEIPT_STATES: readonly ReceiptState[] = [
 	"nacked",
 	"expired",
 	"dead",
+	"withdrawn",
 ];
 
 /** States after which a receipt never changes within its attempt. */
@@ -139,6 +142,7 @@ export const FINAL_STATES: ReadonlySet<ReceiptState> = new Set([
 	"nacked",
 	"expired",
 	"dead",
+	"withdrawn",
 ]);
 
 export interface Receipt {

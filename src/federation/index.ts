@@ -5,6 +5,8 @@ import type {
 	DecideResponse,
 	MessageHit,
 	NeedsYou,
+	QueueItem,
+	QueueState,
 	SubagentCounts,
 	SubagentList,
 	Wake,
@@ -23,6 +25,7 @@ import {
 	type PoolMachine,
 	type PoolView,
 	type RemoteApprovals,
+	type RemoteQueue,
 } from "../service/pool.ts";
 import { delivered, writeReceipt } from "../service/util.ts";
 import type { Agent, Message, Receipt, ReceiptState } from "../types.ts";
@@ -703,6 +706,33 @@ export class Federation implements PoolView {
 		);
 		return path !== null ? r.patch : r.review;
 	}
+
+	/** Remote agents' queues, read and changed on their home node (src/service/queue.ts). */
+	readonly queue: RemoteQueue = {
+		list: async (address, as) => {
+			const slash = address.indexOf("/");
+			const machineId = address.slice(0, slash);
+			const r = await this.act(
+				address,
+				{ op: "queue.list", agent: address.slice(slash + 1) },
+				as,
+			);
+			return queueItemsFrom(r.items, machineId, address);
+		},
+		act: async (address, req, as) => {
+			const slash = address.indexOf("/");
+			const r = await this.act(
+				address,
+				{ op: "queue.act", agent: address.slice(slash + 1), ...req },
+				as,
+			);
+			return (r.receipt as Receipt | null) ?? null;
+		},
+		wake: (machineId) => {
+			this.service.store.outboxWake(machineId, Date.now());
+			this.flushSafe(machineId);
+		},
+	};
 
 	/** A linked machine's id, by id or name. */
 	machineIdOf(machine: string): string | null {
@@ -2553,6 +2583,23 @@ export class Federation implements PoolView {
 				});
 				return { ok: true, result };
 			}
+			case "queue.list": {
+				const agent = String(action.agent);
+				const items = (await this.service.queue.list(user, agent)).items;
+				return { ok: true, items };
+			}
+			case "queue.act": {
+				const agent = String(action.agent);
+				const verb = action.action;
+				if (verb !== "withdraw" && verb !== "promote" && verb !== "edit")
+					return fail("bad_request", "unknown queue action");
+				const receipt = await this.service.queue.relayed(user, agent, {
+					messageId: clean(String(action.messageId), 100),
+					action: verb,
+					...(typeof action.body === "string" ? { body: action.body } : {}),
+				});
+				return { ok: true, receipt };
+			}
 			case "acting.options": {
 				// This node's own challenge, bound to the op, target and params.
 				const options = await this.service.acting.optionsFor(
@@ -2726,3 +2773,65 @@ function receiptSig(receipts: Receipt[]): string {
 		receipts.map((r) => [r.agentId, r.state, r.detail, r.attempt ?? 1]),
 	);
 }
+
+/**
+ * A home node's queue items as this node shows them: the agent by its pool
+ * address, a local sender id under that machine, nothing malformed.
+ */
+function queueItemsFrom(
+	raw: unknown,
+	machineId: string,
+	address: string,
+): QueueItem[] {
+	if (!Array.isArray(raw)) return [];
+	const out: QueueItem[] = [];
+	for (const i of raw as Partial<QueueItem>[]) {
+		if (!i || typeof i.messageId !== "string" || typeof i.body !== "string")
+			continue;
+		const fromId = String(i.from?.id ?? "");
+		out.push({
+			messageId: i.messageId.slice(0, 100),
+			agentId: address,
+			from: {
+				id: fromId.includes("/") ? fromId : `${machineId}/${fromId}`,
+				name: clean(String(i.from?.name ?? "unknown"), 100),
+			},
+			mine: i.mine === true,
+			body: i.body,
+			priority:
+				i.priority === "urgent" || i.priority === "fyi" ? i.priority : "normal",
+			createdAt: Number(i.createdAt) || 0,
+			state: QUEUE_STATES.has(i.state as QueueState)
+				? (i.state as QueueState)
+				: "next-turn",
+			detail: typeof i.detail === "string" ? i.detail.slice(0, 500) : null,
+			attempt: Number(i.attempt) || 1,
+			dueAt: typeof i.dueAt === "number" ? i.dueAt : null,
+			where: "home",
+			canWithdraw: i.canWithdraw === true,
+			canPromote: i.canPromote === true,
+			canEdit: i.canEdit === true,
+			why: {
+				...(typeof i.why?.withdraw === "string"
+					? { withdraw: i.why.withdraw.slice(0, 300) }
+					: {}),
+				...(typeof i.why?.promote === "string"
+					? { promote: i.why.promote.slice(0, 300) }
+					: {}),
+				...(typeof i.why?.edit === "string"
+					? { edit: i.why.edit.slice(0, 300) }
+					: {}),
+			},
+		});
+	}
+	return out;
+}
+
+const QUEUE_STATES: ReadonlySet<QueueState> = new Set([
+	"idle",
+	"next-turn",
+	"held",
+	"retrying",
+	"offline",
+	"sending",
+]);

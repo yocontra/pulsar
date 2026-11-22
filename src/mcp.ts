@@ -446,9 +446,9 @@ export async function runMcp() {
 			expectReply: true,
 		});
 		const r = await waitReply(s, sent.message.id, timeout);
-		if (r.event === "dead" || r.event === "nacked")
+		if (r.event === "dead" || r.event === "nacked" || r.event === "withdrawn")
 			return text(
-				`${sent.message.id} ${r.event === "nacked" ? "was declined" : "was given up on"}: ${receiptsText(r.receipt ? [r.receipt] : sent.receipts)}`,
+				`${sent.message.id} ${r.event === "nacked" ? "was declined" : r.event === "withdrawn" ? "was withdrawn by the operator" : "was given up on"}: ${receiptsText(r.receipt ? [r.receipt] : sent.receipts)}`,
 			);
 		if (r.event !== "reply" || !r.message) {
 			return text(
@@ -859,7 +859,12 @@ export async function runMcp() {
 					);
 			if (r.event === "timeout")
 				return text(`Nothing happened within ${timeout}s.`);
-			if ((r.event === "dead" || r.event === "nacked") && r.receipt)
+			if (
+				(r.event === "dead" ||
+					r.event === "nacked" ||
+					r.event === "withdrawn") &&
+				r.receipt
+			)
 				return text(`${r.event}:\n${receiptsText([r.receipt])}`);
 			if (r.message) return text(`${r.event}:\n${messageText(r.message)}`);
 			if (r.agent)

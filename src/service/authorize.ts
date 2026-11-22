@@ -66,6 +66,9 @@ export const ACTING_OPS = [
 	"git.reply",
 	"git.resolve",
 	"git.review",
+	/** The queue strip: withdraw or send now someone else's waiting message. */
+	"queue.withdraw",
+	"queue.promote",
 ] as const;
 
 /**

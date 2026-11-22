@@ -16,6 +16,7 @@ import type {
 	Link,
 	MessageHit,
 	NeedsYou,
+	QueueItem,
 	SubagentCounts,
 	SubagentList,
 	Wake,
@@ -152,6 +153,8 @@ export interface PoolView extends ActingRelay {
 	): Promise<unknown>;
 	/** Permission prompts of remote agents, decided by their home node. */
 	readonly approvals: RemoteApprovals;
+	/** Queues of remote agents, through their home node (absent before queues existed). */
+	readonly queue?: RemoteQueue;
 	/** Token usage of other machines and their agents (absent before usage existed). */
 	readonly usage?: PoolUsage;
 	/** Other machines' doctor reports (absent before Diagnostics existed). */
@@ -312,4 +315,25 @@ export interface RemoteAttachments {
 		path: string,
 		as?: Principal,
 	): Promise<{ mediaType: string; data: Buffer }>;
+}
+
+/** A queue action on a remote agent's home node (the operator's own message). */
+export interface RemoteQueueAct {
+	messageId: string;
+	action: "withdraw" | "promote" | "edit";
+	body?: string;
+}
+
+/** Remote agents' queues (src/service/queue.ts); addresses are pool addresses. */
+export interface RemoteQueue {
+	/** What waits on the home node for the agent, as `as` sees it. */
+	list(address: string, as: Principal): Promise<QueueItem[]>;
+	/** Withdraw, send now or edit one of the operator's own messages there. */
+	act(
+		address: string,
+		req: RemoteQueueAct,
+		as: Principal,
+	): Promise<Receipt | null>;
+	/** Sends what waits in this node's outbox for that machine now. */
+	wake(machineId: string): void;
 }
