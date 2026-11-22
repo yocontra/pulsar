@@ -44,6 +44,21 @@ async function latestVersion(): Promise<string | null> {
 	}
 }
 
+/**
+ * The PATH to check the `pulsar` command against. In a terminal, this
+ * process's. With `json` (the service daemon's child), the operator's
+ * login shell's: the service's own PATH lacks ~/.local/bin and the like,
+ * so checking it would report a problem the operator doesn't have. Null
+ * when that shell couldn't be read (the check is skipped, not failed).
+ */
+export function commandPath(
+	json: boolean,
+	shellPath: string | null,
+	envPath = process.env.PATH ?? "",
+): string | null {
+	return json ? shellPath : envPath;
+}
+
 /** A harness's `--version`: its first version number, else its first line. */
 export function parseVersion(out: string): string | null {
 	const m = out.match(/\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?/);
@@ -192,7 +207,8 @@ async function doctorChecks(
 
 	checks.group = "harnesses";
 	const detected = CLIENTS.filter((c) => c.detect());
-	// Versions for the app's machine facts only (the CLI never asked).
+	// For the app (the CLI never asked): harness versions, and the PATH the
+	// operator's commands run with (the service's own PATH is not it).
 	const paths = opts.json
 		? await loginShellPaths(
 				detected.map((c) => c.id).filter((id) => /^[a-z]+$/.test(id)),
@@ -239,9 +255,16 @@ async function doctorChecks(
 
 	checks.group = "daemon";
 	const { shimStatus } = await import("./shim.ts");
-	const shim = shimStatus();
-	if (shim.ok) ok(shim.message);
-	else bad(shim.message);
+	const operatorPath = commandPath(opts.json === true, paths?.path ?? null);
+	if (operatorPath === null)
+		note(
+			"`pulsar` command: not checked (your login shell's PATH couldn't be read)",
+		);
+	else {
+		const shim = shimStatus(homedir(), operatorPath);
+		if (shim.ok) ok(shim.message);
+		else bad(shim.message);
+	}
 
 	checks.group = "approvals";
 	const { installedApprovalHook } = await import("../harnesses/claude.ts");

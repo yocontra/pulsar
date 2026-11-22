@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	Checks,
 	checkLine,
@@ -22,7 +25,12 @@ import type { Federation } from "../src/federation/index.ts";
 import type { LocalDiagnostics } from "../src/http/wire.ts";
 import { RpcError } from "../src/rpc.ts";
 import type { Principal } from "../src/service/caller.ts";
-import { parseBinLines, parseVersion } from "../src/setup/doctor.ts";
+import {
+	commandPath,
+	parseBinLines,
+	parseVersion,
+} from "../src/setup/doctor.ts";
+import { shimStatus, writeShim } from "../src/setup/shim.ts";
 import { VERSION } from "../src/version.ts";
 
 /**
@@ -113,6 +121,41 @@ describe("structured checks", () => {
 		expect([...r.bins]).toEqual([["claude", "/Users/a/.local/bin/claude"]]);
 		expect(r.path).toBe("/Users/a/bin:/usr/bin");
 		expect(parseBinLines("nothing").path).toBeNull();
+	});
+
+	test("run under the service, the `pulsar` command is checked against the login shell's PATH", () => {
+		const home = mkdtempSync(join(tmpdir(), "pulsar-diag-shim-"));
+		try {
+			// A shim setup wrote, pointing at files that exist.
+			const node = join(home, "node");
+			const cli = join(home, "cli.js");
+			writeFileSync(node, "");
+			writeFileSync(cli, "");
+			writeShim(node, cli, home);
+			const bin = join(home, ".local", "bin");
+			// launchd's PATH: no ~/.local/bin.
+			const servicePath = "/usr/bin:/bin:/usr/sbin:/sbin";
+			const shellPath = `${bin}:/opt/homebrew/bin:/usr/bin:/bin`;
+
+			// The bug: checked against the service's PATH, a false problem.
+			expect(shimStatus(home, servicePath)).toMatchObject({
+				ok: false,
+				message: expect.stringContaining("is not on PATH here"),
+			});
+			// Doctor's child (--json) checks the login shell's PATH instead.
+			const path = commandPath(true, shellPath, servicePath);
+			expect(path).toBe(shellPath);
+			expect(shimStatus(home, path!)).toEqual({
+				ok: true,
+				message: "`pulsar` command: ~/.local/bin/pulsar",
+			});
+			// In a terminal, this process's PATH, as before.
+			expect(commandPath(false, null, servicePath)).toBe(servicePath);
+			// Under the service with no login shell PATH: not checked (null), never failed.
+			expect(commandPath(true, null, servicePath)).toBeNull();
+		} finally {
+			rmSync(home, { recursive: true, force: true });
+		}
 	});
 
 	test("the doctor's JSON is the last object line of its output", () => {
@@ -540,6 +583,17 @@ describe("the pool's reader", () => {
 			pending: false,
 		});
 		await expect(one("m-nope")).rejects.toThrow("no such machine");
+		// A machine by name too: this one, and a peer (asked at its id).
+		expect(await one("laptop")).toMatchObject({
+			self: true,
+			machineId: "m-self",
+		});
+		asked.length = 0;
+		expect(await one("studio")).toMatchObject({
+			machineId: "m-new",
+			name: "studio",
+		});
+		expect(asked).toEqual([["m-new/", { op: "diag.read", fresh: true }]]);
 	});
 
 	test("a peer that times out says so", async () => {

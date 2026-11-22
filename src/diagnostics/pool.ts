@@ -69,7 +69,8 @@ export async function machineDiagnostics(
 	fresh: boolean,
 ): Promise<MachineDiagnostics> {
 	let row: Omit<MachineDiagnostics, "upgrade" | "pending">;
-	if (machineId === self.id) {
+	// By id or name: the app sends ids, the CLI and people use names.
+	if (machineId === self.id || machineId === self.name) {
 		const r = await local.read(fresh).then(
 			(report) => ({ report, error: null }),
 			(e: Error) => ({ report: null, error: e.message.slice(0, 300) }),

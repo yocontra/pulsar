@@ -27,7 +27,7 @@ export interface RemoteDiagnosticsRow extends RemoteDiagnosticsPeer {
 export interface PoolDiagnostics {
 	/** Every peer, now (no request). */
 	peers(): RemoteDiagnosticsPeer[];
-	/** One peer's report, asked now; null for a machine not in the pool. */
+	/** One peer's report (by id or name), asked now; null for a machine not in the pool. */
 	one(
 		machineId: string,
 		fresh: boolean,
@@ -69,12 +69,16 @@ export class RemoteDiagnostics implements PoolDiagnostics {
 		fresh: boolean,
 		as?: Principal,
 	): Promise<RemoteDiagnosticsRow | null> {
-		const peer = this.peers().find((p) => p.machineId === machineId);
+		// By id, else by name (the CLI and people use names).
+		const peers = this.peers();
+		const peer =
+			peers.find((p) => p.machineId === machineId) ??
+			peers.find((p) => p.name === machineId);
 		if (!peer) return null;
 		if (peer.away) return { ...peer, report: null, error: peer.away };
 		try {
 			const r = await this.fed.act(
-				`${machineId}/`,
+				`${peer.machineId}/`,
 				{ op: "diag.read", fresh },
 				as,
 				DIAG_TIMEOUT_MS,

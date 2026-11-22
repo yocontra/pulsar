@@ -263,6 +263,19 @@ describe("diagnostics across the pool", () => {
 		expect(home.runs).toBe(before + 1);
 	});
 
+	test("a machine can be named instead of its id", async () => {
+		const r = await api<MachineDiagnostics>("viewer", "/diagnostics/home");
+		expect(r.status).toBe(200);
+		expect(r.body).toMatchObject({
+			machineId: home.service.machineId,
+			name: "home",
+			error: null,
+		});
+		expect(r.body.report!.checks[0]!.text).toBe("daemon on home");
+		const mine = await api<MachineDiagnostics>("viewer", "/diagnostics/viewer");
+		expect(mine.body).toMatchObject({ self: true, name: "viewer" });
+	});
+
 	test("an unknown machine is not found", async () => {
 		const r = await api<{ error: { code: string } }>(
 			"viewer",

@@ -141,10 +141,16 @@ export function shimTarget(path: string): { node: string; cli: string } | null {
 
 /**
  * Doctor's view of the `pulsar` command: ok, or what is wrong and the fix.
+ * `envPath` is the PATH the operator's commands run with: this process's
+ * by default; the login shell's when doctor runs under the service, whose
+ * own PATH is not the operator's.
  */
-export function shimStatus(home = homedir()): { ok: boolean; message: string } {
+export function shimStatus(
+	home = homedir(),
+	envPath = process.env.PATH ?? "",
+): { ok: boolean; message: string } {
 	const path = shimPath(home);
-	const resolved = resolveOnPath();
+	const resolved = resolveOnPath("pulsar", envPath);
 	const ours = existsSync(path) && ownsShim(path);
 	if (!ours)
 		return resolved
@@ -160,7 +166,7 @@ export function shimStatus(home = homedir()): { ok: boolean; message: string } {
 			ok: false,
 			message: `${tildeOf(path, home)} points at a node or pulsar copy that is gone: run \`npx pulsar setup\` again`,
 		};
-	if (!onPath(binDir(home)))
+	if (!onPath(binDir(home), envPath))
 		return {
 			ok: profileAddsBin(home),
 			message: `${tildeOf(binDir(home), home)} is not on PATH here, so \`pulsar\` won't run yet: ${pathAdvice(home).replace(/\n\s+/, " ")}`,
