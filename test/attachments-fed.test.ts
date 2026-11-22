@@ -301,6 +301,7 @@ describe("attachments for an agent on another machine", () => {
 		const t = await relay.service.files.tree(remote, "", USER);
 		expect(t).toMatchObject({ agent: remote, available: true });
 		expect(t.entries.map((e) => e.name)).toEqual(["notes.md", "shot.png"]);
+		// (".env" is written below, after the listing.)
 		expect(
 			await relay.service.files.read(remote, "notes.md", USER),
 		).toMatchObject({
@@ -312,6 +313,13 @@ describe("attachments for an agent on another machine", () => {
 		expect(
 			(await relay.service.files.read(remote, "../etc/passwd", USER)).available,
 		).toBe(false);
+		writeFileSync(join(folder, ".env"), "TOKEN=1\n");
+		expect((await relay.service.files.read(remote, ".env", USER)).kind).toBe(
+			"sensitive",
+		);
+		expect(
+			(await relay.service.files.read(remote, ".env", USER, true)).text,
+		).toBe("TOKEN=1\n");
 		const img = await relay.service.files.image(remote, "shot.png", USER);
 		expect(img.mediaType).toBe("image/png");
 		expect(img.data.length).toBe(10);

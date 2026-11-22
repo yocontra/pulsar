@@ -2438,7 +2438,12 @@ export class Federation implements PoolView {
 				if (!action.raw)
 					return {
 						ok: true,
-						content: await this.service.files.read(agent, path),
+						content: await this.service.files.read(
+							agent,
+							path,
+							undefined,
+							action.reveal === true,
+						),
 					};
 				const image = await this.service.files.image(agent, path);
 				return {

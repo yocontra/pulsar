@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StaticIdentity } from "../src/http/identity.ts";
 import type { FileContent, FileTree } from "../src/http/wire.ts";
-import { TEXT_MAX } from "../src/service/files.ts";
+import { looksSecret, TEXT_MAX } from "../src/service/files.ts";
 import { PulsarService } from "../src/service/index.ts";
 import { Store } from "../src/store.ts";
 import { HttpTransport } from "../src/transport/http.ts";
@@ -238,6 +238,46 @@ describe("content", () => {
 			(await service.files.tree(agentId, "ignored")).entries.map((e) => e.name),
 		).not.toContain("gitdir");
 		expect((await read("ignored/gitdir/config")).available).toBe(false);
+	});
+
+	test("secret-looking files show only when asked (reveal=1)", async () => {
+		writeFileSync(join(repo, ".env.local"), "TOKEN=abc\n");
+		writeFileSync(join(repo, ".env.example"), "TOKEN=\n");
+		symlinkSync(join(repo, ".env.local"), join(repo, "settings.txt"));
+		const hidden = await read(".env.local");
+		expect(hidden).toMatchObject({ available: true, kind: "sensitive" });
+		expect(hidden.text).toBeUndefined();
+		// Through a link with an innocent name, too.
+		expect((await read("settings.txt")).kind).toBe("sensitive");
+		expect((await read(".env.example")).kind).toBe("text");
+		const res = await api(
+			`/agents/${encodeURIComponent(agentId)}/files/content?path=.env.local&reveal=1`,
+		);
+		expect(((await res.json()) as FileContent).text).toBe("TOKEN=abc\n");
+	});
+
+	test("looksSecret", () => {
+		for (const p of [
+			".env",
+			"app/.env.production",
+			"tls/server.pem",
+			"a.key",
+			"id_rsa",
+			"id_ed25519",
+			".npmrc",
+			"credentials.json",
+			".git-credentials",
+		])
+			expect(looksSecret(p)).toBe(true);
+		for (const p of [
+			".env.example",
+			"id_rsa.pub",
+			"src/env.ts",
+			"keyboard.ts",
+			"README.md",
+			"docs/credentials-guide.md.sample",
+		])
+			expect(looksSecret(p)).toBe(false);
 	});
 
 	test("an agent in a subfolder: paths relative to it, repoPath from the top", async () => {

@@ -289,7 +289,12 @@ export interface RemoteAttachments {
 	files(address: string, q: string, as?: Principal): Promise<FileSearch>;
 	/** The file viewer's reads (src/service/files.ts), by the home node. */
 	tree(address: string, path: string, as?: Principal): Promise<FileTree>;
-	read(address: string, path: string, as?: Principal): Promise<FileContent>;
+	read(
+		address: string,
+		path: string,
+		as?: Principal,
+		reveal?: boolean,
+	): Promise<FileContent>;
 	image(
 		address: string,
 		path: string,

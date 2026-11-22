@@ -547,9 +547,15 @@ export const api = {
 			{ signal },
 		),
 	/** The file viewer: one file's text, or what kind of file it is. */
-	fileContent: (agentId: string, path: string, signal?: AbortSignal) =>
+	fileContent: (
+		agentId: string,
+		path: string,
+		signal?: AbortSignal,
+		/** Show a secret-looking file (the operator tapped Show). */
+		reveal = false,
+	) =>
 		request<FileContent>(
-			`/agents/${enc(agentId)}/files/content${query({ path })}`,
+			`/agents/${enc(agentId)}/files/content${query({ path, reveal: reveal ? 1 : null })}`,
 			{ signal },
 		),
 	/** An image file's bytes, for a blob: URL (they need this tab's headers). */

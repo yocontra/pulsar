@@ -53,13 +53,15 @@ const useTree = (agentId: string, path: string, enabled = true) =>
 		queryClient,
 	);
 
-const useContent = (agentId: string, path: string) =>
+const useContent = (agentId: string, path: string, reveal: boolean) =>
 	useQuery(
 		{
-			queryKey: ["files", "content", agentId, path],
-			queryFn: ({ signal }) => api.fileContent(agentId, path, signal),
+			queryKey: ["files", "content", agentId, path, reveal],
+			queryFn: ({ signal }) => api.fileContent(agentId, path, signal, reveal),
 			enabled: !!path,
 			staleTime: 5_000,
+			// A shown secret is not kept once its page closes.
+			...(reveal ? { gcTime: 0 } : {}),
 			retry: false,
 		},
 		queryClient,
@@ -71,12 +73,18 @@ function useTarget({ arg, params }: PageProps) {
 	const path = (params.path ?? "").replace(/^\/+|\/+$/g, "");
 	const line = Number(params.line) > 0 ? Number(params.line) : undefined;
 	const agent = useAgent(agentId || null).data as AgentRow | undefined;
-	const content = useContent(agentId, path);
+	// Show for a secret-looking file: this file only, until the page changes.
+	const [shown, setShown] = useState<string | null>(null);
+	const key = `${agentId}\u0000${path}`;
+	const content = useContent(agentId, path, shown === key);
+	const reveal = () => setShown(key);
+	// Leaving the file hides it again (the desktop page stays mounted).
+	useEffect(() => () => setShown(null), [key]);
 	// A path that is a folder: list it.
 	const isDir =
 		!path ||
 		(content.data?.available === false && content.data.reason === "not_file");
-	return { agentId, path, line, agent, content, isDir };
+	return { agentId, path, line, agent, content, isDir, reveal };
 }
 
 const nameOf = (p: string) => p.split("/").pop() ?? p;
@@ -327,12 +335,14 @@ function FileBody({
 	line,
 	content,
 	isError,
+	onReveal,
 }: {
 	agentId: string;
 	path: string;
 	line: number | undefined;
 	content: FileContent | undefined;
 	isError: boolean;
+	onReveal: () => void;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const text = content?.kind === "text" ? (content.text ?? "") : null;
@@ -371,6 +381,18 @@ function FileBody({
 			<p className="fv-empty" role="status">
 				Binary file ({size}). Not shown.
 			</p>
+		);
+	if (content.kind === "sensitive")
+		return (
+			<div className="fv-secret" role="status">
+				<p>
+					<strong>This file may hold secrets</strong> (keys, tokens or
+					passwords). Showing it puts them on this screen.
+				</p>
+				<button type="button" className="fv-btn" onClick={onReveal}>
+					Show
+				</button>
+			</div>
 		);
 	if (content.kind === "too_large")
 		return (
@@ -507,7 +529,8 @@ function TreeRow({
 
 /** The desktop's main pane; the shell's Esc goes back. */
 export function FilesDesktop(props: PageProps) {
-	const { agentId, path, line, agent, content, isDir } = useTarget(props);
+	const { agentId, path, line, agent, content, isDir, reveal } =
+		useTarget(props);
 	return (
 		<main className="fv fv-desktop" aria-label="Files">
 			<header className="fv-head">
@@ -539,6 +562,7 @@ export function FilesDesktop(props: PageProps) {
 							line={line}
 							content={content.data}
 							isError={content.isError}
+							onReveal={reveal}
 						/>
 					)}
 				</section>
@@ -549,7 +573,8 @@ export function FilesDesktop(props: PageProps) {
 
 /** The phone: one pushed page per folder or file. */
 export function FilesPhone(props: PageProps) {
-	const { agentId, path, line, agent, content, isDir } = useTarget(props);
+	const { agentId, path, line, agent, content, isDir, reveal } =
+		useTarget(props);
 	const title = path
 		? nameOf(path)
 		: (agent?.cwd?.split("/").filter(Boolean).pop() ?? "Files");
@@ -592,6 +617,7 @@ export function FilesPhone(props: PageProps) {
 							line={line}
 							content={content.data}
 							isError={content.isError}
+							onReveal={reveal}
 						/>
 					)}
 				</div>

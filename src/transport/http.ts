@@ -248,6 +248,7 @@ const Q = {
 	fileContent: z.object({
 		path: z.string().min(1).max(4096),
 		raw: z.enum(["1"]).optional(),
+		reveal: z.enum(["1"]).optional(),
 	}),
 	receipts: z.object({
 		state: z.enum(RECEIPT_STATES).optional(),
@@ -1068,12 +1069,15 @@ export class HttpTransport {
 			return c.json(await this.service.files.tree(id, q.path, who(c)));
 		});
 		// `raw=1`: an image file's bytes, served like transcript images.
+		// `reveal=1`: a secret-looking file's text (the operator tapped Show).
 		api.get("/agents/:id/files/content", async (c) => {
 			const q = parse(Q.fileContent, c.req.query());
 			const id = c.req.param("id");
 			this.service.authorize(who(c), "transcript.read", id);
 			if (!q.raw)
-				return c.json(await this.service.files.read(id, q.path, who(c)));
+				return c.json(
+					await this.service.files.read(id, q.path, who(c), q.reveal === "1"),
+				);
 			const image = await this.service.files.image(id, q.path, who(c));
 			return c.body(new Uint8Array(image.data), 200, {
 				"Content-Type": image.mediaType,

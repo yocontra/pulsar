@@ -43,6 +43,7 @@ const FILES: Record<string, string | Uint8Array> = {
 		"<!doctype html>\n<h1>QA report</h1>\n<p>All checks passed.</p>\n",
 	"docs/shot.png": SCREENSHOT,
 	"bin/tool": new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0, 0, 0, 1]),
+	".env.local": "API_TOKEN=mock-not-a-real-token\n",
 };
 
 const isDir = (p: string) =>
@@ -79,7 +80,16 @@ export function mockTree(agent: string, path: string): FileTree {
 	return { agent, path: dir, available: true, entries };
 }
 
-export function mockContent(agent: string, path: string): FileContent {
+/** Same rule as the daemon's for `.env` files (src/service/files.ts). */
+const looksSecret = (p: string) =>
+	/^\.env(\..+)?$/.test(p.split("/").pop() ?? "") &&
+	!/\.(example|sample|template)$/.test(p);
+
+export function mockContent(
+	agent: string,
+	path: string,
+	reveal = false,
+): FileContent {
 	const none = (reason: string): FileContent => ({
 		agent,
 		path,
@@ -100,6 +110,7 @@ export function mockContent(agent: string, path: string): FileContent {
 				: data.length,
 		repoPath: path,
 	};
+	if (!reveal && looksSecret(path)) return { ...base, kind: "sensitive" };
 	if (typeof data === "string") return { ...base, kind: "text", text: data };
 	if (path.endsWith(".png"))
 		return { ...base, kind: "image", mediaType: "image/png" };

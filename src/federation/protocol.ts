@@ -273,7 +273,13 @@ export type FedAction =
 	| { op: "files.search"; agent: string; q: string }
 	/** The file viewer: one folder, one file, or an image file's bytes (base64). */
 	| { op: "files.tree"; agent: string; path: string }
-	| { op: "files.read"; agent: string; path: string; raw?: boolean }
+	| {
+			op: "files.read";
+			agent: string;
+			path: string;
+			raw?: boolean;
+			reveal?: boolean;
+	  }
 	| { op: "stop.options"; agent: string }
 	| { op: "stop"; agent: string; assertion: unknown }
 	/*

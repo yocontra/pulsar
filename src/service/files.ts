@@ -184,11 +184,13 @@ export class Files {
 		agentId: string,
 		path: string,
 		as?: Principal,
+		/** Show a file whose name looks like it holds secrets (`sensitive`). */
+		reveal = false,
 	): Promise<FileContent> {
 		const agent = this.lookup(agentId);
 		if (!agent) {
 			if (this.remote && agentId.includes("/"))
-				return this.remote.read(agentId, path, as);
+				return this.remote.read(agentId, path, as, reveal);
 			throw new RpcError("not_found", `no agent ${agentId}`);
 		}
 		const opened = await this.openFile(agent, path);
@@ -208,6 +210,10 @@ export class Files {
 			size,
 			repoPath: listed.ok ? listed.lead + rel : null,
 		};
+		// A key or a token file: only after the operator asks (by its name or,
+		// for a link, its target's name).
+		if (!reveal && (looksSecret(rel) || looksSecret(file)))
+			return { ...out, kind: "sensitive" };
 		const head = await readHead(file, Math.min(size, TEXT_MAX));
 		const image = sniffImage(head);
 		if (image)
@@ -351,6 +357,26 @@ async function staysIn(base: string, path: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * A file name that usually holds secrets: `.env` files (not their
+ * `.example` / `.sample` / `.template` copies), private keys and
+ * certificates, ssh keys (not `.pub`), package-manager and other
+ * credential files.
+ */
+export function looksSecret(path: string): boolean {
+	const name = (path.split(/[/\\]/).pop() ?? "").toLowerCase();
+	if (/\.(example|sample|template|dist|pub)$/.test(name)) return false;
+	return (
+		/^\.env(\..+)?$/.test(name) ||
+		/\.(pem|key|p12|pfx|jks|keystore|ppk)$/.test(name) ||
+		/^id_(rsa|dsa|ecdsa|ed25519)/.test(name) ||
+		/^(\.npmrc|\.pypirc|\.netrc|\.pgpass|\.git-credentials|\.htpasswd)$/.test(
+			name,
+		) ||
+		/^credentials/.test(name)
+	);
 }
 
 /** Entries per folder listing. */
