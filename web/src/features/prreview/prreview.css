@@ -54,6 +54,11 @@
 .prv-num {
 	color: var(--ds-text-3);
 	font-weight: 400;
+	white-space: nowrap;
+}
+.prv-stats .g-link {
+	padding: 0;
+	font: inherit;
 }
 .prv-sub {
 	display: flex;
@@ -72,10 +77,10 @@
 	font-weight: 500;
 }
 .prv-verdict.approved {
-	color: var(--ds-success);
+	color: var(--ds-success-text);
 }
 .prv-verdict.changes_requested {
-	color: var(--ds-danger);
+	color: var(--ds-danger-text);
 }
 .prv-verdict.review_required,
 .prv-verdict.commented {
@@ -481,9 +486,28 @@
 .prv-phone-file .cv-section-head {
 	padding: 0 16px;
 }
+/* The phone: the line numbers are the tap target (no icons over them). */
 .prv-phone .prv-add {
-	opacity: 0.55;
-	left: 1px;
+	left: 0;
+	top: 0;
+	transform: none;
+	width: 68px;
+	height: 100%;
+	border-radius: 0;
+	background: transparent;
+	opacity: 1;
+}
+.prv-phone .prv-add svg {
+	display: none;
+}
+.prv-phone .prv-add:active {
+	background: color-mix(in srgb, var(--ds-accent) 18%, transparent);
+}
+.prv-tip {
+	margin: 0;
+	padding: 6px 16px;
+	font-size: 13px;
+	color: var(--ds-text-3);
 }
 .prv-phone .ds-diff-ln {
 	width: 34px;
