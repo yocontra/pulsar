@@ -1,0 +1,194 @@
+/* The end-of-turn change summary (TurnChanges.tsx), on the tool card's look. */
+.ds-turnchg {
+	min-width: 0;
+	margin-top: var(--ds-space-2);
+	border-radius: var(--ds-radius-md);
+	background: var(--ds-surface);
+	box-shadow:
+		inset 0 0 0 1px var(--ds-border),
+		var(--ds-shadow-xs);
+	font-family: var(--ds-font-sans);
+}
+.ds-turnchg-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	min-height: 36px;
+	padding: 0 10px 0 11px;
+	border: 0;
+	border-radius: inherit;
+	background: transparent;
+	color: var(--ds-text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	transition: background var(--ds-dur-fast) ease;
+}
+.ds-turnchg-head:hover {
+	background: var(--ds-surface-hover);
+}
+.ds-turnchg-head:focus-visible {
+	outline: none;
+	box-shadow: var(--ds-focus-ring);
+}
+.ds-turnchg[data-state="open"] > .ds-turnchg-head {
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+}
+.ds-turnchg-head[aria-expanded="true"] > .ds-tool-chev {
+	transform: rotate(90deg);
+}
+.ds-turnchg-title {
+	min-width: 0;
+	font-weight: var(--ds-weight-medium);
+}
+.ds-turnchg-head .ds-diffstat {
+	font-family: var(--ds-font-mono);
+	font-size: var(--ds-text-footnote);
+}
+.ds-turnchg-head .ds-tool-chev {
+	margin-left: auto;
+}
+.ds-turnchg-body {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 4px 6px 8px;
+	border-top: 1px solid var(--ds-border);
+	min-width: 0;
+}
+.ds-turnchg-bar {
+	display: flex;
+	justify-content: flex-end;
+}
+.ds-turnchg-all,
+.ds-turnchg-open {
+	border: 0;
+	background: transparent;
+	color: var(--ds-link);
+	font: inherit;
+	font-size: var(--ds-text-footnote);
+	cursor: pointer;
+	padding: 4px 6px;
+	border-radius: var(--ds-radius-sm);
+	min-height: 28px;
+}
+.ds-turnchg-all:hover,
+.ds-turnchg-open:hover {
+	background: var(--ds-surface-hover);
+}
+.ds-turnchg-all:focus-visible,
+.ds-turnchg-open:focus-visible,
+.ds-turnchg-file:focus-visible {
+	outline: none;
+	box-shadow: var(--ds-focus-ring);
+}
+.ds-turnchg-files {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.ds-turnchg-item {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+.ds-turnchg-row {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+}
+.ds-turnchg-file {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+	min-width: 0;
+	min-height: 32px;
+	padding: 0 6px;
+	border: 0;
+	border-radius: var(--ds-radius-sm);
+	background: transparent;
+	color: var(--ds-text);
+	font: inherit;
+	font-size: var(--ds-text-footnote);
+	text-align: left;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+.ds-turnchg-file:hover {
+	background: var(--ds-surface-hover);
+}
+.ds-turnchg-file .ds-tool-chev {
+	margin-left: 0;
+}
+.ds-turnchg-file[aria-expanded="true"] .ds-tool-chev {
+	transform: rotate(90deg);
+}
+.ds-turnchg-st {
+	flex: none;
+	width: 14px;
+	font-family: var(--ds-font-mono);
+	font-weight: var(--ds-weight-semibold);
+	text-align: center;
+	color: var(--ds-text-3);
+}
+.ds-turnchg-st.st-added {
+	color: var(--ds-success-text);
+}
+.ds-turnchg-st.st-deleted {
+	color: var(--ds-danger-text);
+}
+.ds-turnchg-st.st-modified,
+.ds-turnchg-st.st-moved {
+	color: var(--ds-busy-text);
+}
+.ds-turnchg-name {
+	flex: none;
+	max-width: 60%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--ds-font-mono);
+}
+.ds-turnchg-dir {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--ds-text-3);
+	font-family: var(--ds-font-mono);
+}
+.ds-turnchg-file .ds-diffstat {
+	flex: none;
+	font-family: var(--ds-font-mono);
+}
+.ds-turnchg-open {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 32px;
+	height: 32px;
+}
+.ds-turnchg-open svg {
+	width: 15px;
+	height: 15px;
+}
+.ds-turnchg-diff {
+	margin: 0 0 6px;
+}
+.ds-turnchg-note {
+	margin: 0 6px 6px;
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-footnote);
+}

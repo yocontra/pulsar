@@ -51,6 +51,10 @@ import {
 import { NoticeCard } from "./NoticeCard.tsx";
 import { ToolCard } from "./ToolCard.tsx";
 import { knownMessages, PulsarMessages } from "./tools/pulsar-messages.ts";
+import {
+	type TurnChanges as TurnChangeSet,
+	turnSummaries,
+} from "./turn-changes.ts";
 
 /**
  * Loaded only when a card needs it: it reads the app's data layer and
@@ -63,6 +67,10 @@ const SubagentLink = lazy(() =>
 // renderer itself imports none of it.
 const DeliveryNote = lazy(() =>
 	import("./DeliveryNote.tsx").then((m) => ({ default: m.DeliveryNote })),
+);
+// The end-of-turn change summary and its diffs: loaded with the first turn that edited files.
+const TurnChanges = lazy(() =>
+	import("./TurnChanges.tsx").then((m) => ({ default: m.TurnChanges })),
 );
 
 export type Variant = "phone" | "desktop";
@@ -80,6 +88,8 @@ export interface TranscriptProps {
 		subagents?: { total: number };
 		/** The agent's repo page: `#1234` in its prose links to that PR. */
 		repoUrl?: string | null;
+		/** `busy`: the last turn is still going (its change summary waits). */
+		state?: string;
 	} | null;
 	/** Ids of events whose text is still growing (streaming). */
 	streamingIds?: ReadonlySet<string>;
@@ -114,6 +124,8 @@ type Ctx = {
 	promptAt?: TranscriptProps["promptAt"];
 	/** The operator's last sent message: its bubble shows the delivery state. */
 	lastSentId?: string;
+	/** Each finished turn's changed files, by its last assistant message's id. */
+	turns?: ReadonlyMap<string, TurnChangeSet>;
 };
 const NONE: ReadonlySet<string> = new Set();
 const C = createContext<Ctx>({
@@ -146,6 +158,11 @@ export const Transcript = memo(function Transcript({
 		}
 		return undefined;
 	}, [messages]);
+	const busy = agent?.state === "busy";
+	const turns = useMemo(
+		() => turnSummaries(messages, agent?.cwd, busy),
+		[messages, agent?.cwd, busy],
+	);
 	// Pulsar messages by id: respond cards name the sender of what they answer.
 	const known = useMemo(() => knownMessages(events), [events]);
 	const ctx = useMemo(
@@ -156,6 +173,7 @@ export const Transcript = memo(function Transcript({
 			actions: messageActions,
 			promptAt,
 			lastSentId,
+			turns,
 		}),
 		[
 			variant,
@@ -170,6 +188,7 @@ export const Transcript = memo(function Transcript({
 			messageActions,
 			promptAt,
 			lastSentId,
+			turns,
 		],
 	);
 	const fileAgent = useMemo(
@@ -286,7 +305,7 @@ function AuthorLine({ end, children }: { end?: boolean; children: ReactNode }) {
 }
 
 function MessageView({ m, prev }: { m: ChatMessage; prev?: ChatMessage }) {
-	const { agent, variant, lastSentId } = useContext(C);
+	const { agent, variant, lastSentId, turns } = useContext(C);
 	switch (m.kind) {
 		case "user": {
 			const who = userAuthor(m.ev.from, m.ev.pulsar);
@@ -402,6 +421,15 @@ function MessageView({ m, prev }: { m: ChatMessage; prev?: ChatMessage }) {
 							<PartView key={p.key} part={p} next={m.parts[i + 1]} />
 						))}
 					</div>
+					{turns?.has(m.id) && (
+						<Suspense fallback={null}>
+							<TurnChanges
+								changes={turns.get(m.id)!}
+								layout={variant === "desktop" ? "split" : "unified"}
+								agentId={agent?.id}
+							/>
+						</Suspense>
+					)}
 					<Actions msg={{ id: m.id, kind: "assistant", text }} />
 				</div>
 			);

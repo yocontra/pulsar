@@ -275,10 +275,13 @@ export function patchFiles(patch: string): PatchFile[] {
 	return files;
 }
 
-function patchText(input: unknown): string {
+/** The patch text of an `apply_patch` call (Codex `input`/`patch`, OpenCode `patchText`). */
+export function patchText(input: unknown): string {
 	return typeof input === "string"
 		? input
-		: str(rec(input).input) || str(rec(input).patch);
+		: str(rec(input).input) ||
+				str(rec(input).patch) ||
+				str(rec(input).patchText);
 }
 
 function lineCount(text: string): number {

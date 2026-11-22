@@ -18,6 +18,7 @@ import { commandRun } from "../../../../src/transcripts/command.ts";
 import {
 	type PatchFile,
 	patchFiles,
+	patchText,
 	type Question,
 	questions,
 	shellCommand,
@@ -361,9 +362,7 @@ const OP: Record<PatchFile["op"], string> = {
 };
 
 export function PatchBody(p: BodyProps) {
-	const a = rec(p.input);
-	const patch =
-		typeof p.input === "string" ? p.input : str(a.input) || str(a.patch);
+	const patch = patchText(p.input);
 	const files = useMemo(() => patchFiles(patch), [patch]);
 	return (
 		<>
