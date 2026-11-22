@@ -268,8 +268,12 @@ async function scanClaude(): Promise<Scanned[]> {
 							(await delegatedActive(rec.cwd ?? null, rec.sessionId)),
 					),
 					model: await claudeModel(rec.cwd ?? null, rec.sessionId),
+					// "dialog open" (/config, a menu) asks nothing: Claude's own
+					// viewer doesn't flag it either, so it is no terminal wait.
 					waitingFor:
-						rec.status === "waiting" ? rec.waitingFor || "a dialog" : null,
+						rec.status === "waiting" && rec.waitingFor !== "dialog open"
+							? rec.waitingFor || "a dialog"
+							: null,
 					meta: {
 						...(rec.messagingSocketPath
 							? { socket: rec.messagingSocketPath }
@@ -320,11 +324,12 @@ const claudeSettings = () => join(homedir(), ".claude", "settings.json");
 /** What marks pulsar's PermissionRequest hook in Claude's settings. */
 const APPROVAL_HOOK_MARKER = " hook claude-permission";
 /**
- * Claude's own hook timeout. The command passes it on (`--timeout`), so the
- * daemon keeps a prompt answerable in the app until a minute before Claude
- * gives up on the hook (approvalDeadlineMs).
+ * Claude's own hook timeout: a day. The command passes it on (`--timeout`),
+ * so the daemon keeps a prompt answerable in the app until a minute before
+ * Claude gives up on the hook (approvalDeadlineMs). Claude shows its own
+ * prompt while the hook runs, so a long wait never holds the terminal up.
  */
-export const APPROVAL_HOOK_TIMEOUT_S = 3600;
+export const APPROVAL_HOOK_TIMEOUT_S = 86_400;
 
 const shellQuote = (s: string) =>
 	/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;

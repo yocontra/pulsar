@@ -111,6 +111,11 @@ export interface ApprovalRequest {
 	transcriptPath: string | null;
 	/** Claude's timeout for the hook (its `--timeout`); null from hooks installed before it. */
 	hookTimeoutS?: number | null;
+	/**
+	 * Set when the hook asks again after a daemon restart: how long ago Claude
+	 * started it, so the deadline stays where it was.
+	 */
+	elapsedMs?: number;
 }
 
 export interface ApprovalsOptions {
@@ -143,16 +148,20 @@ export interface ApprovalsOptions {
  */
 export const APPROVAL_TIMEOUT_MS = 540_000;
 /**
- * Questions and plans wait longer: the operator may be away from the
- * terminal. Under the hook's 3600 s timeout (src/hook.ts).
+ * Questions and plans from such a hook, and extension or harness-server
+ * prompts that don't say how long they wait: the operator may be away from
+ * the terminal. Under the hook's own 3600 s limit (src/hook.ts).
  */
 export const INTERACTION_TIMEOUT_MS = 3_540_000;
 
+/** The longest timer Node holds (~24.8 days). */
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
 /**
  * How long the app may answer a hook's prompt: until a minute (a tenth, for
- * short timeouts) before Claude gives up on the hook, so the hook can still
- * print the app's answer; never past INTERACTION_TIMEOUT_MS (under the
- * hook's own give-up). `fallback` when the hook didn't say its timeout.
+ * short timeouts) before Claude gives up on the hook, so the hook (which
+ * gives up 20 s before Claude does) can still print the app's answer.
+ * `fallback` when the hook didn't say its timeout.
  */
 export function approvalDeadlineMs(
 	hookTimeoutS: number | null | undefined,
@@ -160,8 +169,11 @@ export function approvalDeadlineMs(
 ): number {
 	if (!hookTimeoutS) return fallback;
 	const ms = hookTimeoutS * 1000;
-	return Math.min(INTERACTION_TIMEOUT_MS, Math.max(ms - 60_000, ms * 0.9));
+	return Math.min(MAX_TIMER_MS, Math.max(ms - 60_000, ms * 0.9));
 }
+
+/** A prompt asked again with less than this left goes to the terminal at once. */
+const MIN_LEFT_MS = 5_000;
 
 type Row = Record<string, string | number | null>;
 
@@ -251,8 +263,13 @@ export class Approvals {
 	private readonly answerable: () => boolean;
 	private checking = false;
 	/**
+	 * The daemon is stopping: a hook's prompt ends without a decision and the
+	 * hook asks the next daemon again (`approval.request` answers `retry`).
+	 */
+	stopping = false;
+	/**
 	 * Claude sessions whose hook didn't say its timeout: started before
-	 * `pulsar setup` gave the hook an hour, so the app has 540 s (doctor).
+	 * `pulsar setup` added `--timeout`, so the app has 540 s (doctor).
 	 */
 	private oldHooks = new Map<string, string>();
 
@@ -350,6 +367,7 @@ export class Approvals {
 	}
 
 	stop() {
+		this.stopping = true;
 		for (const id of [...this.waiting.keys()])
 			this.finish(id, "expired", { answeredBy: "stopped" }, null);
 		if (this.poll) clearInterval(this.poll);
@@ -400,6 +418,14 @@ export class Approvals {
 		} catch {}
 		const inputHash = sha256hex(canonicalJson(req.input));
 		const grant = prompt ? null : sessionGrant(req.suggestions, req.tool);
+		const timeoutMs =
+			(req.hookTimeoutS
+				? approvalDeadlineMs(req.hookTimeoutS, this.timeoutMs)
+				: prompt
+					? INTERACTION_TIMEOUT_MS
+					: this.timeoutMs) - Math.max(0, req.elapsedMs ?? 0);
+		// Asked again after a restart with too little time left to answer.
+		if (req.elapsedMs && timeoutMs < MIN_LEFT_MS) return Promise.resolve(null);
 		return this.open(caller, agent, {
 			id: this.newId(req.promptId, inputHash),
 			kind: prompt?.kind ?? "permission",
@@ -412,11 +438,7 @@ export class Approvals {
 			grant,
 			sessionRules: null,
 			source: "hook",
-			timeoutMs: req.hookTimeoutS
-				? approvalDeadlineMs(req.hookTimeoutS, this.timeoutMs)
-				: prompt
-					? INTERACTION_TIMEOUT_MS
-					: this.timeoutMs,
+			timeoutMs,
 			transcriptPath: req.transcriptPath,
 		}).then((r) => {
 			if (!r) return null;
@@ -898,6 +920,11 @@ export class Approvals {
 				r.answered_by === "timeout"
 					? "Expired: nobody confirmed in time"
 					: `Closed: the request ended · ${hhmm(at)}`;
+		else if (
+			state === "expired" &&
+			(r.answered_by === "stopped" || r.answered_by === "restart")
+		)
+			a.outcome = `Closed: Pulsar restarted · ${hhmm(at)}`;
 		else if (state === "expired")
 			a.outcome =
 				kind === "permission"

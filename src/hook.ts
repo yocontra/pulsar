@@ -12,20 +12,36 @@ import { PROTOCOL_VERSION, type Registration } from "./types.ts";
  * passes. Prints Claude's decision JSON, or nothing: no output means no
  * decision, and Claude's own prompt (already on screen) carries on.
  *
+ * A daemon restart (an upgrade, a crash) doesn't end the prompt in the app:
+ * the hook connects again and asks the same prompt once more, with the time
+ * already spent, until the daemon answers or the hook's time runs out.
+ *
  * Never in Claude's way: no daemon, bad input or any error exits 0 silently
  * at once. It never starts a daemon. Imports stay tiny (startup time is paid
  * on every permission prompt).
  */
 
 /**
- * Past the daemon's own timeouts (a minute under `--timeout`, at most
- * 3540 s; 540 s for a permission prompt from a hook without it), under
- * Claude's hook timeout (3600 s; 600 s in hooks installed before
- * interactions, which Claude then ends itself).
+ * The hook's own limit when its command doesn't say its timeout (installed
+ * before `--timeout`): an hour, past the daemon's waits for such a hook.
+ * Claude kills a hook with a shorter timeout (600 s) itself.
  */
-const GIVE_UP_MS = 3_580_000;
+const DEFAULT_HOOK_TIMEOUT_S = 3600;
+/** The hook stops this long before Claude would kill it. */
+const GIVE_UP_MARGIN_MS = 20_000;
 const STDIN_MS = 5_000;
 const MAX_INPUT = 1024 * 1024;
+/** Waits between attempts to reach a restarted daemon. */
+const RETRY_MS = [250, 500, 1000, 2000];
+/** How often the hook checks that Claude (its parent) is still there. */
+const PARENT_CHECK_MS = 10_000;
+
+/** How long the hook may keep a prompt open, from its `--timeout`. */
+export function giveUpMs(hookTimeoutS: number | null): number {
+	const ms = (hookTimeoutS ?? DEFAULT_HOOK_TIMEOUT_S) * 1000;
+	// Node timers hold at most 2^31-1 ms (~24.8 days).
+	return Math.min(2 ** 31 - 1, Math.max(1000, ms - GIVE_UP_MARGIN_MS));
+}
 
 interface HookInput {
 	session_id?: unknown;
@@ -82,12 +98,72 @@ export function hookTimeoutArg(args: readonly string[]): number | null {
 	return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+/** How one attempt ended: the daemon's answer (maybe none), or the daemon went away. */
+type Attempt =
+	| { kind: "answer"; decision: unknown }
+	| { kind: "lost"; connected: boolean };
+
+/**
+ * One connection: `hello`, then `approval.request`. "lost" when the daemon
+ * can't be reached, closes the connection before it answers (a restart, a
+ * crash), or says it is stopping (`retry`): the prompt should be asked again.
+ */
+async function attempt(
+	sock: string,
+	registration: Registration,
+	params: Record<string, unknown>,
+): Promise<Attempt> {
+	const socket = await open(sock);
+	if (!socket) return { kind: "lost", connected: false };
+	const lost = { kind: "lost", connected: true } as const;
+	socket.on("error", () => {});
+	let nextId = 1;
+	const pending = new Map<number, (f: Frame | null) => void>();
+	readFrames(socket, (f) => {
+		if ("id" in f && !("method" in f)) {
+			pending.get(f.id)?.(f);
+			pending.delete(f.id);
+		}
+	});
+	socket.on("close", () => {
+		for (const p of pending.values()) p(null);
+		pending.clear();
+	});
+	/** The reply frame, or null once the connection closed. */
+	const call = (method: string, params: unknown) =>
+		new Promise<Frame | null>((resolve) => {
+			const id = nextId++;
+			pending.set(id, resolve);
+			writeFrame(socket, { id, method, params });
+		});
+	try {
+		const hello = await call("hello", {
+			protocol: PROTOCOL_VERSION,
+			version: "hook",
+			registration,
+		});
+		if (!hello) return lost;
+		// Refused (another protocol, not allowed): no decision.
+		if (!("result" in hello)) return { kind: "answer", decision: null };
+		const r = await call("approval.request", params);
+		if (!r) return lost;
+		if (!("result" in r)) return { kind: "answer", decision: null };
+		const result = r.result as { decision?: unknown; retry?: unknown } | null;
+		if (result?.retry === true) return lost;
+		return { kind: "answer", decision: result?.decision ?? null };
+	} finally {
+		socket.destroy();
+	}
+}
+
 /** Returns what to print on stdout ("" for no decision). */
-async function claudePermission(
+export async function claudePermission(
 	raw: string,
 	sockPath?: string,
 	hookTimeoutS: number | null = null,
+	now: () => number = Date.now,
 ): Promise<string> {
+	const started = now();
 	let input: HookInput;
 	try {
 		input = JSON.parse(raw) as HookInput;
@@ -112,68 +188,52 @@ async function claudePermission(
 	} catch {
 		return "";
 	}
-	const socket = await open(sock);
-	if (!socket) return "";
-	socket.on("error", () => {});
-	let nextId = 1;
-	const pending = new Map<number, (f: Frame | null) => void>();
-	readFrames(socket, (f) => {
-		if ("id" in f && !("method" in f)) {
-			pending.get(f.id)?.(f);
-			pending.delete(f.id);
-		}
-	});
-	socket.on("close", () => {
-		for (const p of pending.values()) p(null);
-		pending.clear();
-	});
-	const call = (method: string, params: unknown) =>
-		new Promise<unknown>((resolve) => {
-			const id = nextId++;
-			pending.set(id, (f) =>
-				resolve(f && "result" in f ? f.result : undefined),
-			);
-			writeFrame(socket, { id, method, params });
-		});
-	try {
-		const cwd = str(input.cwd);
-		const registration: Registration = {
-			role: "cli",
-			harness: "claude",
-			sessionId,
-			// Claude runs hooks as its own children.
-			pid: process.ppid,
-			cwd,
-			project: null,
-			branch: null,
-			tags: [],
-		};
-		const hello = await call("hello", {
-			protocol: PROTOCOL_VERSION,
-			version: "hook",
+	const cwd = str(input.cwd);
+	const registration: Registration = {
+		role: "cli",
+		harness: "claude",
+		sessionId,
+		// Claude runs hooks as its own children.
+		pid: process.ppid,
+		cwd,
+		project: null,
+		branch: null,
+		tags: [],
+	};
+	const request = {
+		sessionId,
+		promptId: str(input.prompt_id),
+		tool,
+		input: toolInput,
+		suggestions: Array.isArray(input.permission_suggestions)
+			? input.permission_suggestions
+			: [],
+		cwd,
+		transcriptPath: str(input.transcript_path),
+		// The daemon waits for the app as long as Claude waits for this hook.
+		...(hookTimeoutS ? { hookTimeoutS } : {}),
+	};
+	const deadline = started + giveUpMs(hookTimeoutS);
+	for (let tries = 0; ; tries++) {
+		const elapsedMs = now() - started;
+		const r = await attempt(
+			sock,
 			registration,
-		});
-		if (!hello) return "";
-		const r = (await call("approval.request", {
-			sessionId,
-			promptId: str(input.prompt_id),
-			tool,
-			input: toolInput,
-			suggestions: Array.isArray(input.permission_suggestions)
-				? input.permission_suggestions
-				: [],
-			cwd,
-			transcriptPath: str(input.transcript_path),
-			// The daemon waits for the app as long as Claude waits for this hook.
-			...(hookTimeoutS ? { hookTimeoutS } : {}),
-		})) as { decision?: unknown } | undefined;
-		const decision = r?.decision;
-		if (!decision || typeof decision !== "object") return "";
-		return JSON.stringify({
-			hookSpecificOutput: { hookEventName: "PermissionRequest", decision },
-		});
-	} finally {
-		socket.destroy();
+			// Asked again after a restart: the daemon's deadline keeps the time spent.
+			tries ? { ...request, elapsedMs } : request,
+		);
+		if (r.kind === "answer") {
+			const decision = r.decision;
+			if (!decision || typeof decision !== "object") return "";
+			return JSON.stringify({
+				hookSpecificOutput: { hookEventName: "PermissionRequest", decision },
+			});
+		}
+		// No daemon on the first try: nothing relays prompts; get out of the way.
+		if (tries === 0 && !r.connected) return "";
+		const wait = RETRY_MS[Math.min(tries, RETRY_MS.length - 1)]!;
+		if (now() + wait >= deadline) return "";
+		await new Promise((r) => setTimeout(r, wait));
 	}
 }
 
@@ -185,13 +245,19 @@ export async function runHook(
 	const quit = () => process.exit(0);
 	// Claude kills the hook when the terminal prompt is answered (Escape, No).
 	for (const s of ["SIGTERM", "SIGINT", "SIGHUP"] as const) process.on(s, quit);
-	setTimeout(quit, GIVE_UP_MS).unref();
+	const hookTimeoutS = hookTimeoutArg(args);
+	setTimeout(quit, giveUpMs(hookTimeoutS)).unref();
+	// Claude went away (its terminal closed): nobody can use the decision.
+	const parent = process.ppid;
+	setInterval(() => {
+		if (process.ppid !== parent) quit();
+	}, PARENT_CHECK_MS).unref();
 	if (name !== "claude-permission") quit();
 	try {
 		const out = await claudePermission(
 			await readStdin(),
 			undefined,
-			hookTimeoutArg(args),
+			hookTimeoutS,
 		);
 		if (out) process.stdout.write(`${out}\n`, quit);
 		else quit();

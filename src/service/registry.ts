@@ -90,6 +90,8 @@ export class Registry {
 	private users = new Map<string, Agent>();
 	/** Agents waiting on the user; empty until approvals exist. */
 	private needs = new Map<string, NeedsYou>();
+	/** The terminal wait each agent's last scan saw (applyTerminalWait). */
+	private terminalSeen = new Map<string, string>();
 	private readonly store: Store;
 	private readonly sessions: Sessions;
 	private readonly events: EventBus;
@@ -178,6 +180,7 @@ export class Registry {
 	delete(id: string) {
 		this.agents.delete(id);
 		this.statusAt.delete(id);
+		this.terminalSeen.delete(id);
 		this.cancelIdle(id);
 		this.clearNeedsYou(id);
 	}
@@ -636,6 +639,13 @@ export class Registry {
 	 */
 	private applyTerminalWait(agent: Agent, waitingFor: string | null) {
 		const current = this.needs.get(agent.id);
+		// A wait shows once two scans in a row saw it: a relayed prompt's hook
+		// connects a moment after the dialog opens, and must not flash a
+		// terminal card first.
+		const seen = this.terminalSeen.get(agent.id);
+		if (waitingFor) this.terminalSeen.set(agent.id, waitingFor);
+		else this.terminalSeen.delete(agent.id);
+		if (waitingFor && seen !== waitingFor) return;
 		// The dialog is a prompt relayed under another id of the same process
 		// (a hook's session id): that card already says so.
 		const relayed =

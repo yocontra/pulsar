@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Daemon } from "../src/daemon.ts";
 import { claude } from "../src/harnesses/claude.ts";
 import type { Approval } from "../src/http/wire.ts";
 import type { Principal } from "../src/service/caller.ts";
@@ -211,6 +212,7 @@ describe("pulsar hook claude-permission (end to end)", () => {
 		});
 		try {
 			for (const [args, ms] of [
+				[["--timeout", "86400"], 86_340_000],
 				[["--timeout", "3600"], 3_540_000],
 				[[], 540_000],
 			] as const) {
@@ -226,6 +228,65 @@ describe("pulsar hook claude-permission (end to end)", () => {
 			cleanup();
 		}
 	}, 30_000);
+
+	test("a daemon restart: the hook asks the new daemon, and the app's answer still reaches Claude", async () => {
+		const approvals = { probe: () => null, answerable: () => true };
+		const { daemon, home, cleanup } = await startDaemon({ approvals });
+		let next: Daemon | null = null;
+		try {
+			const auth = await enroll(daemon.service);
+			let pending = nextPending(daemon.service);
+			const run = runHook(home, input(), ["--timeout", "3600"]);
+			const first = await pending;
+			// An upgrade: the daemon stops and a new one takes the socket.
+			await daemon.stop();
+			next = new Daemon({
+				socket: join(home, "bus.sock"),
+				db: join(home, "pulsar.db"),
+				scan: false,
+				remote: { mode: "off" },
+				approvals,
+			});
+			pending = nextPending(next.service);
+			expect(await next.start()).toBe(true);
+			const again = await pending;
+			expect(next.service.approvals.get(first.requestId)?.outcome).toMatch(
+				/^Closed: Pulsar restarted/,
+			);
+			expect(again.requestId).not.toBe(first.requestId);
+			expect(again.tool).toBe("Bash");
+			expect(again.input).toEqual(first.input);
+			// Same deadline as the first ask (the time already spent counts).
+			expect(Math.abs(again.expiresAt - first.expiresAt)).toBeLessThan(2000);
+			await decide(next.service, auth, again.requestId, "allow-once");
+			const r = await run.done;
+			expect(r.code).toBe(0);
+			expect(JSON.parse(r.out).hookSpecificOutput.decision).toEqual({
+				behavior: "allow",
+			});
+		} finally {
+			await next?.stop();
+			cleanup();
+		}
+	}, 30_000);
+
+	test("the daemon gone with no new one: the hook waits, then gives up before Claude would", async () => {
+		const { daemon, home, cleanup } = await startDaemon({
+			approvals: { probe: () => null, answerable: () => true },
+		});
+		try {
+			const pending = nextPending(daemon.service);
+			// 21 s: the hook gives up 20 s before Claude's timeout, so after ~1 s.
+			const run = runHook(home, input(), ["--timeout", "21"]);
+			await pending;
+			await daemon.stop();
+			const r = await run.done;
+			expect(r).toMatchObject({ code: 0, out: "" });
+			expect(r.ms).toBeLessThan(5000);
+		} finally {
+			cleanup();
+		}
+	}, 20_000);
 
 	test("no daemon: exits 0 at once with no output", async () => {
 		const home = mkdtempSync(join(tmpdir(), "pulsar-nodaemon-"));

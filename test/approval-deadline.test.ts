@@ -4,12 +4,11 @@
  * ran out is shown read-only with the prompt it was.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { hookTimeoutArg } from "../src/hook.ts";
+import { giveUpMs, hookTimeoutArg } from "../src/hook.ts";
 import {
 	APPROVAL_TIMEOUT_MS,
 	type ApprovalRequest,
 	approvalDeadlineMs,
-	INTERACTION_TIMEOUT_MS,
 } from "../src/service/approvals.ts";
 import type { Caller } from "../src/service/caller.ts";
 import { PulsarService } from "../src/service/index.ts";
@@ -73,13 +72,16 @@ function ask(service: PulsarService, agentId: string, req: ApprovalRequest) {
 }
 
 describe("the app's deadline follows the hook's timeout", () => {
-	test("a minute under Claude's hook timeout, capped under the hook's own give-up", () => {
+	test("a minute under Claude's hook timeout, however long it is", () => {
 		expect(approvalDeadlineMs(3600, APPROVAL_TIMEOUT_MS)).toBe(3_540_000);
 		expect(approvalDeadlineMs(600, APPROVAL_TIMEOUT_MS)).toBe(540_000);
 		// Short timeouts keep a tenth in hand.
 		expect(approvalDeadlineMs(60, APPROVAL_TIMEOUT_MS)).toBe(54_000);
-		expect(approvalDeadlineMs(86_400, APPROVAL_TIMEOUT_MS)).toBe(
-			INTERACTION_TIMEOUT_MS,
+		// A day (what setup installs): no hour cap.
+		expect(approvalDeadlineMs(86_400, APPROVAL_TIMEOUT_MS)).toBe(86_340_000);
+		// Past what a Node timer holds: the longest one.
+		expect(approvalDeadlineMs(30 * 86_400, APPROVAL_TIMEOUT_MS)).toBe(
+			2 ** 31 - 1,
 		);
 		// A hook that doesn't say: the old 540 s.
 		expect(approvalDeadlineMs(null, APPROVAL_TIMEOUT_MS)).toBe(540_000);
@@ -90,6 +92,62 @@ describe("the app's deadline follows the hook's timeout", () => {
 		expect(hookTimeoutArg([])).toBeNull();
 		expect(hookTimeoutArg(["--timeout", "soon"])).toBeNull();
 		expect(hookTimeoutArg(["--timeout", "-5"])).toBeNull();
+	});
+
+	test("the hook gives up 20 s before Claude kills it; an hour when it doesn't say", () => {
+		expect(giveUpMs(86_400)).toBe(86_380_000);
+		expect(giveUpMs(3600)).toBe(3_580_000);
+		expect(giveUpMs(null)).toBe(3_580_000);
+		expect(giveUpMs(10)).toBe(1000);
+		expect(giveUpMs(30 * 86_400)).toBe(2 ** 31 - 1);
+	});
+
+	test("asked again after a restart: the deadline keeps the time already spent", () => {
+		const { service, agent } = setup();
+		const again = ask(service, agent.id, {
+			...BASH,
+			hookTimeoutS: 3600,
+			elapsedMs: 600_000,
+		});
+		expect(again.ap.expiresAt - again.ap.createdAt).toBe(2_940_000);
+		// A day's hook asked again an hour in.
+		const day = ask(service, agent.id, {
+			...BASH,
+			promptId: "turn-2",
+			hookTimeoutS: 86_400,
+			elapsedMs: 3_600_000,
+		});
+		expect(day.ap.expiresAt - day.ap.createdAt).toBe(82_740_000);
+	});
+
+	test("asked again with under 5 s left: no card, the terminal decides", async () => {
+		const { service, agent } = setup();
+		const before = service.approvals.pendingFor(agent.id).length;
+		const caller: Caller = {
+			principal: { kind: "agent", agentId: agent.id },
+			closed: new AbortController().signal,
+			emit() {},
+		};
+		const decision = await service.approvals.request(caller, {
+			...BASH,
+			hookTimeoutS: 600,
+			elapsedMs: 537_000,
+		});
+		expect(decision).toBeNull();
+		expect(service.approvals.pendingFor(agent.id).length).toBe(before);
+	});
+
+	test("a stopping daemon ends a hook's prompt as restarted, not expired", async () => {
+		const { service, agent } = setup();
+		const a = ask(service, agent.id, { ...BASH, hookTimeoutS: 3600 });
+		service.approvals.stop();
+		expect(await a.decision).toBeNull();
+		expect(service.approvals.stopping).toBe(true);
+		const ended = service.approvals.get(a.ap.requestId)!;
+		expect(ended.state).toBe("expired");
+		expect(ended.outcome).toMatch(/^Closed: Pulsar restarted · /);
+		// A terminal wait right after is not blamed on the app's time running out.
+		expect(service.approvals.expiredBefore(agent, Date.now())).toBeNull();
 	});
 
 	test("a permission prompt's expiry: the hook's hour, the old 540 s without one", () => {

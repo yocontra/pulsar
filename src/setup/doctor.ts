@@ -154,15 +154,15 @@ export async function runDoctor(
 				);
 			else if (!hook.includes("--timeout"))
 				note(
-					"Claude Code approvals: the hook doesn't pass its timeout, so the app has 9 minutes to answer a permission prompt; re-run `pulsar setup` to give it an hour",
+					"Claude Code approvals: the hook doesn't pass its timeout, so the app has 9 minutes to answer a permission prompt; re-run `pulsar setup` to give it a day",
 				);
 			if (oldHooks.length)
 				note(
-					`Claude Code approvals: ${oldHooks.length} running session(s) started before the hook gave the app an hour (${oldHooks
+					`Claude Code approvals: ${oldHooks.length} running session(s) started before the hook passed its timeout (${oldHooks
 						.map((o) => (o.pid ? `${o.name}, pid ${o.pid}` : o.name))
 						.join(
 							"; ",
-						)}); the app has 9 minutes to answer their prompts. Restart these sessions to give the app an hour to answer.`,
+						)}); the app has 9 minutes to answer their prompts. Restart these sessions to give the app a day to answer.`,
 				);
 		}
 	} else if (

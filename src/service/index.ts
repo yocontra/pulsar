@@ -1088,10 +1088,17 @@ export class PulsarService {
 				return { ok: true };
 			case "transcript.read":
 				return await this.readTranscript(caller, p);
-			case "approval.request":
-				return {
-					decision: await this.approvals.request(caller, approvalRequest(p)),
-				};
+			case "approval.request": {
+				// Stopping (an upgrade, a restart): the hook asks the next daemon.
+				if (this.approvals.stopping) return { decision: null, retry: true };
+				const decision = await this.approvals.request(
+					caller,
+					approvalRequest(p),
+				);
+				return !decision && this.approvals.stopping
+					? { decision: null, retry: true }
+					: { decision };
+			}
 			case "interaction.ask":
 				return {
 					result: await this.approvals.ask(caller, interactionRequest(p)),
@@ -1345,5 +1352,8 @@ function approvalRequest(p: Record<string, unknown>): ApprovalRequest {
 			Number.isInteger(p.hookTimeoutS) && Number(p.hookTimeoutS) > 0
 				? Number(p.hookTimeoutS)
 				: null,
+		...(Number.isFinite(p.elapsedMs) && Number(p.elapsedMs) > 0
+			? { elapsedMs: Number(p.elapsedMs) }
+			: {}),
 	};
 }

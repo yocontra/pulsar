@@ -439,7 +439,8 @@ describe("Claude approvals hook", () => {
 		const mine = ours(home);
 		expect(mine.length).toBe(1);
 		expect(mine[0]!.matcher).toBe("*");
-		expect(mine[0]!.hooks[0]!.timeout).toBe(3600);
+		expect(mine[0]!.hooks[0]!.timeout).toBe(86_400);
+		expect(mine[0]!.hooks[0]!.command).toContain("--timeout 86400");
 		expect(mine[0]!.hooks[0]!.command).toContain(
 			join(home, ".pulsar-install", "current", "dist", "cli.js"),
 		);
