@@ -15,9 +15,12 @@ import {
 	readIssue,
 	toIssue,
 } from "../src/issues.ts";
+import { RpcError } from "../src/rpc.ts";
 import { matches, parseSelector } from "../src/selector.ts";
 import { PulsarService } from "../src/service/index.ts";
-import { firstOperatorText } from "../src/service/issues.ts";
+import { firstOperatorText, IssueOps } from "../src/service/issues.ts";
+import type { PoolView } from "../src/service/pool.ts";
+import type { Registry } from "../src/service/registry.ts";
 import { Store } from "../src/store.ts";
 import { newParseState } from "../src/transcripts/types.ts";
 import { fakeGh } from "./fake-gh.ts";
@@ -227,6 +230,22 @@ describe("the issue card", () => {
 		expect(await readIssue(repo, 11)).toMatchObject({
 			reason: "gh_logged_out",
 		});
+		// A revoked token: GitHub's HTTP 401.
+		gh.set({ prs: {}, mode: "bad_token" });
+		expect(await readIssue(repo, 12)).toMatchObject({
+			reason: "gh_logged_out",
+		});
+	});
+
+	test("an issue numbered like 401 that is missing reads as not found", async () => {
+		const repo = gitRepo();
+		g(repo, "remote", "add", "origin", "https://github.com/acme/demo.git");
+		gh.set({ prs: {}, issues: {} });
+		for (const n of [401, 1401, 4012])
+			expect(await readIssue(repo, n)).toMatchObject({
+				issue: null,
+				reason: "not_found",
+			});
 	});
 
 	test("a fork's issues live in upstream; no GitHub remote: no_github", async () => {
@@ -265,6 +284,80 @@ describe("the issue card", () => {
 		expect(await issueFromPr(repo, 5)).toBe(4);
 		expect(await issueFromPr(repo, 6)).toBe(8);
 		expect(await issueFromPr(repo, 7)).toBeNull();
+	});
+
+	test("issueFromPr asks again after gh failed; a real answer stays cached", async () => {
+		const repo = gitRepo();
+		g(repo, "remote", "add", "origin", "https://github.com/acme/demo.git");
+		gh.set({ prs: {}, mode: "logged_out" });
+		expect(await issueFromPr(repo, 5)).toBeNull();
+		gh.set({
+			prs: { "5": { body: "Fixes #31", closingIssuesReferences: [] } },
+		});
+		expect(await issueFromPr(repo, 5)).toBe(31);
+		// gh's answer "closes nothing" is kept: no new call.
+		gh.set({ prs: { "6": { body: "Refs #1", closingIssuesReferences: [] } } });
+		expect(await issueFromPr(repo, 6)).toBeNull();
+		const calls = gh.calls().length;
+		expect(await issueFromPr(repo, 6)).toBeNull();
+		expect(gh.calls().length).toBe(calls);
+	});
+});
+
+describe("the card of a remote agent", () => {
+	const ops = (pool: Partial<PoolView> | null) =>
+		new IssueOps({
+			registry: { get: () => undefined } as unknown as Registry,
+			pool: () => pool as PoolView | null,
+			resolve: () => null,
+			prLookup: false,
+			firstMessage: false,
+		});
+	const unsupported = {
+		agent: "m1/a1",
+		number: null,
+		issue: null,
+		reason: "unsupported",
+		message: "That machine runs an older Pulsar.",
+	};
+
+	test("a home node without issue.read: unsupported, not an error", async () => {
+		// This node's pool has no issueRead at all.
+		expect(await ops({}).details("m1/a1")).toEqual(unsupported);
+		// The home node answers the op as unknown.
+		const old = ops({
+			issueRead: async () => {
+				throw new RpcError("unsupported", "unknown action issue.read");
+			},
+		});
+		expect(await old.details("m1/a1")).toEqual(unsupported);
+	});
+
+	test("another error from the home node is passed on; no pool: not found", async () => {
+		const failing = ops({
+			issueRead: async () => {
+				throw new RpcError("forbidden", "no");
+			},
+		});
+		await expect(failing.details("m1/a1")).rejects.toMatchObject({
+			code: "forbidden",
+		});
+		await expect(ops(null).details("m1/a1")).rejects.toMatchObject({
+			code: "not_found",
+		});
+		// The home node's card comes back under this node's address.
+		const ok = ops({
+			issueRead: async () => ({
+				agent: "a1",
+				number: 7,
+				issue: null,
+				reason: "no_github",
+			}),
+		});
+		expect(await ok.details("m1/a1")).toMatchObject({
+			agent: "m1/a1",
+			number: 7,
+		});
 	});
 });
 

@@ -8,8 +8,11 @@ import { tmpFolder } from "./git-repo.ts";
  * Every call is logged. Put `dir` first on PATH (process.env.PATH).
  */
 export interface FakeGhState {
-	/** "logged_out": every call fails the way an unauthenticated gh does. */
-	mode?: "ok" | "logged_out";
+	/**
+	 * "logged_out": every call fails the way an unauthenticated gh does;
+	 * "bad_token": the way a revoked token does (GitHub answers HTTP 401).
+	 */
+	mode?: "ok" | "logged_out" | "bad_token";
 	/** PRs by head ref, in `gh pr view --json`'s shape. */
 	prs: Record<string, Record<string, unknown>>;
 	/** Inline review comments (`gh api .../pulls/N/comments`). */
@@ -30,6 +33,10 @@ const st = JSON.parse(readFileSync(file, "utf8"));
 const a = process.argv.slice(2);
 appendFileSync(dir + "/calls.log", JSON.stringify(a) + "\\n");
 const opt = (k) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : undefined; };
+if (st.mode === "bad_token") {
+	console.error("HTTP 401: Bad credentials (https://api.github.com/graphql)");
+	process.exit(1);
+}
 if (st.mode === "logged_out") {
 	console.error("To get started with GitHub CLI, please run:  gh auth login");
 	process.exit(4);

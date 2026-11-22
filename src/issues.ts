@@ -147,10 +147,13 @@ function issueFailure(r: {
 }): NonNullable<IssueDetails["reason"]> {
 	if (r.code === "spawn") return "gh_missing";
 	const text = `${r.stderr}\n${r.message}`;
-	if (/gh auth login|not logged in|authentication|GH_TOKEN|401/i.test(text))
-		return "gh_logged_out";
+	// Not found first: its text names the number ("…with the number of 401.").
 	if (/could not resolve to an issue|not found|no issue/i.test(text))
 		return "not_found";
+	if (
+		/gh auth login|not logged in|authentication|GH_TOKEN|HTTP 401\b/i.test(text)
+	)
+		return "gh_logged_out";
 	return "gh_error";
 }
 
@@ -320,10 +323,12 @@ export async function issueFromPr(
 			}
 			n ??= issueFromPrBody(typeof raw.body === "string" ? raw.body : "", repo);
 		} catch {
-			n = null;
+			return null;
 		}
+		// Only gh's real answer is kept: a failure (timeout, logged out,
+		// network) is asked again on the next run.
+		prRefs.set(key, { at: Date.now(), n });
 	}
-	prRefs.set(key, { at: Date.now(), n });
 	return n;
 }
 
