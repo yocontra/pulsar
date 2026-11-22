@@ -138,7 +138,6 @@ test.describe("desktop", () => {
 	test("rich content: highlighted code, mermaid, math, table, images", async ({
 		page,
 		request,
-		errors,
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
@@ -207,14 +206,6 @@ test.describe("desktop", () => {
 		await expect(page.locator(".transcript")).not.toContainText("[image]");
 		await reply.scrollIntoViewIfNeeded();
 		await page.screenshot({ path: `${SHOTS}desktop-rich.png` });
-		// Streamdown re-applies the diagram's size as a style="" attribute when it
-		// inserts the SVG; CSP blocks it (the width/height attributes still size
-		// it). That one inline-style report is expected with Mermaid on screen.
-		errors.splice(
-			0,
-			errors.length,
-			...errors.filter((e) => !/Applying inline style violates/.test(e)),
-		);
 	});
 	test("stop: confirm, Face ID once, interrupt, toast; hidden when the agent can't be stopped", async ({
 		page,

@@ -715,9 +715,11 @@
 	background: none;
 	backdrop-filter: none;
 }
+/* An inline diagram keeps its own size (its width/height attributes): the
+   pan/zoom frame around it scales it to fit. Shrinking it here too would fit
+   it twice (half size on a phone). The fullscreen view is outside .ds-conv. */
 .ds-conv [data-streamdown="mermaid"] svg {
-	max-width: 100%;
-	height: auto;
+	max-width: none;
 }
 /* Cytoscape's own rule (Mermaid mindmaps); session/streamdown.tsx keeps it
    from adding it as an inline <style>, which the CSP blocks. */
