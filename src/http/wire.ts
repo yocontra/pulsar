@@ -1813,6 +1813,8 @@ export interface DiagnosticsReport {
 	machines: MachineDiagnostics[];
 	/** The newest Pulsar version in the pool. */
 	newest: string | null;
+}
+
 /**
  * Why a queued message has not reached the agent's conversation yet:
  * `idle` the harness has it and lands it when the turn ends, `next-turn` it
