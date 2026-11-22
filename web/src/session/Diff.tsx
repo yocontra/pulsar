@@ -1,5 +1,5 @@
 import { diffLines } from "diff";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { plural } from "../lib/format.ts";
 import { type Lines, LineTokens, useTokens } from "./highlight.tsx";
 
@@ -9,7 +9,23 @@ export type DiffRow = {
 	a?: number;
 	b?: number;
 	text: string;
+	/** 1-based line numbers in the file, old and new side (a git patch knows them). */
+	oldLine?: number;
+	newLine?: number;
 };
+
+/** Which side of a diff a line is on: LEFT the old file, RIGHT the new one. */
+export type DiffSide = "LEFT" | "RIGHT";
+
+/**
+ * Optional per-line extras (PR review): `gutter` renders at the start of a
+ * line (an "add comment" button), `after` below it across the whole diff
+ * (a comment thread). Context lines are asked for both sides.
+ */
+export interface DiffLineExtras {
+	gutter?: (r: DiffRow, side: DiffSide) => ReactNode;
+	after?: (r: DiffRow, side: DiffSide) => ReactNode;
+}
 type Fold = { fold: number; key: string };
 
 /** Unchanged runs longer than this fold into "N unchanged lines". */
@@ -122,6 +138,8 @@ export function DiffBody({
 	layout = "unified",
 	className,
 	onExpand,
+	numbers = false,
+	extras,
 }: {
 	items: DiffItem[];
 	A: Lines | null;
@@ -129,7 +147,26 @@ export function DiffBody({
 	layout?: "split" | "unified";
 	className?: string;
 	onExpand?: () => void;
+	/** Show the file's line numbers (rows with `oldLine` / `newLine`). */
+	numbers?: boolean;
+	extras?: DiffLineExtras;
 }) {
+	const sideOf = (r: DiffRow): DiffSide => (r.sign === "-" ? "LEFT" : "RIGHT");
+	const below = (r: DiffRow, sides: DiffSide[], key: string) => {
+		if (!extras?.after) return null;
+		const parts = sides.map((s) => extras.after!(r, s)).filter(Boolean);
+		return parts.length ? (
+			<div key={key} className="ds-diff-after">
+				{parts}
+			</div>
+		) : null;
+	};
+	const ln = (n: number | undefined) =>
+		numbers ? (
+			<span className="ds-diff-ln" aria-hidden="true">
+				{n ?? ""}
+			</span>
+		) : null;
 	// A pure addition (a new file) has nothing to put on the left.
 	const split =
 		layout === "split" &&
@@ -165,23 +202,31 @@ export function DiffBody({
 				>
 					<div className="ds-diff-grid u">
 						{items.map((r, i) =>
-							isFold(r) ? (
-								foldRow(r)
-							) : isHunk(r) ? (
-								hunkRow(r)
-							) : (
-								<div
-									key={i}
-									className={`ds-diff-row ${r.sign === "+" ? "add" : r.sign === "-" ? "del" : "ctx"}`}
-								>
-									<span className="sign" aria-hidden="true">
-										{r.sign === " " ? "" : r.sign === "-" ? "−" : "+"}
-									</span>
-									<span className="ds-diff-code">
-										<LineTokens tokens={tok(r, A, B)} text={r.text} />
-									</span>
-								</div>
-							),
+							isFold(r)
+								? foldRow(r)
+								: isHunk(r)
+									? hunkRow(r)
+									: [
+											<div
+												key={i}
+												className={`ds-diff-row ${r.sign === "+" ? "add" : r.sign === "-" ? "del" : "ctx"}`}
+											>
+												{extras?.gutter?.(r, sideOf(r))}
+												{ln(r.oldLine)}
+												{ln(r.newLine)}
+												<span className="sign" aria-hidden="true">
+													{r.sign === " " ? "" : r.sign === "-" ? "−" : "+"}
+												</span>
+												<span className="ds-diff-code">
+													<LineTokens tokens={tok(r, A, B)} text={r.text} />
+												</span>
+											</div>,
+											below(
+												r,
+												r.sign === " " ? ["LEFT", "RIGHT"] : [sideOf(r)],
+												`${i}-after`,
+											),
+										],
 						)}
 					</div>
 				</div>
@@ -224,6 +269,8 @@ export function DiffBody({
 			c.sign === " " ? (side === "a" ? A?.[c.a!] : B?.[c.b!]) : tok(c, A, B);
 		return (
 			<span key={key} className={`ds-diff-cell ${cls}`}>
+				{extras?.gutter?.(c, side === "a" ? "LEFT" : "RIGHT")}
+				{ln(side === "a" ? c.oldLine : c.newLine)}
 				<span className="sign" aria-hidden="true">
 					{c.sign === " " ? "" : c.sign === "-" ? "−" : "+"}
 				</span>
@@ -233,6 +280,19 @@ export function DiffBody({
 			</span>
 		);
 	};
+	// A pair's threads: the old side's under its line, then the new side's.
+	const splitBelow = ([l, r]: [Cell, Cell], i: number) => {
+		if (!extras?.after) return null;
+		const parts = [
+			l ? extras.after(l, "LEFT") : null,
+			r ? extras.after(r, "RIGHT") : null,
+		].filter(Boolean);
+		return parts.length ? (
+			<div key={`${i}-after`} className="ds-diff-after">
+				{parts}
+			</div>
+		) : null;
+	};
 	return (
 		<div
 			className={`diff ds-diff split${className ? ` ${className}` : ""}`}
@@ -241,16 +301,17 @@ export function DiffBody({
 		>
 			<div className="ds-diff-grid s">
 				{pairs.map((p, i) =>
-					"fold" in p ? (
-						foldRow(p)
-					) : "hunk" in p ? (
-						hunkRow(p)
-					) : (
-						<div key={i} className="ds-diff-pair">
-							{cell(p[0], "a", "a")}
-							{cell(p[1], "b", "b")}
-						</div>
-					),
+					"fold" in p
+						? foldRow(p)
+						: "hunk" in p
+							? hunkRow(p)
+							: [
+									<div key={i} className="ds-diff-pair">
+										{cell(p[0], "a", "a")}
+										{cell(p[1], "b", "b")}
+									</div>,
+									splitBelow(p, i),
+								],
 				)}
 			</div>
 		</div>
