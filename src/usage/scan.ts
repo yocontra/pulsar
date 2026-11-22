@@ -2,8 +2,10 @@ import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { configDir } from "../harnesses/claude-ident.ts";
+import type { LimitState } from "../http/wire.ts";
 import { lazyCrypto } from "../lazy.ts";
 import type { Store } from "../store.ts";
+import { mergeLimits, saveLimits } from "./limits.ts";
 import {
 	type FileState,
 	parseLine,
@@ -254,7 +256,9 @@ export class UsageScanner {
 					carryLen = 0;
 					start = nl + 1;
 					offset = chunkAt + start;
-					const rec = line ? parseLine(f.harness, line, state) : null;
+					const rec = line
+						? parseLine(f.harness, line, state, batch.onLimit)
+						: null;
 					if (rec && rec.t >= since) batch.add(rec, state);
 				}
 				if (start < bytesRead) {
@@ -358,6 +362,7 @@ ON CONFLICT (path) DO UPDATE SET
 				state.context?.window ?? null,
 				batch.lastAt,
 			);
+			if (batch.limits.size) saveLimits(this.store, batch.limits.values());
 			db.exec("COMMIT");
 		} catch (e) {
 			db.exec("ROLLBACK");
@@ -375,10 +380,12 @@ ON CONFLICT (path) DO UPDATE SET
 	}
 }
 
-/** What one commit adds: records with the folder they ran in. */
+/** What one commit adds: records with the folder they ran in, and the newest limit readings. */
 class Batch {
 	items: { rec: UsageRecord; project: string }[] = [];
 	lastAt: number | null = null;
+	limits = new Map<string, LimitState>();
+	readonly onLimit = (s: LimitState) => mergeLimits(this.limits, [s]);
 	add(rec: UsageRecord, state: FileState) {
 		this.items.push({ rec, project: state.cwd ?? "" });
 		if (this.lastAt === null || rec.t > this.lastAt) this.lastAt = rec.t;

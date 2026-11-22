@@ -34,6 +34,8 @@ export const INTERVALS = {
 	refreshModelsMs: 30_000,
 	/** Reading new lines of harness session files for token usage. */
 	usageMs: 60_000,
+	/** Asking peers for their plan usage limits (warnings cover the pool). */
+	limitsPoolMs: 5 * 60_000,
 	refreshMachineMs: 10 * 60_000,
 	pruneMs: 3600_000,
 	rateWindowMs: 60_000,

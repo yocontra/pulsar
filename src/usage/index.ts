@@ -1,5 +1,8 @@
 import type {
 	AgentUsage,
+	LimitState,
+	LimitWarning,
+	UsageLimits,
 	UsagePeriod,
 	UsagePrice,
 	UsageReport,
@@ -10,6 +13,7 @@ import { RpcError } from "../rpc.ts";
 import type { Principal } from "../service/caller.ts";
 import type { Store } from "../store.ts";
 import type { Agent } from "../types.ts";
+import { cleanLimits, current, Limits } from "./limits.ts";
 import {
 	costOf,
 	normalizeModel,
@@ -44,6 +48,8 @@ export interface LocalUsage {
 	rows: (UsageTokens & { harness: string; model: string; t: number })[];
 	sessions: { harness: string; count: number }[];
 	scannedAt: number | null;
+	/** Plan limits this machine's harnesses reported (absent from older nodes). */
+	limits?: LimitState[];
 }
 
 /** One agent's usage on its home node, unpriced (`act: usage.agent`). */
@@ -53,6 +59,8 @@ export interface LocalAgentUsage {
 	models: (UsageTokens & { model: string })[];
 	context: { used: number; window: number | null } | null;
 	model: string | null;
+	/** Its harness's plan limits on its machine. */
+	limits?: LimitState[];
 }
 
 /** What federation gives the usage page: each peer's answer or why not. */
@@ -140,6 +148,7 @@ export function cleanLocalUsage(v: unknown): LocalUsage | null {
 			count: Math.max(0, Math.floor(Number(s?.count) || 0)),
 		})),
 		scannedAt: Number(o.scannedAt) || null,
+		limits: cleanLimits(o.limits),
 	};
 }
 
@@ -162,6 +171,7 @@ export function cleanAgentUsage(v: unknown): LocalAgentUsage {
 					}
 				: null,
 		model: typeof o.model === "string" ? text(o.model) : null,
+		limits: cleanLimits(o.limits),
 	};
 }
 
@@ -180,10 +190,49 @@ export interface UsageOptions {
 export class Usage {
 	private readonly store: Store;
 	readonly scanner: UsageScanner;
+	readonly limits: Limits;
+	/** Each peer's limits from its last answer (warnings cover the pool). */
+	private readonly peerLimits = new Map<string, LimitState[]>();
 
 	constructor(store: Store, opts: UsageOptions = {}) {
 		this.store = store;
 		this.scanner = new UsageScanner(store, opts.roots, opts.tuning);
+		this.limits = new Limits(store);
+	}
+
+	// --- Limits ---
+
+	/** Remembers what peers said about their limits. */
+	private notePeers(
+		answers: { machineId: string; usage: LocalUsage | null }[],
+	) {
+		for (const a of answers)
+			if (a.usage?.limits) this.peerLimits.set(a.machineId, a.usage.limits);
+	}
+
+	/** `GET /usage/limits`: this machine's readings, the peers' last ones, and the settings. */
+	limitsView(self: string, now = Date.now()): UsageLimits {
+		const limits: UsageLimits["limits"] = this.limits
+			.local(now)
+			.map((l) => ({ ...l, machine: self }));
+		for (const [machine, list] of this.peerLimits)
+			for (const l of list) if (current(l, now)) limits.push({ ...l, machine });
+		return { limits, settings: this.limits.settings() };
+	}
+
+	/**
+	 * Asks the peers for their limits (a small `usage.rows` read), then
+	 * returns the warnings due for the whole pool. A peer that does not
+	 * answer keeps its last readings.
+	 */
+	async limitWarnings(
+		pool: PoolUsage | null,
+		now = Date.now(),
+	): Promise<LimitWarning[]> {
+		if (pool) this.notePeers(await pool.usage("24h", 0));
+		const all = [...this.limits.local(now)];
+		for (const l of this.peerLimits.values()) all.push(...l);
+		return this.limits.check(all, now);
 	}
 
 	// --- Prices ---
@@ -275,6 +324,7 @@ WHERE hour >= ? GROUP BY harness`,
 				count: Number(s.count),
 			})),
 			scannedAt: this.scanner.scannedAt,
+			limits: this.limits.local(now),
 		};
 	}
 
@@ -315,6 +365,7 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 					}
 				: null,
 			model: file?.model ? String(file.model) : null,
+			limits: this.limits.forHarness(agent.harness),
 		};
 	}
 
@@ -355,11 +406,18 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 		const parts: { machine: string; usage: LocalUsage }[] = [
 			{ machine: self.id, usage: this.local(period, tzMinutes, now) },
 		];
-		if (pool)
-			for (const p of await pool.usage(period, tzMinutes, as)) {
+		if (pool) {
+			const answers = await pool.usage(period, tzMinutes, as);
+			this.notePeers(answers);
+			for (const p of answers) {
 				machines.push({ id: p.machineId, name: p.name, error: p.error });
 				if (p.usage) parts.push({ machine: p.machineId, usage: p.usage });
 			}
+		}
+		const limits: NonNullable<UsageReport["limits"]> = [];
+		for (const { machine, usage } of parts)
+			for (const l of usage.limits ?? [])
+				if (current(l, now)) limits.push({ ...l, machine });
 		const rows: UsageRow[] = [];
 		const sessions: UsageReport["sessions"] = [];
 		for (const { machine, usage } of parts) {
@@ -378,6 +436,8 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 			prices: this.prices(),
 			scannedAt: this.scanner.scannedAt,
 			scanning: this.scanner.scanning,
+			limits,
+			limitSettings: this.limits.settings(),
 		};
 	}
 
@@ -399,6 +459,7 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 			cost,
 			context: u.context,
 			model: u.model,
+			limits: (u.limits ?? []).filter((l) => current(l, Date.now())),
 		};
 	}
 }

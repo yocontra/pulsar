@@ -227,11 +227,16 @@ export class EventHub {
 		const offLaunch = this.service.events.on("launch", (data) =>
 			this.publish(topicKey("launches"), "launch", data),
 		);
+		// Usage limit warnings ride the notify topic (every stream hears them).
+		const offLimit = this.service.events.on("limit", (data) =>
+			this.publish(topicKey("notify"), "limit", data),
+		);
 		this.offApprovals = () => {
 			offApproval();
 			offSecurity();
 			offNotify();
 			offLaunch();
+			offLimit();
 		};
 	}
 

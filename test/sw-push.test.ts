@@ -130,3 +130,28 @@ describe("sw.js finish and fail notifications", () => {
 		expect(w.navigated[1]).toBe("/");
 	});
 });
+
+describe("sw.js usage limit notifications", () => {
+	test("near and reached: plain copy with no names, one notice at a time, a tap opens Usage", async () => {
+		const w = worker({ focused: true });
+		await w.push({ kind: "limit", level: 95 });
+		await w.push({ kind: "limit", level: 100, reached: true });
+		await w.push({ kind: "limit" });
+		expect(w.shown.map((n) => [n.title, n.opts.body, n.opts.tag])).toEqual([
+			[
+				"An agent is near its usage limit",
+				"A usage limit passed 95%. Open Pulsar to see which.",
+				"limit",
+			],
+			[
+				"An agent hit its usage limit",
+				"Open Pulsar to see when it resets.",
+				"limit",
+			],
+		]);
+		await w.fire("notificationclick", {
+			notification: { close: () => {}, data: { limit: true } },
+		});
+		expect(w.navigated).toEqual(["/#/usage"]);
+	});
+});

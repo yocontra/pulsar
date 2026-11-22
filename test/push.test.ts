@@ -351,4 +351,36 @@ describe("push service", () => {
 		);
 		expect(payload).toEqual({ kind: "security", badge: 0 });
 	});
+
+	test("a usage limit warning pushes only the level, on its own topic", async () => {
+		const { service, sent } = setup();
+		const ua = browser();
+		service.push.subscribe(user, {
+			endpoint: "https://web.push.apple.com/lim",
+			keys: ua.keys,
+		});
+		await until(() => sent.length >= 1);
+		sent.shift();
+		const warn = {
+			harness: "codex",
+			label: "Weekly",
+			usedPercent: 96,
+			resetsAt: Date.now() + 3_600_000,
+		};
+		service.events.emit("limit", { ...warn, level: 95, reached: false });
+		service.events.emit("limit", { ...warn, level: 100, reached: true });
+		await until(() => sent.length >= 2);
+		const bodies = sent.map((x) =>
+			decrypt(Buffer.from(x.body), ua.priv, ua.auth).toString(),
+		);
+		expect(bodies.map((b) => JSON.parse(b))).toEqual([
+			{ kind: "limit", level: 95 },
+			{ kind: "limit", level: 100, reached: true },
+		]);
+		for (const b of bodies) {
+			expect(b).not.toContain("codex");
+			expect(b).not.toContain("Weekly");
+		}
+		expect(sent[0]!.headers.Topic).toBe("limit");
+	});
 });

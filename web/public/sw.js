@@ -137,6 +137,28 @@ self.addEventListener("push", (event) => {
 		);
 		return;
 	}
+	if (data.kind === "limit" && typeof data.level === "number") {
+		// A plan usage limit passed a threshold or was reached: no names here,
+		// the Usage page says which. One notice at a time (tag).
+		const reached = data.reached === true;
+		const level = Math.max(0, Math.min(100, Math.round(data.level)));
+		event.waitUntil(
+			self.registration.showNotification(
+				reached
+					? "An agent hit its usage limit"
+					: "An agent is near its usage limit",
+				{
+					body: reached
+						? "Open Pulsar to see when it resets."
+						: `A usage limit passed ${level}%. Open Pulsar to see which.`,
+					tag: "limit",
+					icon: "/icon.svg",
+					data: { limit: true },
+				},
+			),
+		);
+		return;
+	}
 	if (
 		(data.kind === "finished" || data.kind === "failed") &&
 		typeof data.ref === "string"
@@ -202,7 +224,11 @@ self.addEventListener("notificationclick", (event) => {
 	const turn = event.notification.data?.turn;
 	event.waitUntil(
 		(async () => {
-			let target = event.notification.data?.security ? "/" : "/#/needs";
+			let target = event.notification.data?.security
+				? "/"
+				: event.notification.data?.limit
+					? "/#/usage"
+					: "/#/needs";
 			if (typeof turn === "string") {
 				target = "/";
 				try {

@@ -7,6 +7,9 @@
  * are their own fields, so a price applies to each.
  */
 
+import type { LimitState } from "../http/wire.ts";
+import { LIMIT_MARKERS, limitsOf } from "./limits.ts";
+
 export interface UsageRecord {
 	/** When the tokens were used (ms). */
 	t: number;
@@ -68,15 +71,23 @@ const WANTED: Record<UsageHarness, string[]> = {
 	omp: ['"usage"', '"type":"session"'],
 };
 
-/** The usage in one line, or null; updates `state`. */
+/**
+ * The usage in one line, or null; updates `state`. Plan limit readings in
+ * the line (src/usage/limits.ts) go to `onLimit`.
+ */
 export function parseLine(
 	harness: UsageHarness,
 	line: string,
 	state: FileState,
+	onLimit?: (s: LimitState) => void,
 ): UsageRecord | null {
-	if (!WANTED[harness].some((w) => line.includes(w))) return null;
+	const limit =
+		onLimit !== undefined &&
+		LIMIT_MARKERS[harness].some((m) => line.includes(m));
+	if (!limit && !WANTED[harness].some((w) => line.includes(w))) return null;
 	const d = parse(line);
 	if (!d) return null;
+	if (limit) for (const s of limitsOf(harness, d)) onLimit(s);
 	switch (harness) {
 		case "claude":
 			return claudeLine(d, state);

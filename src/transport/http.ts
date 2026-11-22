@@ -271,6 +271,18 @@ const UsagePriceBody = z
 	})
 	.strict();
 
+const LimitSettingsBody = z
+	.object({
+		enabled: z.boolean().optional(),
+		/** 1 to 3 whole percents from 1 to 99. */
+		thresholds: z
+			.array(z.number().int().min(1).max(99))
+			.min(1)
+			.max(3)
+			.optional(),
+	})
+	.strict();
+
 /** How long `GET /usage?refresh=1` waits for the scan before answering anyway. */
 const USAGE_REFRESH_WAIT_MS = 8000;
 
@@ -1352,6 +1364,17 @@ export class HttpTransport {
 			return c.json({
 				prices: this.service.usage.setPrice(body.model, body.price),
 			});
+		});
+		// Plan usage limits (this node's and the peers' last readings) and when to warn.
+		api.get("/usage/limits", (c) => {
+			this.service.authorize(who(c), "usage");
+			return c.json(this.service.usage.limitsView(this.service.machineId));
+		});
+		api.put("/usage/limits", async (c) => {
+			this.service.authorize(who(c), "usage");
+			const body = parse(LimitSettingsBody, await jsonBody(c));
+			this.service.usage.limits.setSettings(body);
+			return c.json(this.service.usage.limitsView(this.service.machineId));
 		});
 		api.get("/messages/:id/receipts", (c) => {
 			const q = parse(Q.receipts, c.req.query());
