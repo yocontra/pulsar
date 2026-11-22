@@ -689,6 +689,7 @@ export class PulsarService {
 		this.approvals.expireStale();
 		this.push.start();
 		this.turns.start();
+		this.queue.start();
 		this.lag.start();
 		const jobs = this.jobs;
 		if (this.scan) {
@@ -849,6 +850,7 @@ export class PulsarService {
 		this.approvals.stop();
 		this.push.stop();
 		this.turns.stop();
+		this.queue.stop();
 	}
 
 	/** Tracks a new caller until its `closed` signal aborts. */

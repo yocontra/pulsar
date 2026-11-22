@@ -58,6 +58,8 @@ export class Queue {
 	private readonly acting: Acting;
 	/** When each local agent's current busy stretch began (from `agent:status`). */
 	private busySince = new Map<string, number>();
+	private readonly events: EventBus;
+	private off: (() => void) | null = null;
 	/** Before the first status change seen, a busy agent counts as busy since this. */
 	private readonly started = Date.now();
 
@@ -74,16 +76,28 @@ export class Queue {
 		this.router = deps.router;
 		this.deliveries = deps.deliveries;
 		this.acting = deps.acting;
-		deps.events.on("agent:status", ({ agentId, to, at }) => {
-			if (to === "busy") this.busySince.set(agentId, at);
-			else this.busySince.delete(agentId);
-		});
+		this.events = deps.events;
 		for (const action of ["withdraw", "promote"] as const)
 			this.acting.register(`queue.${action}`, async ({ user, agent, params }) =>
 				this.apply(user, agent!, messageIdOf(params), action, {
 					verified: true,
 				}),
 			);
+	}
+
+	/** Follows turns (busy since when) on the event bus; `stop` lets go. */
+	start() {
+		if (this.off) return;
+		this.off = this.events.on("agent:status", ({ agentId, to, at }) => {
+			if (to === "busy") this.busySince.set(agentId, at);
+			else this.busySince.delete(agentId);
+		});
+	}
+
+	stop() {
+		this.off?.();
+		this.off = null;
+		this.busySince.clear();
 	}
 
 	/** `GET /agents/:id/queue`: what waits for an agent, here and on its home node. */
