@@ -43,7 +43,10 @@ test.describe("usage page", () => {
 		await expect(u.getByRole("img", { name: "Daily cost" })).toBeVisible();
 		await expect(
 			u.getByRole("list", { name: "Machines not counted" }),
-		).toContainText("mbp-b: mbp-b is asleep");
+		).toContainText("mbp-b is asleep");
+		await expect(
+			u.getByRole("list", { name: "Machines not counted" }),
+		).not.toContainText("mbp-b: mbp-b");
 		// Codex's model has no price: counted out of the estimate, said so.
 		await u.getByRole("button", { name: "About unpriced usage" }).click();
 		await expect(u.getByRole("note")).toContainText("gpt-6.2-sol");

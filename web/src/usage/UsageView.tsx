@@ -468,7 +468,8 @@ function MachineErrors({ errors }: { errors: UsageReport["machines"] }) {
 		<ul className="usage-machine-errors" aria-label="Machines not counted">
 			{errors.map((m) => (
 				<li key={m.id}>
-					{m.name}: {m.error}
+					{/* The daemon's reasons often name the machine ("mbp-b is asleep"). */}
+					{m.error?.startsWith(m.name) ? m.error : `${m.name}: ${m.error}`}
 				</li>
 			))}
 		</ul>

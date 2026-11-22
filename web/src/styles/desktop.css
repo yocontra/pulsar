@@ -491,7 +491,7 @@
 	border-radius: 6px;
 	flex: none;
 	/* The navy mark keeps an edge on the dark sidebar. */
-	box-shadow: 0 0 0 1px var(--d-line);
+	box-shadow: 0 0 0 1px color-mix(in oklch, var(--d-fg) 22%, transparent);
 }
 .d-brand-text {
 	display: flex;
