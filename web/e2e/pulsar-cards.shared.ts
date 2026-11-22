@@ -96,9 +96,12 @@ export function pulsarCardsSuite(platform: "desktop" | "phone") {
 			await byName.click();
 			await expect(byName).toBeDisabled();
 
-			// Errors in red with the message.
+			// Errors in red: "Failed" in the head (the reason as its title),
+			// the reason once in the body.
 			await expect(
-				cards.filter({ hasText: "No live agent matches" }).first(),
+				cards
+					.filter({ has: page.locator('[title^="No live agent matches"]') })
+					.first(),
 			).toHaveClass(/is-error/);
 
 			// A name the mock knows opens that agent's session.

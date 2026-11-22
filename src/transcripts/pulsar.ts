@@ -152,7 +152,9 @@ export function errorMessage(text: string): string {
 		.trim()
 		.replace(/^pulsar:\s*/i, "")
 		.replace(/^MCP error -?\d+:\s*/i, "");
-	return t.charAt(0).toUpperCase() + t.slice(1);
+	// Quoted names as typeset quotes: No live agent matches “ghost”.
+	const q = t.replace(/"([^"\n]*)"/g, "\u201c$1\u201d");
+	return q.charAt(0).toUpperCase() + q.slice(1);
 }
 
 export interface Receipt {

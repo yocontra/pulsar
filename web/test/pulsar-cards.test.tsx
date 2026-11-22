@@ -111,13 +111,19 @@ describe("Pulsar cards in the gallery", () => {
 		const b = text(body(pick("mcp__pulsar__respond", 1)));
 		expect(b).toContain("Can you look at the flaky retry test");
 		expect(b).toContain("Fixed: the test now uses fake timers.");
-		// An id this transcript doesn't hold stays a quiet id.
+		// A message this transcript doesn't hold: no raw id in the card's words.
 		expect(head(pick("mcp__pulsar__respond", 2))).toBe(
 			"Declined (retry later)",
 		);
-		expect(text(body(pick("mcp__pulsar__respond", 2)))).toContain(
-			"In answer to m_0ff",
+		const declined = text(body(pick("mcp__pulsar__respond", 2)));
+		expect(declined).toContain("In answer to a message");
+		expect(declined).toContain(
+			"The sender sees it was declined for now and can ask again later.",
 		);
+		// The note is the app's, not the tool's text to the agent.
+		const working = text(body(pick("mcp__pulsar__respond")));
+		expect(working).toContain("The sender sees it's being worked on.");
+		expect(working).not.toContain("respond done");
 		// A message read with wait answers the reply in the pi section.
 		expect(head(pick("mcp_pulsar_reply"))).toBe(
 			"Replied to builder delivered to 1",
@@ -156,9 +162,11 @@ describe("Pulsar cards in the gallery", () => {
 		const it = pick("mcp__pulsar__send", 2);
 		const h = card(it);
 		expect(h).toContain("is-error");
-		expect(text(h)).toBe(
-			'Sent to ghost No live agent matches "ghost" , failed',
-		);
+		// The head says it failed; the reason shows once, in the body.
+		expect(text(h)).toBe("Sent to ghost Failed , failed");
+		const b = text(body(it));
+		expect(b).toContain("No live agent matches \u201cghost\u201d");
+		expect(b.match(/No live agent matches/g)?.length).toBe(1);
 		expect(body(it)).toContain("ds-pulsar-error");
 	});
 

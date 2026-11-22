@@ -90,7 +90,7 @@ export function PulsarHead({
 					!line.text &&
 					line.answers &&
 					verb.endsWith(" to") && (
-						<span className="ds-pulsar-id mono">{line.answers}</span>
+						<span className="ds-tool-target">a message</span>
 					)}
 			</span>
 			<span className="ds-tool-meta tool-summary">
@@ -104,8 +104,9 @@ export function PulsarHead({
 						))}
 					</span>
 				) : line.error ? (
-					<span className="ds-tool-sum is-error">
-						<span>{line.error}</span>
+					// The reason shows once, in full, in the body.
+					<span className="ds-tool-sum is-error" title={line.error}>
+						<span>Failed</span>
 					</span>
 				) : line.facts.length ? (
 					<span className="ds-tool-sum">

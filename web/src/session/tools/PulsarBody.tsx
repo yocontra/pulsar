@@ -3,8 +3,8 @@
  * went to, what it said, what came back, with agents linked to their
  * sessions. The raw arguments and result stay under "Show details".
  */
-import { ChevronRightIcon, UsersIcon } from "lucide-react";
-import { useState } from "react";
+import { ChevronRightIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
 	answeredId,
 	errorMessage,
@@ -17,7 +17,6 @@ import {
 	parseMessages,
 	parseSend,
 	parseWait,
-	priorityLabel,
 	pulsarTool,
 	type Receipt,
 	recipients,
@@ -84,20 +83,26 @@ export function AgentLink({ agent }: { agent: PulsarAgent }) {
 	);
 }
 
-/** A message id: jumps to the message when this transcript shows it. */
+/**
+ * Jumps to a message this transcript shows (the raw id stays in the title
+ * and under "Show details", never in the card's words).
+ */
 function MessageId({ id }: { id: string }) {
 	const target = () =>
 		document.querySelector<HTMLElement>(`[data-pulsar-id="${CSS.escape(id)}"]`);
+	const [here, setHere] = useState(false);
+	useEffect(() => setHere(!!target()), [id]);
+	if (!here) return null;
 	return (
 		<button
 			type="button"
-			className="ds-pulsar-id mono"
-			title="Show this message in the conversation"
+			className="ds-pulsar-id"
+			title={`Show message ${id} in the conversation`}
 			onClick={() =>
 				target()?.scrollIntoView({ block: "center", behavior: "smooth" })
 			}
 		>
-			{id}
+			Show
 		</button>
 	);
 }
@@ -156,33 +161,24 @@ function SendView(p: BodyProps & { tool: PulsarTool }) {
 	const a = rec(p.input);
 	const to = recipients(typeof a.to === "string" ? a.to : "");
 	const awaits = p.tool === "ask" || a.await_reply === true;
-	const pr = priorityLabel(
-		typeof a.priority === "string" ? a.priority : awaits ? "urgent" : undefined,
-	);
 	const out = p.done && !p.isError ? parseSend(p.output) : null;
+	// The head names the recipients and the priority. The body links the
+	// agents among them (the head is a button: its chips can't be links),
+	// and nothing after a failed send.
+	const agents = p.isError ? [] : to.filter((r) => r.agent);
 	return (
 		<>
-			<div className="ds-pulsar-to">
-				<span className="ds-pulsar-k">To</span>
-				{to.map((r, i) =>
-					r.agent ? (
-						<AgentLink key={i} agent={{ name: r.agent }} />
-					) : (
-						<span
-							key={i}
-							className="ds-pulsar-chip is-group"
-							title={r.selector}
-						>
-							<UsersIcon aria-hidden="true" />
-							<span className="ds-pulsar-chip-name">{r.label}</span>
-						</span>
-					),
-				)}
-				{pr && <span className="ds-pulsar-label">{pr}</span>}
-				{awaits && !p.done && (
-					<span className="ds-pulsar-msg-meta">waiting for reply</span>
-				)}
-			</div>
+			{(agents.length > 0 || (awaits && !p.done)) && (
+				<div className="ds-pulsar-to">
+					{agents.length > 0 && <span className="ds-pulsar-k">Open</span>}
+					{agents.map((r, i) => (
+						<AgentLink key={i} agent={{ name: r.agent! }} />
+					))}
+					{awaits && !p.done && (
+						<span className="ds-pulsar-msg-meta">Waiting for a reply</span>
+					)}
+				</div>
+			)}
 			<Sent text={sentText(p.tool, p.input)} />
 			{out?.reply && (
 				<Bubble
@@ -213,7 +209,7 @@ function RespondView(p: BodyProps & { tool: PulsarTool }) {
 	const known = useKnownMessage(id || undefined);
 	const s = respondState(p.tool, p.input);
 	const out = p.done && !p.isError ? parseSend(p.output) : null;
-	const note = p.done && !p.isError ? resultBody(p.output).split("\n")[0] : "";
+	const note = p.done && !p.isError ? respondNote(s, rec(p.input)) : "";
 	return (
 		<>
 			{id && (
@@ -241,7 +237,7 @@ function RespondView(p: BodyProps & { tool: PulsarTool }) {
 						</>
 					) : (
 						<span className="ds-pulsar-quote-head">
-							<span className="ds-pulsar-msg-meta">In answer to</span>
+							<span className="ds-pulsar-msg-meta">In answer to a message</span>
 							<MessageId id={id} />
 						</span>
 					)}
@@ -257,6 +253,29 @@ function RespondView(p: BodyProps & { tool: PulsarTool }) {
 	);
 }
 
+/**
+ * What the sender sees after a response, in the app's words: the tool's
+ * own result text is addressed to the agent ("respond done or reply when
+ * finished") and names messages by id.
+ */
+function respondNote(
+	s: ReturnType<typeof respondState>,
+	input: Record<string, unknown>,
+): string {
+	switch (s) {
+		case "working":
+			return "The sender sees it's being worked on.";
+		case "done":
+			return "The sender sees it's done.";
+		case "declined":
+			return input.retry === true
+				? "The sender sees it was declined for now and can ask again later."
+				: "The sender sees it was declined.";
+		default:
+			return "";
+	}
+}
+
 function MessageList({ messages }: { messages: PulsarMessage[] }) {
 	return (
 		<div className="ds-pulsar-msgs">
@@ -269,7 +288,7 @@ function MessageList({ messages }: { messages: PulsarMessage[] }) {
 						m.ago,
 						m.priority,
 						m.wantsReply ? "wants a reply" : "",
-						m.replyTo ? `reply to ${m.replyTo}` : "",
+						m.replyTo ? "a reply" : "",
 					]
 						.filter(Boolean)
 						.join(" · ")}
@@ -298,9 +317,21 @@ function WaitView(p: BodyProps) {
 /** How many agents a lookup shows before "+N more". */
 const FIRST = 8;
 
+/** A registry status ("busy", "idle") in the app's words ("Working", "Idle"). */
+function statusWord(status: string): string {
+	const words: Record<string, string> = {
+		busy: "Working",
+		idle: "Idle",
+		unknown: "Idle",
+		gone: "Offline",
+		offline: "Offline",
+		"needs-you": "Needs you",
+	};
+	return words[status] ?? status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 function AgentsView(p: BodyProps) {
 	const [all, setAll] = useState(false);
-	const q = rec(p.input).question;
 	if (!p.done) return null;
 	const r = parseAgents(p.output);
 	if (r.empty) return <p className="ds-tool-note">{r.empty}</p>;
@@ -308,14 +339,13 @@ function AgentsView(p: BodyProps) {
 	const hidden = r.total - shown.length;
 	return (
 		<>
-			{typeof q === "string" && q.trim() && (
-				<p className="ds-tool-desc">“{q.trim()}”</p>
-			)}
 			<ul className="ds-pulsar-agents">
 				{shown.map((a, i) => (
 					<li key={a.id ?? i}>
 						<AgentLink agent={a} />
-						{a.status && <span className="ds-pulsar-msg-meta">{a.status}</span>}
+						{a.status && (
+							<span className="ds-pulsar-msg-meta">{statusWord(a.status)}</span>
+						)}
 						{a.activity && (
 							<span className="ds-pulsar-doing">{a.activity}</span>
 						)}
@@ -356,10 +386,12 @@ function IdentityView(p: BodyProps & { tool: PulsarTool }) {
 	const tags = me?.tags.length ? me.tags : c.tagsAdd;
 	return (
 		<>
-			{(me?.activity ?? c.activity) && (
-				<p className="ds-tool-desc">{me?.activity ?? c.activity}</p>
+			{/* The head shows a status it set; the body only one it read. */}
+			{c.activity === undefined && me?.activity && (
+				<p className="ds-tool-desc">{me.activity}</p>
 			)}
-			{tags.length > 0 && (
+			{/* The head lists the tags it added: the body, all of them when more. */}
+			{tags.some((t) => !c.tagsAdd.includes(t)) && (
 				<ul className="ds-chips" aria-label="Tags">
 					{tags.map((t) => (
 						<li

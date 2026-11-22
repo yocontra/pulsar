@@ -305,6 +305,6 @@ describe("describePulsar", () => {
 				{ to: "x", body: "y" },
 				{ done: true, isError: true, output: 'pulsar: no agent matches "x"' },
 			).error,
-		).toBe('No agent matches "x"');
+		).toBe("No agent matches \u201cx\u201d");
 	});
 });
