@@ -355,6 +355,12 @@
 	transform: translateX(-50%);
 	white-space: nowrap;
 }
+.usage-chart-x span.is-first {
+	transform: none;
+}
+.usage-chart-x span.is-last {
+	transform: translateX(-100%);
+}
 .usage-tip {
 	position: absolute;
 	top: var(--ds-space-2);

@@ -143,6 +143,15 @@ export function UsageChart({
 					i % labelEvery === 0 ? (
 						<span
 							key={t}
+							// The end labels stay inside the chart: the first starts at
+							// its tick, the last ends at its tick.
+							className={
+								n > 1 && i === 0
+									? "is-first"
+									: n > 1 && i === n - 1
+										? "is-last"
+										: undefined
+							}
 							style={{ left: `${n <= 1 ? 50 : (i / (n - 1)) * 100}%` }}
 						>
 							{bucketLabel(t)}

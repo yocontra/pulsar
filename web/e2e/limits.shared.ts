@@ -229,13 +229,13 @@ export function limitsSuite(platform: "desktop" | "phone") {
 			await expect(row).toContainText("70%, 90%");
 		} else {
 			const input = section.getByRole("textbox", {
-				name: "Warn at these percents",
+				name: "Warn at these percentages",
 			});
 			await expect(input).toHaveValue("80, 95");
 			await input.fill("0, 120");
 			await input.press("Enter");
 			await expect(section.getByRole("alert")).toContainText(
-				"Up to 3 percents from 1 to 99",
+				"Up to 3 values from 1 to 99",
 			);
 			const saved = put((b) => String(b.thresholds) === "70,90");
 			await input.fill("90, 70");
@@ -245,7 +245,7 @@ export function limitsSuite(platform: "desktop" | "phone") {
 			await page.reload();
 			const again = await openSettings(page, false);
 			await expect(
-				again.getByRole("textbox", { name: "Warn at these percents" }),
+				again.getByRole("textbox", { name: "Warn at these percentages" }),
 			).toHaveValue("70, 90");
 		}
 	});

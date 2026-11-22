@@ -21,7 +21,7 @@ import "./limits.css";
 
 export const HELP =
 	"A notification when a limit passes a threshold or is reached, once per limit window. Codex reports percentages; Claude Code, pi and omp only report a reached limit.";
-const THRESHOLD_HELP = "Up to 3 percents from 1 to 99, like 80, 95.";
+const THRESHOLD_HELP = "Up to 3 values from 1 to 99, like 80, 95.";
 
 const show = (t: number[]) => t.map((n) => `${n}%`).join(", ");
 
@@ -89,7 +89,7 @@ export function DesktopSection() {
 				</span>
 				<input
 					className="limits-input"
-					aria-label="Warn at these percents"
+					aria-label="Warn at these percentages"
 					inputMode="numeric"
 					value={text}
 					disabled={!loaded || !settings.enabled}
@@ -115,7 +115,7 @@ export function PhoneSection() {
 		const now = settings.thresholds.join();
 		const sheet = await actionSheetController.create({
 			header: "Warn at",
-			subHeader: "Other percents can be set in Settings on a computer.",
+			subHeader: "Other percentages can be set in Settings on a computer.",
 			buttons: [
 				...PRESETS.map((t) => ({
 					text: t.join() === now ? `${show(t)} ✓` : show(t),
