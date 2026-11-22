@@ -106,7 +106,7 @@ export async function agentMenu(a: AgentRow) {
 		...(issueOf(a)
 			? [
 					{
-						text: `Show Issue #${issueOf(a)}`,
+						text: `Issue #${issueOf(a)}`,
 						handler: () => showIssue(a.id),
 					},
 				]
