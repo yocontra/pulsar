@@ -293,4 +293,53 @@ export function searchSuite(platform: "desktop" | "phone") {
 			...errors.filter((e) => !/status of 503/.test(e)),
 		);
 	});
+
+	test(`the current match stays on screen when the conversation changes size, until the operator scrolls (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=apparish-auth");
+		await ready(page);
+		await page.evaluate((id) => {
+			location.hash = `#/a/${encodeURIComponent(id)}`;
+		}, id);
+		await page
+			.getByRole("button", { name: "Find in messages", exact: true })
+			.click();
+		const bar = findBar(page);
+		await bar.getByRole("searchbox").fill("fake timers");
+		await landed(page);
+		// Step to an older match, away from the end.
+		await bar.getByRole("button", { name: "Previous match" }).click();
+		const current = page
+			.locator("section.session")
+			.last()
+			.locator("[data-find-current]");
+		await expect(current).toBeInViewport();
+		// Something above the match grows (an image or diagram that sized late).
+		const grow = () =>
+			page.evaluate(() => {
+				const cur = document.querySelector(
+					"section.session [data-find-current]",
+				);
+				const turn = cur?.closest(".ds-turn") ?? cur;
+				const tall = document.createElement("div");
+				tall.className = "zz-grow";
+				tall.style.height = "1600px";
+				turn?.parentElement?.insertBefore(tall, turn);
+			});
+		await grow();
+		await expect(current).toBeInViewport();
+		// The operator scrolls: the match is theirs to leave.
+		if (phone) await current.dispatchEvent("touchstart");
+		else {
+			await current.hover();
+			await page.mouse.wheel(0, -200);
+		}
+		const before = await current.evaluate((e) => e.getBoundingClientRect().top);
+		await grow();
+		await expect
+			.poll(() => current.evaluate((e) => e.getBoundingClientRect().top))
+			.toBeGreaterThan(before + 1000);
+	});
 }
