@@ -37,6 +37,11 @@ const CHUNK = 1 << 20;
 const COMMIT_BYTES = 32 << 20;
 /** A single line longer than this is skipped (no usage line is near it). */
 const MAX_LINE = 64 << 20;
+/** The one-time limit backfill: files changed this recently, this much of each. */
+const BACKFILL_MS = 8 * DAY;
+const BACKFILL_BYTES = 256 * 1024;
+const BACKFILL_CODEX_BYTES = 8 << 20;
+const BACKFILL_KEY = "usage.limitsBackfilled";
 
 interface Found {
 	path: string;
@@ -138,6 +143,7 @@ export class UsageScanner {
 		// Newest first: today's numbers show before the backlog is read.
 		found.sort((a, b) => b.mtime - a.mtime);
 		const known = this.knownFiles();
+		await this.backfillLimits(found, known, now);
 		for (const f of found) {
 			const k = known.get(f.path);
 			if (k && k.size === f.size && k.mtime === f.mtime) continue;
@@ -145,6 +151,70 @@ export class UsageScanner {
 		}
 		this.prune(now);
 		this.scannedAt = Date.now();
+	}
+
+	/**
+	 * Once per database: limit readings for files read before Pulsar kept
+	 * them (their offsets are already at the end, so a normal scan would
+	 * show no limits until the harness writes again). Reads the last
+	 * `BACKFILL_BYTES` before each recent file's saved offset for limit
+	 * lines and answers only: no tokens are counted, no offset moves. The
+	 * readings keep their own times, so old ones do not warn.
+	 */
+	private async backfillLimits(
+		found: Found[],
+		known: Map<string, FileRow>,
+		now: number,
+	) {
+		if (this.store.metaGet(BACKFILL_KEY)) return;
+		const batch = new Batch();
+		for (const f of found) {
+			const k = known.get(f.path);
+			const end = Math.min(k?.offset ?? 0, f.size);
+			if (end <= 0 || f.mtime < now - BACKFILL_MS) continue;
+			// Codex writes its limits on every token count: read back until one
+			// turns up (long tool output can hide it). The others: the tail only.
+			const cap = f.harness === "codex" ? BACKFILL_CODEX_BYTES : BACKFILL_BYTES;
+			const fh = await open(f.path, "r").catch(() => null);
+			if (!fh) continue;
+			try {
+				let to = end;
+				while (to > 0) {
+					const from = Math.max(0, to - BACKFILL_BYTES, end - cap);
+					const buf = Buffer.alloc(to - from);
+					await fh.read(buf, 0, buf.length, from);
+					// Whole lines only: the cut line is read with the next window.
+					const cut = from > 0 ? buf.indexOf(10) + 1 : 0;
+					if (from > 0 && cut === 0) break;
+					let seen = 0;
+					const onLimit = (l: LimitState) => {
+						seen++;
+						batch.onLimit(l);
+					};
+					for (const line of buf.subarray(cut).toString("utf8").split("\n")) {
+						if (!line) continue;
+						const rec = parseLine(f.harness, line, {}, onLimit);
+						if (rec) batch.answer(rec, f.harness);
+					}
+					// Found one, or read as far back as allowed.
+					if (f.harness !== "codex" || seen > 0 || from <= end - cap) break;
+					to = from + cut;
+				}
+			} finally {
+				await fh.close();
+			}
+		}
+		const db = this.store.db;
+		db.exec("BEGIN IMMEDIATE");
+		try {
+			if (batch.limits.size || batch.answered.size)
+				saveLimits(this.store, batch.limits.values(), batch.answered);
+			this.store.metaSet(BACKFILL_KEY, String(now));
+			db.exec("COMMIT");
+		} catch (e) {
+			db.exec("ROLLBACK");
+			throw e;
+		}
 	}
 
 	private async find(
@@ -391,9 +461,13 @@ class Batch {
 	readonly onLimit = (s: LimitState) => mergeLimits(this.limits, [s]);
 	add(rec: UsageRecord, state: FileState, harness: UsageHarness) {
 		this.items.push({ rec, project: state.cwd ?? "" });
+		this.answer(rec, harness);
+		if (this.lastAt === null || rec.t > this.lastAt) this.lastAt = rec.t;
+	}
+	/** A model answered at `rec.t` (clears an earlier hard stop). */
+	answer(rec: UsageRecord, harness: UsageHarness) {
 		const k = answeredKey(harness, rec.account ?? "");
 		if (rec.t > (this.answered.get(k) ?? 0)) this.answered.set(k, rec.t);
-		if (this.lastAt === null || rec.t > this.lastAt) this.lastAt = rec.t;
 	}
 }
 
