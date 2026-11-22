@@ -1202,17 +1202,11 @@ ion-action-sheet {
 .p-agent-header .p-nav-title .p-nav-sub:has(.p-nav-sub-more) {
 	justify-content: flex-start;
 }
-/* A subagent's top bar keeps the back title ("‹ Back", "‹ lead"), which the
-   agent page's fixed title inset doesn't clear. Its title is laid out in the
-   toolbar's flow instead of across the whole bar, so it starts after the back
-   button whatever that measures, and a long name ends in an ellipsis. */
+/* A subagent's top bar keeps the back title ("‹ Back", "‹ lead"): the
+   button has no empty end, so its title starts right after it. */
 .p-sub-header ion-title {
-	position: static;
-	transform: none;
-	width: auto;
-	height: auto;
-	min-width: 0;
-	padding-inline: 4px 16px;
+	margin-inline-start: 0;
+	padding-inline: 4px 8px;
 }
 
 /* Ask answers (shared AskPanel) as an inset group on the phone. */

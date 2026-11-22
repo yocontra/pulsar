@@ -59,8 +59,11 @@ copyFileSync(FIXTURE, transcript);
 // own log and a meta file.
 const subagents = join(projectDir, SESSION, "subagents");
 mkdirSync(subagents, { recursive: true });
+// It finished minutes ago: subagents that finished more than a day ago are
+// not listed (DONE_KEEP_MS).
+const subAt = new Date(Date.now() - 5 * 60_000).toISOString();
 const subRecord = (o: object) =>
-	`${JSON.stringify({ isSidechain: true, agentId: "a0demo0subagent", timestamp: "2026-11-10T10:00:10.000Z", ...o })}\n`;
+	`${JSON.stringify({ isSidechain: true, agentId: "a0demo0subagent", timestamp: subAt, ...o })}\n`;
 writeFileSync(
 	join(subagents, "agent-a0demo0subagent.jsonl"),
 	subRecord({
