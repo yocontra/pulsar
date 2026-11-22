@@ -113,6 +113,7 @@
 		"zod": "^4.6.7"
 	},
 	"patchedDependencies": {
-		"@ionic/core@9.0.11": "patches/@ionic%2Fcore@9.0.11.patch"
+		"@ionic/core@9.0.11": "patches/@ionic%2Fcore@9.0.11.patch",
+		"streamdown@2.7.1": "patches/streamdown@2.7.1.patch"
 	}
 }

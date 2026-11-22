@@ -186,6 +186,7 @@ const mermaid: DiagramPlugin = {
 			},
 			async render(id, source) {
 				const m = (await import("mermaid")).default;
+				reserveCytoscapeSheet();
 				m.initialize({
 					startOnLoad: false,
 					// "base" colored from the Pulsar tokens, so diagrams match the app.
@@ -208,6 +209,20 @@ const mermaid: DiagramPlugin = {
 		};
 	},
 };
+
+/**
+ * Mermaid's mindmap lays out with cytoscape, which adds a <style> to the
+ * page unless an element with its stylesheet id exists (blocked by CSP,
+ * and logged). Its one rule is in conversation.css; this marker tells
+ * cytoscape the sheet is there.
+ */
+const CYTOSCAPE_SHEET = "__________cytoscape_stylesheet";
+function reserveCytoscapeSheet() {
+	if (document.getElementById(CYTOSCAPE_SHEET)) return;
+	const marker = document.createElement("meta");
+	marker.id = CYTOSCAPE_SHEET;
+	document.head.append(marker);
+}
 
 /** Mermaid colors read from the live tokens (hex/rgb only; Mermaid can't read var()). */
 function mermaidPalette(): Record<string, string | boolean> {

@@ -719,6 +719,11 @@
 	max-width: 100%;
 	height: auto;
 }
+/* Cytoscape's own rule (Mermaid mindmaps); session/streamdown.tsx keeps it
+   from adding it as an inline <style>, which the CSP blocks. */
+.__________cytoscape_container {
+	position: relative;
+}
 
 /* KaTeX */
 .ds-conv .katex {

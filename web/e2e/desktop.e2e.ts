@@ -111,16 +111,19 @@ test.describe("desktop", () => {
 		);
 		// Assistant turns have a Copy button that shows on hover, and the
 		// right-click menu offers the same.
+		// New turns keep streaming in (every 700 ms in the mock) and the view
+		// follows them, so the newest turn can change, or scroll out from
+		// under a mouse that hasn't moved: hover again on each check.
 		const turn = page.locator(".ds-turn--assistant").last();
 		const copy = turn.getByRole("button", { name: "Copy message" });
 		await expect(copy).toBeAttached();
-		await turn.hover();
-		await expect(copy).toBeVisible();
 		await expect
-			.poll(() =>
-				copy.evaluate((b) => getComputedStyle(b.parentElement!).opacity),
-			)
+			.poll(async () => {
+				await turn.hover();
+				return copy.evaluate((b) => getComputedStyle(b.parentElement!).opacity);
+			})
 			.toBe("1");
+		await expect(copy).toBeVisible();
 		await turn.click({ button: "right", position: { x: 40, y: 10 } });
 		await expect(
 			page.getByRole("menuitem", { name: "Copy message" }),
