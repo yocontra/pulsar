@@ -168,12 +168,20 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 			?.scrollIntoView({ block: "start", behavior: "smooth" });
 	};
 	const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
-		const top = e.currentTarget.getBoundingClientRect().top;
+		const box = e.currentTarget;
+		const top = box.getBoundingClientRect().top;
 		let cur: string = shown[0]![0];
 		for (const [id] of shown) {
 			const el = document.getElementById(id);
 			if (el && el.getBoundingClientRect().top - top < 80) cur = id;
 		}
+		// At the bottom the last sections can't reach the top: the last one
+		// is current (a click on it scrolls here).
+		if (
+			box.scrollTop > 0 &&
+			box.scrollTop + box.clientHeight >= box.scrollHeight - 2
+		)
+			cur = shown.at(-1)![0];
 		setActive(cur);
 	};
 	return (
@@ -331,7 +339,7 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 									No device has proven you're human on {node} yet.
 								</p>
 							) : (
-								<ul className="d-card d-set-card passkey-list">
+								<ul className="d-card d-set-card">
 									{keys.map((k) => (
 										<li key={k.id} className="d-set-row">
 											<span className="d-set-text">
@@ -377,7 +385,7 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 						) : sessions.length === 0 ? (
 							<p className="d-set-empty">None yet.</p>
 						) : (
-							<ul className="d-card d-set-card passkey-list">
+							<ul className="d-card d-set-card">
 								{sessions.map((x) => (
 									<li key={x.id} className="d-set-row">
 										<span className="d-set-text">

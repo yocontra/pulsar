@@ -127,7 +127,7 @@ const WAKE = {
 	wakes: { word: "Wake now", cls: "g-wake" },
 	"inbox-only": { word: "To inbox", cls: "g-inbox" },
 	held: { word: "Held", cls: "g-held" },
-	refuses: { word: "Refuse", cls: "g-held" },
+	refuses: { word: "Refuse", cls: "g-refused" },
 	queued: { word: "Queued", cls: "g-queued" },
 } as const;
 type WakeKey = keyof typeof WAKE;
@@ -140,7 +140,7 @@ const STATE_CLS: Record<string, string> = {
 	read: "g-read",
 	replied: "g-replied",
 	held: "g-held",
-	refused: "g-held",
+	refused: "g-refused",
 	failed: "g-failed",
 };
 

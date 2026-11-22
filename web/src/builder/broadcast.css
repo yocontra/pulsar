@@ -446,6 +446,12 @@
 	border-radius: 2px;
 	background: var(--ds-needs);
 }
+/* Refuses: the held square, hollow (held and refused differ by shape). */
+.bc-glyph.g-refused {
+	border-radius: 2px;
+	background: var(--ds-surface);
+	box-shadow: inset 0 0 0 2px var(--ds-needs);
+}
 .bc-glyph.g-queued {
 	background: var(--ds-surface);
 	box-shadow: inset 0 0 0 2px var(--ds-offline);
@@ -549,6 +555,12 @@
 }
 
 /* ---------------------------------------------------------------- results */
+/* The legend above already counts every state in the receipts' own words:
+   the shared summary line (other words, grouped) would contradict it. The
+   bar keeps it as its accessible label. */
+.bc-results .receipt-summary {
+	display: none;
+}
 .bc-results .bc-audience {
 	flex: none;
 	overflow: visible;
@@ -624,6 +636,8 @@
 	gap: 10px;
 	overflow-x: auto;
 	scroll-snap-type: x mandatory;
+	/* Snapping to a card's start keeps the gutter, not the screen edge. */
+	scroll-padding-inline: var(--ds-gutter);
 	margin: 0 calc(var(--ds-gutter) * -1);
 	padding: 2px var(--ds-gutter) 6px;
 }
@@ -645,9 +659,9 @@
 .bc--phone .bc-priority .seg {
 	width: 100%;
 }
+/* The iOS segmented control (ios.css) sizes its own 32 px buttons. */
 .bc--phone .bc-priority .seg button {
 	flex: 1;
-	min-height: 36px;
 }
 .bc--phone .bc-send-btn {
 	flex-basis: 100%;

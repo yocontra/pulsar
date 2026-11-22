@@ -34,7 +34,9 @@ function PromptInlineImpl({
 				"button:not(:disabled), input:not(:disabled), textarea:not(:disabled)",
 			);
 			if (el && (first || tries > 20)) {
-				el.scrollIntoView({ block: "center" });
+				// Its end (the buttons) in view, above the floating "Jump to
+				// latest" lane (scroll-margin-bottom in conversation.css).
+				el.scrollIntoView({ block: "end" });
 				// No enabled control (this device can't answer): the card itself.
 				(first ?? el).focus({ preventScroll: true });
 				return;

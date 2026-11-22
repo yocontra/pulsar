@@ -1,7 +1,10 @@
 import { Dialog } from "radix-ui";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { inFlight } from "../../lib/inflight.ts";
 import { CloseX } from "../CloseX.tsx";
+
+/** How many layers this one opens over (a confirm inside the builder: 1). */
+const Depth = createContext(0);
 
 /**
  * A desktop modal layer on Radix Dialog: focus trap, Esc, outside click,
@@ -43,6 +46,13 @@ export function Layer({
 	onEscape?: () => boolean;
 }) {
 	const canClose = () => dismissable && inFlight.peek() === 0;
+	// A layer opened from inside another stacks above it, scrim included
+	// (every layer shares z-index 50/51 otherwise: the inner scrim would
+	// fall behind the outer layer).
+	const depth = useContext(Depth);
+	const z = depth
+		? { overlay: { zIndex: 50 + depth * 2 }, pop: { zIndex: 51 + depth * 2 } }
+		: null;
 	return (
 		<Dialog.Root
 			open
@@ -51,9 +61,10 @@ export function Layer({
 			}}
 		>
 			<Dialog.Portal>
-				<Dialog.Overlay className="d-overlay" />
+				<Dialog.Overlay className="d-overlay" style={z?.overlay} />
 				<Dialog.Content
 					className={`d-layer d-pop d-pop-${placement} ${className}`}
+					style={z?.pop}
 					// Radix sets role="dialog"; pass a role only to override it.
 					{...(role ? { role } : {})}
 					onOpenAutoFocus={
@@ -82,7 +93,7 @@ export function Layer({
 					) : (
 						<Dialog.Description className="sr-only">{title}</Dialog.Description>
 					)}
-					{children}
+					<Depth.Provider value={depth + 1}>{children}</Depth.Provider>
 					{/* Last, so the dialog's own first control keeps first focus. */}
 					<Dialog.Close asChild>
 						<CloseX disabled={!dismissable} />

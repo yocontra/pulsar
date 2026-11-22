@@ -304,6 +304,10 @@
 	max-width: max(calc(100% - 113px), 40%);
 	overflow: hidden;
 }
+/* "Needs you" is the one status that must read whole: the name gives way. */
+.d-row.agent .d-line1 .d-trail:has(.s-needs-you) {
+	max-width: none;
+}
 .d-row.agent .d-row-status {
 	min-width: 0;
 	max-width: 100%;
@@ -478,6 +482,8 @@
 .d-brand img {
 	border-radius: 6px;
 	flex: none;
+	/* The navy mark keeps an edge on the dark sidebar. */
+	box-shadow: 0 0 0 1px var(--d-line);
 }
 .d-brand-text {
 	display: flex;
@@ -1651,15 +1657,26 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
+	/* Machine and PR stay whole; project and branch (first) shrink. */
+	flex: none;
+}
+.d-sh-meta > .d-sh-shrink {
+	flex: 0 1 auto;
 	min-width: 0;
 }
+.d-sh-meta > .d-sh-shrink.is-branch {
+	flex-shrink: 4;
+}
+
 .d-sh-meta svg {
 	width: 13px;
 	height: 13px;
 	color: var(--d-fg-3);
 	flex: none;
 }
-.d-sh-branch {
+.d-sh-branch,
+.d-sh-project {
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
@@ -2615,9 +2632,6 @@
 .d-session .ds-msg-actions .ds-icon-btn {
 	width: 28px;
 	height: 28px;
-}
-.prompt-inline:focus:not(:focus-visible) {
-	outline: none;
 }
 /* A prompt with no conversation (the operator's): the inline card, as a dialog. */
 .d-prompt-dialog {

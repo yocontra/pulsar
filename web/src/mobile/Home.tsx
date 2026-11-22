@@ -639,16 +639,18 @@ function HomeImpl() {
 						>
 							<SettingsIcon />
 						</IonButton>
-					</IonButtons>
-					<IonTitle>{HOME_TITLE}</IonTitle>
-					<IonButtons slot="end">
-						<Slot name="sidebar.header" mobile />
+						{/* Settings and Ask on the left balance the feature buttons on the right, or the
+						    collapsed title runs under the buttons. */}
 						<IonButton
 							aria-label="Ask"
 							onClick={() => navigate({ view: "ask" })}
 						>
 							<SparklesIcon />
 						</IonButton>
+					</IonButtons>
+					<IonTitle>{HOME_TITLE}</IonTitle>
+					<IonButtons slot="end">
+						<Slot name="sidebar.header" mobile />
 						<IonButton
 							aria-label="Broadcast…"
 							onClick={() => navigate({ view: "broadcast", selector: "*" })}

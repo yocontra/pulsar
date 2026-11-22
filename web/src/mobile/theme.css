@@ -312,6 +312,10 @@ ion-searchbar.p-search {
 	place-items: center;
 	color: #fff;
 }
+/* An icon in an IonItem's start slot: the gap a .p-row's lead gets. */
+.p-item-icon {
+	margin-inline-end: 12px;
+}
 .p-icon svg {
 	width: 1.06rem;
 	height: 1.06rem;
@@ -649,6 +653,8 @@ ion-skeleton-text.p-sk {
 	color: var(--p-label-2);
 }
 .p-empty svg {
+	/* Preflight makes an svg a block: center it like the text under it. */
+	margin-inline: auto;
 	width: 44px;
 	height: 44px;
 	color: var(--p-label-3);
@@ -837,6 +843,29 @@ ion-toggle {
 }
 .p-nav-sub .p-state {
 	font-size: inherit;
+}
+/* The agent header's subtitle: the status, then " · model". Too narrow, the
+   model goes first, then the status ends in an ellipsis (an inline-flex
+   badge never takes the parent's ellipsis). */
+.p-nav-title .p-nav-sub:has(.p-nav-sub-more) {
+	display: flex;
+	justify-content: center;
+	min-width: 0;
+}
+.p-nav-sub .ds-status {
+	min-width: 0;
+	flex: 0 1 auto;
+}
+.p-nav-sub .ds-status-text,
+.p-nav-sub-more {
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.p-nav-sub-more {
+	flex: 0 1000 auto;
+	white-space: pre;
 }
 .p-nav-sub .p-state.is-needs {
 	color: var(--p-needs-text);

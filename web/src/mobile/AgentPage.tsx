@@ -5,6 +5,7 @@
  */
 import { EllipsisIcon, ShieldCheckIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
+import type { Approval } from "../api/types.ts";
 import { focusPrompt } from "../approval/focus.ts";
 import { ChangesButton } from "../changes/ChangesButton.tsx";
 import { shortModel } from "../lib/format.ts";
@@ -127,9 +128,11 @@ function AgentPageImpl({ id }: { id: string }) {
 							{a && (
 								<span className="p-nav-sub">
 									<AgentStatus a={a} reason />
-									{a.model
-										? ` · ${shortModel(a.model)}`
-										: ` · ${harnessName(a.harness)}`}
+									<span className="p-nav-sub-more">
+										{a.model
+											? ` · ${shortModel(a.model)}`
+											: ` · ${harnessName(a.harness)}`}
+									</span>
 								</span>
 							)}
 						</span>
@@ -160,8 +163,10 @@ function AgentPageImpl({ id }: { id: string }) {
 								<ShieldCheckIcon />
 							</span>
 							<span className="p-ab-text">
-								<strong>Approval needed</strong>
-								<span>{att.approval.tool}</span>
+								<strong>
+									{att.approval.prompt ? "Answer needed" : "Approval needed"}
+								</strong>
+								<span>{bannerDetail(att.approval)}</span>
 							</span>
 							<span className="p-ab-cta">Review</span>
 						</button>
@@ -175,6 +180,19 @@ function AgentPageImpl({ id }: { id: string }) {
 			</IonContent>
 		</>
 	);
+}
+
+/**
+ * The banner's second line: the tool an approval runs, or what a question
+ * or dialog asks (never its tool name, `AskUserQuestion` or `ui.confirm`).
+ */
+function bannerDetail(ap: Approval): string {
+	const p = ap.prompt;
+	if (!p) return ap.tool;
+	if (p.kind === "question")
+		return p.title ?? p.questions[0]?.question ?? "Question";
+	if (p.kind === "plan") return "Plan review";
+	return p.title;
 }
 
 export default observer(AgentPageImpl);

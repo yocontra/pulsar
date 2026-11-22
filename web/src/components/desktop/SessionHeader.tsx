@@ -123,15 +123,18 @@ function DesktopSessionHeaderImpl({
 						{agent.machine}
 					</span>
 					{agent.project && (
-						<span title="Project">
+						<span title="Project" className="d-sh-shrink">
 							<ExtLink href={repoLink(agent.repoUrl)} className="d-sh-repo">
 								<FolderIcon aria-hidden="true" />
-								{agent.project}
+								<span className="d-sh-project">{agent.project}</span>
 							</ExtLink>
 						</span>
 					)}
 					{agent.branch && (
-						<span title={worktree ? `Branch, worktree ${worktree}` : "Branch"}>
+						<span
+							title={worktree ? `Branch, worktree ${worktree}` : "Branch"}
+							className="d-sh-shrink is-branch"
+						>
 							<ExtLink
 								href={branchLink(agent.repoUrl, agent.branch)}
 								className="d-sh-branch-link"

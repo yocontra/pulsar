@@ -1208,9 +1208,17 @@ button.row:hover,
 	background: var(--fg-3);
 }
 
-.seg-held,
-.seg-refused {
+.seg-held {
 	background: var(--needs);
+}
+
+/* Refused: the held color, striped, so the two read apart in the bar. */
+.seg-refused {
+	background: repeating-linear-gradient(
+		135deg,
+		var(--needs) 0 3px,
+		color-mix(in srgb, var(--needs) 45%, transparent) 3px 6px
+	);
 }
 
 .seg-failed {
@@ -1739,20 +1747,6 @@ body > div[id^="dmermaid"] svg,
 	font-size: 14px;
 }
 
-/* ------------------------------------------------------------ settings */
-.passkey-list {
-	list-style: none;
-	margin: 0.5rem 0 0;
-	padding: 0;
-}
-.passkey-list li {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.5rem;
-	padding: 0.4rem 0;
-	border-top: 1px solid var(--border, rgba(127, 127, 127, 0.25));
-}
 /* Prove Human: one sheet over either app (prove/ProveSheet.tsx). */
 .prove-backdrop {
 	position: fixed;
@@ -2024,7 +2018,10 @@ body > div[id^="dmermaid"] svg,
 }
 
 .ix-opt input {
-	margin-top: 3px;
+	/* A full-size control, centred on the label's first line (20 px). */
+	width: 16px;
+	height: 16px;
+	margin: 2px 0 0;
 	flex: none;
 	accent-color: var(--needs);
 }

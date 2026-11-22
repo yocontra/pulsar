@@ -182,7 +182,8 @@ function GitDesktopImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 									rel="noopener noreferrer"
 								>
 									<GitPullRequestIcon aria-hidden="true" />
-									{quick.label}
+									{/* The PR chip beside it shows the number and state. */}
+									{status.pr ? "View PR" : quick.label}
 								</a>
 							) : (
 								<button

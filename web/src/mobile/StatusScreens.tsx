@@ -120,7 +120,7 @@ function Failure() {
 								lines={i === all.length - 1 ? "none" : "inset"}
 							>
 								<span
-									className="p-icon is-offline"
+									className="p-icon p-item-icon is-offline"
 									slot="start"
 									aria-hidden="true"
 								>

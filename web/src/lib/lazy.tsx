@@ -92,7 +92,7 @@ function LoadFailed({
 			<span className="st-mark is-error" aria-hidden="true">
 				<img src="/icon.svg" alt="" width={44} height={44} />
 			</span>
-			<p className="st-title">This part of Pulsar didn't load</p>
+			<p className="st-title">This screen didn't load</p>
 			<p className="st-text">Check your connection, then retry.</p>
 			<button
 				type="button"
