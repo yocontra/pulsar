@@ -8,9 +8,12 @@
  * to its root, and only a page pushed straight from Agents (or a deep link,
  * `[home, agent]`) goes back to Agents.
  *
- * - Switching tabs is not animated and adds no history entry beyond the one
- *   that holds a non-Agents tab: Android's back from it returns to Agents,
- *   and from Agents leaves the app.
+ * - Switching tabs is not animated. History holds at most one tab entry
+ *   above Agents: leaving Agents pushes it, switching between the other
+ *   tabs replaces it, and going to Agents pops it. So Android's back from
+ *   any other tab returns to Agents, and from Agents leaves the app.
+ *   (Opened straight on a tab or a page, lib/router `seatHome` puts the
+ *   Agents entry under it.) docs/app.md, "On a phone".
  * - Each tab keeps its root's scroll position only.
  * - Tapping the active tab pops to its root, or scrolls the root to the top.
  */

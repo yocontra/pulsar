@@ -1,4 +1,20 @@
 /*
+ * The phone's Tailwind: Konsta UI's styles and the utilities its components
+ * use, loaded with the phone's chunk so the desktop never downloads them.
+ *
+ * It compiles every utility the app uses again, not only Konsta's: this
+ * sheet loads after the app's (styles/globals.css), and a utility only here
+ * would otherwise land after one it must lose to (`p-2` after `sm:p-4`).
+ * With the full set here, later and in Tailwind's order, every element
+ * sees the same cascade as one compile would give it. Same configuration
+ * as the app's (styles/tw-config.css), same layers (globals.css).
+ */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "../../styles/konsta.css";
+@import "../../styles/tw-config.css";
+
+/*
  * Konsta's safe areas are the phone's --sat/--sab/--sal/--sar
  * (styles/ios.css), which tests set to emulate a notch. Ionic's toolbars
  * and content already pad for the same insets: a Konsta element inside

@@ -13,6 +13,14 @@ The open app updates itself when the machine's Pulsar is upgraded: it reloads in
 
 On an iPhone, iOS colours the status bar from the app's page, and the clock turns black or white with light and dark mode. If you added the app before this change and still see a separate bar above the app, remove it from the home screen and add it again: iOS reads this setting only when the app is added.
 
+## On a phone
+
+The phone app looks native: iOS on an iPhone, Material on Android. A tab bar at the bottom switches between **Agents**, **Needs You** (with a count of what waits on you), **Usage** and **Settings**. Pages you open from a tab (an agent, its changes, a file) cover the tab bar; back returns to the tab.
+
+- Switching tabs keeps your place: each tab returns to where you left its list.
+- Tap the tab you are on to scroll back to the top.
+- Back on Android: from an open page, back to its tab; from another tab, back to Agents; from Agents, out of the app. A link or notification that opens an agent goes back to Agents.
+
 ## The pool
 
 The sidebar (the home screen on a phone) lists every agent as a tree: machines, then projects, then agents. A group shows a count only when agents there need you. A machine that can't be reached says why: asleep, daemon down, or an older Pulsar.

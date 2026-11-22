@@ -6,8 +6,9 @@
  * light, dark and the forced themes follow tokens.css. Konsta's light and
  * dark slots read the same token, which already switches with the theme.
  *
- * Konsta's `dark` variant is replaced by Pulsar's (globals.css: data-theme
- * or the system scheme), and KonstaProvider always passes `dark`.
+ * Konsta's `dark` variant is replaced by Pulsar's (tw-config.css: data-theme
+ * or the system scheme, imported after this file), and KonstaProvider
+ * always passes `dark`. Phone only: mobile/ui/konsta.css imports it.
  */
 @import "../../../node_modules/konsta/styles/base.css";
 @import "../../../node_modules/konsta/styles/glass.css";
@@ -17,6 +18,11 @@
 @import "../../../node_modules/konsta/styles/preloader.css";
 @import "../../../node_modules/konsta/styles/hairlines.css";
 @import "../../../node_modules/konsta/styles/safe-areas.css";
+
+/* Konsta's class names, for the components the phone uses only (its own
+   theme.css scans every component: ~9 KB gzipped more CSS). Add
+   a component here when the phone starts using it. */
+@source "../../../node_modules/konsta/{shared/classes,shared/colors,react/components}/{Actions,ActionsButton,ActionsGroup,ActionsLabel,Badge,Block,BlockFooter,BlockHeader,BlockTitle,Button,Card,Chip,Glass,Icon,Link,List,ListButton,ListGroup,ListItem,MenuList,MenuListItem,Popover,Preloader,Segmented,SegmentedButton,Tabbar,TabbarLink,Toggle,Toolbar,ToolbarPane}{,Classes,Colors}.js";
 
 @theme inline {
 	--color-ios-primary: var(--ds-primary);

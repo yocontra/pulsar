@@ -27,9 +27,10 @@ import {
 
 /** Initial JS per layout chunk (`_app/<name>.<hash>.js`), gzipped. */
 const BUDGETS: Record<string, number> = {
-	// Raised from 170 for Konsta UI on the first screen (the tab bar): its
-	// components and the tailwind-merge its cls() needs, ~15 KB. Home moving
-	// from IonSearchbar to Konsta's Searchbar (K1) gives back ~14 KB.
+	// Raised from 170: Konsta UI's runtime is on the first screen now (the
+	// tab bar), tailwind-merge (its cls()) included, ~15 KB. K1 brings it
+	// back toward 175 by replacing Home's IonSearchbar (~14 KB) with
+	// Konsta's Searchbar.
 	PhoneApp: 185 * 1024,
 	DesktopApp: 130 * 1024,
 };
