@@ -124,6 +124,7 @@ import {
 	resetGit,
 } from "./git.ts";
 import { CHART, SAMPLE_PDF, SCREENSHOT } from "./images.ts";
+import { issueControl, issueDetails } from "./issues.ts";
 import { launchRoute } from "./launch.ts";
 import {
 	forParentBody,
@@ -182,6 +183,7 @@ const FEATURES: Feature[] = [
 		"attachments",
 		"launch",
 		"git",
+		"issues",
 		...((process.env.PULSAR_MOCK_FEATURES ?? "")
 			.split(",")
 			.map((f) => f.trim())
@@ -2699,6 +2701,17 @@ async function route(
 			throw e;
 		}
 	}
+	// The issue card (web/mock/issues.ts); an address stands for a remote agent.
+	if (GET && seg[0] === "agents" && seg[2] === "issue" && seg.length === 3) {
+		const raw = seg[1]!;
+		const a = agentOr404(
+			raw.includes("/") ? raw.slice(raw.indexOf("/") + 1) : raw,
+		);
+		return json(issueDetails(a, raw));
+	}
+	// Mock only: how gh answers the issue card next.
+	if (POST && path === "/__mock/issue")
+		return json(issueControl((await jsonBody(req)) as { mode?: unknown }));
 	// Mock only: change an agent's git state, or fail its next action.
 	if (POST && path === "/__mock/git") {
 		const b = (await jsonBody(req)) as { agent: string } & Parameters<

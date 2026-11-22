@@ -62,7 +62,7 @@ Ask any agent in plain words:
 Sent m_mwk3jlo0 to 3 agents.
 ```
 
-Agents are tagged with their harness, model, project, branch and PR. Send to a name, a selector (`project=apparish`, `pr=1402 role=reviewer`), or `*` for everyone. Agents know a message comes from another agent, not from you, and that it can't approve anything.
+Agents are tagged with their harness, model, project, branch, PR and GitHub issue. Send to a name, a selector (`project=apparish`, `pr=1402 role=reviewer`, `issue=1378`), or `*` for everyone. Agents know a message comes from another agent, not from you, and that it can't approve anything.
 
 The agent tools are `list_agents`, `send`, `respond`, `wait`, `inbox` and `set_identity`. Delivery details: [docs/delivery.md](docs/delivery.md).
 
@@ -89,6 +89,7 @@ Run `pulsar qr` and scan the code with your phone, then add the page to your hom
 - Stop an agent's turn.
 - Start a new agent on any machine, in a folder or a new git worktree.
 - Review an agent's changes, then commit, push and open a PR.
+- See the GitHub issue an agent works on, with its card.
 - Search the pool, and ask "who is editing this file?"
 - Get notifications when an agent needs you, finishes or fails.
 - See token usage and an API cost estimate per harness, model and day.

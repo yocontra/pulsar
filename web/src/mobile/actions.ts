@@ -3,6 +3,7 @@
  * toolbars. Menus are Ionic action sheets (loaded lazily).
  */
 import type { AgentRow, TreeNode } from "../api/types.ts";
+import { issueOf, showIssue } from "../features/issues/open.ts";
 import { tagValue } from "../lib/format.ts";
 import { branchLink, prLink, repoLink } from "../lib/links.ts";
 import { navigate } from "../lib/router.ts";
@@ -102,6 +103,14 @@ export async function agentMenu(a: AgentRow) {
 			handler: () => navigate({ view: "agent", id: a.id }),
 		},
 		...linkButtons(a),
+		...(issueOf(a)
+			? [
+					{
+						text: `Show Issue #${issueOf(a)}`,
+						handler: () => showIssue(a.id),
+					},
+				]
+			: []),
 		...(node
 			? [{ text: pinned ? "Unpin" : "Pin", handler: () => togglePin(node) }]
 			: []),

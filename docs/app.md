@@ -79,6 +79,19 @@ The session header has the git actions for the agent's worktree. On a computer: 
 
 Each commit, push or PR needs a proven human (Prove Human, once per session) and is recorded in the audit log of the agent's machine. For an agent on another machine, that machine checks your passkey for each step: "Commit, push & PR" asks three times, and on an iPhone you tap **Confirm** before each next step.
 
+## Issues
+
+When an agent works on a GitHub issue, its session header shows the issue (**#N**) and its rows in the sidebar and on Home show **#N** before the activity. Click the chip (on a phone, the issue button in the agent's top bar) to open the issue card: title, state, labels, assignees, the start of the description, and a link to GitHub. Right-click the agent in the sidebar, or open the agent's menu on a phone, and pick **Show issue #N** to open the card from there.
+
+Pulsar finds the issue, in this order:
+
+- an `issue:N` tag the agent set itself with `set_identity`;
+- the branch name: `fix-1378`, `issue-1378`, `issues/1378`, `1378-login-crash`;
+- the issue the agent's PR closes ("Fixes #1378" in the PR body, or a linked issue);
+- the first `#1378` (or a link to an issue of the repo) in the first message you sent in the session.
+
+The card is read with `gh` on the agent's machine, so that machine needs `gh` installed and logged in. It only reads; it never changes the issue. To message every agent on an issue, use the selector `issue=1378` in Broadcast; agents can use it too.
+
 ## Usage
 
 **Usage** shows how many tokens your agents used and what that would cost at API prices. Open it with the chart button in the sidebar header (on a phone, on Home's top bar), from Cmd-K, or with Cmd-U.

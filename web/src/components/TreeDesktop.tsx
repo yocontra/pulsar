@@ -9,6 +9,7 @@ import type { AgentRow, AttentionItem, TreeNode } from "../api/types.ts";
 import { terminalTitle } from "../approval/terminal.ts";
 import { useNow } from "../data/clock.ts";
 import { AgentAvatar, AgentStatus, NeedsBadge, Skeleton } from "../ds/index.ts";
+import { issueOf } from "../features/issues/open.ts";
 import { age, plural, rollupOf, sentence, stateLabel } from "../lib/format.ts";
 import { route } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
@@ -304,6 +305,7 @@ function NodeRowImpl({
 		};
 		const line =
 			a.activity ?? (a.branch ? `On ${a.branch}` : "No activity yet");
+		const issue = issueOf(a);
 		return (
 			<button
 				type="button"
@@ -313,7 +315,7 @@ function NodeRowImpl({
 				aria-level={depth + 1}
 				aria-selected={selected}
 				aria-current={current ? "page" : undefined}
-				aria-label={`${a.name}, ${a11yState(a)}${a.activity ? `, ${a.activity}` : ""}`}
+				aria-label={`${a.name}, ${a11yState(a)}${issue ? `, issue #${issue}` : ""}${a.activity ? `, ${a.activity}` : ""}`}
 				data-agent={a.id}
 				onClick={click}
 				onContextMenu={ctx}
@@ -333,7 +335,10 @@ function NodeRowImpl({
 							/>
 						</span>
 					</span>
-					<span className="d-line2">{line}</span>
+					<span className="d-line2">
+						{issue && <span className="d-issue">#{issue}</span>}
+						{line}
+					</span>
 				</span>
 			</button>
 		);

@@ -25,6 +25,7 @@ import {
 	AgentStatus as DsAgentStatus,
 	NeedsBadge as DsNeedsBadge,
 } from "../ds/index.ts";
+import { issueOf } from "../features/issues/open.ts";
 import { age, heldFor, num, rollupOf } from "../lib/format.ts";
 import { now } from "./clock.ts";
 
@@ -199,6 +200,18 @@ export function activityLine(a: AgentRow, withPlace: boolean): string {
 	return a.state === "offline" ? "Not running" : "No activity yet";
 }
 
+/** The row's second line, after the issue the agent works on (features/issues). */
+function IssueSub({ a, text }: { a: AgentRow; text: string }) {
+	const issue = issueOf(a);
+	if (!issue) return text;
+	return (
+		<>
+			<span className="p-issue">#{issue}</span>
+			{text}
+		</>
+	);
+}
+
 export function AgentRowView({
 	a,
 	depth = 0,
@@ -214,7 +227,7 @@ export function AgentRowView({
 			depth={depth}
 			lead={<Avatar harness={a.harness} />}
 			title={a.name}
-			sub={activityLine(a, withPlace)}
+			sub={<IssueSub a={a} text={activityLine(a, withPlace)} />}
 			trail={<AgentStatus a={a} />}
 		/>
 	);

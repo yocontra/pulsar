@@ -344,6 +344,14 @@
 	line-height: 18px;
 }
 
+/* The issue an agent works on, before its activity (features/issues). */
+.d-line2 .d-issue {
+	margin-right: 6px;
+	color: var(--d-fg);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
 /* ---------------------------------------------------------------- skeleton */
 .d-skel {
 	display: block;

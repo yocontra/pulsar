@@ -1,4 +1,5 @@
 import {
+	CircleDotIcon,
 	CodeIcon,
 	CopyIcon,
 	MegaphoneIcon,
@@ -12,6 +13,7 @@ import { useEffect } from "react";
 import type { TreeNode } from "../api/types.ts";
 import { openPrompt } from "../approval/focus.ts";
 import { askStop } from "../data/pending.ts";
+import { issueOf, showIssue } from "../features/issues/open.ts";
 import { openDraft } from "../features/launch/open.ts";
 import { back, navigate, route } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
@@ -45,6 +47,7 @@ function ContextMenuImpl({
 }) {
 	const n = menu.node;
 	const pinned = pins.value.some((p) => p.id === n.id);
+	const issue = n.agent ? issueOf(n.agent) : null;
 	const copy = (s: string) => {
 		void navigator.clipboard?.writeText(s).catch(() => {});
 		onClose();
@@ -108,6 +111,14 @@ function ContextMenuImpl({
 						}),
 					"",
 					SquarePenIcon,
+				)}
+			{n.agent &&
+				issue &&
+				item(
+					`Show issue #${issue}`,
+					() => showIssue(n.agent!.id),
+					"",
+					CircleDotIcon,
 				)}
 			{n.agent?.canStop &&
 				can("stop") &&
