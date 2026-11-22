@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseClaude } from "../src/harnesses/claude-transcript.ts";
+import type { IssueDetails } from "../src/http/wire.ts";
 import {
 	BODY_MAX,
 	excerpt,
@@ -313,7 +314,7 @@ describe("the card of a remote agent", () => {
 			prLookup: false,
 			firstMessage: false,
 		});
-	const unsupported = {
+	const unsupported: IssueDetails = {
 		agent: "m1/a1",
 		number: null,
 		issue: null,
