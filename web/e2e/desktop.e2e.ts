@@ -828,6 +828,33 @@ test.describe("desktop", () => {
 		await expect(page.locator(".session-header h1")).toBeVisible();
 	});
 
+	test("keys pressed before the shortcuts load are not lost", async ({
+		page,
+	}) => {
+		// Hold the shortcuts' chunk: the tree paints first (from the last-screen
+		// snapshot), and a key pressed then used to land on nothing.
+		let release!: () => void;
+		const held = new Promise<void>((r) => {
+			release = r;
+		});
+		await page.route(/\/_app\/desktopKeys\.[^/]+\.js$/, async (route) => {
+			await held;
+			await route.continue();
+		});
+		await page.goto("/");
+		await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
+		await page.keyboard.press("j");
+		await page.keyboard.press("ControlOrMeta+Shift+B");
+		// Not loaded yet: nothing happened.
+		await expect(page.locator(".tree .focused")).toHaveCount(0);
+		await expect(page).not.toHaveURL(/#\/broadcast/);
+		release();
+		// Once loaded, both keys are handled, in order.
+		await expect(page.locator(".tree .focused")).toHaveCount(1);
+		await expect(page).toHaveURL(/#\/broadcast/);
+		await expect(page.getByTestId("match-count")).toHaveText(/^3,\d{3} agents/);
+	});
+
 	test("tree keys leave a focused button alone; Escape closes the row menu", async ({
 		page,
 	}) => {

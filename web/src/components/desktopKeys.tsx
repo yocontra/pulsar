@@ -167,9 +167,13 @@ const FOCUS_KEYS = new Set([
 	"ArrowRight",
 ]);
 
-export function installDesktopKeys(filterRef: {
-	current: HTMLElement | null;
-}): () => void {
+export function installDesktopKeys(
+	filterRef: {
+		current: HTMLElement | null;
+	},
+	/** Keys pressed before this loaded, handled now in order. */
+	early: KeyboardEvent[] = [],
+): () => void {
 	{
 		const onKey = (e: KeyboardEvent) => {
 			// An IME is composing: its Enter and Escape are not ours.
@@ -291,6 +295,7 @@ export function installDesktopKeys(filterRef: {
 		// Capture: run before Radix's own Esc handling, so an open dialog is
 		// still in the DOM when we check for one.
 		addEventListener("keydown", onKey, true);
+		for (const e of early) onKey(e);
 		return () => removeEventListener("keydown", onKey, true);
 	}
 }

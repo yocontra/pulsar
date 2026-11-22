@@ -182,6 +182,9 @@ function FilterBoxImpl() {
 	);
 }
 
+/** Keys kept while the shortcuts load (a burst of typing, not a backlog). */
+const EARLY_KEYS = 20;
+
 function DesktopImpl() {
 	const r = route.value;
 	const h = hello.value!;
@@ -191,15 +194,24 @@ function DesktopImpl() {
 		y: number;
 		node: TreeNode;
 	} | null>(null);
-	// Shortcuts and the context menu load right after first paint.
+	// Shortcuts and the context menu load right after first paint. The tree
+	// can paint (from the last-screen snapshot) before they do: keys pressed
+	// meanwhile are kept and handled once the shortcuts are in, not lost.
 	useEffect(() => {
 		let off: (() => void) | undefined;
 		let live = true;
+		const early: KeyboardEvent[] = [];
+		const hold = (e: KeyboardEvent) => {
+			if (early.length < EARLY_KEYS) early.push(e);
+		};
+		addEventListener("keydown", hold, true);
 		void import("./desktopKeys.tsx").then((m) => {
-			if (live) off = m.installDesktopKeys(filterRef);
+			removeEventListener("keydown", hold, true);
+			if (live) off = m.installDesktopKeys(filterRef, early);
 		});
 		return () => {
 			live = false;
+			removeEventListener("keydown", hold, true);
 			off?.();
 		};
 	}, []);
