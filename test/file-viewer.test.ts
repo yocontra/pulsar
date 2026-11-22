@@ -226,6 +226,20 @@ describe("content", () => {
 		expect((await read("inside-link")).text).toBe("one\ntwo\nthree\n");
 	});
 
+	test(".git in any case, and links to it, are refused", async () => {
+		expect((await read(".GIT/config")).available).toBe(false);
+		expect((await read(".Git/HEAD")).available).toBe(false);
+		expect((await service.files.tree(agentId, ".GIT")).available).toBe(false);
+		symlinkSync(join(repo, ".git"), join(repo, "ignored", "gitdir"));
+		expect(
+			(await service.files.tree(agentId, "ignored/gitdir")).available,
+		).toBe(false);
+		expect(
+			(await service.files.tree(agentId, "ignored")).entries.map((e) => e.name),
+		).not.toContain("gitdir");
+		expect((await read("ignored/gitdir/config")).available).toBe(false);
+	});
+
 	test("an agent in a subfolder: paths relative to it, repoPath from the top", async () => {
 		const sub = agentWith(join(repo, "src"), "s-sub");
 		expect(await service.files.read(sub, "main.ts")).toMatchObject({

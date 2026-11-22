@@ -596,7 +596,10 @@ export function claudeLog(): string {
 	assistant([
 		{
 			type: "text",
-			text: "Done. The refresh path now runs once:\n\n```ts\nexport async function getSession() {\n  if (token.expired) await refreshOnce();\n  return token;\n}\n```\n\n| case | before | after |\n| --- | --- | --- |\n| 2 requests | 2 refreshes | 1 refresh |",
+			text:
+				"Done. The refresh path now runs once:\n\n```ts\nexport async function getSession() {\n  if (token.expired) await refreshOnce();\n  return token;\n}\n```\n\n| case | before | after |\n| --- | --- | --- |\n| 2 requests | 2 refreshes | 1 refresh |\n\nSee [refresh.ts](src/auth/refresh.ts), the [QA report](" +
+				CWD +
+				"/out/qa/report.html), the [run log](/tmp/demo-run.log) and the [docs](https://example.com/docs).",
 		},
 	]);
 	return lines(out);

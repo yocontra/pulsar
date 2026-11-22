@@ -375,8 +375,12 @@ function cleanPath(path: string, folder: boolean): string | null {
 	return p;
 }
 
-/** In a `.git` folder (which can hold credentials in its config). */
-const isGitPath = (p: string) => p.split("/").includes(".git");
+/**
+ * In a `.git` folder (which can hold credentials in its config). Any case:
+ * macOS disks usually ignore it, so `.GIT/config` is the same file.
+ */
+const isGitPath = (p: string) =>
+	p.toLowerCase().split(/[/\\]/).includes(".git");
 
 /**
  * A folder read from disk (ignored, or not in a repo): its entries, never
@@ -393,10 +397,12 @@ async function readFolder(
 		if (!abs) return null;
 		const real = await realpath(abs);
 		if (real !== base && !real.startsWith(base + sep)) return null;
+		// A link to `.git` is still `.git`.
+		if (isGitPath(relative(base, real))) return null;
 		const out: FileEntry[] = [];
 		for (const d of await readdir(real, { withFileTypes: true })) {
 			if (out.length > TREE_MAX) break;
-			if (d.name === ".git") continue;
+			if (d.name.toLowerCase() === ".git") continue;
 			// biome-ignore lint/suspicious/noControlCharactersInRegex: refusing them is the point
 			if (/[\u0000-\u001f\u007f/]/.test(d.name)) continue;
 			const path = dir ? `${dir}/${d.name}` : d.name;
@@ -404,7 +410,8 @@ async function readFolder(
 			if (d.isSymbolicLink()) {
 				try {
 					const to = await realpath(join(real, d.name));
-					if (!to.startsWith(base + sep)) continue;
+					if (!to.startsWith(base + sep) || isGitPath(relative(base, to)))
+						continue;
 					isDir = (await stat(to)).isDirectory();
 				} catch {
 					continue;

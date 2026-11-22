@@ -38,6 +38,8 @@ Receipts follow each send: handed over, in its conversation, read, replied. Repl
 
 **Dictate** with the mic: your words appear in the draft as you speak, with a timer on the mic; tap it again to stop, or press Esc to cancel and put the draft back. Your browser's own speech recognition hears you (it may use its maker's service); nothing goes through Pulsar. The mic shows only in browsers that can dictate.
 
+**File links** in agent text (`src/a.ts`, or a full path like `/Users/you/repo/out/report.html`) open in the app. A file the agent changed opens in **Changes**; any other file inside the agent's folder opens in **Files**. A path outside the folder is copied ("Path copied"). Web links open in a new tab. A file path never opens as a web address.
+
 **Stop** (in the header, or Cmd-.) interrupts the agent's current turn after you confirm. While the agent works and your draft is empty, the composer's Send button turns into a red Stop button. Stop shows only when Pulsar can reach the agent this way; see [Stop](adapters.md#stop) for each harness.
 
 ## Subagents
@@ -64,6 +66,17 @@ Limits: Codex subagents are listed only while Codex's app-server runs, and a Cod
 - It updates as the agent works (after each edit or command, and every few seconds while open) and keeps your place.
 
 The Changes view reads the worktree with git and never writes to it (only the git actions below do, when you ask): it takes no index lock, runs no external diff tools, textconv filters or fsmonitor hooks, shows only files `git status` lists (never ignored ones), and reads a new file only inside the repo and never through a symbolic link (a link shows its target). Diffs show file contents as they are; Pulsar redacts nothing. The same people who can read an agent's transcript can read its changes: you, from the app on any of your machines (the agent's machine reads them), and the agent itself. Tagged devices you allowed get nothing. An agent on a machine with an older Pulsar shows "update it to see changes".
+
+## Files
+
+**Files** shows the files in the agent's folder, read-only. On a computer, the folder button in the session header opens it in the main pane: a folder tree on the left, the open file on the right, and the path above (click a folder in the path to list it). Esc goes back. On a phone, a file link opens it as a page; tap a folder in the path or in a list to open it.
+
+- Text files show with highlighting and line numbers (the first 1 MB; no highlighting past 256 KB). PNG, JPEG, GIF and WebP images show as images. Other files say what they are and their size.
+- **Copy path** copies the file's full path on the agent's machine.
+- **Open in Changes** shows when the file has uncommitted changes, and opens its diff.
+- Folders list what git tracks plus new files it doesn't ignore. A folder git ignores, or a folder outside any repo, lists what is in it.
+
+Files opens any file inside the agent's folder, also files git ignores (an agent often links to its own output), but never a file in `.git`, never through a symbolic link that leads out of the folder, and never a path outside it. The same people who can read an agent's transcript can read its files: you, from the app on any of your machines (the agent's machine reads them), and the agent itself. Tagged devices you allowed get nothing. An agent on a machine with an older Pulsar shows "Update it to browse files".
 
 ## Commit, push and PR
 

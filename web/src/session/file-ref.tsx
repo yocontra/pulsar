@@ -3,12 +3,14 @@
  * `[x](./src/a.ts)`, `file:///…`). They are not web pages: a plain link would
  * resolve against the app's origin and navigate the app to a bogus URL. They
  * render as a file reference instead: a click opens the file in the Changes
- * view when the agent changed it, else copies the path.
+ * view when the agent changed it, else in the file viewer when it is inside
+ * the agent's folder (features/files), else copies the path.
  */
 import { createContext, type ReactNode, useContext } from "react";
 import type { ChangesSummary } from "../api/types.ts";
 import { keys } from "../data/keys.ts";
 import { queryClient } from "../data/runtime.ts";
+import { fileRoute, insideFolder } from "../lib/file-links.ts";
 import { navigate } from "../lib/router.ts";
 import { toast } from "../lib/toast.ts";
 
@@ -84,16 +86,27 @@ export function FileRef({
 	const abs = resolvePath(path, agent?.cwd);
 	const id = agent?.id;
 	const rel = id ? changedFile(abs, summaryOf(id)) : null;
+	const inside = id && !rel ? insideFolder(abs, agent?.cwd) : null;
 	return (
 		<button
 			type="button"
 			className="file-ref"
-			title={rel ? `Open ${rel} in Changes` : `Copy ${abs}`}
+			title={
+				rel
+					? `Open ${rel} in Changes`
+					: inside !== null
+						? `Open ${inside || "the agent's folder"}`
+						: `Copy ${abs}`
+			}
 			onClick={(e) => {
 				e.preventDefault();
 				e.stopPropagation();
 				if (id && rel) {
 					navigate({ view: "changes", id, file: rel });
+					return;
+				}
+				if (id && inside !== null) {
+					navigate(fileRoute(id, inside));
 					return;
 				}
 				void navigator.clipboard
