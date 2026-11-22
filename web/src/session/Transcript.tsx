@@ -124,8 +124,6 @@ type Ctx = {
 	promptAt?: TranscriptProps["promptAt"];
 	/** The operator's last sent message: its bubble shows the delivery state. */
 	lastSentId?: string;
-	/** Each finished turn's changed files, by its last assistant message's id. */
-	turns?: ReadonlyMap<string, TurnChangeSet>;
 };
 const NONE: ReadonlySet<string> = new Set();
 const C = createContext<Ctx>({
@@ -158,7 +156,8 @@ export const Transcript = memo(function Transcript({
 		}
 		return undefined;
 	}, [messages]);
-	const busy = agent?.state === "busy";
+	// The last turn is still going: working, or stopped on a prompt for you.
+	const busy = agent?.state === "busy" || agent?.state === "needs-you";
 	const turns = useMemo(
 		() => turnSummaries(messages, agent?.cwd, busy),
 		[messages, agent?.cwd, busy],
@@ -173,7 +172,6 @@ export const Transcript = memo(function Transcript({
 			actions: messageActions,
 			promptAt,
 			lastSentId,
-			turns,
 		}),
 		[
 			variant,
@@ -188,7 +186,6 @@ export const Transcript = memo(function Transcript({
 			messageActions,
 			promptAt,
 			lastSentId,
-			turns,
 		],
 	);
 	const fileAgent = useMemo(
@@ -203,7 +200,12 @@ export const Transcript = memo(function Transcript({
 						className={`ds-conv ds-conv--${variant}${variant === "phone" ? " ds-phone" : ""}${className ? ` ${className}` : ""}`}
 					>
 						{messages.map((m, i) => (
-							<MessageView key={m.id} m={m} prev={messages[i - 1]} />
+							<MessageView
+								key={m.id}
+								m={m}
+								prev={messages[i - 1]}
+								changes={turns.get(m.id)}
+							/>
 						))}
 						{working && <WorkingRow />}
 					</div>
@@ -304,8 +306,17 @@ function AuthorLine({ end, children }: { end?: boolean; children: ReactNode }) {
 	);
 }
 
-function MessageView({ m, prev }: { m: ChatMessage; prev?: ChatMessage }) {
-	const { agent, variant, lastSentId, turns } = useContext(C);
+function MessageView({
+	m,
+	prev,
+	changes,
+}: {
+	m: ChatMessage;
+	prev?: ChatMessage;
+	/** What the turn this message ends changed (its last assistant message only). */
+	changes?: TurnChangeSet;
+}) {
+	const { agent, variant, lastSentId } = useContext(C);
 	switch (m.kind) {
 		case "user": {
 			const who = userAuthor(m.ev.from, m.ev.pulsar);
@@ -421,10 +432,10 @@ function MessageView({ m, prev }: { m: ChatMessage; prev?: ChatMessage }) {
 							<PartView key={p.key} part={p} next={m.parts[i + 1]} />
 						))}
 					</div>
-					{turns?.has(m.id) && (
+					{changes && (
 						<Suspense fallback={null}>
 							<TurnChanges
-								changes={turns.get(m.id)!}
+								changes={changes}
 								layout={variant === "desktop" ? "split" : "unified"}
 								agentId={agent?.id}
 							/>

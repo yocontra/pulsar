@@ -14,11 +14,13 @@ export function turnChangesSuite(platform: "desktop" | "phone") {
 		const id = await agentId(request, "fixture=blocks");
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
 		const conv = page.locator(".ds-conv").first();
-		const summaries = conv.locator("[data-turn-changes]");
-		// Claude (4 files), Codex (3), omp (2).
-		await expect(summaries).toHaveCount(3);
-
-		const codex = summaries.filter({ hasText: "Changed 3 files" });
+		// The Codex turn: one apply_patch over three files.
+		const codex = conv
+			.locator(".ds-turn--assistant")
+			.filter({ has: page.locator('[data-tool="apply_patch"]') })
+			.locator("[data-turn-changes]");
+		await expect(codex).toHaveCount(1);
+		await expect(codex).toHaveAttribute("data-turn-changes", "3");
 		const head = codex.locator(".ds-turnchg-head");
 		await head.scrollIntoViewIfNeeded();
 		await expect(head).toContainText("+2");

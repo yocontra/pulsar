@@ -15,7 +15,7 @@
 	gap: 8px;
 	width: 100%;
 	min-width: 0;
-	min-height: 36px;
+	min-height: max(36px, var(--ds-hit));
 	padding: 0 10px 0 11px;
 	border: 0;
 	border-radius: inherit;
@@ -65,6 +65,7 @@
 	justify-content: flex-end;
 }
 .ds-turnchg-all,
+.ds-turnchg-more,
 .ds-turnchg-open {
 	border: 0;
 	background: transparent;
@@ -72,15 +73,17 @@
 	font: inherit;
 	font-size: var(--ds-text-footnote);
 	cursor: pointer;
-	padding: 4px 6px;
+	padding: 4px 8px;
 	border-radius: var(--ds-radius-sm);
-	min-height: 28px;
+	min-height: var(--ds-hit);
 }
 .ds-turnchg-all:hover,
+.ds-turnchg-more:hover,
 .ds-turnchg-open:hover {
 	background: var(--ds-surface-hover);
 }
 .ds-turnchg-all:focus-visible,
+.ds-turnchg-more:focus-visible,
 .ds-turnchg-open:focus-visible,
 .ds-turnchg-file:focus-visible {
 	outline: none;
@@ -112,7 +115,7 @@
 	gap: 8px;
 	flex: 1;
 	min-width: 0;
-	min-height: 32px;
+	min-height: max(32px, var(--ds-hit));
 	padding: 0 6px;
 	border: 0;
 	border-radius: var(--ds-radius-sm);
@@ -148,6 +151,7 @@
 	color: var(--ds-danger-text);
 }
 .ds-turnchg-st.st-modified,
+.ds-turnchg-st.st-written,
 .ds-turnchg-st.st-moved {
 	color: var(--ds-busy-text);
 }
@@ -177,8 +181,8 @@
 	align-items: center;
 	justify-content: center;
 	flex: none;
-	width: 32px;
-	height: 32px;
+	width: max(32px, var(--ds-hit));
+	height: max(32px, var(--ds-hit));
 }
 .ds-turnchg-open svg {
 	width: 15px;
@@ -191,4 +195,8 @@
 	margin: 0 6px 6px;
 	color: var(--ds-text-3);
 	font-size: var(--ds-text-footnote);
+}
+.ds-turnchg-more {
+	align-self: flex-start;
+	margin: -4px 0 6px;
 }
