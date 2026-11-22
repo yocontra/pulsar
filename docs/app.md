@@ -100,7 +100,7 @@ The card is read with `gh` on the agent's machine, so that machine needs `gh` in
 - **Files**: each changed file's diff as GitHub has it, with review threads at their lines. Outdated threads show above the diff, and resolved threads are folded. On a computer, pick a file on the left and switch between split and unified. On a phone, tap a file to open it.
 - **Checks**: failing checks first, each with a link to its run.
 
-To comment on a line, hover it and click the comment button (on a phone, tap the line number), then write and press **Comment**. Under a thread, **Reply** answers it and **Resolve** (or **Reopen**) changes its state. **Submit review** (**Review** on a phone) sends a summary as **Comment**, **Approve** or **Request changes**. GitHub does not let you approve or request changes on your own PR, so the app turns those off when the agent's `gh` account wrote the PR.
+To comment on a line, hover it and click the comment button (on a phone, tap the line number), then write and press **Comment**. Under a thread, **Reply** answers it and **Resolve** (or **Reopen**) changes its state. **Submit review** sends a summary as **Comment**, **Approve** or **Request changes**. GitHub does not let you approve or request changes on your own PR, so the app turns those off when the agent's `gh` account wrote the PR.
 
 These actions use `gh` on the agent's machine, as that machine's GitHub account. Each one needs a proven human and goes in the agent machine's audit log. For an agent on another machine, that machine checks your passkey for each comment, reply, resolve and review. If the PR gets new commits after you open it, a line comment is refused: reload and comment on the latest code. Text from GitHub shows as plain text.
 
