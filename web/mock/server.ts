@@ -2320,6 +2320,10 @@ let identityOutage = { left: 0, eventsOnly: false };
  * `beforeMs` waits before handling, `afterMs` handles and then waits (the
  * echo can win the race), `fail` answers that status without handling,
  * `failAfter` handles and then answers that status (a lost response).
+ * `hold` (a name) keeps the request waiting until the test releases that
+ * name (`POST /__mock/release {hold}`); `GET /__mock/held?hold=` says how
+ * many wait, so a test can check what shows while a request is pending,
+ * with no timing budget.
  * `echoMs` delays the echo of a send to one live agent into its
  * transcript (as its harness records the push; at once by default).
  * `{}` clears all.
@@ -2332,6 +2336,24 @@ interface FaultRule {
 	afterMs?: number;
 	fail?: number;
 	failAfter?: number;
+	hold?: string;
+}
+/** Held requests by name: how many wait, and how to let them go. */
+const holds = new Map<
+	string,
+	{ waiting: number; release: () => void; gate: Promise<void> }
+>();
+function holdFor(name: string) {
+	let h = holds.get(name);
+	if (!h) {
+		let release = () => {};
+		const gate = new Promise<void>((r) => {
+			release = r;
+		});
+		h = { waiting: 0, release, gate };
+		holds.set(name, h);
+	}
+	return h;
 }
 let faults: { rules: FaultRule[]; echoMs: number } = {
 	rules: [],
@@ -2341,11 +2363,17 @@ let faults: { rules: FaultRule[]; echoMs: number } = {
 const sentByClientId = new Map<string, SendDone>();
 
 function faultFor(req: Request, path: string): FaultRule | null {
+	// Rules name paths as written (`/agents/claude:abc/transcript`); the app
+	// sends ids percent-encoded.
+	let plain = path;
+	try {
+		plain = decodeURIComponent(path);
+	} catch {}
 	const r = faults.rules.find(
 		(f) =>
 			(f.count ?? 1) > 0 &&
 			(!f.method || f.method === req.method) &&
-			path.startsWith(f.path),
+			(path.startsWith(f.path) || plain.startsWith(f.path)),
 	);
 	if (!r) return null;
 	if (r.count !== undefined) r.count--;
@@ -2394,11 +2422,30 @@ async function route(
 	if (POST && path === "/__mock/faults") {
 		const b = (await jsonBody(req)) as Partial<typeof faults>;
 		faults = { rules: b.rules ?? [], echoMs: b.echoMs ?? 0 };
+		// Clearing the rules lets every held request go.
+		if (!faults.rules.length) {
+			for (const h of holds.values()) h.release();
+			holds.clear();
+		}
 		return json({ ok: true });
 	}
+	if (POST && path === "/__mock/release") {
+		const b = (await jsonBody(req)) as { hold: string };
+		holds.get(b.hold)?.release();
+		holds.delete(b.hold);
+		return json({ ok: true });
+	}
+	if (GET && path === "/__mock/held")
+		return json({ waiting: holds.get(q.get("hold") ?? "")?.waiting ?? 0 });
 	const fault =
 		faulted || path.startsWith("/__mock/") ? null : faultFor(req, path);
 	if (fault) {
+		if (fault.hold) {
+			const h = holdFor(fault.hold);
+			h.waiting++;
+			await h.gate;
+			h.waiting--;
+		}
 		if (fault.beforeMs) await Bun.sleep(fault.beforeMs);
 		if (fault.fail) throw faultError(fault.fail);
 		if (fault.afterMs || fault.failAfter) {

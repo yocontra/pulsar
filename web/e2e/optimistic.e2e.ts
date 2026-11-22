@@ -25,6 +25,8 @@ interface Rule {
 	afterMs?: number;
 	fail?: number;
 	failAfter?: number;
+	/** Wait until `release(name)`; `held(name)` counts the waiting requests. */
+	hold?: string;
 }
 
 async function faults(
@@ -34,6 +36,24 @@ async function faults(
 	const res = await request.post("/api/v1/__mock/faults", {
 		headers: { "X-Pulsar": "1" },
 		data: body,
+	});
+	expect(res.ok()).toBe(true);
+}
+
+/** How many requests wait on a `hold` rule now (they are still pending). */
+async function held(request: APIRequestContext, name: string) {
+	const res = await request.get(
+		`/api/v1/__mock/held?hold=${encodeURIComponent(name)}`,
+		{ headers: { "X-Pulsar": "1" } },
+	);
+	return ((await res.json()) as { waiting: number }).waiting;
+}
+
+/** Lets the requests a `hold` rule keeps waiting go. */
+async function release(request: APIRequestContext, name: string) {
+	const res = await request.post("/api/v1/__mock/release", {
+		headers: { "X-Pulsar": "1" },
+		data: { hold: name },
 	});
 	expect(res.ok()).toBe(true);
 }
@@ -332,24 +352,29 @@ test.describe("Stop and navigation", () => {
 		await withPasskey(page, request, context);
 		await page.goto(`${localhostBase()}/#/a/${encodeURIComponent(busy.id)}`);
 		await expect(page.locator(".session-header h1")).toHaveText(busy.name);
+		// The stop request waits until the test lets it go: what shows while
+		// it is pending is checked with no timing budget.
+		const stop = `/agents/${busy.id}/stop`;
 		await faults(request, {
-			rules: [{ method: "POST", path: "/agents/", beforeMs: 2000 }],
+			rules: [{ method: "POST", path: stop, hold: "stop" }],
 		});
 		await page.getByRole("button", { name: "Stop", exact: true }).click();
 		const confirm = page.getByRole("alertdialog", { name: "Confirm stop" });
 		await confirm.getByRole("button", { name: "Stop this turn" }).click();
 		await proveInSheet(page);
+		await expect.poll(() => held(request, "stop")).toBe(1);
 		await expect(
 			confirm.getByRole("button", { name: "Stopping…" }),
-		).toBeDisabled({ timeout: 1000 });
+		).toBeDisabled();
 		// Not optimistic: the header says Stopping…, never Idle, until the answer.
 		await expect(page.locator(".session-header [aria-live]")).toHaveText(
 			"Stopping…",
 		);
 		await expect(page.locator(".session-header")).not.toContainText(/\bIdle\b/);
+		expect(await held(request, "stop")).toBe(1);
+		await release(request, "stop");
 		await expect(page.locator(".toast")).toHaveText(
 			`Stopped ${busy.name}'s turn`,
-			{ timeout: 8000 },
 		);
 	});
 
@@ -361,15 +386,30 @@ test.describe("Stop and navigation", () => {
 		const b = await agentId(request, "name=apparish-auth");
 		await openSession(page, a);
 		await openSession(page, b);
+		// Past the query's 1 s staleTime (data/runtime.ts), so going back is
+		// sure to refetch. A lower bound, not a race: waiting longer is fine.
+		await page.waitForTimeout(1100);
+		// The refetch waits until the test lets it go: the cached transcript
+		// must show while it is still pending (no timing budget).
 		await faults(request, {
 			rules: [
-				{ method: "GET", path: `/agents/${a}/transcript`, beforeMs: 4000 },
+				{ method: "GET", path: `/agents/${a}/transcript`, hold: "refetch" },
 			],
 		});
 		await page.goBack();
-		await expect(page.locator(".ds-turn").first()).toBeVisible({
-			timeout: 1000,
-		});
+		await expect.poll(() => held(request, "refetch")).toBe(1);
+		await expect(page.locator(".ds-turn").first()).toBeVisible();
+		await expect(page.locator(".transcript-skel")).toHaveCount(0);
+		expect(await held(request, "refetch")).toBe(1);
+		// Let it go: the refetch answers and the transcript stays.
+		const refetched = page.waitForResponse((r) =>
+			decodeURIComponent(new URL(r.url()).pathname).endsWith(
+				`/agents/${a}/transcript`,
+			),
+		);
+		await release(request, "refetch");
+		expect((await refetched).ok()).toBe(true);
+		await expect(page.locator(".ds-turn").first()).toBeVisible();
 		await expect(page.locator(".transcript-skel")).toHaveCount(0);
 	});
 
