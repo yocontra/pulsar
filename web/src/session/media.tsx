@@ -63,7 +63,11 @@ export function ImageThumb({ image }: { image: Image }) {
 					src={src}
 					alt="Attachment"
 					className="transcript-image"
-					loading="lazy"
+					// Not lazy: the bytes are already in memory (a blob: URL). A lazy
+					// image gets its size only as it scrolls near, which on WebKit can
+					// land inside a ResizeObserver pass (the conversation's
+					// stick-to-bottom) and log "ResizeObserver loop completed with
+					// undelivered notifications".
 				/>
 			</button>
 			{open && (
