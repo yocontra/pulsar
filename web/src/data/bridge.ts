@@ -37,6 +37,8 @@ import { live, prefetchAgent, queryClient, startLive } from "./runtime.ts";
 import { startUpdates } from "./update.ts";
 
 const mounts = new Map<string, Observed>();
+/** Compares /hello's build with this page's (data/update.ts). */
+let checkUpdate = () => {};
 
 /** Keeps a query mounted (an observer) until the returned function runs. */
 function mount<T>(def: LiveDef<T>): () => void {
@@ -107,6 +109,7 @@ function onCacheEvent(key: readonly unknown[]) {
 		syncBranch(a, data as ListData<TreeNode> | undefined, loading);
 	} else if (name === "hello") {
 		if (data) store.hello.value = data as Hello;
+		if (data) checkUpdate();
 		if (q?.state.status === "success") store.failure.value = null;
 		else if (q?.state.status === "error") failed(q.state.error);
 	} else if (name === "attention") {
@@ -159,9 +162,11 @@ export function startBridge(firstHello?: Promise<Hello>) {
 	});
 	live.on("receipts", (v) => store.emitReceipts(v));
 	// A new build of the app (data/update.ts): /hello says which one the
-	// daemon serves. A daemon restart (a new boot id) asks at once.
-	const checkUpdate = startUpdates(() => store.hello.peek()?.webBuild);
-	store.hello.subscribe(checkUpdate);
+	// daemon serves (the query, never the store's snapshot from the last
+	// visit). A daemon restart (a new boot id) asks at once.
+	checkUpdate = startUpdates(
+		() => queryClient.getQueryData<Hello>(keys.hello())?.webBuild,
+	);
 	let bootId: string | null = null;
 	live.on("ready", (r) => {
 		if (bootId && r.bootId !== bootId)

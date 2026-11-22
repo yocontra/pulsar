@@ -1,6 +1,11 @@
 /** When an open app reloads into the build its daemon serves (data/update.ts). */
 import { describe, expect, test } from "bun:test";
 import {
+	sendsPending,
+	setLocalSend,
+	setStopping,
+} from "../src/data/pending.ts";
+import {
 	type Activity,
 	decide,
 	isBusy,
@@ -14,6 +19,7 @@ const idle: Activity = {
 	files: false,
 	dialog: false,
 	inFlight: false,
+	dictating: false,
 };
 
 describe("isBusy", () => {
@@ -26,6 +32,7 @@ describe("isBusy", () => {
 		expect(isBusy({ ...idle, typedAgo: TYPING_MS }, false)).toBe(false);
 		expect(isBusy({ ...idle, focusedField: true }, false)).toBe(true);
 		expect(isBusy({ ...idle, dialog: true }, false)).toBe(true);
+		expect(isBusy({ ...idle, dictating: true }, false)).toBe(true);
 	});
 
 	test("a hidden page reloads over typing, focus and dialogs", () => {
@@ -38,6 +45,32 @@ describe("isBusy", () => {
 			expect(isBusy({ ...idle, [k]: true }, false)).toBe(true);
 			expect(isBusy({ ...idle, [k]: true }, true)).toBe(true);
 		}
+	});
+});
+
+describe("sendsPending", () => {
+	const send = (state: "sending" | "sent" | "failed") => ({
+		state,
+		retry: () => {},
+		discard: () => {},
+	});
+
+	test("a send on its way or failed (text only in its bubble) holds a reload", () => {
+		expect(sendsPending()).toBe(false);
+		setLocalSend("local:a", send("sending"));
+		expect(sendsPending()).toBe(true);
+		setLocalSend("local:a", send("failed"));
+		expect(sendsPending()).toBe(true);
+		setLocalSend("local:a", send("sent"));
+		expect(sendsPending()).toBe(false);
+		setLocalSend("local:a", null);
+	});
+
+	test("a Stop in flight holds a reload", () => {
+		setStopping("agent-1", true);
+		expect(sendsPending()).toBe(true);
+		setStopping("agent-1", false);
+		expect(sendsPending()).toBe(false);
 	});
 });
 

@@ -15,8 +15,9 @@
 
 import { KEPT_DRAFTS, openComposers } from "../lib/composer-draft.ts";
 import { inFlight } from "../lib/inflight.ts";
-import { toast } from "../lib/toast.ts";
+import { dismissToast, toast } from "../lib/toast.ts";
 import { proveAsk } from "../prove/state.ts";
+import { sendsPending } from "./pending.ts";
 
 /** What the operator is doing, as far as a reload goes. */
 export interface Activity {
@@ -30,8 +31,13 @@ export interface Activity {
 	files: boolean;
 	/** A dialog, sheet or menu is open. */
 	dialog: boolean;
-	/** A send, a passkey check or Prove Human is in progress. */
+	/**
+	 * A send, Stop, passkey check or Prove Human in progress, or a failed
+	 * send whose text lives only in its Retry bubble.
+	 */
 	inFlight: boolean;
+	/** Dictation is listening (its words land in the composer). */
+	dictating: boolean;
 }
 
 /** Typing this recently counts as busy. */
@@ -46,7 +52,7 @@ export const RETRY_MS = 5000;
 export function isBusy(a: Activity, hidden: boolean): boolean {
 	if (a.unsaved || a.files || a.inFlight) return true;
 	if (hidden) return false;
-	return a.dialog || a.focusedField || a.typedAgo < TYPING_MS;
+	return a.dialog || a.focusedField || a.dictating || a.typedAgo < TYPING_MS;
 }
 
 /**
@@ -127,7 +133,8 @@ function activity(): Activity {
 		unsaved,
 		files,
 		dialog,
-		inFlight: inFlight.peek() > 0 || proveAsk.peek() !== null,
+		inFlight: inFlight.peek() > 0 || proveAsk.peek() !== null || sendsPending(),
+		dictating: !!document.querySelector('.mic-btn[aria-pressed="true"]'),
 	};
 }
 
@@ -141,15 +148,18 @@ function tried(served: string): string | null {
 }
 
 /** Composer text, by target key, for the composers after the reload. */
-function keepDrafts() {
+function keepDrafts(): boolean {
 	try {
 		const all = JSON.parse(sessionStorage.getItem(KEPT_DRAFTS) ?? "{}");
 		for (const [key, c] of openComposers) {
-			const text = c.field()?.value;
-			if (text?.trim()) all[key] = text;
+			const text = c.text();
+			if (text.trim()) all[key] = text;
 		}
 		sessionStorage.setItem(KEPT_DRAFTS, JSON.stringify(all));
-	} catch {}
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 const wait = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
@@ -188,11 +198,14 @@ let applying = false;
 
 async function apply(build: string, tapped: boolean) {
 	if (applying) return;
-	applying = true;
+	let kept = false;
 	try {
 		sessionStorage.setItem(TRIED, build);
+		kept = keepDrafts();
 	} catch {}
-	keepDrafts();
+	// Without the loop guard or the drafts saved, reload only when asked.
+	if (!kept && !tapped) return offer(build);
+	applying = true;
 	await fetchBuild(build);
 	if (tapped) await bypassShell();
 	location.reload();
@@ -233,7 +246,12 @@ export function startUpdates(served: () => string | null | undefined) {
 			tried: tried(build),
 			busy: isBusy(activity(), document.hidden),
 		});
-		if (d === "none") return;
+		if (d === "none") {
+			// The daemon went back to this build: the offer is moot.
+			if (shownFor) void dismissToast("pulsar-update");
+			shownFor = null;
+			return;
+		}
 		if (d === "reload") return void apply(build, false);
 		offer(build);
 		if (d === "wait") timer = setTimeout(check, RETRY_MS);
@@ -241,5 +259,6 @@ export function startUpdates(served: () => string | null | undefined) {
 	document.addEventListener("input", () => (lastInput = Date.now()), true);
 	document.addEventListener("visibilitychange", check);
 	addEventListener("hashchange", check);
+	check();
 	return check;
 }

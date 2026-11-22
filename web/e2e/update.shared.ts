@@ -53,21 +53,26 @@ async function deploy(
 	).toBe(true);
 }
 
+// Both answer null while a reload is under way (a poll asks again).
 const ownBuild = (page: Page) =>
-	page.evaluate(() =>
-		document
-			.querySelector('meta[name="pulsar-build"]')
-			?.getAttribute("content"),
-	);
+	page
+		.evaluate(() =>
+			document
+				.querySelector('meta[name="pulsar-build"]')
+				?.getAttribute("content"),
+		)
+		.catch(() => null);
 /** Set before an update; a reload clears it. */
 const mark = (page: Page) =>
 	page.evaluate(() => {
 		(window as { __beforeUpdate?: boolean }).__beforeUpdate = true;
 	});
 const marked = (page: Page) =>
-	page.evaluate(
-		() => (window as { __beforeUpdate?: boolean }).__beforeUpdate === true,
-	);
+	page
+		.evaluate(
+			() => (window as { __beforeUpdate?: boolean }).__beforeUpdate === true,
+		)
+		.catch(() => null);
 const updateToast = (page: Page) =>
 	page.locator("[data-sonner-toast]", { hasText: "Pulsar updated" });
 
@@ -132,6 +137,26 @@ export function updateSuite(platform: "desktop" | "phone") {
 		await expect(
 			page.locator(".composer").last().locator(".composer-input"),
 		).toHaveValue(typed);
+	});
+
+	test(`after typing stops, the update applies by itself (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const composer = await openAgent(page, request, "name=apparish-auth");
+		const input = composer.locator(".composer-input");
+		await input.fill("typed just now");
+		const next = stageBuild(staged);
+		await mark(page);
+		await deploy(request, { root: next.root });
+		await input.press("!");
+		await expect(updateToast(page)).toBeVisible({ timeout: 20_000 });
+		// No tap: the next quiet moment (typing window past) reloads.
+		await expect.poll(() => marked(page), { timeout: 20_000 }).toBe(false);
+		await expect.poll(() => ownBuild(page)).toBe(next.build);
+		await expect(
+			page.locator(".composer").last().locator(".composer-input"),
+		).toHaveValue("typed just now!");
 	});
 
 	test(`a build the reload can't reach shows the toast, with no reload loop (${platform})`, async ({

@@ -88,7 +88,12 @@ export class ComposerDraft {
  */
 export const openComposers = new Map<
 	string,
-	{ draft: ComposerDraft; field: () => HTMLTextAreaElement | null }
+	{
+		draft: ComposerDraft;
+		field: () => HTMLTextAreaElement | null;
+		/** The message: the field's text, or the text being confirmed or sent. */
+		text: () => string;
+	}
 >();
 
 /** sessionStorage: composer text kept across a reload, by target key. */

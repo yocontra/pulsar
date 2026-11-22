@@ -87,6 +87,10 @@ export function setStopping(id: string, on: boolean) {
 
 export const isStopping = (id: string) => stopping.has(id);
 
+/** A send not yet accepted, a failed one (its text is only here), or a Stop in flight. */
+export const sendsPending = () =>
+	stopping.size > 0 || [...sends.values()].some((s) => s.state !== "sent");
+
 export function useStopping(id: string): boolean {
 	const get = () => stopping.has(id);
 	return useSyncExternalStore(subscribe, get, get);

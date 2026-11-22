@@ -334,12 +334,16 @@ function ComposerImpl({
 	const draft = useMemo(() => new ComposerDraft(), [key]);
 	useEffect(() => {
 		// Text kept across a reload into a new build (data/update.ts).
-		const kept = takeKeptDraft(key);
-		if (kept && ta.current && !ta.current.value) {
+		const kept = ta.current && !ta.current.value ? takeKeptDraft(key) : null;
+		if (kept && ta.current) {
 			ta.current.value = kept;
 			setHasText(!!kept.trim());
 		}
-		const open = { draft, field: () => ta.current };
+		const open = {
+			draft,
+			field: () => ta.current,
+			text: () => ta.current?.value || pendingBody.current,
+		};
 		openComposers.set(key, open);
 		return () => {
 			if (openComposers.get(key) === open) openComposers.delete(key);
