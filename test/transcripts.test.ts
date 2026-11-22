@@ -874,6 +874,28 @@ describe("tailer", () => {
 		]);
 	});
 
+	test("a guessed file (no session id) never replaces the one followed", async () => {
+		const mine = join(dir, "mine.jsonl");
+		const other = join(dir, "other.jsonl");
+		writeFileSync(mine, line("m1", "one"));
+		writeFileSync(other, line("o1", "another session in the folder"));
+		sources.set("p", fileSource(mine));
+		make({ resolveMs: 20 });
+		const c = collector();
+		tailer.subscribe("p", c.fn);
+		await tailer.ready("p");
+		// The other session wrote last: the folder's newest file is its.
+		const guess = fileSource(other);
+		sources.set("p", {
+			...guess,
+			source: { ...guess.source, guess: true },
+		});
+		await Bun.sleep(80);
+		appendFileSync(mine, line("m2", "two"));
+		await c.wait(1);
+		expect(c.events.map((e) => e.id)).toEqual(["m2"]);
+	});
+
 	test("a lookup that misses keeps following the file", async () => {
 		const file = join(dir, "kept.jsonl");
 		writeFileSync(file, line("k1", "one"));

@@ -309,13 +309,23 @@ export interface TranscriptPage {
  *
  * - `file`: an append-only JSONL log, tailed by byte offset. `headerLine`
  *   marks a first line the harness rewrites in place (omp's padded title);
- *   the tailer never reads it.
+ *   the tailer never reads it. `guess` marks a file picked without a
+ *   session id.
  * - `poll`: a harness API. `fetch(null)` returns the newest page; a page's
  *   `cursor` fetches the one before it. The live tail polls `fetch(null)` and
  *   emits events that are new or changed (parts that change in place).
  */
 export type TranscriptSource =
-	| { kind: "file"; path: string; headerLine?: boolean }
+	| {
+			kind: "file";
+			path: string;
+			headerLine?: boolean;
+			/**
+			 * A guess (the newest file in a folder, no session id): a live
+			 * watcher never moves to a guessed file while its own file exists.
+			 */
+			guess?: boolean;
+	  }
 	| {
 			kind: "poll";
 			intervalMs?: number;
