@@ -1458,6 +1458,53 @@ export interface FileSearch {
 	truncated?: boolean;
 }
 
+/** One row of the file viewer's folder listing. */
+export interface FileEntry {
+	/** The file or folder name. */
+	name: string;
+	/** Relative to the agent's folder. */
+	path: string;
+	kind: "file" | "dir";
+}
+
+/**
+ * `GET /agents/:id/files/tree?path=`: one folder of the agent's folder
+ * (`path` empty: its top). Files git ignores are left out, unless the
+ * folder itself is ignored or not in a repo (then it is read as it is).
+ */
+export interface FileTree {
+	agent: string;
+	path: string;
+	available: boolean;
+	/** `no_cwd`, `not_found` (no such folder in it), `unavailable`, `unsupported`. */
+	reason?: string;
+	entries: FileEntry[];
+	/** More entries than are listed. */
+	truncated?: boolean;
+}
+
+/**
+ * `GET /agents/:id/files/content?path=`: one file of the agent's folder.
+ * `text` up to 1 MB (`truncated` past it); an image's bytes come from the
+ * same route with `raw=1`.
+ */
+export interface FileContent {
+	agent: string;
+	path: string;
+	available: boolean;
+	/** `no_cwd`, `not_found`, `not_file`, `refused` (in `.git`), `unavailable`, `unsupported`. */
+	reason?: string;
+	kind?: "text" | "image" | "binary" | "too_large";
+	/** Bytes on disk. */
+	size?: number;
+	text?: string;
+	truncated?: boolean;
+	/** An image's type: png, jpeg, gif or webp. */
+	mediaType?: string;
+	/** The path from the git worktree's top (what Changes lists); null outside a repo. */
+	repoPath?: string | null;
+}
+
 // ------------------------------------------------------------------ launch
 
 /** Harnesses the app can start (src/service/launch.ts has their fixed commands). */

@@ -7,7 +7,13 @@ import {
 	test,
 } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Federation } from "../src/federation/index.ts";
@@ -270,6 +276,49 @@ describe("attachments for an agent on another machine", () => {
 				streamOf(Buffer.from("x")),
 			),
 		).rejects.toMatchObject({ code: "not_found" });
+	});
+
+	test("the file viewer reads a remote agent's folder through its home node", async () => {
+		const folder = mkdtempSync(join(tmpdir(), "pulsar-viewer-fed-"));
+		writeFileSync(join(folder, "notes.md"), "# notes\n");
+		writeFileSync(
+			join(folder, "shot.png"),
+			Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2]),
+		);
+		const caller: Caller = {
+			principal: { kind: "terminal" },
+			closed: new AbortController().signal,
+			emit: () => {},
+		};
+		home.service.attach(caller);
+		home.service.setRole(caller, "extension");
+		const local = home.service.registerAgent(
+			caller,
+			registration({ name: "viewer", project: "demo", cwd: folder }),
+		).id;
+		const remote = `${home.service.machineId}/${local}`;
+		await until(() => relay.service.registry.find(remote) !== undefined, 5000);
+		const t = await relay.service.files.tree(remote, "", USER);
+		expect(t).toMatchObject({ agent: remote, available: true });
+		expect(t.entries.map((e) => e.name)).toEqual(["notes.md", "shot.png"]);
+		expect(
+			await relay.service.files.read(remote, "notes.md", USER),
+		).toMatchObject({
+			agent: remote,
+			kind: "text",
+			text: "# notes\n",
+			repoPath: null,
+		});
+		expect(
+			(await relay.service.files.read(remote, "../etc/passwd", USER)).available,
+		).toBe(false);
+		const img = await relay.service.files.image(remote, "shot.png", USER);
+		expect(img.mediaType).toBe("image/png");
+		expect(img.data.length).toBe(10);
+		await expect(
+			relay.service.files.image(remote, "notes.md", USER),
+		).rejects.toMatchObject({ code: "unsupported_media" });
+		rmSync(folder, { recursive: true, force: true });
 	});
 
 	test("@ files of a remote agent come from its home node", async () => {

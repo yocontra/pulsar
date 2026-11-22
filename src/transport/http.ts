@@ -244,6 +244,11 @@ const Q = {
 		path: z.string().min(1).max(4096),
 	}),
 	files: z.object({ q: z.string().max(200).default("") }),
+	fileTree: z.object({ path: z.string().max(4096).default("") }),
+	fileContent: z.object({
+		path: z.string().min(1).max(4096),
+		raw: z.enum(["1"]).optional(),
+	}),
 	receipts: z.object({
 		state: z.enum(RECEIPT_STATES).optional(),
 		cursor: optionalText(100),
@@ -1054,6 +1059,29 @@ export class HttpTransport {
 			const id = c.req.param("id");
 			this.service.authorize(who(c), "transcript.read", id);
 			return c.json(await this.service.files.search(id, q.q, who(c)));
+		});
+		// The file viewer: one folder, one file (same rule as the transcript).
+		api.get("/agents/:id/files/tree", async (c) => {
+			const q = parse(Q.fileTree, c.req.query());
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			return c.json(await this.service.files.tree(id, q.path, who(c)));
+		});
+		// `raw=1`: an image file's bytes, served like transcript images.
+		api.get("/agents/:id/files/content", async (c) => {
+			const q = parse(Q.fileContent, c.req.query());
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			if (!q.raw)
+				return c.json(await this.service.files.read(id, q.path, who(c)));
+			const image = await this.service.files.image(id, q.path, who(c));
+			return c.body(new Uint8Array(image.data), 200, {
+				"Content-Type": image.mediaType,
+				"Content-Disposition": "inline",
+				"X-Content-Type-Options": "nosniff",
+				// Never active content, even if opened directly.
+				"Content-Security-Policy": "sandbox; default-src 'none'",
+			});
 		});
 		// Acting ops on another machine (attachments, launch, git): its home
 		// node's challenge for this exact act. The op's own route then sends

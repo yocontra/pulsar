@@ -2426,6 +2426,27 @@ export class Federation implements PoolView {
 				);
 				return { ok: true, files };
 			}
+			case "files.tree":
+			case "files.read": {
+				const agent = String(action.agent);
+				authorize(user, "transcript.read", agent);
+				if (!this.service.registry.get(agent))
+					return fail("not_found", `no agent ${agent}`);
+				const path = String(action.path ?? "").slice(0, 4096);
+				if (action.op === "files.tree")
+					return { ok: true, tree: await this.service.files.tree(agent, path) };
+				if (!action.raw)
+					return {
+						ok: true,
+						content: await this.service.files.read(agent, path),
+					};
+				const image = await this.service.files.image(agent, path);
+				return {
+					ok: true,
+					mediaType: image.mediaType,
+					data: image.data.toString("base64"),
+				};
+			}
 			case "git.read": {
 				const agent = String(action.agent);
 				authorize(user, "transcript.read", agent);

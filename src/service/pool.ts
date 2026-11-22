@@ -7,8 +7,10 @@ import type {
 	ChangesMode,
 	ChangesSummary,
 	DecideResponse,
+	FileContent,
 	FileDiff,
 	FileSearch,
+	FileTree,
 	InteractionAnswer,
 	Link,
 	MessageHit,
@@ -285,4 +287,12 @@ export interface RemoteAttachments {
 		as: Principal,
 	): Promise<{ received: number; file: AttachmentSaved | null }>;
 	files(address: string, q: string, as?: Principal): Promise<FileSearch>;
+	/** The file viewer's reads (src/service/files.ts), by the home node. */
+	tree(address: string, path: string, as?: Principal): Promise<FileTree>;
+	read(address: string, path: string, as?: Principal): Promise<FileContent>;
+	image(
+		address: string,
+		path: string,
+		as?: Principal,
+	): Promise<{ mediaType: string; data: Buffer }>;
 }
