@@ -44,7 +44,7 @@ function largestScript() {
 /** Point the mock at another dist folder and/or hold its HTML responses. */
 async function serve(
 	request: APIRequestContext,
-	body: { root?: string; htmlDelayMs?: number } = {},
+	body: { root?: string; htmlDelayMs?: number; webBuild?: string } = {},
 ) {
 	const res = await request.post("/api/v1/__mock/static", {
 		headers: H,
@@ -271,6 +271,9 @@ test.describe("first load", () => {
 test.describe("service worker", () => {
 	test.use({ serviceWorkers: "allow" });
 	test.setTimeout(60_000);
+	// These follow the worker alone: /hello reports no build id, so the app
+	// doesn't reload itself into the new build (src/data/update.ts) mid-test.
+	const NO_UPDATE = "none";
 
 	test("a phone on the old pulsar-shell-v2 worker gets the current build", async ({
 		page,
@@ -278,7 +281,7 @@ test.describe("service worker", () => {
 		errors,
 	}) => {
 		const old = stageBuild({ legacySw: true });
-		await serve(request, { root: old.root });
+		await serve(request, { root: old.root, webBuild: NO_UPDATE });
 		await page.goto("/");
 		await expect(app(page)).toBeVisible();
 		await controlled(page);
@@ -287,7 +290,7 @@ test.describe("service worker", () => {
 		expect(await cacheNames(page)).toEqual(["pulsar-shell-v2"]);
 
 		// Deploy: the server has only the current build now.
-		await serve(request);
+		await serve(request, { webBuild: NO_UPDATE });
 		await page.reload();
 		await expect(app(page)).toBeVisible();
 		expect(await loadedEntry(page)).toBe(current().entry);
@@ -306,7 +309,7 @@ test.describe("service worker", () => {
 		errors,
 	}) => {
 		const a = stageBuild();
-		await serve(request, { root: a.root });
+		await serve(request, { root: a.root, webBuild: NO_UPDATE });
 		await page.goto("/");
 		await expect(app(page)).toBeVisible();
 		await controlled(page);
@@ -316,7 +319,7 @@ test.describe("service worker", () => {
 
 		// The server moves to the current build and its HTML stalls: after
 		// 3 s the worker answers with build A's shell and A's own assets.
-		await serve(request, { htmlDelayMs: 8_000 });
+		await serve(request, { htmlDelayMs: 8_000, webBuild: NO_UPDATE });
 		const t0 = Date.now();
 		await page.reload();
 		await expect(app(page)).toBeVisible();
@@ -324,7 +327,7 @@ test.describe("service worker", () => {
 		expect(await loadedEntry(page)).toBe(a.entry);
 
 		// The network recovers: the current build takes over.
-		await serve(request);
+		await serve(request, { webBuild: NO_UPDATE });
 		await page.reload();
 		await expect(app(page)).toBeVisible();
 		await expect
@@ -347,7 +350,7 @@ test.describe("service worker", () => {
 		errors,
 	}) => {
 		const a = stageBuild();
-		await serve(request, { root: a.root });
+		await serve(request, { root: a.root, webBuild: NO_UPDATE });
 		await page.goto("/");
 		await expect(app(page)).toBeVisible();
 		await controlled(page);
@@ -366,7 +369,7 @@ test.describe("service worker", () => {
 
 		// The server moved on and its HTML is slow: the worker serves A's
 		// shell, A's layout 404s, and the page reloads once from the network.
-		await serve(request, { htmlDelayMs: 4_000 });
+		await serve(request, { htmlDelayMs: 4_000, webBuild: NO_UPDATE });
 		// The boot guard's own reload supersedes this one.
 		await page.reload().catch((e: Error) => {
 			if (!/ERR_ABORTED/.test(e.message)) throw e;
@@ -374,6 +377,38 @@ test.describe("service worker", () => {
 		await expect(app(page)).toBeVisible({ timeout: 30_000 });
 		expect(await loadedEntry(page)).toBe(current().entry);
 		await expect(errorScreen(page)).toBeHidden();
+		allow(errors, DOWNLOAD_ERRORS);
+	});
+
+	test("an open app reloads itself into the new build after a daemon restart", async ({
+		page,
+		request,
+		errors,
+	}) => {
+		const a = stageBuild();
+		await serve(request, { root: a.root });
+		await page.goto("/");
+		await expect(app(page)).toBeVisible();
+		await controlled(page);
+		await expect
+			.poll(() => cacheNames(page))
+			.toEqual([`pulsar-shell-${a.build}`]);
+
+		// Upgrade and restart: the stream drops and /hello names the new build.
+		await serve(request);
+		const restart = await request.post("/api/v1/__mock/restart", {
+			headers: H,
+		});
+		expect(restart.ok()).toBe(true);
+		// The worker installs the new build first, then the page reloads.
+		await expect
+			.poll(() => loadedEntry(page).catch(() => null), { timeout: 30_000 })
+			.toBe(current().entry);
+		await expect(app(page)).toBeVisible();
+		await expect
+			.poll(() => cacheNames(page).catch(() => []), { timeout: 15_000 })
+			.toEqual([`pulsar-shell-${current().build}`]);
+		await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
 		allow(errors, DOWNLOAD_ERRORS);
 	});
 });

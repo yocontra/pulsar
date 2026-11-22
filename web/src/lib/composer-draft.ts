@@ -82,6 +82,32 @@ export class ComposerDraft {
 	}
 }
 
+/**
+ * The open composers by target key: what a reload into a new app build
+ * keeps (data/update.ts) and what makes it wait (files being attached).
+ */
+export const openComposers = new Map<
+	string,
+	{ draft: ComposerDraft; field: () => HTMLTextAreaElement | null }
+>();
+
+/** sessionStorage: composer text kept across a reload, by target key. */
+export const KEPT_DRAFTS = "pulsar:kept-drafts";
+
+/** The text kept for `key` across a reload (once), or null. */
+export function takeKeptDraft(key: string): string | null {
+	try {
+		const all = JSON.parse(sessionStorage.getItem(KEPT_DRAFTS) ?? "{}");
+		const text = all[key];
+		if (typeof text !== "string") return null;
+		delete all[key];
+		sessionStorage.setItem(KEPT_DRAFTS, JSON.stringify(all));
+		return text;
+	} catch {
+		return null;
+	}
+}
+
 /** Send turns into Stop: the agent works and the draft is empty. */
 export function showsStop(
 	agent: AgentRow | null,

@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { createSecureServer, Http2ServerRequest } from "node:http2";
 import { createServer as createHttpsServer } from "node:https";
@@ -923,9 +923,10 @@ export class HttpTransport {
 				ok: true,
 			});
 
-		api.get("/hello", (c) =>
+		api.get("/hello", async (c) =>
 			c.json({
 				...svc.hello(who(c)),
+				webBuild: await this.webBuild(),
 				appUrl: this.url,
 				session: c.get("session"),
 				// The same rule as the session lifetime: a token may outlive a
@@ -1582,6 +1583,32 @@ export class HttpTransport {
 		);
 
 		app.get("*", (c) => this.staticFile(c));
+	}
+
+	private builtApp: { mtime: number; build: string | undefined } | null = null;
+
+	/**
+	 * The served app's build id (`<meta name="pulsar-build">`, written by
+	 * web/scripts/finish-dist.ts): an open app that runs another build
+	 * updates itself. Undefined when no built app is served.
+	 */
+	private async webBuild(): Promise<string | undefined> {
+		const root = await this.webRoot;
+		if (!root) return undefined;
+		const file = join(root, "index.html");
+		try {
+			const mtime = (await stat(file)).mtimeMs;
+			if (this.builtApp?.mtime !== mtime) {
+				const html = await readFile(file, "utf8");
+				const build = /<meta name="pulsar-build" content="([0-9a-f]+)">/.exec(
+					html,
+				)?.[1];
+				this.builtApp = { mtime, build };
+			}
+			return this.builtApp.build;
+		} catch {
+			return undefined;
+		}
 	}
 
 	/** The built app (see ./static.ts): precompressed, ETags, immutable `/_app/`. */

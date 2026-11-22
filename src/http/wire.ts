@@ -296,6 +296,12 @@ export interface Hello {
 	 * agents, a token on disk is readable by them; keep it in memory there.
 	 */
 	persistSession?: boolean;
+	/**
+	 * The build id of the app this node serves (`<meta name="pulsar-build">`).
+	 * An open app running another build reloads into this one. Absent from
+	 * older daemons and when no built app is served.
+	 */
+	webBuild?: string;
 }
 
 /**

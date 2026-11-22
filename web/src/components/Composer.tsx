@@ -18,7 +18,12 @@ import type {
 	Wake,
 } from "../api/types.ts";
 import type { ChatStatus } from "../lib/ai-types.ts";
-import { ComposerDraft, showsStop } from "../lib/composer-draft.ts";
+import {
+	ComposerDraft,
+	openComposers,
+	showsStop,
+	takeKeptDraft,
+} from "../lib/composer-draft.ts";
 import {
 	num,
 	plural,
@@ -327,7 +332,20 @@ function ComposerImpl({
 	const key = targetKey(target);
 	// Attached files and `@` picks: one draft per target (lib/composer-draft.ts).
 	const draft = useMemo(() => new ComposerDraft(), [key]);
-	useEffect(() => () => draft.clear(), [draft]);
+	useEffect(() => {
+		// Text kept across a reload into a new build (data/update.ts).
+		const kept = takeKeptDraft(key);
+		if (kept && ta.current && !ta.current.value) {
+			ta.current.value = kept;
+			setHasText(!!kept.trim());
+		}
+		const open = { draft, field: () => ta.current };
+		openComposers.set(key, open);
+		return () => {
+			if (openComposers.get(key) === open) openComposers.delete(key);
+			draft.clear();
+		};
+	}, [draft, key]);
 
 	useEffect(() => {
 		setPhase("idle");

@@ -323,6 +323,31 @@ describe("identity and browser checks", () => {
 		expect(typeof body.version).toBe("string");
 	});
 
+	test("hello carries the served app's build id once the app has one", async () => {
+		const { utimesSync } = await import("node:fs");
+		const index = join(dir, "web", "index.html");
+		const original = "<!doctype html><title>pulsar</title>";
+		const helloBuild = async () =>
+			(
+				(await (await fetch(`${base}/api/v1/hello`)).json()) as {
+					webBuild?: string;
+				}
+			).webBuild;
+		expect(await helloBuild()).toBeUndefined();
+		try {
+			writeFileSync(
+				index,
+				'<!doctype html><head><meta name="pulsar-build" content="0123456789ab"><title>pulsar</title>',
+			);
+			utimesSync(index, new Date(), new Date(Date.now() + 5_000));
+			expect(await helloBuild()).toBe("0123456789ab");
+		} finally {
+			writeFileSync(index, original);
+			utimesSync(index, new Date(), new Date(Date.now() + 10_000));
+		}
+		expect(await helloBuild()).toBeUndefined();
+	});
+
 	test("an API call without X-Pulsar is refused", async () => {
 		const res = await fetch(`${base}/api/v1/agents`);
 		expect(res.status).toBe(403);

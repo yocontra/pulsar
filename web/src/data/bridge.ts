@@ -34,6 +34,7 @@ import {
 	type LiveDef,
 } from "./queries.ts";
 import { live, prefetchAgent, queryClient, startLive } from "./runtime.ts";
+import { startUpdates } from "./update.ts";
 
 const mounts = new Map<string, Observed>();
 
@@ -157,6 +158,16 @@ export function startBridge(firstHello?: Promise<Hello>) {
 		store.streamId.value = live.streamId;
 	});
 	live.on("receipts", (v) => store.emitReceipts(v));
+	// A new build of the app (data/update.ts): /hello says which one the
+	// daemon serves. A daemon restart (a new boot id) asks at once.
+	const checkUpdate = startUpdates(() => store.hello.peek()?.webBuild);
+	store.hello.subscribe(checkUpdate);
+	let bootId: string | null = null;
+	live.on("ready", (r) => {
+		if (bootId && r.bootId !== bootId)
+			void queryClient.invalidateQueries({ queryKey: keys.hello() });
+		bootId = r.bootId;
+	});
 	live.on("security", (v) => {
 		// Every tab hears about passkey changes, so a surprise is noticed.
 		store.showToast(v.message, "warn");

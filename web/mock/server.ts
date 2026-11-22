@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
  *   PULSAR_MOCK_POOL=small           # four machines, ~80 agents (README shots)
  *   PULSAR_MOCK_STREAM=0             # open sessions stop growing
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { canonicalJson } from "../../src/canonical.ts";
 import { generateVapidKeys } from "../../src/push/webpush.ts";
@@ -1320,7 +1320,8 @@ function advanceReceipts(now: number) {
 
 // ------------------------------------------------------------------ SSE
 
-const BOOT_ID = `b${Date.now().toString(36)}`;
+// A new one when the mock "restarts" (`POST /__mock/restart`).
+let BOOT_ID = `b${Date.now().toString(36)}`;
 const RETAIN_MS = 5 * 60_000;
 
 type TopicKind =
@@ -2520,6 +2521,7 @@ async function route(
 			session: sessionOf(req),
 			canSession: passkeys.has(LOGIN, rp),
 			persistSession: !me.pulsarNode,
+			...(servedBuild() ? { webBuild: servedBuild() } : {}),
 		});
 	}
 	if (POST && (path === "/session/options" || path === "/session/verify")) {
@@ -3074,13 +3076,25 @@ async function route(
 	}
 	// Mock only: serve the app from another folder (a staged deploy) and/or
 	// hold every HTML response (a slow network), for the service worker tests.
+	// `webBuild` overrides the build /hello reports: "none" for an older
+	// daemon (no build id), omitted for the served index.html's own.
 	if (POST && path === "/__mock/static") {
 		const body = (await jsonBody(req)) as {
 			root?: string;
 			htmlDelayMs?: number;
+			webBuild?: string;
 		};
 		web.root = body.root ? resolve(body.root) : STATIC;
 		web.htmlDelayMs = body.htmlDelayMs ?? 0;
+		web.build = body.webBuild ?? null;
+		return json({ ok: true });
+	}
+	// Mock only: a daemon restart as the app sees it: every event stream
+	// ends, and the next one comes from a new boot.
+	if (POST && path === "/__mock/restart") {
+		BOOT_ID = `b${Date.now().toString(36)}${(++seq).toString(36)}`;
+		for (const s of [...streams.values()]) s.close?.();
+		streams.clear();
 		return json({ ok: true });
 	}
 	if (seg[0] === "push") {
@@ -3231,7 +3245,22 @@ async function api(req: Request, url: URL): Promise<Response> {
  * The root and an HTML delay can change at runtime (`/__mock/static`) so the
  * e2e tests can stage a deploy and a slow network for the service worker.
  */
-const web = { root: STATIC, htmlDelayMs: 0 };
+const web = {
+	root: STATIC,
+	htmlDelayMs: 0,
+	/** /hello's `webBuild` override; null: the served index.html's own. */
+	build: null as string | null,
+};
+/** The build id /hello reports (src/transport/http.ts `webBuild`). */
+function servedBuild(): string | undefined {
+	if (web.build) return web.build === "none" ? undefined : web.build;
+	try {
+		const html = readFileSync(join(web.root, "index.html"), "utf8");
+		return /<meta name="pulsar-build" content="([0-9a-f]+)">/.exec(html)?.[1];
+	} catch {
+		return undefined;
+	}
+}
 async function staticFile(req: Request, url: URL): Promise<Response> {
 	const r = await serveStatic(web.root, url.pathname, {
 		acceptEncoding: req.headers.get("accept-encoding") ?? undefined,
