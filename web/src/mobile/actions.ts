@@ -9,7 +9,6 @@ import { tagValue } from "../lib/format.ts";
 import { branchLink, prLink, repoLink } from "../lib/links.ts";
 import { navigate } from "../lib/router.ts";
 import { agentNode, showToast, togglePin } from "../lib/store.ts";
-import { loadIonicLazy } from "./lazyIonic.ts";
 import { canStop, isPinned, messageGroup } from "./nav-actions.ts";
 import { harnessName } from "./rows.tsx";
 
@@ -20,6 +19,8 @@ export {
 	openApproval,
 	openNeeds,
 } from "./nav-actions.ts";
+
+import { type ActionButton, showActions } from "./ui/actions.ts";
 
 /**
  * Stop is not optimistic (the turn may be over, Face ID may be cancelled):
@@ -46,8 +47,7 @@ export async function stopAgent(a: AgentRow) {
 
 /** Ask before stopping: an action sheet with a destructive button. */
 export async function confirmStop(a: AgentRow) {
-	const { actionSheetController } = await loadIonicLazy();
-	const sheet = await actionSheetController.create({
+	await showActions({
 		header: `Stop ${a.name}'s turn?`,
 		subHeader: "The agent stops what it's doing now. Its session stays open.",
 		buttons: [
@@ -56,10 +56,9 @@ export async function confirmStop(a: AgentRow) {
 				role: "destructive",
 				handler: () => void stopAgent(a),
 			},
-			{ text: "Cancel", role: "cancel" },
+			{ text: "Cancel", role: "cancel" as const },
 		],
 	});
-	await sheet.present();
 }
 
 async function copy(text: string, what: string) {
@@ -95,10 +94,9 @@ function linkButtons(a: AgentRow) {
 
 /** Long-press menu for an agent. */
 export async function agentMenu(a: AgentRow) {
-	const { actionSheetController } = await loadIonicLazy();
 	const node = agentNode(a.id);
 	const pinned = node ? isPinned(node.id) : false;
-	const buttons = [
+	const buttons: ActionButton[] = [
 		{
 			text: "Open Conversation",
 			handler: () => navigate({ view: "agent", id: a.id }),
@@ -124,28 +122,26 @@ export async function agentMenu(a: AgentRow) {
 			? [
 					{
 						text: "Stop Turn…",
-						role: "destructive",
+						role: "destructive" as const,
 						handler: () => void confirmStop(a),
 					},
 				]
 			: []),
-		{ text: "Cancel", role: "cancel" },
+		{ text: "Cancel", role: "cancel" as const },
 	];
-	const sheet = await actionSheetController.create({
+	await showActions({
 		header: a.name,
 		subHeader: [harnessName(a.harness), a.machine, a.project]
 			.filter(Boolean)
 			.join(" · "),
 		buttons,
 	});
-	await sheet.present();
 }
 
 /** Long-press menu for a machine or project. */
 export async function groupMenu(n: TreeNode) {
-	const { actionSheetController } = await loadIonicLazy();
 	const pinned = isPinned(n.id);
-	const sheet = await actionSheetController.create({
+	await showActions({
 		header: n.label,
 		subHeader: n.kind === "machine" ? "Machine" : "Project",
 		buttons: [
@@ -154,8 +150,7 @@ export async function groupMenu(n: TreeNode) {
 				handler: () => messageGroup(n),
 			},
 			{ text: pinned ? "Unpin" : "Pin", handler: () => togglePin(n) },
-			{ text: "Cancel", role: "cancel" },
+			{ text: "Cancel", role: "cancel" as const },
 		],
 	});
-	await sheet.present();
 }

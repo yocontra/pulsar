@@ -1,0 +1,12 @@
+/*
+ * Konsta's safe areas are the phone's --sat/--sab/--sal/--sar
+ * (styles/ios.css), which tests set to emulate a notch. Ionic's toolbars
+ * and content already pad for the same insets: a Konsta element inside
+ * them must not add pt-safe/pb-safe on top.
+ */
+:root {
+	--k-safe-area-top: var(--sat);
+	--k-safe-area-bottom: var(--sab);
+	--k-safe-area-left: var(--sal);
+	--k-safe-area-right: var(--sar);
+}

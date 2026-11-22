@@ -1,6 +1,7 @@
 import { hrefFor, type Route, stack } from "../lib/router.ts";
 import { findAgent } from "../lib/store.ts";
 import { pagesOf } from "./stack.tsx";
+import { TABS } from "./tabs.ts";
 
 export function pageTitle(r: Route): string {
 	switch (r.view) {
@@ -22,7 +23,8 @@ export function pageTitle(r: Route): string {
 		case "changes":
 			return r.file ? (r.file.split("/").pop() ?? "Diff") : "Changes";
 		default:
-			return "";
+			// A tab's root page (Usage).
+			return TABS.find((t) => hrefFor(t.route) === hrefFor(r))?.label ?? "";
 	}
 }
 

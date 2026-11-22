@@ -112,10 +112,18 @@ export default defineConfig<unknown, E2EWorkerOptions>({
 			use: { ...devices["Pixel 7"] },
 		},
 		{
-			// iOS gestures (swipe-back, swipe actions, sheets, pull to refresh).
+			// iOS gestures (swipe-back, swipe actions, sheets, pull to refresh),
+			// and the phone specs both platforms run (*.phone.e2e.ts).
 			name: "ios",
-			testMatch: /ios\.e2e\.ts$/,
+			testMatch: /(ios|phone)\.e2e\.ts$/,
 			use: { ...devices["iPhone 13 Mini"] },
+		},
+		{
+			// The phone on Android: Ionic's Material mode and Konsta's Material
+			// theme (mobile/platform.ts picks them from the user agent).
+			name: "android",
+			testMatch: /(android|phone)\.e2e\.ts$/,
+			use: { ...devices["Pixel 7"] },
 		},
 	],
 });

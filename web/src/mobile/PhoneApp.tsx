@@ -1,29 +1,40 @@
 /**
- * Pulsar on a phone: Ionic React in iOS mode. Loaded instead of the desktop
- * layout below 1024 px (components/App.tsx).
+ * Pulsar on a phone: Ionic React for structure (navigation, pages, sheets)
+ * and Konsta UI inside, in iOS mode, or Material on Android
+ * (mobile/platform.ts). Loaded instead of the desktop layout below 1024 px
+ * (components/App.tsx).
  */
-import "@ionic/react/css/core.css";
-import "@ionic/react/css/normalize.css";
-import "@ionic/react/css/structure.css";
-import "@ionic/react/css/typography.css";
+import "./ionic.css";
 import "../styles/ionic-theme.css";
 import "./theme.css";
+import "./ui/konsta.css";
+import "./ui/ui.css";
+import { KonstaProvider } from "konsta/react";
 import { useEffect } from "react";
 import { Toasts } from "../components/Toasts.tsx";
 import { lazy } from "../lib/lazy.tsx";
+import { seatHome } from "../lib/router.ts";
 import { effect, observer } from "../lib/signals.ts";
 import { failure, hello, toast } from "../lib/store.ts";
+import { toast as showToast } from "../lib/toast.ts";
+import { withLazyIonCss } from "./ionCss.ts";
 import { IonApp, setupIonicReact } from "./ionic.ts";
-import { loadIonicLazy, prefetchIonicLazy } from "./lazyIonic.ts";
+import { prefetchIonicLazy } from "./lazyIonic.ts";
 import { preloadPages } from "./pages.tsx";
+import { mode } from "./platform.ts";
 import { PhoneNav } from "./stack.tsx";
+import { ActionsHost } from "./ui/ActionsHost.tsx";
+import { TabBar } from "./ui/TabBar.tsx";
 
 setupIonicReact({
-	mode: "ios",
+	mode,
 	swipeBackEnabled: true,
 	hardwareBackButton: false,
 });
 document.documentElement.dataset.platform = "phone";
+// Opened on a page: Home gets a real history entry under it (Android back).
+seatHome();
+document.documentElement.classList.add(mode === "md" ? "k-material" : "k-ios");
 
 // Ionic's global styles don't belong on the desktop layout: a window that
 // grows past the phone breakpoint reloads into it.
@@ -33,30 +44,25 @@ desktop.addEventListener("change", () => {
 });
 
 const Overlays = lazy<object>(
-	() => import("./Overlays.tsx"),
+	withLazyIonCss(() => import("./Overlays.tsx")),
 	() => <></>,
 	{ layer: true },
 );
 const Screens = lazy<{ kind: "failure" | "first-run" }>(
-	() => import("./StatusScreens.tsx"),
+	withLazyIonCss(() => import("./StatusScreens.tsx")),
 );
 
-/** Store toasts as Ionic toasts. */
+/** The store's one-line status toasts, on the one toaster (sonner). */
 function useToasts() {
 	useEffect(
 		() =>
 			effect(() => {
 				const t = toast.value;
 				if (!t) return;
-				void loadIonicLazy().then(async ({ toastController }) => {
-					await toastController.dismiss().catch(() => {});
-					const el = await toastController.create({
-						message: t.text,
-						duration: 3000,
-						position: "bottom",
-						cssClass: `p-toast is-${t.tone}`,
-					});
-					await el.present();
+				void showToast(t.text, {
+					...(t.tone === "warn" ? { tone: "warning" as const } : {}),
+					duration: 3000,
+					id: "status",
 				});
 			}),
 		[],
@@ -74,24 +80,25 @@ function PhoneAppImpl() {
 	}, []);
 	const f = failure.value;
 	const h = hello.value;
-	if (f)
-		return (
-			<IonApp>
-				<Screens kind="failure" />
-			</IonApp>
-		);
-	if (h && (h.firstRun || h.agents === 0))
-		return (
-			<IonApp>
-				<Screens kind="first-run" />
-			</IonApp>
-		);
-	return (
-		<IonApp>
+	const body = f ? (
+		<Screens kind="failure" />
+	) : h && (h.firstRun || h.agents === 0) ? (
+		<Screens kind="first-run" />
+	) : (
+		<>
 			<PhoneNav />
+			<TabBar />
 			<Overlays />
+			<ActionsHost />
 			<Toasts mobile />
-		</IonApp>
+		</>
+	);
+	// Konsta follows the Ionic mode; its `dark:` classes are always on and
+	// apply through Pulsar's dark variant (styles/globals.css, data-theme).
+	return (
+		<KonstaProvider theme={mode === "md" ? "material" : "ios"} dark>
+			<IonApp>{body}</IonApp>
+		</KonstaProvider>
 	);
 }
 

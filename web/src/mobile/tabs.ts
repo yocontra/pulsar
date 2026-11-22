@@ -1,0 +1,114 @@
+/**
+ * The phone's tabs: Agents (`#/`), Needs You (`#/needs`), Usage (`#/usage`)
+ * and Settings (`#/settings`), over lib/router's history stack.
+ *
+ * A tab other than Agents is its root route directly above Agents' (the
+ * stack's first entry): `[home, needs, …]`. The navigation stack shows a
+ * tab from its root (stack.tsx `pagesOf`), so pages pushed on a tab go back
+ * to its root, and only a page pushed straight from Agents (or a deep link,
+ * `[home, agent]`) goes back to Agents.
+ *
+ * - Switching tabs is not animated and adds no history entry beyond the one
+ *   that holds a non-Agents tab: Android's back from it returns to Agents,
+ *   and from Agents leaves the app.
+ * - Each tab keeps its root's scroll position only.
+ * - Tapping the active tab pops to its root, or scrolls the root to the top.
+ */
+import { hrefFor, navigate, popBy, type Route, stack } from "../lib/router.ts";
+import { computed } from "../lib/signals.ts";
+
+export type TabId = "agents" | "needs" | "usage" | "settings";
+
+export const TABS: { id: TabId; route: Route; label: string }[] = [
+	{ id: "agents", route: { view: "home" }, label: "Agents" },
+	{ id: "needs", route: { view: "needs" }, label: "Needs You" },
+	{ id: "usage", route: { view: "page", name: "usage" }, label: "Usage" },
+	{ id: "settings", route: { view: "settings" }, label: "Settings" },
+];
+
+/** The tab a route is the root of, if any. */
+export function tabOf(r: Route | undefined): TabId | null {
+	if (!r) return null;
+	const href = hrefFor(r);
+	return TABS.find((t) => hrefFor(t.route) === href)?.id ?? null;
+}
+
+/** Index in `s` where the visible tab's pages start (0 or 1). */
+export function tabStart(s: Route[]): number {
+	const t = tabOf(s[1]);
+	return s[0]?.view === "home" && t && t !== "agents" ? 1 : 0;
+}
+
+/** The tab that holds the stack's top page. */
+export const activeTab = computed<TabId>(() => {
+	const s = stack.value;
+	return tabStart(s) === 1 ? (tabOf(s[1]) ?? "agents") : "agents";
+});
+
+/** The top page is a tab's root: the tab bar shows. */
+export const atTabRoot = computed(() => {
+	const s = stack.value;
+	return s.length - 1 === tabStart(s);
+});
+
+// ---------------------------------------------------------------- scroll
+
+const scrollTops = new Map<TabId, number>();
+
+/** The top page's scroller (its IonContent), once it has one. */
+async function topScroller(): Promise<HTMLElement | null> {
+	const content = document.querySelector<HTMLIonContentElement>(
+		"ion-nav > .ion-page:last-child ion-content",
+	);
+	return content ? content.getScrollElement() : null;
+}
+
+function rememberScroll(tab: TabId) {
+	void topScroller().then((el) => {
+		if (el) scrollTops.set(tab, el.scrollTop);
+	});
+}
+
+/** Put a tab root's scroll back once its page is the top one. */
+function restoreScroll(tab: TabId) {
+	const top = scrollTops.get(tab) ?? 0;
+	if (top <= 0) return;
+	const end = performance.now() + 1500;
+	const tick = async () => {
+		const el = await topScroller();
+		if (el && activeTab.peek() === tab && el.scrollHeight > el.clientHeight) {
+			el.scrollTop = top;
+			return;
+		}
+		if (performance.now() < end) requestAnimationFrame(() => void tick());
+	};
+	requestAnimationFrame(() => void tick());
+}
+
+// ------------------------------------------------------------- switching
+
+/** The tab bar's tap: switch tabs, or pop / scroll the active one. */
+export function selectTab(id: TabId) {
+	const s = stack.peek();
+	const cur = activeTab.peek();
+	const start = tabStart(s);
+	if (id === cur) {
+		const above = s.length - 1 - start;
+		if (above > 0) popBy(above);
+		else
+			void document
+				.querySelector<HTMLIonContentElement>(
+					"ion-nav > .ion-page:last-child ion-content",
+				)
+				?.scrollToTop(300);
+		return;
+	}
+	rememberScroll(cur);
+	const tab = TABS.find((t) => t.id === id);
+	if (!tab) return;
+	if (id === "agents") popBy(s.length - 1, { animated: false });
+	else if (cur === "agents" && s.length === 1)
+		navigate(tab.route, { animated: false });
+	else navigate(tab.route, { replace: true });
+	restoreScroll(id);
+}

@@ -66,7 +66,14 @@ addEventListener("popstate", (e) => {
 	route.value = next;
 });
 
-export function navigate(r: Route, opts: { replace?: boolean } = {}) {
+export function navigate(
+	r: Route,
+	opts: {
+		replace?: boolean;
+		/** false: no push animation (the phone's tab switches). */
+		animated?: boolean;
+	} = {},
+) {
 	const href = hrefFor(r);
 	if (href === location.hash || (href === "#/" && !location.hash)) {
 		route.value = r;
@@ -79,9 +86,36 @@ export function navigate(r: Route, opts: { replace?: boolean } = {}) {
 	} else {
 		history.pushState({ depth: ++depth }, "", href);
 		stack.value = [...stack.value, r];
-		motion.value = "push";
+		motion.value = opts.animated === false ? "none" : "push";
 	}
 	route.value = r;
+}
+
+/**
+ * Go back `n` entries this tab pushed (at most to the first): the phone pops
+ * to a tab's root, or back to Agents from another tab. False when there is
+ * nothing to pop.
+ */
+export function popBy(n: number, opts: { animated?: boolean } = {}): boolean {
+	const k = Math.min(n, depth);
+	if (k <= 0) return false;
+	pendingPop = opts.animated === false ? "none" : "pop";
+	history.go(-k);
+	return true;
+}
+
+/**
+ * The phone, opened straight on a page (a link, a notification, a reload of
+ * a tab): give the Home under it a real history entry, so the system back
+ * (Android) returns to Home before it leaves the app.
+ */
+export function seatHome() {
+	const s = stack.value;
+	if (depth !== 0 || s.length !== 2 || s[0]?.view !== "home") return;
+	const href = location.hash;
+	history.replaceState({ depth: 0 }, "", "#/");
+	history.pushState({ depth: 1 }, "", href);
+	depth = 1;
 }
 
 /**

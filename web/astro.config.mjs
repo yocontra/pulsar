@@ -69,21 +69,93 @@ function ionicReactPure() {
 }
 
 /**
- * The phone runs Ionic in iOS mode only: drop each component's Material
- * (`md`) stylesheet from the bundle.
+ * Ionic's components carry their styles for both modes (`ios`, `md`) as
+ * strings in their JS. The phone picks one mode per device
+ * (mobile/platform.ts), so each mode's strings move out of the components
+ * into per-mode registries (`virtual:ionic-css/<mode>-<eager|lazy>`), and a
+ * device downloads only its own. Each component's style getter reads the
+ * registry (globalThis.__pulsarIonCss) when its first instance connects;
+ * mobile/ionCss.ts loads the eager registry before the phone renders and
+ * the lazy one with the after-first-paint Ionic module (lazyIonic.ts).
+ *
+ * A registry holds only the styles of components left in the bundle after
+ * tree-shaking: its content is filled in at renderChunk, when every chunk's
+ * rendered code is known (and before chunk hashes are computed). "lazy" is
+ * what only the chunk holding mobile/ionic-lazy.tsx uses; everything else is "eager".
+ * Build only: the dev server keeps the styles inline.
  */
-function ionicIosOnly() {
+function ionicModeStyles() {
+	/** A JS string literal's value (Ionic's own minified build output). */
+	const literal = (src) => new Function(`return ${src}`)();
+	const PREFIX = "virtual:ionic-css/";
+	const MARK = "__PULSAR_ION_CSS__";
+	/** "ios:<key>" → CSS. */
+	const css = new Map();
+	let build = false;
+	const str = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`$]*`)/.source;
+	const getter = new RegExp(
+		`static get style\\(\\)\\{return\\{ios:${str},md:${str}\\}\\}`,
+		"g",
+	);
 	return {
-		name: "ionic-ios-only",
+		name: "ionic-mode-styles",
 		enforce: "pre",
+		configResolved(c) {
+			build = c.command === "build";
+		},
+		resolveId(id) {
+			if (id.startsWith(PREFIX)) return `\0${id}`;
+			return null;
+		},
+		load(id) {
+			if (!id.startsWith(`\0${PREFIX}`)) return null;
+			const which = id.slice(PREFIX.length + 1);
+			if (!/^(ios|md)-(eager|lazy)$/.test(which))
+				throw new Error(`ionic-mode-styles: unknown registry ${which}`);
+			return build ? `export default "${MARK}${which}";` : "export default {};";
+		},
 		transform(code, id) {
+			if (!build) return null;
 			if (!/@ionic\/core\/components\/(ion|p)-[\w-]+\.js$/.test(id))
 				return null;
 			if (!code.includes("static get style(){return{ios:")) return null;
-			return code.replace(
-				/,md:(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`)/g,
-				"",
+			const file = id.replace(/^.*\/components\//, "").replace(/\.js$/, "");
+			let i = 0;
+			const out = code.replace(getter, (_all, ios, md) => {
+				const key = `${file}:${i++}`;
+				css.set(`ios:${key}`, literal(ios));
+				css.set(`md:${key}`, literal(md));
+				const read = (m) =>
+					`(globalThis.__pulsarIonCss?.["${m}:${key}"]??globalThis.__pulsarIonMiss?.("${m}:${key}")??"")`;
+				// Getters: Stencil reads only the element's mode.
+				return `static get style(){return{get ios(){return ${read("ios")}},get md(){return ${read("md")}}}}`;
+			});
+			if (i === 0)
+				throw new Error(`ionic-mode-styles: no style getter matched in ${id}`);
+			return out;
+		},
+		renderChunk(code, _chunk, _out, meta) {
+			const m = new RegExp(`(["'\`])${MARK}((ios|md)-(eager|lazy))\\1`).exec(
+				code,
 			);
+			if (!m) return null;
+			const [, , , mode, part] = m;
+			const used = { eager: new Set(), lazy: new Set() };
+			for (const c of Object.values(meta.chunks)) {
+				const lazy = c.moduleIds.some((id) =>
+					/\/mobile\/ionic-lazy\.tsx$/.test(id),
+				);
+				for (const mod of Object.values(c.modules))
+					for (const k of (mod.code ?? "").matchAll(
+						/__pulsarIonCss\?\.\["ios:([^"]+)"\]/g,
+					))
+						used[lazy ? "lazy" : "eager"].add(k[1]);
+			}
+			for (const k of used.eager) used.lazy.delete(k);
+			const map = {};
+			for (const k of [...used[part]].sort())
+				map[`${mode}:${k}`] = css.get(`${mode}:${k}`) ?? "";
+			return code.replace(m[0], JSON.stringify(map));
 		},
 	};
 }
@@ -124,7 +196,7 @@ export default defineConfig({
 			tailwindcss(),
 			stencilConstructableStyles(),
 			ionicReactPure(),
-			ionicIosOnly(),
+			ionicModeStyles(),
 			sonnerNoInlineStyle(),
 			// KaTeX fonts as woff2 only (every browser the app supports): drops
 			// the woff and ttf copies, ~0.8 MB of the package.
@@ -176,12 +248,13 @@ export default defineConfig({
 			modulePreload: { polyfill: false },
 			chunkSizeWarningLimit: 4000,
 			rolldownOptions: {
-				// Ionic's packages don't declare `sideEffects`, so every component
-				// would ship. Their component modules and wrappers only define
+				// Ionic's and Konsta's packages don't declare `sideEffects`, so
+				// every component would ship (Konsta's set `displayName` at the
+				// top level). Their component modules and wrappers only define
 				// what is used.
 				treeshake: {
 					moduleSideEffects: (id) =>
-						!/node_modules\/(@ionic\/core\/components\/ion-[\w-]+\.js|@ionic\/react\/dist\/index\.js|ionicons\/components\/)/.test(
+						!/node_modules\/(@ionic\/core\/components\/ion-[\w-]+\.js|@ionic\/react\/dist\/index\.js|ionicons\/components\/|konsta\/(react|shared)\/)/.test(
 							id,
 						),
 				},

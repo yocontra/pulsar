@@ -1,0 +1,132 @@
+/*
+ * The phone primitives (mobile/ui/): the tab bar and the pages under it.
+ */
+:root {
+	/* The tab bar above the bottom inset: iOS's capsule (64) and its gap
+	   (16), Material's navigation bar (80). */
+	--p-tabbar-h: 80px;
+}
+
+/* A tab's root page clears the tab bar: everything that pads for the
+   bottom inset (lists, Ionic's content) pads for the bar too. */
+html.p-tabs ion-nav > .ion-page:last-child {
+	--ion-safe-area-bottom: calc(var(--sab) + var(--p-tabbar-h));
+}
+
+.p-tabbar {
+	transition:
+		transform var(--ds-dur) ease,
+		opacity var(--ds-dur) ease;
+}
+.p-tabbar.is-hidden {
+	transform: translateY(100%);
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* ------------------------------------------------------------ toasts
+   The one toaster (sonner, styles/toasts.css) on the phone: above the tab
+   bar on a tab's root, above the composer on pushed pages, and up with the
+   keyboard. Sonner sets its offset inline (CSSOM), hence !important. */
+html[data-platform="phone"] {
+	--p-toast-bottom: 88px;
+}
+html[data-platform="phone"].p-tabs {
+	--p-toast-bottom: calc(var(--p-tabbar-h) + var(--sab) + 8px);
+}
+html[data-platform="phone"] [data-sonner-toaster] {
+	--mobile-offset-bottom: calc(
+		var(--p-toast-bottom) +
+		var(--kb, 0px)
+	) !important;
+}
+
+/* iOS: a rounded glass card. */
+html.k-ios [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+	border-radius: 18px;
+	background: var(--ds-material);
+	-webkit-backdrop-filter: var(--ds-material-filter);
+	backdrop-filter: var(--ds-material-filter);
+	font-size: var(--ds-text-secondary);
+}
+
+/* Material 3: a snackbar on the inverse surface, 4 px corners, no border. */
+html.k-material [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+	border: 0;
+	border-radius: 4px;
+	background: var(--ds-text);
+	color: var(--ds-bg);
+	box-shadow: var(--ds-shadow-md);
+	font-family: Roboto, system-ui, sans-serif;
+	font-size: 14px;
+}
+html.k-material
+	[data-sonner-toaster]
+	[data-sonner-toast][data-styled="true"]
+	[data-description] {
+	color: color-mix(in srgb, var(--ds-bg) 75%, transparent);
+}
+html.k-material
+	[data-sonner-toaster]
+	[data-sonner-toast][data-styled="true"]
+	[data-button] {
+	background: transparent;
+	color: var(--ds-primary-soft);
+	text-transform: none;
+}
+
+/* ------------------------------------------------------------ actions
+   Konsta Actions (ui/ActionsSheet.tsx) above Ionic's sheets (z 20000+). */
+.p-actions-layer {
+	position: fixed;
+	inset: 0;
+	z-index: 30000;
+}
+
+/* ------------------------------------------------------------ top bar
+   PageShell (ui/PageShell.tsx). iOS: Konsta's Liquid Glass navbar, a
+   backdrop (.p-bar-bg) behind a clear toolbar, the trailing buttons in a
+   glass capsule. The large title's own toolbar stays on the page. */
+html.ios ion-header.p-bar {
+	isolation: isolate;
+}
+html.ios ion-header.p-bar ion-toolbar {
+	--background: transparent;
+	--border-width: 0;
+}
+html.ios ion-header.p-bar > .header-background {
+	display: none;
+}
+.p-bar-bg {
+	position: absolute;
+	inset: 0 0 -16px;
+	z-index: -1;
+	pointer-events: none;
+}
+.p-bar-glass {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding-inline: 4px;
+	border-radius: 999px;
+}
+
+/* Android: Material's top app bar on the page surface. */
+html.md ion-header.p-bar ion-toolbar {
+	--background: var(--ds-bg-sunken);
+	--min-height: 64px;
+	--border-width: 0;
+}
+html.md ion-header.p-bar ion-title {
+	font-family: Roboto, system-ui, sans-serif;
+	font-size: 22px;
+	font-weight: 400;
+}
+html.md ion-header.p-bar.header-md::after {
+	display: none;
+}
+
+/* The page under a PageShell: the sunken background (= theme-color). */
+ion-content.p-page {
+	--background: var(--ds-bg-sunken);
+}

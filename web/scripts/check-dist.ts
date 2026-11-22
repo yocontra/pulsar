@@ -4,8 +4,8 @@
  *   (the daemon serves `script-src 'self'` and `default-src 'self'`).
  * - Budget, per layout: the initial route's JS (boot.js, entry + static
  *   imports + that layout's app chunk) gzipped (the .gz sidecars
- *   finish-dist.ts writes, which the daemon serves): the phone (Ionic shell)
- *   ≤ 170 KB, the desktop ≤ 130 KB.
+ *   finish-dist.ts writes, which the daemon serves): the phone (Ionic shell,
+ *   with its mode's Ionic styles) ≤ 170 KB, the desktop ≤ 130 KB.
  * - Package: dist/web ≤ 9 MB and ≤ 420 files unpacked, not counting the
  *   precompressed .br/.gz sidecars, which have their own ≤ 4 MB budget
  *   (Shiki languages and KaTeX fonts are trimmed in astro.config.mjs;
@@ -86,6 +86,24 @@ for (const name of Object.keys(BUDGETS)) {
 		continue;
 	}
 	const c = new Set([...entry, ...closure([chunk])]);
+	// The phone's Ionic styles for its mode load with its chunk
+	// (components/App.tsx): count iOS's, report Android's beside it.
+	if (name === "PhoneApp") {
+		const reg = (mode: string) =>
+			js.find((f) => relative(DIST, f).startsWith(`_app/${mode}-eager.`));
+		const ios = reg("ios");
+		const md = reg("md");
+		if (!ios || !md)
+			problems.push(
+				"no ios-eager/md-eager chunk (astro.config.mjs ionicModeStyles)",
+			);
+		else {
+			c.add(ios);
+			results.push(
+				`  (Ionic styles: iOS ${(gz(ios) / 1024).toFixed(1)} KB counted; Android ${(gz(md) / 1024).toFixed(1)} KB in its place)`,
+			);
+		}
+	}
 	for (const f of c) initial.add(f);
 	const bytes = [...c].reduce((s, f) => s + gz(f), 0);
 	const budget = BUDGETS[name]!;

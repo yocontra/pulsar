@@ -39,8 +39,9 @@ import {
 	IonToolbar,
 } from "./ionic.ts";
 import { IonLabel, IonList, IonNote } from "./ionic-lazy.tsx";
-import { loadIonicLazy, useIonicLazy } from "./lazyIonic.ts";
+import { useIonicLazy } from "./lazyIonic.ts";
 import { Bar, linkWord } from "./rows.tsx";
+import { showActions } from "./ui/actions.ts";
 
 /** A titled inset list (registered sections render IonItems inside one). */
 export function Group({
@@ -79,8 +80,7 @@ async function confirm(
 	action: string,
 	run: () => void,
 ) {
-	const { actionSheetController } = await loadIonicLazy();
-	const s = await actionSheetController.create({
+	await showActions({
 		header,
 		subHeader: sub,
 		buttons: [
@@ -88,7 +88,6 @@ async function confirm(
 			{ text: "Cancel", role: "cancel" },
 		],
 	});
-	await s.present();
 }
 
 function SkeletonItem() {

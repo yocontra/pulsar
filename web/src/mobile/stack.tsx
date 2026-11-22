@@ -14,6 +14,7 @@ import { back, hrefFor, motion, type Route, stack } from "../lib/router.ts";
 import { effect } from "../lib/signals.ts";
 import { IonNav } from "./ionic.ts";
 import { PageFor, preloadPage } from "./pages.tsx";
+import { tabStart } from "./tabs.ts";
 
 /** Routes shown as sheets over the page below them. */
 export const isOverlay = (r: Route) =>
@@ -29,10 +30,14 @@ function pageOf(r: Route): Route | null {
 	return r;
 }
 
-/** The pages for a history stack, in order (consecutive duplicates merged). */
+/**
+ * The pages for a history stack, in order (consecutive duplicates merged),
+ * from the visible tab's root (tabs.ts): Agents' root isn't under another
+ * tab's pages.
+ */
 export function pagesOf(s: Route[]): Route[] {
 	const out: Route[] = [];
-	for (const r of s) {
+	for (const r of s.slice(tabStart(s))) {
 		const p = pageOf(r);
 		if (!p) continue;
 		const prev = out[out.length - 1];

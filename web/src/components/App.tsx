@@ -1,5 +1,6 @@
 import { lazy } from "../lib/lazy.tsx";
 import { observer, signal } from "../lib/signals.ts";
+import { loadEagerIonCss } from "../mobile/ionCss.ts";
 import { proveAsk } from "../prove/state.ts";
 
 // Each device downloads only its app: the desktop layout, or the phone's
@@ -16,7 +17,14 @@ function BootShell() {
 	);
 }
 const Desktop = lazy(() => import("./DesktopApp.tsx"), BootShell);
-const Mobile = lazy(() => import("../mobile/PhoneApp.tsx"), BootShell);
+// The phone's Ionic styles for its mode load alongside its chunk.
+const Mobile = lazy<object>(
+	() =>
+		Promise.all([import("../mobile/PhoneApp.tsx"), loadEagerIonCss()]).then(
+			([m]) => m,
+		),
+	BootShell,
+);
 
 const mq = matchMedia("(min-width: 1024px)");
 const isDesktop = signal(mq.matches);

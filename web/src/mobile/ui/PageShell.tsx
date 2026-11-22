@@ -1,0 +1,111 @@
+/**
+ * A phone page: its top bar and its scroll area (Ionic's IonHeader and
+ * IonContent, as direct children of IonNav's page, so the iOS push moves the
+ * titles), with Konsta inside.
+ *
+ * - iOS: a large title that condenses into the bar as the page scrolls
+ *   (IonHeader collapse="condense"), and a Liquid Glass bar: Konsta's
+ *   navbar backdrop (a surface-to-clear gradient over a light blur) with
+ *   the trailing buttons in a glass capsule.
+ * - Android: Material's top app bar (back arrow, title, icon buttons).
+ *
+ * Safe areas come from Ionic (the header and content pad for --sat/--sab):
+ * nothing inside adds Konsta's pt-safe/pb-safe on top.
+ */
+import { Glass } from "konsta/react";
+import type { ReactNode } from "react";
+import type { Route } from "../../lib/router.ts";
+import { BackButton } from "../BackButton.tsx";
+import {
+	IonButtons,
+	IonContent,
+	IonHeader,
+	IonTitle,
+	IonToolbar,
+} from "../ionic.ts";
+import { isMaterial } from "../platform.ts";
+
+export interface PageShellProps {
+	/** The bar's title (and the large title on iOS). */
+	title: string;
+	/** This page's route: the back button (none on a tab's root). */
+	route?: Route;
+	/** Leading buttons after the back button. */
+	start?: ReactNode;
+	/** Trailing buttons: a glass capsule on iOS, icon buttons on Android. */
+	end?: ReactNode;
+	/** iOS large title (default on). */
+	large?: boolean;
+	/** The scroll area's class (page styles). */
+	className?: string;
+	/** A fixed footer under the content (a composer dock). */
+	footer?: ReactNode;
+	testId?: string;
+	children: ReactNode;
+}
+
+export function PageShell({
+	title,
+	route,
+	start,
+	end,
+	large = true,
+	className,
+	footer,
+	testId,
+	children,
+}: PageShellProps) {
+	const condense = large && !isMaterial;
+	return (
+		<>
+			<IonHeader translucent={!isMaterial} className="p-bar">
+				{!isMaterial && (
+					<div
+						aria-hidden="true"
+						className="p-bar-bg bg-gradient-to-b from-ios-light-surface to-transparent dark:from-ios-dark-surface/50 backdrop-blur-[2px] mask-b-from-50% mask-b-to-100%"
+					/>
+				)}
+				<IonToolbar>
+					{(route || start) && (
+						<IonButtons slot="start">
+							{route && <BackButton route={route} />}
+							{start}
+						</IonButtons>
+					)}
+					<IonTitle>{title}</IonTitle>
+					{end && (
+						<IonButtons slot="end">
+							{isMaterial ? (
+								end
+							) : (
+								<Glass highlight={false} className="p-bar-glass">
+									{end}
+								</Glass>
+							)}
+						</IonButtons>
+					)}
+				</IonToolbar>
+			</IonHeader>
+			<IonContent
+				fullscreen
+				className={className ? `p-page ${className}` : "p-page"}
+				data-testid={testId}
+			>
+				{condense && (
+					<IonHeader collapse="condense">
+						<IonToolbar>
+							<IonTitle size="large">{title}</IonTitle>
+						</IonToolbar>
+					</IonHeader>
+				)}
+				{children}
+			</IonContent>
+			{footer}
+		</>
+	);
+}
+
+/** A tab's root page (tabs.ts): no back button; the tab bar switches. */
+export function TabShell(props: Omit<PageShellProps, "route">) {
+	return <PageShell {...props} />;
+}

@@ -10,7 +10,7 @@ import type { LimitSettings } from "../../api/types.ts";
 import { queryClient } from "../../data/hooks.ts";
 import { IonItem } from "../../mobile/ionic.ts";
 import { IonLabel, IonNote } from "../../mobile/ionic-lazy.tsx";
-import { loadIonicLazy, useIonicLazy } from "../../mobile/lazyIonic.ts";
+import { useIonicLazy } from "../../mobile/lazyIonic.ts";
 import {
 	DEFAULT_SETTINGS,
 	limitsKey,
@@ -18,6 +18,7 @@ import {
 	useLimits,
 } from "./model.ts";
 import "./limits.css";
+import { showActions } from "../../mobile/ui/actions.ts";
 
 export const HELP =
 	"A notification when a limit passes a threshold or is reached, once per limit window. Codex reports percentages; Claude Code, pi and omp only report a reached limit.";
@@ -111,9 +112,8 @@ export function PhoneSection() {
 	const lz = useIonicLazy();
 	const { settings, loaded, error, save } = useSettings();
 	const edit = async () => {
-		const { actionSheetController } = await loadIonicLazy();
 		const now = settings.thresholds.join();
-		const sheet = await actionSheetController.create({
+		await showActions({
 			header: "Warn at",
 			subHeader: "Other percentages can be set in Settings on a computer.",
 			buttons: [
@@ -124,7 +124,6 @@ export function PhoneSection() {
 				{ text: "Cancel", role: "cancel" },
 			],
 		});
-		await sheet.present();
 	};
 	return (
 		<>

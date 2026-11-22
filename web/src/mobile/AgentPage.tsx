@@ -27,9 +27,9 @@ import {
 	IonTitle,
 	IonToolbar,
 } from "./ionic.ts";
-import { loadIonicLazy } from "./lazyIonic.ts";
 import { AgentStatus, harnessName } from "./rows.tsx";
 import { SubagentsSection } from "./SubagentsSection.tsx";
+import { showActions } from "./ui/actions.ts";
 
 /**
  * Long-press a message for its actions, as in Messages (no copy row under
@@ -52,8 +52,7 @@ function useMessageMenu() {
 		const text = el ? texts.current.get(el.dataset.msgId ?? "") : undefined;
 		if (!el || !text) return;
 		el.classList.add("p-pressed");
-		const { actionSheetController } = await loadIonicLazy();
-		const sheet = await actionSheetController.create({
+		await showActions({
 			buttons: [
 				{
 					text: "Copy",
@@ -66,8 +65,7 @@ function useMessageMenu() {
 				{ text: "Cancel", role: "cancel" },
 			],
 		});
-		void sheet.onDidDismiss().then(() => el.classList.remove("p-pressed"));
-		await sheet.present();
+		el.classList.remove("p-pressed");
 	};
 	const cancel = () => {
 		clearTimeout(t.current);

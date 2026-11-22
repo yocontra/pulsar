@@ -1,0 +1,88 @@
+/*
+ * Konsta UI (the phone's components) on Pulsar's tokens. Konsta's theme.css
+ * is imported piece by piece without its colors.css: that derives fixed
+ * Material palettes from one hex at build time (~4 KB gzipped, three
+ * variants). Here every Konsta color reads a --ds-* token instead, so
+ * light, dark and the forced themes follow tokens.css. Konsta's light and
+ * dark slots read the same token, which already switches with the theme.
+ *
+ * Konsta's `dark` variant is replaced by Pulsar's (globals.css: data-theme
+ * or the system scheme), and KonstaProvider always passes `dark`.
+ */
+@import "../../../node_modules/konsta/styles/base.css";
+@import "../../../node_modules/konsta/styles/glass.css";
+@import "../../../node_modules/konsta/styles/touch-ripple.css";
+@import "../../../node_modules/konsta/styles/no-scrollbar.css";
+@import "../../../node_modules/konsta/styles/ios-material.css";
+@import "../../../node_modules/konsta/styles/preloader.css";
+@import "../../../node_modules/konsta/styles/hairlines.css";
+@import "../../../node_modules/konsta/styles/safe-areas.css";
+
+@theme inline {
+	--color-ios-primary: var(--ds-primary);
+	--color-ios-primary-tint: var(--ds-primary-hover);
+	--color-ios-primary-shade: var(--ds-primary-hover);
+	--color-ios-hover-highlight: rgba(255, 255, 255, 0.4);
+
+	/* iOS: the page is the sunken background (= theme-color); groups and
+	   cards are surfaces on it. */
+	--color-ios-light-surface: var(--ds-bg-sunken);
+	--color-ios-dark-surface: var(--ds-bg-sunken);
+	--color-ios-light-surface-1: var(--ds-surface);
+	--color-ios-dark-surface-1: var(--ds-surface);
+	--color-ios-light-surface-1-shade: var(--ds-surface-active);
+	--color-ios-dark-surface-1-shade: var(--ds-surface-active);
+	--color-ios-light-surface-1-tint: var(--ds-surface);
+	--color-ios-dark-surface-1-tint: var(--ds-surface-3);
+	--color-ios-light-surface-2: var(--ds-surface-2);
+	--color-ios-dark-surface-2: var(--ds-surface-2);
+	--color-ios-light-surface-3: var(--ds-surface);
+	--color-ios-dark-surface-3: var(--ds-surface);
+	--color-ios-light-surface-variant: var(--ds-surface-2);
+	--color-ios-dark-surface-variant: var(--ds-surface-3);
+
+	--color-md-light-primary: var(--ds-primary);
+	--color-md-dark-primary: var(--ds-primary);
+	--color-md-light-on-primary: var(--ds-on-primary);
+	--color-md-dark-on-primary: var(--ds-on-primary);
+	--color-md-light-primary-container: var(--ds-primary-soft);
+	--color-md-dark-primary-container: var(--ds-primary-soft);
+	--color-md-light-on-primary-container: var(--ds-text);
+	--color-md-dark-on-primary-container: var(--ds-text);
+	--color-md-light-secondary: var(--ds-text-2);
+	--color-md-dark-secondary: var(--ds-text-2);
+	--color-md-light-on-secondary: var(--ds-surface);
+	--color-md-dark-on-secondary: var(--ds-surface);
+	--color-md-light-secondary-container: var(--ds-primary-soft);
+	--color-md-dark-secondary-container: var(--ds-primary-soft);
+	--color-md-light-on-secondary-container: var(--ds-text);
+	--color-md-dark-on-secondary-container: var(--ds-text);
+	--color-md-light-surface: var(--ds-bg-sunken);
+	--color-md-dark-surface: var(--ds-bg-sunken);
+	--color-md-light-on-surface: var(--ds-text);
+	--color-md-dark-on-surface: var(--ds-text);
+	--color-md-light-surface-variant: var(--ds-surface-2);
+	--color-md-dark-surface-variant: var(--ds-surface-2);
+	--color-md-light-on-surface-variant: var(--ds-text-2);
+	--color-md-dark-on-surface-variant: var(--ds-text-2);
+	--color-md-light-outline: var(--ds-border-strong);
+	--color-md-dark-outline: var(--ds-border-strong);
+	--color-md-light-outline-variant: var(--ds-border);
+	--color-md-dark-outline-variant: var(--ds-border);
+	--color-md-light-surface-1: var(--ds-surface);
+	--color-md-dark-surface-1: var(--ds-surface);
+	--color-md-light-surface-2: var(--ds-surface-2);
+	--color-md-dark-surface-2: var(--ds-surface-2);
+	--color-md-light-surface-3: var(--ds-surface-3);
+	--color-md-dark-surface-3: var(--ds-surface-3);
+	--color-md-light-surface-4: var(--ds-surface-3);
+	--color-md-dark-surface-4: var(--ds-surface-3);
+	--color-md-light-surface-5: var(--ds-surface-3);
+	--color-md-dark-surface-5: var(--ds-surface-3);
+}
+
+/* Konsta's glass FAB shadows read the primary color as a variable. */
+:root {
+	--color-primary: var(--ds-primary);
+	--k-hairline-color: var(--ds-hairline);
+}

@@ -9,11 +9,13 @@ import { prefetch } from "../lib/prefetch.ts";
 import { pageFor, pageProps } from "../lib/registry.tsx";
 import type { Route } from "../lib/router.ts";
 import Home from "./Home.tsx";
+import { loadLazyIonCss, withLazyIonCss } from "./ionCss.ts";
 import { PageSkeleton } from "./skeletons.tsx";
 
+// A page may render the lazy Ionic components: their styles load with it.
 const page = <P extends object>(
 	load: () => Promise<{ default: React.ComponentType<P> }>,
-) => lazy(load);
+) => lazy(withLazyIonCss(load));
 
 const Agent = page<{ id: string }>(() => import("./AgentPage.tsx"));
 const Needs = page<object>(() => import("./NeedsPage.tsx"));
@@ -47,7 +49,7 @@ export function preloadPage(r: Route): Promise<unknown> {
 		case "changes":
 			return Changes.preload();
 		case "page":
-			return pageFor(r)?.phone?.preload?.() ?? Promise.resolve();
+			return Promise.all([pageFor(r)?.phone?.preload?.(), loadLazyIonCss()]);
 		default:
 			return Promise.resolve();
 	}
@@ -57,6 +59,14 @@ export function preloadPage(r: Route): Promise<unknown> {
 export function preloadPages() {
 	prefetch([Agent, Needs, Ask, Settings, Ids].map((p) => p.preload));
 }
+
+/** A feature's page (its own chunk) once the lazy Ionic styles are in. */
+const WithLazyIonCss = lazy<{ children: React.ReactNode }>(
+	withLazyIonCss(async () => ({
+		default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+	})),
+	() => <PageSkeleton title="" />,
+);
 
 export function PageFor({ route }: { route: Route }) {
 	switch (route.view) {
@@ -81,7 +91,13 @@ export function PageFor({ route }: { route: Route }) {
 		case "page": {
 			// A feature's page (lib/registry.tsx); Home when it has no phone view.
 			const Page = pageFor(route)?.phone;
-			return Page ? <Page {...pageProps(route)} /> : <Home />;
+			return Page ? (
+				<WithLazyIonCss>
+					<Page {...pageProps(route)} />
+				</WithLazyIonCss>
+			) : (
+				<Home />
+			);
 		}
 		default:
 			return <PageSkeleton title="" />;

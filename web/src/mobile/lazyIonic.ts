@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { prefetch } from "../lib/prefetch.ts";
+import { withLazyIonCss } from "./ionCss.ts";
 
 export type LazyIonic = typeof import("./ionic-lazy.tsx");
 
@@ -8,7 +9,7 @@ let loading: Promise<LazyIonic> | null = null;
 
 /** Load the after-first-paint Ionic components (sheets, swipe actions...). */
 export function loadIonicLazy(): Promise<LazyIonic> {
-	loading ??= import("./ionic-lazy.tsx").then(
+	loading ??= withLazyIonCss(() => import("./ionic-lazy.tsx"))().then(
 		(m) => {
 			mod = m;
 			return m;

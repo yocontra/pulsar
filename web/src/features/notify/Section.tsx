@@ -10,7 +10,7 @@ import { observer } from "../../lib/signals.ts";
 import { can } from "../../lib/store.ts";
 import { IonItem } from "../../mobile/ionic.ts";
 import { IonLabel, IonNote } from "../../mobile/ionic-lazy.tsx";
-import { loadIonicLazy, useIonicLazy } from "../../mobile/lazyIonic.ts";
+import { useIonicLazy } from "../../mobile/lazyIonic.ts";
 import { enablePush, pushState } from "../../settings/push.ts";
 import {
 	inApp,
@@ -23,6 +23,7 @@ import {
 	wantsNotifications,
 } from "./prefs.ts";
 import "./notify.css";
+import { showActions } from "../../mobile/ui/actions.ts";
 
 export const HELP =
 	"For agents you started, messaged or opened in the last 6 hours. Notifications say only that an agent finished or stopped; details stay on your machines.";
@@ -134,8 +135,7 @@ function PhoneImpl() {
 	const { error, busy, choose, toggleInApp } = useAgentActivity();
 	const current = shownMode();
 	const pick = async () => {
-		const { actionSheetController } = await loadIonicLazy();
-		const sheet = await actionSheetController.create({
+		await showActions({
 			header: "When an agent finishes or fails",
 			subHeader: HELP,
 			buttons: [
@@ -146,7 +146,6 @@ function PhoneImpl() {
 				{ text: "Cancel", role: "cancel" },
 			],
 		});
-		await sheet.present();
 	};
 	return (
 		<>

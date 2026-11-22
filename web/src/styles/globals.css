@@ -1,4 +1,9 @@
+/* Layer order: the phone's Ionic global CSS (mobile/ionic.css) sits above
+   Tailwind's preflight and below utilities, so Konsta's utility classes
+   style the elements Ionic's normalize also touches. */
+@layer theme, base, ionic, components, utilities;
 @import "tailwindcss";
+@import "./konsta.css";
 @import "./tokens.css";
 @import "./ds.css";
 @import "./conversation.css";
@@ -10,6 +15,10 @@
 @source "../../../node_modules/streamdown/dist/*.js";
 @source "../../../node_modules/@streamdown/code/dist/*.js";
 @source "../../../node_modules/@streamdown/math/dist/*.js";
+/* Konsta's class names, for the components the phone uses only (its own
+   theme.css scans every component: ~9 KB gzipped of CSS on every page). Add
+   a component here when the phone starts using it. */
+@source "../../../node_modules/konsta/{shared/classes,shared/colors,react/components}/{Actions,ActionsButton,ActionsGroup,ActionsLabel,Badge,Block,BlockFooter,BlockHeader,BlockTitle,Button,Card,Chip,Glass,Icon,Link,List,ListButton,ListGroup,ListItem,MenuList,MenuListItem,Popover,Preloader,Segmented,SegmentedButton,Tabbar,TabbarLink,Toggle,Toolbar,ToolbarPane}{,Classes,Colors}.js";
 
 @custom-variant dark {
 	&:where([data-theme="dark"], [data-theme="dark"] *) {
