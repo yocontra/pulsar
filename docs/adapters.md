@@ -1,6 +1,6 @@
 # Harness support
 
-How Pulsar names agents, how messages reach each harness, and what each harness can't do.
+How Pulsar names agents, how messages reach each harness, what the app can do in each harness, and what each harness can't do.
 
 ## Names
 
@@ -43,3 +43,51 @@ Limits:
 - **pi, omp**: the only harnesses where a receipt reaches "in its conversation".
 
 See [delivery.md](delivery.md) for receipts and redelivery.
+
+## Prompts in the app
+
+| Harness | Relayed |
+| --- | --- |
+| Claude Code | Permission prompts, AskUserQuestion, plan approval (ExitPlanMode) |
+| OpenCode | Permission prompts, the `question` tool |
+| omp | `ask` forms, tool approvals, plan review, extension dialogs |
+| pi | Extension dialogs (select, confirm, input) |
+| Codex | Shown read-only; answer in the terminal |
+
+MCP elicitation forms, Codex's "Implement this plan?" and pi `custom()` dialogs are not relayed. An unanswered card ends after 9 minutes for a permission prompt and 59 minutes for a question or plan; the terminal prompt stays. `pulsar setup --no-approvals` keeps Claude Code prompts out of the app.
+
+## Stop
+
+Stop interrupts an agent's current turn; the session keeps running. Use the app (Cmd-.) or `pulsar interrupt <agent>`. The app hides Stop when it can't reach the agent.
+
+| Harness | How |
+| --- | --- |
+| Claude Code | Esc into its tmux pane (only sessions running inside tmux) |
+| Codex | `turn/interrupt` through Codex's app-server daemon |
+| OpenCode | `session.interrupt` on the OpenCode service (not a `--standalone` TUI) |
+| pi, omp | The Pulsar extension aborts the run |
+| Cursor, Gemini CLI | Not supported |
+
+## Setup options
+
+`pulsar setup` copies Pulsar to `~/.local/share/pulsar/<version>` and puts a `pulsar` command in `~/.local/bin`. It also sets Claude Code's `crossSessionInbound` and Codex's tool approval, which plugin installs can't.
+
+| Flag | Does |
+| --- | --- |
+| `--yes --all-detected` | No questions (scripts, dotfiles) |
+| `--client claude,codex` | Only these harnesses (`--client none`: only the `pulsar` command, e.g. on a server) |
+| `--dry-run` | Show the plan, change nothing |
+| `--no-approvals` | Don't relay Claude Code prompts to the app |
+| `--mesh` | Turn the agent mesh on without asking; takes the `pulsar mesh on` options (`--cert`, `--key`, `--ca`, `--rp-id`, `--prove`) |
+| `--uninstall` | Undo everything setup did |
+
+## Environment
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `PULSAR_HOME` | `~/.local/state/pulsar` | State folder: socket, message log, certificate |
+| `PULSAR_HTTP_PORT` | `7337` | Port of the app and the mesh |
+| `PULSAR_NAME` | detected | Name this agent registers under |
+| `PULSAR_TAGS` | none | Extra tags for this agent |
+| `PULSAR_NO_MESH` | unset | `pulsar mesh on` refuses to run (tests, sandboxes) |
+| `PULSAR_DEBUG` | unset | Log the MCP server to `mcp-debug.log` |

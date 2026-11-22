@@ -4,6 +4,44 @@ Every Pulsar node of one Tailscale user links to every other one. Each node shar
 
 A node takes part only while its agent mesh is on (`pulsar mesh on`; off by default). Code: `src/federation/`. The service sees the pool through `PoolView` (`src/service/pool.ts`).
 
+## Set up
+
+### Tailscale (once per tailnet)
+
+1. Install Tailscale on every machine that runs agents and on your phone: [tailscale.com/download](https://tailscale.com/download). Sign in to the same account everywhere. The free Personal plan works.
+2. In the admin console's DNS page, [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns), check that **MagicDNS** is on (the default) and turn on **HTTPS Certificates**. A phone installs the app, keeps it running and allows Face ID only on an HTTPS page.
+3. Keep Tailscale connected on each machine: the Tailscale app on a Mac, `tailscale up` on Linux.
+4. On Linux, if `tailscale cert` is denied for your account, run `sudo tailscale set --operator=$USER`.
+5. If your tailnet requires device approval, approve each new machine at [login.tailscale.com/admin/machines](https://login.tailscale.com/admin/machines).
+
+### Each machine
+
+Say yes when `pulsar setup` asks about the agent mesh, or run `pulsar mesh on`. It:
+
+1. Checks that Tailscale is running and signed in, with MagicDNS and HTTPS Certificates on. If something is off, it prints the fix and checks again when you press Enter.
+2. Gets this machine's certificate with `tailscale cert` (the daemon renews it daily) and serves the app at `https://<machine>.<tailnet>.ts.net:7337` (`PULSAR_HTTP_PORT` changes the port). `--cert <file> --key <file> [--ca <root>]` uses your own certificate instead (required with Headscale).
+3. Installs an always-on background service: a launchd agent on macOS, a systemd user unit on Linux. On Linux, run `loginctl enable-linger $USER` to keep it running after you log out.
+4. Installs Claude Code's permission hook, so prompts reach the app.
+5. Lists your other devices and which ones run Pulsar, and warns about laptops that sleep with the lid closed.
+6. Offers to set up a passkey for Prove Human, and ends with the app's URL and a QR code.
+
+`pulsar doctor --mesh` checks all of this and prints a fix for each problem. `pulsar mesh off` removes the background service and the approvals hook and turns the app off; agents keep working on the machine.
+
+### Tagged devices
+
+Servers with no Tailscale user don't join on their own. On each machine already in the mesh, run `pulsar mesh allow <server>`. On the server, run `pulsar mesh owner <you@example.com>`. Each change waits until you confirm it ([presence.md](presence.md)).
+
+### Agents on different machines
+
+Nothing changes for the agents. Selectors span the whole mesh, and `machine=<name>` narrows a send:
+
+```text
+send to="machine=studio project=apparish" body="I'm rebasing main in 5 min, push before then"
+send to="codex@billing" body="Is the invoice migration safe to run twice?" await_reply=true
+```
+
+`wait idle:<agent>` works across machines, and a message for a machine that is asleep goes out when it comes back.
+
 ## Membership
 
 - **Discovery.** Every `discoverMs` (30 s), the daemon reads `tailscale status --json`. Candidates are:

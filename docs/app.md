@@ -34,7 +34,7 @@ Receipts follow each send: handed over, in its conversation, read, replied. Repl
 
 **Mention a file**: type `@` to search the files in the agent's folder (what git tracks, plus new files it doesn't ignore). Use the arrow keys and Enter or Tab to insert `@path`. Mentions show as chips above the field, and Backspace deletes a mention in one step.
 
-**Stop** (in the header, or Cmd-.) interrupts the agent's current turn after you confirm. While the agent works and your draft is empty, the composer's Send button turns into a red Stop button. Stop shows only when Pulsar can reach the agent this way; see [Stop](../README.md#stop) for each harness.
+**Stop** (in the header, or Cmd-.) interrupts the agent's current turn after you confirm. While the agent works and your draft is empty, the composer's Send button turns into a red Stop button. Stop shows only when Pulsar can reach the agent this way; see [Stop](adapters.md#stop) for each harness.
 
 ## Subagents
 
@@ -98,11 +98,25 @@ Starting needs a proven human (another machine asks for its own passkey check). 
 
 An agent's permission prompt shows in Needs you and in its session as a card: the tool, every argument exactly as the agent sent it (spaces, tabs, newlines and hidden characters are marked), the folder and branch, and a countdown. Choose Allow once, Allow for session (the rules it adds are listed) or Deny with a note. The prompt also stays on the machine; whichever answer comes first wins, and the card says where it was answered.
 
-Answering needs a proven human. Not proven yet, Prove Human opens inline: one passkey check (Face ID, Touch ID, Windows Hello or the device PIN; a first one makes the passkey, no codes), then your answer goes on. After that, prompts on this machine are answered without another check until the session ends: the answer goes with your session, tied to the exact prompt the card shows. A prompt on another machine still asks for the passkey check of that machine for each answer.
+Answering needs [Prove Human](#prove-human). If you haven't proven yet, the check opens in place, and your answer goes on after it.
 
 ## Prove Human
 
-You prove once, and the whole app knows it: the nav, Settings, sending as you, Stop, Ask directly and every prompt share one proven state, so nothing asks again while the session lasts (12 hours on a computer that runs Pulsar, 7 days on a phone or tablet). Every open tab of the same machine's app shares it, and a tab you open or reload while another is open is proven at once. On a computer, a reload with no other tab open asks again: the session is kept only in memory there (see [SECURITY.md](../SECURITY.md)). The installed phone app keeps it across reloads. Stopping an agent or answering a prompt on another machine asks for that machine's passkey check each time.
+Your agents run with your permissions. An agent must never be able to approve its own actions, or send a message that looks like it came from you. So before the app acts as you, it asks for your device's check: Face ID, Touch ID, Windows Hello or the device PIN. The first check makes a passkey. There are no codes.
+
+It asks before you:
+
+- answer a prompt or a question;
+- send a message as you (agents then see it as from you, not "not verified as your operator");
+- stop an agent;
+- start an agent;
+- commit, push or open a PR;
+- upload attachments;
+- remove a passkey or confirm a pool change.
+
+You prove once, and the whole app knows it. It lasts 12 hours in a computer's browser and 7 days on a phone or tablet. All open tabs share it. On a computer, a reload with no other tab open asks again. Settings → Confirmed browsers lists proven browsers, with Sign out.
+
+Each machine checks for itself. An action on an agent on another machine asks for that machine's check each time: "Commit, push & PR" there asks three times. Messages to agents on another machine always arrive as not verified.
 
 ## Broadcast
 

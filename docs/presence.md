@@ -1,37 +1,30 @@
 # Presence checks
 
-Some commands change who can reach your agents or how you prove you are you:
+Some commands change who can reach your agents, or how you prove you are you:
 
 - `pulsar mesh allow|deny|forget <node>`
 - `pulsar mesh owner <login>`
 - `pulsar passkeys remove <id>`
 
-Anyone on the machine can run them, agents included. A terminal is not needed. Before the change, the daemon asks you to confirm it. It asks in two ways at the same time, and the first answer counts:
+Anyone on the machine can run them, agents included. An agent runs with your permissions, so it must never be able to let a new machine in, or remove your passkey, on its own. Before the change, Pulsar asks you to confirm it. It asks in two places at once, and the first answer counts:
 
-1. **The operating system's prompt**, shown by the daemon itself:
-   - macOS: Touch ID, Apple Watch, or the login password.
-   - Windows: Windows Hello.
-   - Linux desktop: polkit, only with Pulsar's polkit action installed (below).
-2. **A confirm card in the Pulsar app**: in Needs You, on the agent that asked (a request from a terminal shows on "operator"), with a push to subscribed phones. You answer it in one of two ways:
-   - with your passkey (Face ID, Touch ID, Windows Hello or the device PIN), signed for that one card;
-   - in this machine's app, with the browser's passkey session, like any other prompt on this machine (one Face ID per session).
+- **On the machine**: Touch ID (or Apple Watch, or your login password) on macOS, Windows Hello on Windows, polkit on a Linux desktop.
+- **In the Pulsar app**: a confirm card in Needs you, with a push to your phone. Answer it with your passkey, or with a browser you already proved in ([Prove Human](app.md#prove-human)).
 
-   The daemon checks the answer either way. A session answer must carry the card's hash, which covers the action and the card text, so it applies only to the card you saw. It is recorded as "passkey session".
-
-Both name the exact change and who asked. The macOS prompt text is the reason Pulsar passes; macOS adds the name of the asking app, for example:
+Both name the exact change and who asked. For example, on macOS:
 
 > "osascript" is trying to confirm a Pulsar change: forget pulsar-meshnode and its machine id (pulsar mesh) (asked by agent claude@pulsar (claude) on studio).
 
-If you say no in either place, the change is refused. If nobody answers in 3 minutes, it times out. If the command stops (Ctrl-C), the prompt and the card go away. When there is no system prompt and the app can't answer (it is off, or this machine has no passkey), there is one last resort, for a person at a real terminal only: the daemon writes a word to that terminal and you type it back. This is for a headless tagged server reached over SSH, before it has an owner (`pulsar mesh owner`). The daemon refuses a process with no terminal, or with a terminal that has an agent harness anywhere in its process tree. An agent's request never falls back to the word: it is refused with a pointer to `pulsar mesh on --prove`.
+Say no in either place and the change is refused. With no answer in 3 minutes, it times out. Every check asks again; a past yes never counts for the next change.
+
+On a headless server reached over SSH, with no system prompt and no app yet, a person at a real terminal can confirm by typing back a word the daemon prints. An agent's request never gets this fallback.
 
 ## Why an agent can't confirm
 
-- The daemon works out the change, asks you, and applies it only when its own check passed. Nothing a client sends can mark a change as confirmed.
-- The daemon shows the system prompt itself and reads nothing back from other processes. The action text is passed as data, never as code.
-- Only the daemon opens the confirm card, and only a passkey assertion bound to that card answers it. An agent can't produce one.
-- A passkey session comes only from Prove Human, a WebAuthn ceremony with user verification. An agent can't get one, and a session never crosses machines. It lasts 12 hours in a desktop browser and 7 days in the installed phone app, so anyone who can use your unlocked, proven browser or phone can confirm without a new biometric check.
-- One check runs at a time. After two denials in an hour, the next check waits 15 s, then 30 s, 60 s and so on, up to 30 minutes, so an agent can't keep prompting until you say yes without looking.
-- Every request and outcome is audited. Pool changes and passkey removals are announced in open app tabs and pushed as security notices.
+- Only the daemon decides that a change is confirmed. Nothing a client sends can mark it so.
+- The daemon shows the system prompt itself. Only a passkey signature for that card, or a session from Prove Human, answers the app card. An agent can't produce either.
+- After two denials in an hour, each next check waits longer (up to 30 minutes), so an agent can't keep asking until you say yes without looking.
+- Every request and outcome is audited. Pool changes and passkey removals show in open app tabs and are pushed as security notices.
 
 ## What it doesn't stop
 
