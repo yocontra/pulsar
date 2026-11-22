@@ -9,12 +9,23 @@ import { backTitle } from "./titles.ts";
  * lib/router (history), which animates IonNav back; swipe-back pops IonNav
  * directly and history follows (stack.tsx).
  */
-function BackButtonImpl({ route }: { route: Route }) {
+function BackButtonImpl({
+	route,
+	compact = false,
+}: {
+	route: Route;
+	/** Chevron only: a top bar whose title needs the room (the agent page). */
+	compact?: boolean;
+}) {
 	const title = backTitle(route);
 	return (
-		<IonButton className="p-back" aria-label="Back" onClick={() => back()}>
+		<IonButton
+			className={compact ? "p-back is-compact" : "p-back"}
+			aria-label={compact && title ? `Back to ${title}` : "Back"}
+			onClick={() => back()}
+		>
 			<ChevronLeftIcon aria-hidden="true" />
-			<span>{title}</span>
+			{!compact && <span>{title}</span>}
 		</IonButton>
 	);
 }

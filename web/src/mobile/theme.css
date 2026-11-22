@@ -820,9 +820,6 @@ ion-toggle {
 
 /* ------------------------------------------------------------ agent page */
 
-.p-agent-header ion-title {
-	padding-inline: 96px;
-}
 .p-nav-title {
 	display: flex;
 	flex-direction: column;
@@ -1181,9 +1178,19 @@ ion-action-sheet {
 	--color: var(--p-label-2);
 }
 
-/* Titles leave room for the back button at every text size. */
+/* The agent's top bar: a chevron-only back button (BackButton compact),
+   then the title, left-aligned, in all the room up to the end buttons (two,
+   or three with git: git.css). At 375 px that is about 177 px, not the
+   128 px a centered title between "‹ Agents" and the buttons had. */
 .p-agent-header ion-title {
-	padding-inline: 5.7rem;
+	padding-inline: 2.8rem 6.2rem;
+}
+.p-agent-header .p-nav-title {
+	align-items: flex-start;
+	text-align: left;
+}
+.p-agent-header .p-nav-title .p-nav-sub:has(.p-nav-sub-more) {
+	justify-content: flex-start;
 }
 
 /* Ask answers (shared AskPanel) as an inset group on the phone. */

@@ -120,7 +120,7 @@ function AgentPageImpl({ id }: { id: string }) {
 			<IonHeader className="p-agent-header">
 				<IonToolbar>
 					<IonButtons slot="start">
-						<BackButton route={{ view: "agent", id }} />
+						<BackButton route={{ view: "agent", id }} compact />
 					</IonButtons>
 					<IonTitle>
 						<span className="p-nav-title">
