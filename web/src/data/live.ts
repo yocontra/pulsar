@@ -410,14 +410,17 @@ export class LiveSync {
 				break;
 			case "limit":
 				// A plan usage limit passed a threshold (features/limits); the
-				// Usage page shows the new reading.
+				// Usage page and limit chips show the new reading.
 				void c.invalidateQueries({ queryKey: ["usage"] });
+				void c.invalidateQueries({ queryKey: ["usageLimits"] });
 				this.emit("limit", e.data);
 				break;
 			case "usage":
-				// New session lines on this machine: token counts and context.
+				// New session lines on this machine: token counts, context and
+				// limit readings.
 				void c.invalidateQueries({ queryKey: ["usage"] });
 				void c.invalidateQueries({ queryKey: ["agentUsage"] });
+				void c.invalidateQueries({ queryKey: ["usageLimits"] });
 				break;
 			case "git":
 				invalidateGit(c, e.data.agentId);

@@ -322,12 +322,15 @@ export class PoolState {
 		}
 		if (peer.node.nodeId !== node.nodeId) this.byNode.delete(peer.node.nodeId);
 		peer.node = node;
+		// A new Pulsar version is a pool change too (Diagnostics checks again).
+		const upgraded =
+			!!peer.hello && peer.hello.pulsarVersion !== hello.pulsarVersion;
 		peer.hello = hello;
 		peer.version = version;
 		if (peer.name !== hello.name) {
 			peer.name = hello.name;
 			this.bump(peer.machineId);
-		}
+		} else if (upgraded) this.bump(peer.machineId);
 		this.byNode.set(node.nodeId, peer.machineId);
 		return peer;
 	}

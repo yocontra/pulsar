@@ -112,6 +112,8 @@ export class Changes {
 		agentId: string,
 		mode: ChangesMode,
 		fn: (s: ChangesSummary) => void,
+		/** `pollMs`: this watch's re-read with no activity (default: the service's). */
+		opts: { pollMs?: number } = {},
 	): () => void {
 		if (this.remoteId(agentId)) return this.remote!.watch(agentId, mode, fn);
 		this.agent(agentId);
@@ -143,7 +145,7 @@ export class Changes {
 				}
 			}
 		};
-		const poll = setInterval(() => void run(), this.pollMs);
+		const poll = setInterval(() => void run(), opts.pollMs ?? this.pollMs);
 		poll.unref?.();
 		let offActivity: (() => void) | null = null;
 		try {

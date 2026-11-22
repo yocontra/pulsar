@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PoolState } from "../src/federation/state.ts";
 import { EventHub } from "../src/http/events.ts";
 import type { Subscription } from "../src/http/wire.ts";
 import { PulsarService } from "../src/service/index.ts";
@@ -41,7 +42,7 @@ beforeEach(() => {
 		usage: { roots: () => rootsIn(dir) },
 		changes: { pollMs: 50, debounceMs: 10 },
 	});
-	hub = new EventHub(service, { coalesceMs: 600_000 });
+	hub = new EventHub(service, { coalesceMs: 600_000, gitPollMs: 50 });
 	hub.start();
 });
 
@@ -53,18 +54,38 @@ afterEach(() => {
 	cleanupRepos();
 });
 
+/**
+ * Counts the worktree summaries the service has read (a watch's first one
+ * is its baseline).
+ */
+function summaries() {
+	const changes = service.changes;
+	const read = changes.summary.bind(changes);
+	const n = { reads: 0 };
+	changes.summary = async (...args: Parameters<typeof read>) => {
+		const r = await read(...args);
+		n.reads++;
+		return r;
+	};
+	return n;
+}
+
 /** A stream's text as it arrives; `ready` already read. */
-async function stream() {
-	const reader = hub.open(OWNER, null).getReader();
+async function stream(lastEventId: string | null = null) {
+	const reader = hub.open(OWNER, lastEventId).getReader();
 	const dec = new TextDecoder();
 	const first = dec.decode((await reader.read()).value);
-	const streamId = /"streamId":"([^"]+)"/.exec(first)![1]!;
+	const streamId = /"streamId":"([^"]+)"/.exec(first)?.[1] ?? "";
+	let lastId = /^id: (\S+)$/m.exec(first)?.[1] ?? null;
 	let text = "";
 	let pending: Promise<void> | null = null;
 	const pump = () => {
 		pending ??= reader.read().then((r) => {
 			pending = null;
-			if (r.value) text += dec.decode(r.value);
+			if (!r.value) return;
+			const chunk = dec.decode(r.value);
+			text += chunk;
+			for (const m of chunk.matchAll(/^id: (\S+)$/gm)) lastId = m[1]!;
 		});
 		return pending;
 	};
@@ -95,6 +116,8 @@ async function stream() {
 		clear() {
 			text = "";
 		},
+		/** The last event id seen (for a resume). */
+		lastId: () => lastId,
 		cancel: () => reader.cancel(),
 	};
 }
@@ -175,10 +198,12 @@ describe("git", () => {
 	test("a `git` subscription sends `git` when the watched worktree moves, not for the first read", async () => {
 		const d = gitRepo();
 		const a = agentIn(d, "live-git-3");
+		const n = summaries();
 		const s = await stream();
 		hub.setSubscription(s.streamId, OWNER, { ...NONE, git: [a.id] });
 		// The first summary is the baseline: no notice.
-		expect(await s.drain(300)).not.toContain("event: git");
+		await until(() => n.reads >= 1, 5000);
+		expect(await s.drain(150)).not.toContain("event: git");
 		appendFileSync(join(d, "a.txt"), "four\n");
 		await s.waitFor("event: git");
 		await s.waitFor(`"agentId":"${a.id}"`);
@@ -194,6 +219,36 @@ describe("git", () => {
 		await s.cancel();
 	});
 
+	test("a stream that resumes after its git watch stopped is told to read git status again", async () => {
+		const d = gitRepo();
+		const a = agentIn(d, "live-git-4");
+		const n = summaries();
+		const s = await stream();
+		hub.setSubscription(s.streamId, OWNER, { ...NONE, git: [a.id] });
+		await until(() => n.reads >= 1, 5000);
+		await s.drain(100);
+		const last = s.lastId();
+		expect(last).not.toBeNull();
+		// The tab goes away: no connected stream wants the watch, so it stops.
+		await s.cancel();
+		await until(
+			() =>
+				(hub as unknown as { topics: Map<string, unknown> }).topics.size ===
+					0 ||
+				![
+					...(
+						hub as unknown as { topics: Map<string, { kind: string }> }
+					).topics.values(),
+				].some((t) => t.kind === "git"),
+		);
+		appendFileSync(join(d, "a.txt"), "four\n");
+		// It comes back: a `git` notice, though the watch saw nothing meanwhile.
+		const back = await stream(last);
+		await back.waitFor("event: git");
+		await back.waitFor(`"agentId":"${a.id}"`);
+		await back.cancel();
+	});
+
 	test("an unknown agent in a `git` subscription is ignored", async () => {
 		const s = await stream();
 		hub.setSubscription(s.streamId, OWNER, { ...NONE, git: ["nobody"] });
@@ -203,6 +258,33 @@ describe("git", () => {
 });
 
 describe("machines", () => {
+	test("a peer that comes back on a new Pulsar version is a pool change", () => {
+		const state = new PoolState();
+		const changes: (string | null)[] = [];
+		state.onChange = (id) => changes.push(id);
+		const node = {
+			nodeId: "n",
+			name: "b",
+			dnsName: "b.x.ts.net",
+			userId: "u",
+			login: "me",
+			tags: [],
+			online: true,
+		};
+		const hello = (v: string) => ({
+			fedProtocol: [1, 1] as [number, number],
+			features: [],
+			pulsarVersion: v,
+			machineId: "mb",
+			name: "b",
+		});
+		state.upsert(node, hello("2.0.0"), 1);
+		state.upsert(node, hello("2.0.0"), 1);
+		expect(changes).toEqual([]);
+		state.upsert(node, hello("2.1.0"), 1);
+		expect(changes).toEqual(["mb"]);
+	});
+
 	test("a pool change sends `machines` only when the machines or their versions changed", async () => {
 		const s = await stream();
 		// A pool event with the same machines: nothing.

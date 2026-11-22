@@ -14,6 +14,16 @@ liveSuite("desktop");
 /** The session header's git split button. */
 const split = (page: Page) => page.getByRole("group", { name: "Git actions" });
 
+/** Resolves once the app's subscription watches the agent's git status. */
+const gitWatched = (page: Page, id: string) =>
+	page.waitForResponse((r) => {
+		const req = r.request();
+		if (req.method() !== "PUT" || !r.url().includes("/subscriptions/"))
+			return false;
+		const git = (JSON.parse(req.postData() ?? "{}") as { git?: string[] }).git;
+		return r.ok() && !!git?.includes(id);
+	});
+
 test.describe("git stays live", () => {
 	test("git status updates on a git notice for the watched agent", async ({
 		page,
@@ -26,10 +36,12 @@ test.describe("git stays live", () => {
 		);
 		await page.goto(`${localhostBase()}/`);
 		await withPasskey(page, request, context);
+		const watched = gitWatched(page, id);
 		await page.goto(`${localhostBase()}/#/a/${encodeURIComponent(id)}`);
 		await expect(
 			split(page).getByRole("button", { name: "Push & create PR" }),
 		).toBeVisible();
+		await watched;
 		// The branch fell behind upstream (the daemon's worktree watch saw it).
 		await realtime(request, {
 			action: "git",
@@ -58,8 +70,10 @@ test.describe("git stays live", () => {
 			.click();
 		const card = page.getByRole("dialog", { name: "Pull request" });
 		await expect(card).toBeVisible();
-		const reread = page.waitForRequest((r) =>
-			r.url().includes(`/agents/${encodeURIComponent(id)}/git/pr`),
+		// Bounded well inside the card's 30 s GitHub poll.
+		const reread = page.waitForRequest(
+			(r) => r.url().includes(`/agents/${encodeURIComponent(id)}/git/pr`),
+			{ timeout: 5000 },
 		);
 		// A branch or PR change goes to every stream.
 		await realtime(request, { action: "git", id, all: true });
@@ -71,13 +85,16 @@ test.describe("git stays live", () => {
 		request,
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
+		const watched = gitWatched(page, id);
 		await page.goto(
 			`${localhostBase()}/#/file/${encodeURIComponent(id)}?path=src`,
 		);
 		await expect(page.getByRole("main")).toBeVisible();
-		await page.waitForTimeout(500);
-		const reread = page.waitForRequest((r) =>
-			r.url().includes(`/agents/${encodeURIComponent(id)}/files/`),
+		await watched;
+		// Bounded well inside the viewer's 30 s fallback poll.
+		const reread = page.waitForRequest(
+			(r) => r.url().includes(`/agents/${encodeURIComponent(id)}/files/`),
+			{ timeout: 5000 },
 		);
 		await realtime(request, {
 			action: "changes",

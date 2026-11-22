@@ -84,8 +84,7 @@ export function useDiagnostics() {
 	const merged: MachineRow[] = (list.data?.machines ?? []).map((m) => {
 		const a = byId.get(m.machineId);
 		if (!a) return { ...m, checking: false };
-		// A recheck keeps the last report on screen.
-		if (a.data) return { ...a.data, checking: false };
+		// The last check failed (a recheck too): say why, not an old report.
 		if (a.isError)
 			return {
 				...m,
@@ -96,6 +95,8 @@ export function useDiagnostics() {
 						? `Couldn't check: ${a.error.message}`
 						: "Couldn't check this machine.",
 			};
+		// A recheck keeps the last report on screen.
+		if (a.data) return { ...a.data, checking: false };
 		return { ...m, checking: true };
 	});
 	const { newest, upgrade } = versionSkew(merged);

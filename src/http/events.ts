@@ -61,6 +61,11 @@ export interface HubOptions {
 	/** Streams one login may hold (tabs, reconnects); the oldest goes first. */
 	maxStreamsPerLogin?: number;
 	keepaliveMs?: number;
+	/**
+	 * How often a watched git status re-reads the worktree with no agent
+	 * activity (ms); activity re-reads it at once.
+	 */
+	gitPollMs?: number;
 }
 
 type TopicKind =
@@ -199,6 +204,7 @@ export class EventHub {
 	private readonly queueMax: number;
 	private readonly maxStreamsPerLogin: number;
 	private readonly keepaliveMs: number;
+	private readonly gitPollMs: number;
 	private timers: NodeJS.Timeout[] = [];
 	private offBus: (() => void) | null = null;
 	private offApprovals: (() => void) | null = null;
@@ -215,6 +221,7 @@ export class EventHub {
 		this.queueMax = opts.queueMax ?? 256;
 		this.maxStreamsPerLogin = opts.maxStreamsPerLogin ?? 32;
 		this.keepaliveMs = opts.keepaliveMs ?? 15_000;
+		this.gitPollMs = opts.gitPollMs ?? 15_000;
 	}
 
 	start() {
@@ -593,8 +600,8 @@ export class EventHub {
 
 	/**
 	 * Git status on screen: the agent's worktree summary is watched (git
-	 * runs only while a connected stream wants it, on agent activity and a
-	 * slow poll; a remote agent through its home node), and each time its
+	 * runs only while a connected stream wants it, on agent activity and
+	 * every `gitPollMs`; a remote agent through its home node), and each time its
 	 * stamp moves (status, branch, HEAD, upstream) a `git` notice goes out.
 	 * The first summary sets the baseline: the app reads git status itself.
 	 */
@@ -602,13 +609,18 @@ export class EventHub {
 		const agentId = topic.args[0] ?? "";
 		let stamp: string | null = null;
 		try {
-			topic.off = this.service.changes.watch(agentId, "worktree", (s) => {
-				if (this.topics.get(topic.key) !== topic) return;
-				const first = stamp === null;
-				if (s.stamp === stamp) return;
-				stamp = s.stamp;
-				if (!first) this.publish(topic.key, "git", { agentId });
-			});
+			topic.off = this.service.changes.watch(
+				agentId,
+				"worktree",
+				(s) => {
+					if (this.topics.get(topic.key) !== topic) return;
+					const first = stamp === null;
+					if (s.stamp === stamp) return;
+					stamp = s.stamp;
+					if (!first) this.publish(topic.key, "git", { agentId });
+				},
+				{ pollMs: this.gitPollMs },
+			);
 		} catch {
 			// An unknown agent: nothing to watch; the app's fetch gets a 404.
 			topic.off = null;
@@ -669,10 +681,15 @@ export class EventHub {
 			topic.kind === "approvals" ||
 			topic.kind === "security" ||
 			topic.kind === "notify" ||
-			topic.kind === "launches" ||
-			topic.kind === "git"
+			topic.kind === "launches"
 		) {
 			stream.since.set(key, ++this.seq);
+			return;
+		}
+		if (topic.kind === "git") {
+			stream.since.set(key, ++this.seq);
+			// Its watch may have stopped while the stream was away: read again.
+			if (resuming) this.write(stream, "git", { agentId: topic.args[0] });
 			return;
 		}
 		if (topic.kind === "changes") {
