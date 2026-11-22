@@ -2,7 +2,10 @@ import { ArrowUpRightIcon } from "lucide-react";
 import { pageFor } from "../lib/registry.tsx";
 import { navigate, type Route } from "../lib/router.ts";
 
-/** The file viewer's page (`#/file/<agent id>?path=<path>`), when a feature registers it. */
+/**
+ * The file viewer's page (`#/file/<agent id>?path=<path>`, the path relative
+ * to the agent's folder), when a feature registers it.
+ */
 const FILE_PAGE = "file";
 
 /**
@@ -22,7 +25,8 @@ export function TurnFileLink({
 		arg: agentId,
 		params: { path },
 	};
-	if (!pageFor(r)) return null;
+	// The viewer opens paths inside the agent's folder only (relative ones).
+	if (path.startsWith("/") || !pageFor(r)) return null;
 	return (
 		<button
 			type="button"

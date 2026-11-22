@@ -433,6 +433,10 @@ describe("turn changes: the file viewer link", () => {
 		const off = registerPage({ name: "file", desktop: () => null });
 		try {
 			expect(link()).toContain('aria-label="Open src/a.ts"');
+			// Outside the agent's folder: the viewer can't open it.
+			expect(
+				renderToStaticMarkup(<TurnFileLink agentId="m:1" path="/etc/hosts" />),
+			).toBe("");
 		} finally {
 			off();
 		}
