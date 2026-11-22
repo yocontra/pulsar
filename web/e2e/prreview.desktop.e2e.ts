@@ -92,7 +92,7 @@ test.describe("PR review", () => {
 		await tabs.getByRole("tab", { name: /Files/ }).click();
 		await expect(
 			main.getByRole("list", { name: "Changed files" }).locator("li"),
-		).toHaveCount(3);
+		).toHaveCount(4);
 		const refresh = main.getByRole("region", { name: "src/auth/refresh.ts" });
 		const open = refresh
 			.locator(".prv-at-line")
@@ -102,6 +102,10 @@ test.describe("PR review", () => {
 		const old = refresh.locator(".prv-loose");
 		await expect(old).toContainText("Outdated");
 		await expect(old).toContainText("was line 30");
+		// So does a thread on a line outside the hunks, with its line.
+		await expect(
+			old.getByRole("region", { name: "Thread by reviewer, resolved" }),
+		).toContainText("Line 80");
 		// The resolved thread is folded.
 		const tests = main.getByRole("region", { name: "test/refresh.test.ts" });
 		const done = tests.getByRole("region", {
@@ -112,7 +116,10 @@ test.describe("PR review", () => {
 		await expect(done).toContainText("Done in the next commit.");
 		await expect(
 			main.getByRole("region", { name: "docs/flow.png" }),
-		).toContainText("Binary file, not shown.");
+		).toContainText("No line changes to show.");
+		await expect(
+			main.getByRole("region", { name: "src/auth/lock.ts" }),
+		).toContainText("No line changes to show.");
 		// The diff's colors are the shared highlighter's; check what this page adds.
 		expect(
 			await contrastFailures(
@@ -146,11 +153,15 @@ test.describe("PR review", () => {
 		await expect(open).toContainText("Done: it runs under the lock now.");
 		await open.getByRole("button", { name: "Resolve" }).click();
 		await expect(toast(page, "Thread resolved")).toBeVisible();
+		// It folds at its line (39); the open count drops (mine is still open).
 		await expect(
 			refresh
-				.getByRole("region", { name: "Thread by reviewer, resolved" })
-				.first(),
-		).toBeVisible();
+				.locator(".prv-at-line")
+				.getByRole("region", { name: "Thread by reviewer, resolved" }),
+		).toHaveCount(1);
+		await expect(main.getByRole("tab", { name: /Files/ })).toContainText(
+			"2 open",
+		);
 
 		// Submit a review: on your own PR only Comment is offered.
 		await main.getByRole("button", { name: "Submit review" }).click();
