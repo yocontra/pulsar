@@ -103,39 +103,90 @@ export async function reveal(
 	// The conversation stops following its end, so new events don't pull it away.
 	el.dispatchEvent(new CustomEvent("pulsar:stop-follow", { bubbles: true }));
 	el.scrollIntoView({ block: "center" });
-	await keepInView(el, signal);
+	pin(el, signal);
 	return el;
 }
 
-/** How long a landed match is held on screen while the view settles. */
-const SETTLE_MS = 800;
+/** The element that scrolls `el` (the conversation's scroll area). */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+	for (let p = el.parentElement; p; p = p.parentElement) {
+		const y = getComputedStyle(p).overflowY;
+		if ((y === "auto" || y === "scroll") && p.scrollHeight > p.clientHeight)
+			return p;
+	}
+	return null;
+}
+
+/** True when `el` is fully inside the scroller's visible box (or as much of it as fits). */
+function inView(el: HTMLElement, scroller: HTMLElement): boolean {
+	const r = el.getBoundingClientRect();
+	const s = scroller.getBoundingClientRect();
+	if (r.height >= s.height) return r.top < s.bottom && r.bottom > s.top;
+	return r.top >= s.top && r.bottom <= s.bottom;
+}
+
+/** Keys that scroll a page: pressing one hands the scroll back to the operator. */
+const SCROLL_KEYS = new Set([
+	"ArrowUp",
+	"ArrowDown",
+	"PageUp",
+	"PageDown",
+	"Home",
+	"End",
+	" ",
+]);
 
 /**
- * A session that just opened still scrolls itself to its end (and media
- * above may still load): for a moment, bring the match back if the view
- * moves it away. Any input from the operator ends this at once.
+ * Holds the current match on screen until the operator scrolls: the
+ * conversation can still follow its end (use-stick-to-bottom), or images
+ * and diagrams above the match can change height after the jump. On every
+ * resize of the conversation and every scroll the operator didn't make, a
+ * match out of the scroll area is brought back (and following stops again).
+ * Wheel, touch, a scroll key or a press in the scroll area ends it, as does
+ * `signal` (the match changed, or the find bar closed).
  */
-function keepInView(el: HTMLElement, signal: AbortSignal): Promise<void> {
-	return new Promise((resolve) => {
-		const until = performance.now() + SETTLE_MS;
-		let frame = 0;
-		const stop = () => {
-			cancelAnimationFrame(frame);
-			for (const t of INPUT) removeEventListener(t, stop, true);
-			resolve();
-		};
-		const INPUT = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
-		for (const t of INPUT) addEventListener(t, stop, true);
-		const tick = () => {
-			if (signal.aborted || !el.isConnected || performance.now() > until)
-				return stop();
-			const r = el.getBoundingClientRect();
-			if (r.bottom < 0 || r.top > innerHeight)
-				el.scrollIntoView({ block: "center" });
-			frame = requestAnimationFrame(tick);
-		};
-		frame = requestAnimationFrame(tick);
-	});
+function pin(el: HTMLElement, signal: AbortSignal) {
+	const scroller = scrollParent(el);
+	if (!scroller) return;
+	let frame = 0;
+	const check = () => {
+		cancelAnimationFrame(frame);
+		frame = requestAnimationFrame(() => {
+			if (signal.aborted || !el.isConnected) return stop();
+			if (inView(el, scroller)) return;
+			el.dispatchEvent(
+				new CustomEvent("pulsar:stop-follow", { bubbles: true }),
+			);
+			el.scrollIntoView({ block: "center" });
+		});
+	};
+	const ro = new ResizeObserver(check);
+	ro.observe(scroller);
+	for (const child of scroller.children) ro.observe(child);
+	ro.observe(el);
+	const key = (e: KeyboardEvent) => {
+		const t = e.target as HTMLElement | null;
+		// Typing in the find bar (or any field) is not scrolling.
+		if (t?.closest("input, textarea, [contenteditable]")) return;
+		if (SCROLL_KEYS.has(e.key)) stop();
+	};
+	const stop = () => {
+		cancelAnimationFrame(frame);
+		ro.disconnect();
+		scroller.removeEventListener("scroll", check);
+		scroller.removeEventListener("wheel", stop);
+		scroller.removeEventListener("touchstart", stop);
+		scroller.removeEventListener("pointerdown", stop);
+		removeEventListener("keydown", key, true);
+		signal.removeEventListener("abort", stop);
+	};
+	scroller.addEventListener("scroll", check, { passive: true });
+	scroller.addEventListener("wheel", stop, { passive: true });
+	scroller.addEventListener("touchstart", stop, { passive: true });
+	scroller.addEventListener("pointerdown", stop);
+	addEventListener("keydown", key, true);
+	signal.addEventListener("abort", stop);
+	check();
 }
 
 // --------------------------------------------------------------- highlight
