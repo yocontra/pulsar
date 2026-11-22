@@ -18,6 +18,7 @@ import type {
 	TreeSort,
 	Wake,
 } from "../api/types.ts";
+import { e2eNumber } from "../lib/e2e.ts";
 import { keys } from "./keys.ts";
 import {
 	type AgentPages,
@@ -244,7 +245,8 @@ export function transcriptDef(
 				off?.();
 			}
 		},
-		poll: POLL_MS,
+		// An end-to-end test may ask sooner (`__pulsarE2E.transcriptPollMs`).
+		poll: e2eNumber("transcriptPollMs") ?? POLL_MS,
 	};
 }
 
