@@ -97,7 +97,9 @@ export function voiceSuite(platform: "desktop" | "phone") {
 		await expect(input).toHaveValue("Note: fix the");
 		await speech(page, "say", "fix the login", " bug");
 		await expect(input).toHaveValue("Note: fix the login bug");
-		await expect(composer.getByRole("button", { name: "Send" })).toBeEnabled();
+		await expect(
+			composer.getByRole("button", { name: "Send", exact: true }),
+		).toBeEnabled();
 
 		await stop.click();
 		const finishing = composer.getByRole("button", {
@@ -135,7 +137,7 @@ export function voiceSuite(platform: "desktop" | "phone") {
 		await composer.getByRole("button", { name: "Dictate" }).click();
 		await speech(page, "say", "ship it");
 		await expect(input).toHaveValue("ship it");
-		await composer.getByRole("button", { name: "Send" }).click();
+		await composer.getByRole("button", { name: "Send", exact: true }).click();
 		await expect(input).toHaveValue("");
 		await expect(
 			composer.getByRole("button", { name: "Dictate" }),

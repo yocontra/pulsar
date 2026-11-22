@@ -84,7 +84,7 @@ export function composerSuite(platform: "desktop" | "phone") {
 		await expect(tiles.nth(1)).toHaveAttribute("data-state", "done");
 		await expect(tiles.nth(1).locator("img")).toBeVisible();
 		// Files alone are a message.
-		const send = composer.getByRole("button", { name: "Send" });
+		const send = composer.getByRole("button", { name: "Send", exact: true });
 		await expect(send).toBeEnabled();
 		await composer.locator(".composer-input").fill("Look at these");
 		await send.click();
@@ -131,7 +131,7 @@ export function composerSuite(platform: "desktop" | "phone") {
 			{ name: "flaky.txt", mimeType: "text/plain", buffer: Buffer.from("x") },
 		]);
 		await expect(tiles.first()).toHaveAttribute("data-state", "failed");
-		const send = composer.getByRole("button", { name: "Send" });
+		const send = composer.getByRole("button", { name: "Send", exact: true });
 		await composer.locator(".composer-input").fill("with a file");
 		await expect(send).toBeDisabled();
 		await expect(send).toHaveAttribute(
@@ -193,10 +193,14 @@ export function composerSuite(platform: "desktop" | "phone") {
 		);
 		const stop = composer.getByRole("button", { name: "Stop turn" });
 		await expect(stop).toBeVisible();
-		await expect(composer.getByRole("button", { name: "Send" })).toHaveCount(0);
+		await expect(
+			composer.getByRole("button", { name: "Send", exact: true }),
+		).toHaveCount(0);
 		await composer.locator(".composer-input").fill("wait");
 		await expect(stop).toHaveCount(0);
-		await expect(composer.getByRole("button", { name: "Send" })).toBeVisible();
+		await expect(
+			composer.getByRole("button", { name: "Send", exact: true }),
+		).toBeVisible();
 		await composer.locator(".composer-input").fill("");
 		await stop.click();
 		// Stop always confirms.

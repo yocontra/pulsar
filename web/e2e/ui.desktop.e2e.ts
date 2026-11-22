@@ -109,7 +109,7 @@ test.describe("desktop UI", () => {
 	test("disabled controls show not-allowed", async ({ page, request }) => {
 		const id = await agentId(request, "name=apparish-auth");
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
-		const send = page.getByRole("button", { name: "Send" });
+		const send = page.getByRole("button", { name: "Send", exact: true });
 		await expect(send).toBeDisabled();
 		expect(await send.evaluate((e) => getComputedStyle(e).cursor)).toBe(
 			"not-allowed",

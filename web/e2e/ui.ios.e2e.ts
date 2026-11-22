@@ -124,7 +124,7 @@ test.describe("phone UI", () => {
 			const [d, field, send] = await Promise.all([
 				dock.boundingBox(),
 				dock.locator("textarea").boundingBox(),
-				dock.getByRole("button", { name: "Send" }).boundingBox(),
+				dock.getByRole("button", { name: "Send", exact: true }).boundingBox(),
 			]);
 			expect(field!.x + field!.width).toBeLessThanOrEqual(d!.x + d!.width - 9);
 			expect(send!.x + send!.width).toBeLessThanOrEqual(

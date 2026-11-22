@@ -630,7 +630,7 @@ test.describe("phone screens", () => {
 			.getByRole("textbox")
 			.last()
 			.fill("hold refresh() for 10 minutes");
-		await page.getByRole("button", { name: "Send" }).last().tap();
+		await page.getByRole("button", { name: "Send", exact: true }).last().tap();
 		// Unproven: Prove Human asks first; send without proving.
 		await page
 			.getByRole("dialog", { name: "Prove Human" })
