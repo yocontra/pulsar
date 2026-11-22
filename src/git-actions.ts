@@ -24,7 +24,7 @@ import { RpcError } from "./rpc.ts";
 
 const COMMIT_TIMEOUT_MS = 120_000;
 const PUSH_TIMEOUT_MS = 150_000;
-const GH_TIMEOUT_MS = 30_000;
+export const GH_TIMEOUT_MS = 30_000;
 /** A PR lookup is kept this long (status polls must not hit GitHub each time). */
 const PR_TTL_MS = 60_000;
 const DETAILS_TTL_MS = 15_000;
@@ -35,7 +35,7 @@ const MAX_COMMENT_CHARS = 4000;
 
 type Read = (args: string[]) => Promise<GitResult>;
 
-const reader =
+export const reader =
 	(cwd: string): Read =>
 	(args) =>
 		runGit(cwd, args, { mode: "read" });
@@ -131,7 +131,7 @@ async function config(read: Read, key: string): Promise<string | null> {
  * The remote a push of `branch` goes to: its pushRemote, remote.pushDefault,
  * its upstream's remote, `origin`, else the only remote. Null without one.
  */
-async function pushRemote(
+export async function pushRemote(
 	read: Read,
 	branch: string | null,
 ): Promise<string | null> {
@@ -216,14 +216,14 @@ async function operation(read: Read): Promise<GitStatus["operation"]> {
 }
 
 /** The repos a PR involves: where it is opened (base) and where the branch lives (head). */
-interface PrRepos {
+export interface PrRepos {
 	base: string;
 	head: string;
 	/** `gh`'s head selector: the branch, or `owner:branch` from a fork. */
 	headRef: string;
 }
 
-async function prRepos(
+export async function prRepos(
 	read: Read,
 	remote: string | null,
 	branch: string,
@@ -244,10 +244,12 @@ async function prRepos(
 
 // ------------------------------------------------------------------ gh
 
-type GhState = NonNullable<GitStatus["gh"]>;
+export type GhState = NonNullable<GitStatus["gh"]>;
 
 /** How a failed `gh` reads: not installed, logged out, no PR, or another error. */
-function ghFailure(r: Extract<GitResult, { ok: false }>): GhState | "none" {
+export function ghFailure(
+	r: Extract<GitResult, { ok: false }>,
+): GhState | "none" {
 	if (r.code === "spawn") return "missing";
 	const text = `${r.stderr}\n${r.message}`;
 	if (/no (open )?pull requests? found/i.test(text)) return "none";
@@ -256,7 +258,7 @@ function ghFailure(r: Extract<GitResult, { ok: false }>): GhState | "none" {
 	return "error";
 }
 
-interface RawPr {
+export interface RawPr {
 	number: number;
 	url: string;
 	title: string;
@@ -266,13 +268,14 @@ interface RawPr {
 	headRefName: string;
 }
 
-const PR_FIELDS = "number,url,title,state,isDraft,baseRefName,headRefName";
+export const PR_FIELDS =
+	"number,url,title,state,isDraft,baseRefName,headRefName";
 
 /** A link from GitHub's data, only when it is https (the app opens it). */
 export const httpsUrl = (u: unknown): string | null =>
 	typeof u === "string" && /^https:\/\/[^\s]+$/.test(u) ? u : null;
 
-function toPr(raw: RawPr): GitPr {
+export function toPr(raw: RawPr): GitPr {
 	const s = String(raw.state).toUpperCase();
 	return {
 		number: Number(raw.number),
@@ -411,7 +414,7 @@ export async function gitStatus(
 
 // ----------------------------------------------------------------- PR details
 
-interface RawCheck {
+export interface RawCheck {
 	__typename?: string;
 	name?: string;
 	context?: string;

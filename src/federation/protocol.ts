@@ -229,6 +229,8 @@ export type FedAction =
 	| { op: "git.read"; agent: string; what: "status" | "pr" }
 	/** The issue card of the issue the agent works on (its own `issue:` tag). */
 	| { op: "issue.read"; agent: string }
+	/** The agent's PR for review, or one file's patch with `path` (newer nodes). */
+	| { op: "git.review"; agent: string; path?: string }
 	/** Ask about the receiver's own agents (`service.ask.local`). */
 	| { op: "ask"; question: string; selector?: string }
 	/** Message search over the receiver's own agents (newer nodes; older ones answer bad_request). */

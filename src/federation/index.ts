@@ -681,6 +681,26 @@ export class Federation implements PoolView {
 		return r.issue;
 	}
 
+	/** A remote agent's PR review, or one file's patch, read on its home node. */
+	async gitReview(
+		address: string,
+		path: string | null,
+		as?: Principal,
+	): Promise<unknown> {
+		const slash = address.indexOf("/");
+		const r = await this.act(
+			address,
+			{
+				op: "git.review",
+				agent: address.slice(slash + 1),
+				...(path !== null ? { path } : {}),
+			},
+			as,
+			60_000,
+		);
+		return path !== null ? r.patch : r.review;
+	}
+
 	/** A linked machine's id, by id or name. */
 	machineIdOf(machine: string): string | null {
 		if (this.state.peers.has(machine)) return machine;
@@ -2467,6 +2487,21 @@ export class Federation implements PoolView {
 				if (!this.service.registry.get(agent))
 					return fail("not_found", `no agent ${agent}`);
 				return { ok: true, issue: await this.service.issues.details(agent) };
+			}
+			case "git.review": {
+				const agent = String(action.agent);
+				authorize(user, "transcript.read", agent);
+				if (!this.service.registry.get(agent))
+					return fail("not_found", `no agent ${agent}`);
+				if (typeof action.path === "string")
+					return {
+						ok: true,
+						patch: await this.service.prReview.file(
+							agent,
+							action.path.slice(0, 4096),
+						),
+					};
+				return { ok: true, review: await this.service.prReview.review(agent) };
 			}
 			case "stop.options": {
 				const agent = String(action.agent);

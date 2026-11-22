@@ -34,6 +34,10 @@ export const ACTING_SCOPE: Record<ActingOp, "agent" | "machine"> = {
 	"git.commit": "agent",
 	"git.push": "agent",
 	"git.pr": "agent",
+	"git.comment": "agent",
+	"git.reply": "agent",
+	"git.resolve": "agent",
+	"git.review": "agent",
 };
 
 /** The operator, verified: a passkey session here, or an assertion the home node checked. */

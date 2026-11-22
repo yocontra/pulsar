@@ -187,6 +187,7 @@ const FEATURES: Feature[] = [
 		"git",
 		"issues",
 		"search",
+		"prreview",
 		...((process.env.PULSAR_MOCK_FEATURES ?? "")
 			.split(",")
 			.map((f) => f.trim())

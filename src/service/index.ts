@@ -73,6 +73,7 @@ import { BACKFILL_MS, MessageSearch } from "./message-search.ts";
 import { SqlitePasskeyStore } from "./passkey-store.ts";
 import { Passkeys } from "./passkeys.ts";
 import { isLocalSubagentId, type PoolView } from "./pool.ts";
+import { PrReviewOps } from "./pr-review.ts";
 import { Presence } from "./presence.ts";
 import { Push, type PushOptions } from "./push.ts";
 import { Registry } from "./registry.ts";
@@ -207,6 +208,7 @@ export class PulsarService {
 	/** Git actions on agents' worktrees: status, PR, and the git.* acting ops. */
 	readonly git: GitOps;
 	readonly issues: IssueOps;
+	readonly prReview: PrReviewOps;
 	/** This node's passkeys (approvals and passkey sessions share them). */
 	readonly passkeys: Passkeys;
 	/** Passkey sessions: what the app shows to act as the user. */
@@ -348,6 +350,11 @@ export class PulsarService {
 			relay: () => this.registry.pool,
 		});
 		this.git = new GitOps({
+			registry: this.registry,
+			acting: this.acting,
+			pool: () => this.registry.pool,
+		});
+		this.prReview = new PrReviewOps({
 			registry: this.registry,
 			acting: this.acting,
 			pool: () => this.registry.pool,

@@ -35,6 +35,12 @@ import {
 import { commitParams, prParams, pushParams } from "../service/git.ts";
 import type { PulsarService, RelyingParty } from "../service/index.ts";
 import { LIMITS } from "../service/limits.ts";
+import {
+	commentParams,
+	replyParams,
+	resolveParams,
+	reviewParams,
+} from "../service/pr-review.ts";
 import { decodeCursor, encodeCursor, FACET_KEYS } from "../service/views.ts";
 import { RECEIPT_STATES } from "../types.ts";
 import { serveStatic } from "./static.ts";
@@ -1335,6 +1341,45 @@ export class HttpTransport {
 			["commit", "git.commit", commitParams],
 			["push", "git.push", pushParams],
 			["pr", "git.pr", prParams],
+		] as const)
+			api.post(`/agents/:id/git/${path}`, async (c) => {
+				const raw = await jsonBody(c);
+				if (!raw || typeof raw !== "object" || Array.isArray(raw))
+					throw new RpcError("bad_request", "the body must be an object");
+				// The params go on exactly as sent: a remote proof covers them.
+				const { assertion, ...params } = raw as Record<string, unknown>;
+				check(params);
+				return c.json(
+					await this.service.acting.run(
+						who(c),
+						op,
+						{ agent: c.req.param("id") },
+						params,
+						assertion,
+					),
+				);
+			});
+		// PR review (src/service/pr-review.ts): reads follow the diff viewer's
+		// rule; a line comment, reply, resolve and review are acting ops.
+		api.get("/agents/:id/git/review", async (c) => {
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			return c.json(await this.service.prReview.review(id, who(c)));
+		});
+		api.get("/agents/:id/git/review/file", async (c) => {
+			const q = parse(
+				z.object({ path: z.string().min(1).max(4096) }),
+				c.req.query(),
+			);
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			return c.json(await this.service.prReview.file(id, q.path, who(c)));
+		});
+		for (const [path, op, check] of [
+			["comment", "git.comment", commentParams],
+			["reply", "git.reply", replyParams],
+			["resolve", "git.resolve", resolveParams],
+			["review", "git.review", reviewParams],
 		] as const)
 			api.post(`/agents/:id/git/${path}`, async (c) => {
 				const raw = await jsonBody(c);
