@@ -6,6 +6,7 @@
  * deep links go back to Agents, and Android's back returns to Agents.
  */
 import type { Page } from "@playwright/test";
+import { expectIonicStyledUnderCsp } from "./csp-phone.ts";
 import { agentId, expect, ready, test } from "./fixtures.ts";
 
 /** An ion-content element, as the page sees it. */
@@ -24,6 +25,8 @@ test.describe("tabs", () => {
 		await expect(page.locator("html")).toHaveClass(
 			md ? /\bk-material\b/ : /\bk-ios\b/,
 		);
+		// This mode's Ionic and Konsta styles, under the CSP.
+		await expectIonicStyledUnderCsp(page);
 		// The forced look: ?platform= (tests and screenshots).
 		await page.goto(md ? "/?platform=ios" : "/?platform=android");
 		await expect(page.locator("html")).toHaveClass(md ? /\bios\b/ : /\bmd\b/);
@@ -152,4 +155,34 @@ test.describe("tabs", () => {
 				"Needs You",
 			);
 	});
+	for (const hash of ["#/needs", "#/usage", "#/settings"])
+		test(`${hash}: the last row scrolls clear of the tab bar`, async ({
+			page,
+		}) => {
+			await page.goto(`/${hash}`);
+			await expect(bar(page)).toBeInViewport();
+			await page.waitForTimeout(500);
+			const r = await topContent(page).evaluate(async (c) => {
+				const el = await (c as unknown as ScrollerHost).getScrollElement();
+				el.scrollTop = el.scrollHeight;
+				await new Promise((r) => setTimeout(r, 300));
+				// Rows and text (leaves), not containers padded past them.
+				const kids = [...c.querySelectorAll("*")].filter(
+					(e) =>
+						e.childElementCount === 0 &&
+						(e as HTMLElement).offsetParent &&
+						e.getBoundingClientRect().height > 0,
+				);
+				const last = Math.max(
+					...kids.map((e) => e.getBoundingClientRect().bottom),
+				);
+				const barTop = document
+					.querySelector(
+						'[data-testid="tabbar"] .k-toolbar-pane, [data-testid="tabbar"]',
+					)!
+					.getBoundingClientRect().top;
+				return { last, barTop };
+			});
+			expect(r.last).toBeLessThanOrEqual(r.barTop + 1);
+		});
 });

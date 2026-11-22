@@ -7,10 +7,14 @@
 	--p-tabbar-h: 80px;
 }
 
-/* A tab's root page clears the tab bar: everything that pads for the
-   bottom inset (lists, Ionic's content) pads for the bar too. */
-html.p-tabs ion-nav > .ion-page:last-child {
-	--ion-safe-area-bottom: calc(var(--sab) + var(--p-tabbar-h));
+/* A tab's root page scrolls its last row clear of the tab bar (on top of
+   the page's own bottom padding). */
+html.p-tabs ion-nav > .ion-page:last-child > ion-content::part(scroll) {
+	padding-bottom: calc(
+		var(--padding-bottom, 0px) +
+		var(--p-tabbar-h) +
+		var(--sab)
+	);
 }
 
 .p-tabbar {

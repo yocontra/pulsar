@@ -23,6 +23,10 @@
 	--color-ios-primary-tint: var(--ds-primary-hover);
 	--color-ios-primary-shade: var(--ds-primary-hover);
 	--color-ios-hover-highlight: rgba(255, 255, 255, 0.4);
+	/* Glass a little denser than Konsta's (0.75 / 0.5): labels over busy
+	   lists stay legible, in dark especially. */
+	--color-ios-light-glass: rgba(255, 255, 255, 0.8);
+	--color-ios-dark-glass: rgba(44, 44, 44, 0.72);
 
 	/* iOS: the page is the sunken background (= theme-color); groups and
 	   cards are surfaces on it. */
@@ -85,4 +89,13 @@
 :root {
 	--color-primary: var(--ds-primary);
 	--k-hairline-color: var(--ds-hairline);
+}
+
+/* Reduce Transparency: glass becomes a plain surface. */
+@media (prefers-reduced-transparency: reduce) {
+	.k-glass {
+		background-color: var(--ds-surface) !important;
+		-webkit-backdrop-filter: none !important;
+		backdrop-filter: none !important;
+	}
 }

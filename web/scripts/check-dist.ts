@@ -5,7 +5,7 @@
  * - Budget, per layout: the initial route's JS (boot.js, entry + static
  *   imports + that layout's app chunk) gzipped (the .gz sidecars
  *   finish-dist.ts writes, which the daemon serves): the phone (Ionic shell,
- *   with its mode's Ionic styles) ≤ 170 KB, the desktop ≤ 130 KB.
+ *   with its mode's Ionic styles) ≤ 185 KB, the desktop ≤ 130 KB.
  * - Package: dist/web ≤ 9 MB and ≤ 420 files unpacked, not counting the
  *   precompressed .br/.gz sidecars, which have their own ≤ 4 MB budget
  *   (Shiki languages and KaTeX fonts are trimmed in astro.config.mjs;
@@ -27,7 +27,10 @@ import {
 
 /** Initial JS per layout chunk (`_app/<name>.<hash>.js`), gzipped. */
 const BUDGETS: Record<string, number> = {
-	PhoneApp: 170 * 1024,
+	// Raised from 170 for Konsta UI on the first screen (the tab bar): its
+	// components and the tailwind-merge its cls() needs, ~15 KB. Home moving
+	// from IonSearchbar to Konsta's Searchbar (K1) gives back ~14 KB.
+	PhoneApp: 185 * 1024,
 	DesktopApp: 130 * 1024,
 };
 const PACKAGE_BYTES = 9 * 1024 * 1024;
