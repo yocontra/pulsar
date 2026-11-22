@@ -27,6 +27,8 @@ import {
 	OMP_QUIET_MS,
 	ompSubagentReads,
 } from "../src/harnesses/more-subagents.ts";
+import { omp as ompDriver } from "../src/harnesses/omp.ts";
+import { openFilesSource } from "../src/harnesses/pi-sessions.ts";
 import { processSnapshot } from "../src/processes.ts";
 import {
 	isAddress,
@@ -440,6 +442,91 @@ describe("omp subagents", () => {
 		const before = ompSubagentReads.bytes;
 		await listOmpSubagents(parent);
 		expect(ompSubagentReads.bytes).toBe(before);
+	});
+});
+
+describe("omp subagents: which session", () => {
+	// Real-shaped: omp names a folder under the home folder home-relative
+	// (`-tmp` for ~/tmp), and two sessions can share one.
+	const home = join(dir, "omp-which-home");
+	const cwd = join(home, "tmp");
+	const sessions = join(home, ".omp", "agent", "sessions", "-tmp");
+	const mine = join(sessions, "2026-11-20T04-03-57-433Z_01a1f720.jsonl");
+	const newer = join(sessions, "2026-11-22T07-43-06-660Z_01a20235.jsonl");
+	const saved = openFilesSource.fn;
+	let open: string[] = [];
+
+	const task = (name: string, parent: string) =>
+		rec({ type: "title", title: name }) +
+		rec({
+			type: "session",
+			id: name,
+			parentSession: parent,
+			cwd,
+			timestamp: "2026-11-20T04-05-00.000Z",
+		});
+
+	beforeAll(() => {
+		process.env.HOME = home;
+		openFilesSource.fn = async () => open;
+		for (const [file, sub] of [
+			[mine, "MineTask"],
+			[newer, "OtherTask"],
+		] as const) {
+			mkdirSync(file.slice(0, -".jsonl".length), { recursive: true });
+			writeFileSync(
+				file,
+				`${rec({ type: "title", title: "" })}${rec({ type: "message", id: sub, message: { role: "user", content: `log of ${sub}` } })}`,
+			);
+			writeFileSync(
+				join(file.slice(0, -".jsonl".length), `${sub}.jsonl`),
+				task(sub, file),
+			);
+		}
+		utimesSync(mine, 1000, 1000);
+		utimesSync(newer, 2000, 2000);
+	});
+	afterAll(() => {
+		openFilesSource.fn = saved;
+	});
+
+	const keys = async (over: Parameters<typeof agentRecord>[0]) =>
+		(
+			await listOmpSubagents(
+				agentRecord({ harness: "omp", sessionId: null, cwd, ...over }),
+			)
+		).map((f) => f.key);
+
+	test("no session id: the session its process has open, not the newest", async () => {
+		open = [join(mine.slice(0, -".jsonl".length), "MineTask.jsonl"), mine];
+		expect(await keys({ id: "omp:pid:84724", pid: 84724 })).toEqual([
+			"MineTask",
+		]);
+	});
+
+	test("the session the extension reported (resumeKey) wins", async () => {
+		open = [];
+		expect(
+			await keys({
+				id: "omp:pid:2",
+				pid: 2,
+				meta: { resumeKey: "omp:01a1f720" },
+			}),
+		).toEqual(["MineTask"]);
+	});
+
+	test("nothing exact: the newest session of the folder", async () => {
+		open = [];
+		expect(await keys({ id: "omp:pid:3", pid: 3 })).toEqual(["OtherTask"]);
+	});
+
+	test("the session log is the agent's own session", async () => {
+		open = [mine];
+		const log = await ompDriver.sessionLog!(
+			agentRecord({ harness: "omp", sessionId: null, cwd, pid: 4 }),
+		);
+		expect(log).toContain("log of MineTask");
+		expect(log).not.toContain("log of OtherTask");
 	});
 });
 

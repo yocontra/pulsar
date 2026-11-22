@@ -23,7 +23,7 @@ export const pi: HarnessDriver = {
 		turnFailed: piTurnFailed,
 	},
 
-	sessionLog: (agent) => piSessionLog(".pi", agent.cwd),
+	sessionLog: (agent) => piSessionLog("pi", agent),
 
 	setup: {
 		detect: (path) =>

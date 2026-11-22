@@ -44,6 +44,9 @@ const lsofOpenFiles: OpenFiles = async (pid) => {
 		.map((l) => l.slice(1));
 };
 
+/** How processes' open files are listed (tests replace `fn`; never the real lsof there). */
+export const openFilesSource: { fn: OpenFiles } = { fn: lsofOpenFiles };
+
 /** A process's open files, briefly (a watcher's tick must not run lsof each time). */
 const openByPid = new Map<
 	number,
@@ -60,7 +63,7 @@ export async function openSessionFile(
 	dir: string,
 	pid: number,
 	home = homedir(),
-	openFiles: OpenFiles = lsofOpenFiles,
+	openFiles: OpenFiles = openFilesSource.fn,
 ): Promise<string | null> {
 	const root = join(home, dir, "agent", "sessions");
 	let hit = openByPid.get(pid);
@@ -198,7 +201,7 @@ export async function locatePiStyle(
 	harness: keyof typeof PI_STYLE,
 	agent: SessionRef,
 	home = process.env.HOME || homedir(),
-	openFiles: OpenFiles = lsofOpenFiles,
+	openFiles: OpenFiles = openFilesSource.fn,
 ): Promise<TranscriptSource | null> {
 	const other = harness === "pi" ? "omp" : "pi";
 	const source = (
@@ -233,11 +236,14 @@ export async function locatePiStyle(
 	return file ? source(harness, file, true) : null;
 }
 
-/** pi-style session log: the end of the newest session file for a folder ("" when none). */
+/**
+ * A pi-style agent's session log: the end of its session file, found as
+ * `locatePiStyle` finds it ("" when none).
+ */
 export async function piSessionLog(
-	dir: string,
-	cwd: string | null,
+	harness: keyof typeof PI_STYLE,
+	agent: SessionRef,
 ): Promise<string> {
-	const file = await piSessionFile(dir, cwd);
-	return file ? tailAsync(file, 512 * 1024) : "";
+	const source = await locatePiStyle(harness, agent);
+	return source?.kind === "file" ? tailAsync(source.path, 512 * 1024) : "";
 }

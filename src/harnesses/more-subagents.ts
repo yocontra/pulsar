@@ -1,12 +1,11 @@
 import { readdir, stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { processSnapshot } from "../processes.ts";
 import type { Agent } from "../types.ts";
 import { headAsync, tailAsync } from "../util.ts";
 import { codexControlReady, codexRpc } from "./codex-rpc.ts";
 import { opencodeGet, opencodeServiceRunning } from "./opencode-api.ts";
-import { piSessionFile } from "./pi-sessions.ts";
+import { locatePiStyle } from "./pi-sessions.ts";
 import { parsePi } from "./pi-transcript.ts";
 import type { FoundSubagent, SubagentTranscript } from "./types.ts";
 
@@ -59,23 +58,41 @@ const ompCache = new Map<string, OmpCached>();
 /** Bytes read from omp subagent files (tests check unchanged files are not re-read). */
 export const ompSubagentReads = { bytes: 0 };
 
-/** Each agent's session file, so the sweep does not walk its folder every time. */
-const ompFiles = new Map<string, string>();
+/**
+ * Each agent's session file, so the sweep does not look it up every time;
+ * looked up again after `OMP_FILE_MS` (the session may have moved: new,
+ * resumed, forked).
+ */
+const ompFiles = new Map<string, { file: string; at: number }>();
+const OMP_FILE_MS = 5000;
 
+/**
+ * The folder of the agent's session (its subagents' files), found as its
+ * transcript is (pi-sessions.ts `locatePiStyle`): the host session id,
+ * else the file its process has open, else the newest file for its cwd.
+ */
 async function ompFolder(agent: Agent): Promise<string | null> {
-	let file = ompFiles.get(agent.id) ?? null;
-	if (file && !(await stat(file).catch(() => null))) file = null;
-	// HOME first: tests (and services) may point it elsewhere after start.
-	file ??= await piSessionFile(
-		".omp",
-		agent.cwd,
-		agent.sessionId,
-		process.env.HOME || homedir(),
-	);
-	if (!file) return null;
-	if (ompFiles.size > 1000) ompFiles.clear();
-	ompFiles.set(agent.id, file);
+	const hit = ompFiles.get(agent.id);
+	let file =
+		hit && Date.now() - hit.at < OMP_FILE_MS && (await isFile(hit.file))
+			? hit.file
+			: null;
+	if (!file) {
+		// HOME at call time: tests (and services) may point it elsewhere after start.
+		const source = await locatePiStyle("omp", agent);
+		file = source?.kind === "file" ? source.path : null;
+		if (!file) {
+			ompFiles.delete(agent.id);
+			return null;
+		}
+		if (ompFiles.size > 1000) ompFiles.clear();
+		ompFiles.set(agent.id, { file, at: Date.now() });
+	}
 	return file.slice(0, -".jsonl".length);
+}
+
+async function isFile(path: string): Promise<boolean> {
+	return (await stat(path).catch(() => null))?.isFile() ?? false;
 }
 
 export async function ompSubagentStamp(agent: Agent): Promise<string | null> {

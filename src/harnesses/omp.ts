@@ -29,7 +29,7 @@ export const omp: HarnessDriver = {
 		transcript: ompSubagentTranscript,
 	},
 
-	sessionLog: (agent) => piSessionLog(".omp", agent.cwd),
+	sessionLog: (agent) => piSessionLog("omp", agent),
 
 	setup: {
 		detect: (path) =>
