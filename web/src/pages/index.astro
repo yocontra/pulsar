@@ -25,10 +25,11 @@ import "../styles/desktop.css";
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<!-- No apple-mobile-web-app-status-bar-style, on purpose. Checked with a
 		     test page in the iOS 27 Simulator: with no key, the Home Screen app's
-		     status bar takes the colour of the page's top edge (a sticky header
-		     there; our top bar here) and the clock turns
-		     black or white with the theme, live, so the header runs up behind the
-		     clock with no seam in light or dark. "default" gives a separate system
+		     status bar takes the colour of the page's top edge (there, a sticky
+		     header) and the clock turns black or white with the theme, live. Our
+		     header is not sticky (Ionic's body is fixed), so whether iOS samples
+		     the header or the body background needs a device check; theme-color
+		     and the body background match per theme either way. "default" gives a separate system
 		     bar; black-translucent is deprecated (WebKit bug 317153), forces a white
 		     clock and gets a system scrim since iOS 26.1. iOS reads the key when the
 		     app is added, so an old install keeps its bar until it is re-added.

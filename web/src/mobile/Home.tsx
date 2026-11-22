@@ -504,6 +504,9 @@ function InstallHint() {
 			return (
 				!!localStorage.getItem("pulsar.installHint") ||
 				matchMedia("(display-mode: standalone)").matches ||
+				// iOS 27's Home Screen app reports only navigator.standalone.
+				(navigator as Navigator & { standalone?: boolean }).standalone ===
+					true ||
 				!/iPhone|iPad/.test(navigator.userAgent)
 			);
 		} catch {

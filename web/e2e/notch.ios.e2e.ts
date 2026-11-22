@@ -179,6 +179,14 @@ const SCREENS: Screen[] = [
 		},
 	],
 	[
+		"subagent",
+		async (page, { auth }) => {
+			const sub = `${auth}/sub:a4mate`;
+			await page.goto(`/#/s/${encodeURIComponent(sub)}`);
+			await page.locator(`[data-subagent-page="${sub}"]`).waitFor();
+		},
+	],
+	[
 		"needs you",
 		async (page) => {
 			await page.goto("/#/needs");
@@ -335,6 +343,20 @@ test("the browser bar colour matches the page in each theme, live", async ({
 	await page.emulateMedia({ colorScheme: "light" });
 	expect(await same("forced dark")).toBe("#0b0b0a");
 	await group.getByRole("radio", { name: "System" }).tap();
+});
+
+test("the installed app hides the Add to Home Screen tip", async ({ page }) => {
+	// A Safari tab shows it (no saved dismissal in a fresh context)...
+	await ready(page);
+	await expect(page.getByRole("complementary", { name: "Tip" })).toBeVisible();
+	// ...the Home Screen app does not: iOS 27 reports navigator.standalone
+	// there, and display-mode: standalone does not match.
+	await page.addInitScript(() =>
+		Object.defineProperty(navigator, "standalone", { get: () => true }),
+	);
+	await page.goto("about:blank");
+	await ready(page);
+	await expect(page.getByRole("complementary", { name: "Tip" })).toHaveCount(0);
 });
 
 test.describe("notch and home indicator", () => {

@@ -11,7 +11,7 @@ The app is served by every machine in your [agent mesh](../README.md#agent-mesh)
 
 The open app updates itself when the machine's Pulsar is upgraded: it reloads into the new version when you are not typing, in a dialog or sending, and keeps the page and your unsent message. Until then, a "Pulsar updated" toast offers **Reload**.
 
-On an iPhone, the status bar takes the colour of the app's top bar and follows light and dark mode. If you added the app before this change and still see a separate bar above the app, remove it from the home screen and add it again: iOS reads this setting only when the app is added.
+On an iPhone, iOS colours the status bar from the app's page, and the clock turns black or white with light and dark mode. If you added the app before this change and still see a separate bar above the app, remove it from the home screen and add it again: iOS reads this setting only when the app is added.
 
 ## The pool
 
