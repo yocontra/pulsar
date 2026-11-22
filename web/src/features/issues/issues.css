@@ -1,0 +1,194 @@
+/* The issue chip and card (web/src/features/issues). */
+
+.i-chip > svg {
+	color: var(--ds-success);
+}
+
+.i-pop {
+	z-index: 60;
+	width: min(440px, calc(100vw - 32px));
+	max-height: min(560px, calc(100vh - 120px));
+	overflow-y: auto;
+	padding: 14px;
+	border-radius: 12px;
+	background: var(--ds-surface);
+	box-shadow: var(--ds-shadow-lg);
+	outline: none;
+}
+
+.i-card {
+	display: grid;
+	gap: 10px;
+	font-size: 13px;
+	color: var(--ds-text);
+	min-width: 0;
+}
+.i-card.mobile {
+	font-size: 15px;
+}
+.i-head {
+	display: flex;
+	gap: 10px;
+}
+.i-ico {
+	width: 18px;
+	height: 18px;
+	margin-top: 2px;
+	flex: none;
+	color: var(--ds-success);
+}
+.i-ico.done {
+	color: var(--ds-accent);
+}
+.i-ico.skipped {
+	color: var(--ds-text-3);
+}
+.i-title {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+}
+.i-title a,
+.i-title > span:first-child {
+	color: var(--ds-text);
+	font-weight: 600;
+	text-decoration: none;
+	overflow-wrap: anywhere;
+}
+.i-title a:hover {
+	text-decoration: underline;
+}
+.i-num {
+	color: var(--ds-text-3);
+}
+.i-sub {
+	color: var(--ds-text-3);
+	font-size: 12px;
+}
+.i-state {
+	display: inline-block;
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	background: var(--ds-success-soft);
+	color: var(--ds-success-text);
+}
+.i-state.done {
+	background: var(--ds-accent-soft);
+	color: var(--ds-accent-text);
+}
+.i-state.skipped {
+	background: var(--ds-surface-3);
+	color: var(--ds-text-2);
+}
+.i-labels {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.i-label {
+	padding: 1px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 18px;
+	background: var(--ds-surface-3);
+	color: var(--ds-text-2);
+	box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+.i-assignees {
+	margin: 0;
+	color: var(--ds-text-2);
+	font-size: 12px;
+}
+.i-body {
+	padding-top: 8px;
+	border-top: 1px solid var(--ds-border);
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+.i-body pre {
+	max-width: 100%;
+	overflow-x: auto;
+}
+.i-more {
+	margin: 4px 0 0;
+	color: var(--ds-text-3);
+}
+.i-empty {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	color: var(--ds-text-3);
+}
+.i-spin {
+	width: 14px;
+	height: 14px;
+	animation: i-spin 1s linear infinite;
+}
+@keyframes i-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.i-spin {
+		animation: none;
+	}
+}
+.i-foot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	color: var(--ds-text-3);
+	font-size: 12px;
+}
+.i-open {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: auto;
+	color: var(--ds-link);
+	font-weight: 600;
+	text-decoration: none;
+}
+.i-open:hover {
+	text-decoration: underline;
+}
+.i-open svg {
+	width: 12px;
+	height: 12px;
+}
+
+/* Phone: the header button and its sheet. */
+.i-phone-btn {
+	--padding-start: 2px;
+	--padding-end: 2px;
+}
+.i-phone-btn svg {
+	width: 22px;
+	height: 22px;
+	color: var(--ds-success);
+}
+/* One more button at the end of the agent's top bar (each 44 px wide). */
+.p-agent-header ion-title.i-has-issue {
+	padding-inline-end: 150px;
+}
+.p-agent-header ion-title.i-has-issue.g-has-git {
+	padding-inline-end: 194px;
+}
+.i-sheet {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	background: var(--ds-bg);
+}
+.i-sheet-body {
+	padding: 4px 16px 24px;
+}

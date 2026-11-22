@@ -37,6 +37,7 @@ import {
 	type GitStatus,
 	type Hello,
 	type InteractionAnswer,
+	type IssueDetails,
 	type LimitSettings,
 	type Page,
 	type PasskeyList,
@@ -500,6 +501,9 @@ export const api = {
 	/** The branch's PR with checks and review comments. */
 	gitPr: (agentId: string) =>
 		request<GitPrDetails>(`/agents/${enc(agentId)}/git/pr`),
+	/** The GitHub issue the agent works on (src/service/issues.ts). */
+	issue: (agentId: string) =>
+		request<IssueDetails>(`/agents/${enc(agentId)}/issue`),
 	/**
 	 * Commit, push or PR: acting ops (Prove Human here; a remote agent's
 	 * machine checks one passkey assertion for exactly these params).
