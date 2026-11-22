@@ -449,6 +449,10 @@ class Watcher {
 	private timer: NodeJS.Timeout | null = null;
 	private fsWatch: FSWatcher | null = null;
 	private resolved: ResolvedTranscript | null = null;
+	/** The source this watcher follows now (null until found, or once it went away). */
+	get source(): ResolvedTranscript | null {
+		return this.resolved;
+	}
 	// File sources.
 	private path: string | null = null;
 	private ino = -1;
@@ -757,7 +761,13 @@ export class TranscriptTailer {
 		agentId: string,
 		cursor?: string | null,
 	): Promise<TranscriptPage | null> {
-		const resolved = await this.opts.resolve(agentId);
+		// A lookup can miss for a moment (a folder scan under load, a registry
+		// update with another cwd): the source a live watcher follows still
+		// answers, so a page never says "no transcript" for one it is streaming.
+		const resolved =
+			(await this.opts.resolve(agentId)) ??
+			this.watchers.get(agentId)?.source ??
+			null;
 		if (!resolved) return null;
 		const { source } = resolved;
 		if (source.kind === "poll") return source.fetch(cursor ?? null);

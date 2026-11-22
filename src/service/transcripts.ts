@@ -17,6 +17,11 @@ export interface TranscriptPageResult extends TranscriptPage {
 	available: boolean;
 }
 
+/** The agent's harness keeps a transcript pulsar reads (the row's `hasTranscript`). */
+export function driverSupports(agent: Agent): boolean {
+	return Boolean(driverFor(agent.harness)?.transcript);
+}
+
 /** An agent's transcript through its harness driver. */
 export async function driverTranscript(
 	agent: Agent,
@@ -57,6 +62,8 @@ export class Transcripts {
 	}
 	/** Finds a local subagent its parent has not listed yet (set by the service). */
 	private readonly ensure: (agentId: string) => Promise<unknown>;
+	/** The harness keeps a transcript at all (a source not found yet is still "available"). */
+	private readonly supports: (agent: Agent) => boolean;
 
 	constructor(
 		lookup: (agentId: string) => Agent | undefined,
@@ -66,10 +73,12 @@ export class Transcripts {
 				agent: Agent,
 			) => ResolvedTranscript | null | Promise<ResolvedTranscript | null>;
 			ensure?: (agentId: string) => Promise<unknown>;
+			supports?: (agent: Agent) => boolean;
 		} = {},
 	) {
 		this.lookup = lookup;
 		this.ensure = opts.ensure ?? (async () => {});
+		this.supports = opts.supports ?? driverSupports;
 		const resolve = opts.resolve ?? driverTranscript;
 		this.resolve = resolve;
 		this.tailer = new TranscriptTailer({
@@ -119,7 +128,7 @@ export class Transcripts {
 			return { events: [], cursor: null, available: false };
 		if (isLocalSubagentId(agentId) && !this.lookup(agentId))
 			await this.ensure(agentId);
-		this.agent(agentId);
+		const agent = this.agent(agentId);
 		// Subscribe first, then page: a live watcher's offset is set first, so
 		// nothing falls between the page and the stream.
 		await this.tailer.ready(agentId);
@@ -130,9 +139,12 @@ export class Transcripts {
 			if (e instanceof RangeError) throw new RpcError("bad_cursor", e.message);
 			throw e;
 		}
-		return page
-			? { ...page, available: true }
-			: { events: [], cursor: null, available: false };
+		if (page) return { ...page, available: true };
+		// No source right now. `available` says whether the harness keeps a
+		// transcript at all, as the agent's row does: a file not written yet,
+		// or a lookup that missed for a moment, is an empty page, not "this
+		// agent has no transcript" (the app would flap to that banner).
+		return { events: [], cursor: null, available: this.supports(agent) };
 	}
 
 	/**

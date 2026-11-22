@@ -1,4 +1,3 @@
-import { driverFor } from "../harnesses/index.ts";
 import type {
 	AgentRow,
 	AgentSort,
@@ -32,6 +31,7 @@ import type { Agent, Priority } from "../types.ts";
 import { LIMITS } from "./limits.ts";
 import { isRemote } from "./pool.ts";
 import type { Registry } from "./registry.ts";
+import { driverSupports } from "./transcripts.ts";
 
 /**
  * The pool as the app sees it: lazily expanded trees with rollups, paged
@@ -310,7 +310,7 @@ export class Views {
 			stateSince: this.stateSince(agent, state),
 			needsYou: this.registry.needsYou(agent.id),
 			wake: this.wakeOf(agent, priority, full),
-			hasTranscript: Boolean(driverFor(agent.harness)?.transcript),
+			hasTranscript: driverSupports(agent),
 			canStop: this.canStop(agent),
 			...(isPane(agent.meta.tmux) ? { tmux: agent.meta.tmux } : {}),
 			...subagentField(this.subagents(agent.id)),

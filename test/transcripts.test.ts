@@ -795,6 +795,8 @@ describe("service transcripts", () => {
 	let service: PulsarService;
 	let store: Store;
 	let file: string;
+	/** The resolver misses (a folder scan under load, a registry update with another cwd). */
+	let miss = false;
 
 	function fakeCaller(principal: Principal) {
 		const controller = new AbortController();
@@ -811,6 +813,7 @@ describe("service transcripts", () => {
 		dir = mkdtempSync(join(tmpdir(), "pulsar-svc-transcripts-"));
 		file = join(dir, "pi.jsonl");
 		copyFileSync(PI, file);
+		miss = false;
 		store = new Store(":memory:");
 		service = new PulsarService({
 			store,
@@ -819,7 +822,7 @@ describe("service transcripts", () => {
 			transcripts: {
 				pollMs: 20,
 				resolve: (agent: Agent) =>
-					agent.sessionId === "with-log"
+					!miss && agent.sessionId === "with-log"
 						? {
 								source: { kind: "file", path: file },
 								parse: support("pi").parse,
@@ -834,9 +837,9 @@ describe("service transcripts", () => {
 		rmSync(dir, { recursive: true, force: true });
 	});
 
-	const add = (sessionId: string) =>
+	const add = (sessionId: string, harness = "pi") =>
 		service.registry.upsert({
-			harness: "pi",
+			harness,
 			sessionId,
 			pid: null,
 			cwd: "/work/demo",
@@ -864,11 +867,20 @@ describe("service transcripts", () => {
 	});
 
 	test("agents without a transcript, unknown agents, bad cursors", async () => {
+		// A harness that keeps no transcript at all.
+		const plain = add("no-log", "plain-harness");
+		expect(await service.transcripts.page(plain.id)).toEqual({
+			events: [],
+			cursor: null,
+			available: false,
+		});
+		// A harness that keeps one, not found (yet): empty, still available, as
+		// its row's hasTranscript says.
 		const bare = add("no-log");
 		expect(await service.transcripts.page(bare.id)).toEqual({
 			events: [],
 			cursor: null,
-			available: false,
+			available: true,
 		});
 		await expect(service.transcripts.page("pi:nobody")).rejects.toMatchObject({
 			code: "not_found",
@@ -877,6 +889,27 @@ describe("service transcripts", () => {
 		await expect(
 			service.transcripts.page(agent.id, "not-a-cursor"),
 		).rejects.toMatchObject({ code: "bad_cursor" });
+	});
+
+	test("a lookup that misses for a moment never makes a transcript unavailable", async () => {
+		const agent = add("with-log");
+		const off = service.transcripts.subscribe(agent.id, () => {});
+		await service.transcripts.ready(agent.id);
+		const before = await service.transcripts.page(agent.id);
+		miss = true;
+		// The live watcher still follows the file: the page comes from it.
+		const during = await service.transcripts.page(agent.id);
+		expect(during.available).toBe(true);
+		expect(during.events.map((e) => e.id)).toEqual(
+			before.events.map((e) => e.id),
+		);
+		off();
+		// Nobody watching and nothing found: an empty page, still available.
+		expect(await service.transcripts.page(agent.id)).toEqual({
+			events: [],
+			cursor: null,
+			available: true,
+		});
 	});
 
 	test("transcript.read over handle(): own transcript, operator, user; not others", async () => {
