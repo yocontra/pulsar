@@ -20,10 +20,17 @@ import "../styles/desktop.css";
 		<meta name="theme-color" content="#151517" media="(min-width: 1024px) and (prefers-color-scheme: dark)" />
 		<meta name="referrer" content="no-referrer" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<!-- "default", not black-translucent: black-translucent forces white status-bar
-		     text, unreadable in light mode, and WebKit marks it deprecated. Expected:
-		     iOS tints the bar from theme-color (not yet checked on a device). -->
-		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<!-- No apple-mobile-web-app-status-bar-style, on purpose. Checked in the
+		     iOS 27 Simulator: with no key, the Home Screen app's status bar takes
+		     the colour of the page's top edge (our header) and the clock turns
+		     black or white with the theme, live, so the header runs up behind the
+		     clock with no seam in light or dark. "default" gives a separate system
+		     bar; black-translucent is deprecated (WebKit bug 317153), forces a white
+		     clock and gets a system scrim since iOS 26.1. iOS reads the key when the
+		     app is added, so an old install keeps its bar until it is re-added.
+		     Safe-area padding (styles/ios.css --sat/--sab/--sal/--sar) still covers
+		     any inset iOS reports. -->
+
 		<meta name="apple-mobile-web-app-title" content="Pulsar" />
 		<title>Pulsar</title>
 		<!-- Data preload: starts the first screen's API reads while the CSS and JS

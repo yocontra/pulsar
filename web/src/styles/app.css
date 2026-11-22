@@ -675,7 +675,7 @@
 .toast {
 	position: fixed;
 	left: 50%;
-	bottom: calc(16px + env(safe-area-inset-bottom));
+	bottom: calc(16px + var(--sab));
 	transform: translateX(-50%);
 	background: var(--fg);
 	color: var(--bg);
@@ -1613,7 +1613,7 @@ button.row:hover,
 	z-index: 45;
 	display: flex;
 	flex-direction: column;
-	padding-top: env(safe-area-inset-top);
+	padding-top: var(--sat);
 }
 
 .facet-picker .search-box {
@@ -1627,7 +1627,7 @@ button.row:hover,
 	margin: 0;
 	overflow-y: auto;
 	flex: 1;
-	padding-bottom: env(safe-area-inset-bottom);
+	padding-bottom: var(--sab);
 }
 
 .picker-row {
@@ -1658,8 +1658,7 @@ button.row:hover,
 	align-items: center;
 	justify-content: center;
 	gap: 16px;
-	padding: calc(24px + env(safe-area-inset-top)) 16px
-		calc(24px + env(safe-area-inset-bottom));
+	padding: calc(24px + var(--sat)) 16px calc(24px + var(--sab));
 }
 
 .last-known {
@@ -1792,7 +1791,12 @@ body > div[id^="dmermaid"] svg,
 	position: relative;
 	width: 100%;
 	border-radius: var(--ds-radius-xl) var(--ds-radius-xl) 0 0;
-	padding-bottom: calc(20px + env(safe-area-inset-bottom));
+	padding: 18px calc(20px + var(--sar)) calc(20px + var(--sab))
+		calc(20px + var(--sal));
+}
+/* The phone sheet runs edge to edge: its close button keeps off the side inset. */
+.prove-backdrop.mobile .prove-sheet > .close-x {
+	right: calc(12px + var(--sar));
 }
 .prove-head {
 	display: flex;

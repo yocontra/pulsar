@@ -220,7 +220,7 @@
 }
 .att-zoom-x {
 	position: absolute;
-	top: max(16px, env(safe-area-inset-top));
+	top: max(16px, var(--sat));
 	right: 16px;
 	display: flex;
 	padding: 8px;

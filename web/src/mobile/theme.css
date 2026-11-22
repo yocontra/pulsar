@@ -62,8 +62,10 @@
 	--ion-placeholder-color: var(--p-label-3);
 	--ion-color-step-50: var(--p-bg);
 	--ion-color-step-150: var(--p-cell-pressed);
-	--ion-safe-area-top: var(--sat, env(safe-area-inset-top));
-	--ion-safe-area-bottom: var(--sab, env(safe-area-inset-bottom));
+	--ion-safe-area-top: var(--sat);
+	--ion-safe-area-bottom: var(--sab);
+	--ion-safe-area-left: var(--sal);
+	--ion-safe-area-right: var(--sar);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -881,7 +883,7 @@ ion-toggle {
 	--background: transparent;
 	--border-width: 0;
 	--min-height: 0;
-	padding: 0 12px 8px;
+	padding: 0 calc(12px + var(--sar)) 8px calc(12px + var(--sal));
 }
 .p-approval-banner {
 	appearance: none;
@@ -1354,6 +1356,31 @@ ion-action-sheet {
 ion-toolbar {
 	--background: var(--p-material);
 	--opacity: 1;
+}
+
+/*
+ * Landscape on a notched iPhone: the side insets (--sal/--sar, 0 in
+ * portrait). Ionic pads only modal toolbars, so pad page toolbars and every
+ * scroll area here, once. Bars and backgrounds still run edge to edge (the
+ * toolbar's background fills its padding). Inside the scroll area the insets
+ * are spent, so they read 0 there: rules that add --sal/--sar, and Ionic
+ * items that add --ion-safe-area-left/right, do not inset twice. Fixed-slot
+ * children sit outside the padding and keep them.
+ */
+ion-toolbar:not(ion-modal ion-toolbar) {
+	padding-left: var(--sal);
+	padding-right: var(--sar);
+}
+ion-content {
+	--padding-start: var(--sal);
+	--padding-end: var(--sar);
+}
+/* The agent page lays out its own scroller and composer, inset by them. */
+ion-content > :not([slot="fixed"], .p-agent-body) {
+	--sal: 0px;
+	--sar: 0px;
+	--ion-safe-area-left: 0px;
+	--ion-safe-area-right: 0px;
 }
 ion-header.header-translucent ion-toolbar {
 	--opacity: 1;

@@ -20,8 +20,11 @@
 	--ion-backdrop-color: #000;
 	--ion-backdrop-opacity: 0.32;
 	--ion-overlay-background-color: var(--ds-surface);
-	--ion-safe-area-top: env(safe-area-inset-top);
-	--ion-safe-area-bottom: env(safe-area-inset-bottom);
+	/* Through ios.css's --sat/--sab/--sal/--sar, so tests can emulate a notch. */
+	--ion-safe-area-top: var(--sat);
+	--ion-safe-area-bottom: var(--sab);
+	--ion-safe-area-left: var(--sal);
+	--ion-safe-area-right: var(--sar);
 
 	/* Grouped (inset) lists sit on the sunken background, iOS Settings style. */
 	--ion-color-step-50: var(--ds-bg-sunken);

@@ -541,7 +541,7 @@
 }
 .usage-phone .usage-sheet {
 	border-radius: var(--ds-radius-xl) var(--ds-radius-xl) 0 0;
-	padding-bottom: calc(var(--ds-space-6) + env(safe-area-inset-bottom));
+	padding-bottom: calc(var(--ds-space-6) + var(--sab));
 }
 .usage-sheet-head {
 	display: flex;

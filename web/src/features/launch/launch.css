@@ -262,7 +262,7 @@
 	flex-direction: column;
 	background: var(--ds-bg);
 	color: var(--ds-text);
-	padding: env(safe-area-inset-top) 12px env(safe-area-inset-bottom);
+	padding: var(--sat) 12px var(--sab);
 	text-align: left;
 	font-size: 16px;
 	letter-spacing: normal;
@@ -427,7 +427,7 @@
 	padding: 0 12px;
 }
 .ld-phone .ld-composer {
-	padding-bottom: calc(10px + env(safe-area-inset-bottom));
+	padding-bottom: calc(10px + var(--sab));
 }
 .ld-phone .ld-progress {
 	font-size: 13px;

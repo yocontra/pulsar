@@ -397,7 +397,7 @@
 
 /* ------------------------------------------------------------ phone */
 .cv-phone {
-	padding-bottom: env(safe-area-inset-bottom);
+	padding-bottom: var(--sab);
 }
 .cv-phone .cv-head {
 	border-bottom: 0;
