@@ -1288,6 +1288,12 @@ export class HttpTransport {
 			this.service.authorize(who(c), "transcript.read", id);
 			return c.json(await this.service.git.pr(id, who(c)));
 		});
+		// The GitHub issue the agent works on (src/service/issues.ts), read-only.
+		api.get("/agents/:id/issue", async (c) => {
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			return c.json(await this.service.issues.details(id, who(c)));
+		});
 		for (const [path, op, check] of [
 			["commit", "git.commit", commitParams],
 			["push", "git.push", pushParams],

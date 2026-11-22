@@ -63,6 +63,7 @@ import { GitOps } from "./git.ts";
 import { cleanPrompt, KINDS } from "./interactions.ts";
 import { Interest } from "./interest.ts";
 import { Interrupts } from "./interrupts.ts";
+import { IssueOps } from "./issues.ts";
 import { Jobs, LagMonitor } from "./jobs.ts";
 import { type LaunchDeps, Launches } from "./launch.ts";
 import { INTERVALS, LIMITS } from "./limits.ts";
@@ -121,6 +122,8 @@ export interface ServiceOptions {
 	};
 	/** Attachments: the folder they are saved in (tests use a temp folder). */
 	attachments?: { dir?: () => string };
+	/** Issue detection: ask gh which issue an agent's PR closes (default: `scan`). */
+	issues?: { prLookup?: boolean };
 	/** Worktree changes: poll and debounce timers (tests shorten them). */
 	changes?: { pollMs?: number; debounceMs?: number };
 	/** Token usage: session folders and how often to read them (tests use fixtures). */
@@ -197,6 +200,7 @@ export class PulsarService {
 	readonly launches: Launches;
 	/** Git actions on agents' worktrees: status, PR, and the git.* acting ops. */
 	readonly git: GitOps;
+	readonly issues: IssueOps;
 	/** This node's passkeys (approvals and passkey sessions share them). */
 	readonly passkeys: Passkeys;
 	/** Passkey sessions: what the app shows to act as the user. */
@@ -421,6 +425,14 @@ export class PulsarService {
 		);
 		this.registry.onRelease = (agent) => void this.router.releaseHeld(agent);
 		const resolveTranscript = opts.transcripts?.resolve ?? driverTranscript;
+		this.issues = new IssueOps({
+			registry: this.registry,
+			pool: () => this.registry.pool,
+			resolve: resolveTranscript,
+			prLookup: opts.issues?.prLookup ?? this.scan,
+			// Tests read only fixture transcripts, never the real HOME's.
+			firstMessage: this.scan || !!opts.transcripts?.resolve,
+		});
 		this.transcripts = new Transcripts(
 			(id) => {
 				// A local subagent: a record made from its parent, never registered.
@@ -680,6 +692,10 @@ export class PulsarService {
 		);
 		jobs.every("refresh:models", INTERVALS.refreshModelsMs, () =>
 			this.registry.refreshModels(),
+		);
+		// The GitHub issue each agent works on (branch, PR, first message).
+		jobs.every("refresh:issues", INTERVALS.refreshPrsMs, () =>
+			this.issues.refresh(),
 		);
 		// Attachments past their week (a scanning daemon: tests' services skip it).
 		if (this.scan)

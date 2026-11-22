@@ -253,7 +253,9 @@ export type Feature =
 	/** Start agents from the app (`POST /agents/launch`, src/service/launch.ts). */
 	| "launch"
 	/** Commit, push and PR from the app (`/agents/:id/git/*`). */
-	| "git";
+	| "git"
+	/** The issue card of an agent's GitHub issue (`/agents/:id/issue`). */
+	| "issues";
 
 /** `GET /hello`. */
 export interface Hello {
@@ -957,6 +959,50 @@ export interface GitPrDetails {
 	checks: GitCheck[];
 	review: "approved" | "changes_requested" | "review_required" | null;
 	comments: GitReviewComment[];
+}
+
+/** Where pulsar found the issue an agent works on. */
+export type IssueSource = "tag" | "branch" | "pr" | "message";
+
+/** One GitHub issue, as the issue card shows it (bounded; body is Markdown). */
+export interface IssueInfo {
+	number: number;
+	title: string;
+	state: "open" | "closed";
+	stateReason: "completed" | "not_planned" | null;
+	/** The issue's page (https only). */
+	url: string | null;
+	/** Label names with their hex color (no `#`), when GitHub gave one. */
+	labels: { name: string; color: string | null }[];
+	assignees: string[];
+	author: string | null;
+	/** The body's first part (Markdown); `truncated` when cut. */
+	body: string;
+	truncated: boolean;
+	updatedAt: string | null;
+}
+
+/**
+ * `GET /agents/:id/issue`: the issue the agent works on (its `issue:` tag),
+ * read with gh on the agent's machine. Always 200: `reason` says why there
+ * is no card.
+ */
+export interface IssueDetails {
+	agent: string;
+	/** The issue number the agent's tags name; null when none. */
+	number: number | null;
+	/** How it was found (absent for an older home node). */
+	source?: IssueSource;
+	issue: IssueInfo | null;
+	reason?:
+		| "no_issue"
+		| "no_github"
+		| "gh_missing"
+		| "gh_logged_out"
+		| "not_found"
+		| "gh_error"
+		| "unsupported";
+	message?: string;
 }
 
 /**

@@ -18,9 +18,11 @@ export function ago(ms: number, now = Date.now()): string {
 
 function agentLine(a: PublicAgent): string {
 	const selfTags = a.tags.filter(
-		(t) => !/^(harness|project|branch|worktree|pr|model|machine):/.test(t),
+		(t) =>
+			!/^(harness|project|branch|worktree|pr|issue|model|machine):/.test(t),
 	);
 	const pr = a.tags.find((t) => t.startsWith("pr:"))?.slice(3);
+	const issue = a.tags.find((t) => t.startsWith("issue:"))?.slice(6);
 	const worktree = a.tags.find((t) => t.startsWith("worktree:"))?.slice(9);
 	const bits = [
 		a.name,
@@ -29,6 +31,7 @@ function agentLine(a: PublicAgent): string {
 		a.branch ? `branch=${a.branch}` : null,
 		worktree ? `worktree=${worktree}` : null,
 		pr ? `pr=${pr}` : null,
+		issue ? `issue=${issue}` : null,
 		a.model ? `model=${a.model}` : null,
 		a.status,
 		a.reach === "push" ? "push" : "pull-only",

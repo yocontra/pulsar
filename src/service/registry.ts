@@ -840,6 +840,27 @@ export class Registry {
 	}
 
 	/**
+	 * Sets the issue pulsar detected for an agent (src/service/issues.ts):
+	 * replaces only the `issue:` tag pulsar added, like the PR tag, and
+	 * announces a change. `from` says where it was found.
+	 */
+	setAutoIssue(agent: Agent, n: number | null, from: string | null) {
+		const next = n ? String(n) : "";
+		const prev = agent.meta.autoIssue ?? "";
+		const source = next ? (from ?? "") : "";
+		const hasTag = !next || agent.tags.includes(`issue:${next}`);
+		if (next === prev && hasTag && (agent.meta.issueFrom ?? "") === source)
+			return;
+		agent.tags = agent.tags.filter((t) => !prev || t !== `issue:${prev}`);
+		if (next && !agent.tags.includes(`issue:${next}`))
+			agent.tags.push(`issue:${next}`);
+		agent.meta.autoIssue = next;
+		agent.meta.issueFrom = source;
+		if (agent.status !== "gone")
+			this.events.emit("agent", { action: "update", agent: toPublic(agent) });
+	}
+
+	/**
 	 * The repo page a (re)registered agent starts with: its folder's, as the
 	 * last `refreshPrs` read it, else what the agent had. Absent until known.
 	 */
@@ -1275,9 +1296,12 @@ export class Registry {
 			{
 				// Only a chosen name is kept: a harness or default name is re-derived.
 				name: me.meta.nameFrom === "self" ? me.name : null,
-				// The PR tag pulsar detected is re-detected, not saved as the agent's own.
+				// The PR and issue tags pulsar detected are re-detected, not saved as the agent's own.
 				tags: me.tags.filter(
-					(t) => !isAutoTag(t) && t !== `pr:${me.meta.autoPr}`,
+					(t) =>
+						!isAutoTag(t) &&
+						t !== `pr:${me.meta.autoPr}` &&
+						t !== `issue:${me.meta.autoIssue}`,
 				),
 				activity: me.activity,
 				inbound: me.inbound,
