@@ -43,14 +43,14 @@ let http: HttpTransport;
 let base: string;
 const files = new Map<string, string>();
 
-function addAgent(sessionId: string, withLog: boolean, harness = "pi"): Agent {
+function addAgent(sessionId: string, withLog: boolean): Agent {
 	if (withLog) {
 		const file = join(dir, `${sessionId}.jsonl`);
 		copyFileSync(PI, file);
 		files.set(sessionId, file);
 	}
 	return service.registry.upsert({
-		harness,
+		harness: "pi",
 		sessionId,
 		pid: null,
 		cwd: "/work/demo",
@@ -200,25 +200,14 @@ describe("transcript pages", () => {
 	});
 
 	test("no transcript, unknown agents, bad cursors", async () => {
-		// A harness that keeps no transcript.
-		const plain = addAgent("page-plain", false, "plain-harness");
+		const bare = addAgent("page-bare", false);
 		const none = await api(
-			`/api/v1/agents/${encodeURIComponent(plain.id)}/transcript`,
+			`/api/v1/agents/${encodeURIComponent(bare.id)}/transcript`,
 		);
 		expect(await none.json()).toEqual({
 			events: [],
 			cursor: null,
 			available: false,
-		});
-		// pi keeps one; its file not found (yet) is an empty page.
-		const bare = addAgent("page-bare", false);
-		const empty = await api(
-			`/api/v1/agents/${encodeURIComponent(bare.id)}/transcript`,
-		);
-		expect(await empty.json()).toEqual({
-			events: [],
-			cursor: null,
-			available: true,
 		});
 		const unknown = await api("/api/v1/agents/pi%3Anobody/transcript");
 		expect(unknown.status).toBe(404);

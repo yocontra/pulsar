@@ -837,9 +837,9 @@ describe("service transcripts", () => {
 		rmSync(dir, { recursive: true, force: true });
 	});
 
-	const add = (sessionId: string, harness = "pi") =>
+	const add = (sessionId: string) =>
 		service.registry.upsert({
-			harness,
+			harness: "pi",
 			sessionId,
 			pid: null,
 			cwd: "/work/demo",
@@ -867,20 +867,11 @@ describe("service transcripts", () => {
 	});
 
 	test("agents without a transcript, unknown agents, bad cursors", async () => {
-		// A harness that keeps no transcript at all.
-		const plain = add("no-log", "plain-harness");
-		expect(await service.transcripts.page(plain.id)).toEqual({
-			events: [],
-			cursor: null,
-			available: false,
-		});
-		// A harness that keeps one, not found (yet): empty, still available, as
-		// its row's hasTranscript says.
 		const bare = add("no-log");
 		expect(await service.transcripts.page(bare.id)).toEqual({
 			events: [],
 			cursor: null,
-			available: true,
+			available: false,
 		});
 		await expect(service.transcripts.page("pi:nobody")).rejects.toMatchObject({
 			code: "not_found",
@@ -904,12 +895,9 @@ describe("service transcripts", () => {
 			before.events.map((e) => e.id),
 		);
 		off();
-		// Nobody watching and nothing found: an empty page, still available.
-		expect(await service.transcripts.page(agent.id)).toEqual({
-			events: [],
-			cursor: null,
-			available: true,
-		});
+		// Nobody watching and nothing found: no transcript (the app keeps the
+		// events it holds; web/src/data/patch.ts).
+		expect((await service.transcripts.page(agent.id)).available).toBe(false);
 	});
 
 	test("transcript.read over handle(): own transcript, operator, user; not others", async () => {

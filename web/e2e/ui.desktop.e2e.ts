@@ -181,13 +181,21 @@ test.describe("desktop UI", () => {
 		await nav.getByRole("button", { name: "Machines" }).click();
 		await page.mouse.move(0, 0);
 		await expect(nav.locator('[aria-current="true"]')).toHaveText("Machines");
-		// Once the smooth scroll has reached the bottom, still Machines.
+		// Once the smooth scroll has arrived (Machines at the top, or the
+		// bottom when it can't get there), still Machines.
 		const box = page.locator(".d-set-scroll");
 		await expect
 			.poll(() =>
-				box.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop),
+				box.evaluate((el) => {
+					const h = document.getElementById("set-machines")!;
+					const off =
+						h.getBoundingClientRect().top - el.getBoundingClientRect().top;
+					return (
+						off < 80 || el.scrollHeight - el.clientHeight - el.scrollTop <= 2
+					);
+				}),
 			)
-			.toBeLessThanOrEqual(2);
+			.toBe(true);
 		await expect(nav.locator('[aria-current="true"]')).toHaveText("Machines");
 	});
 
