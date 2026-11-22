@@ -807,10 +807,15 @@ ion-skeleton-text.p-sk {
  * host boxes it flattens (found by diffing computed styles with and
  * without preflight).
  */
-ion-title {
+:where(html.ios) ion-title {
 	padding-inline: 90px;
 	padding-top: var(--padding-top);
 	padding-bottom: var(--padding-bottom);
+}
+/* Material's title sits in the bar's row with its own 20px sides: the iOS
+   inset there squeezed "Agents" to "Age…" before the end buttons. */
+:where(html.md) ion-title {
+	padding: 0 20px;
 }
 ion-title.title-large {
 	padding: 2px 12px 4px;
@@ -818,40 +823,52 @@ ion-title.title-large {
 
 /* ------------------------------------------------------------ top bar title
  * Ionic's iOS small title is an overlay across the whole bar, kept off the
- * buttons by a fixed 90px inset: room for one button a side. Home has more
- * (Search, Usage, New agent, Broadcast), so the collapsed "Agents" ran under
- * "+". Instead the bar is a three-column grid: start buttons, title, end
+ * buttons by a fixed 90px inset: room for one button a side. Home has three
+ * or more end buttons (Search, New agent, Broadcast, whatever features
+ * register) and none at the start, so the collapsed "Agents" ran under "+".
+ * Instead the bar is a three-column grid: start buttons, title, end
  * buttons. The side columns share the room left by the title equally but
  * never get narrower than their buttons, so the title is centered when it
  * fits and moves aside just enough when one side is wider (as UIKit does);
  * when even that is too little, the title shrinks and ends in an ellipsis.
- * The agent pages lay out their own bar (below).
+ * iOS only: Material's title already sits in the row, left-aligned. The
+ * agent pages lay out their own bar (below).
  */
-ion-toolbar:has(> ion-title:not(.title-large)):not(
-	.p-agent-header ion-toolbar
-)::part(container) {
+html.ios
+	ion-toolbar:has(> ion-title:not(.title-large)):not(
+		.p-agent-header ion-toolbar
+	)::part(container) {
 	display: grid;
 	grid-template-columns:
 		minmax(max-content, 1fr) minmax(0, max-content)
 		minmax(max-content, 1fr);
 	align-items: center;
 }
-ion-toolbar:has(> ion-title:not(.title-large)):not(
-	.p-agent-header ion-toolbar
-)::part(content) {
+html.ios
+	ion-toolbar:has(> ion-title:not(.title-large)):not(
+		.p-agent-header ion-toolbar
+	)::part(content) {
 	grid-area: 1 / 2;
 }
-ion-toolbar:has(> ion-title:not(.title-large)):not(.p-agent-header ion-toolbar)
+html.ios
+	ion-toolbar:has(> ion-title:not(.title-large)):not(
+		.p-agent-header ion-toolbar
+	)
 	> ion-buttons:is([slot="start"], [slot="secondary"]) {
 	grid-area: 1 / 1;
 	justify-self: start;
 }
-ion-toolbar:has(> ion-title:not(.title-large)):not(.p-agent-header ion-toolbar)
+html.ios
+	ion-toolbar:has(> ion-title:not(.title-large)):not(
+		.p-agent-header ion-toolbar
+	)
 	> ion-buttons:is([slot="end"], [slot="primary"]) {
 	grid-area: 1 / 3;
 	justify-self: end;
 }
-ion-toolbar:not(.p-agent-header ion-toolbar) > ion-title:not(.title-large) {
+html.ios
+	ion-toolbar:not(.p-agent-header ion-toolbar)
+	> ion-title:not(.title-large) {
 	position: relative;
 	padding-inline: 4px;
 }

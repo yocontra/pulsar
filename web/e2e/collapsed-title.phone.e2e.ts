@@ -1,5 +1,5 @@
 /**
- * The collapsed large title: scrolled down, the page's small title in the top
+ * The collapsed large title (on Android, Material's bar title): scrolled down, the page's small title in the top
  * bar never sits under a toolbar button ("+" over "Agents"), on Home and on
  * every other page whose large title condenses. At 320, 375 and 430 px, at
  * the default text size and at larger iOS text sizes (the phone root follows
@@ -43,6 +43,14 @@ const SCREENS: Screen[] = [
 		open: async (page) => {
 			await page.goto("/#/settings");
 			await page.locator("ion-content.p-settings").waitFor();
+		},
+	},
+	{
+		name: "needs",
+		title: "Needs You",
+		open: async (page) => {
+			await page.goto("/#/needs");
+			await page.locator("ion-content.p-needs").waitFor();
 		},
 	},
 	{
@@ -101,17 +109,19 @@ async function collapse(page: Page) {
 function addEndButtons(page: Page, n: number) {
 	return page.evaluate(
 		([bar, n]) => {
-			const end = document.querySelector(`${bar} ion-buttons[slot=end]`);
-			const start = document.querySelector(`${bar} ion-buttons[slot=start]`);
+			const toolbar = document.querySelector(bar)!;
 			const host =
-				end ??
-				start!.parentElement!.appendChild(
+				toolbar.querySelector(":scope > ion-buttons[slot=end]") ??
+				toolbar.appendChild(
 					Object.assign(document.createElement("ion-buttons"), {
 						slot: "end",
 					}),
 				);
 			const model =
-				host.querySelector("ion-button") ?? start!.querySelector("*")!;
+				host.querySelector("ion-button") ??
+				Object.assign(document.createElement("ion-button"), {
+					textContent: "+",
+				});
 			for (let i = 0; i < n; i++) {
 				const b = model.cloneNode(true) as HTMLElement;
 				b.dataset.extra = "";
@@ -245,7 +255,12 @@ for (const w of [320, 375, 430])
 					).toBe(false);
 				// ...and centered when it has the room, as on iOS.
 				const dump = JSON.stringify({ ...m, buttons: undefined });
+				// (Material's title sits at the start, as on Android.)
+				const ios = await page.evaluate(() =>
+					document.documentElement.classList.contains("ios"),
+				);
 				if (
+					ios &&
 					m.barCenter - m.natural / 2 > m.startEdge + 8 &&
 					m.barCenter + m.natural / 2 < m.endEdge - 8
 				)
