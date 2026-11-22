@@ -203,8 +203,13 @@ const mermaid: DiagramPlugin = {
 					...(mermaidConfig as object),
 					securityLevel: "strict",
 				});
-				const out = await m.render(id, source);
-				return { svg: cspSafeSvg(out.svg, id) };
+				const held = holdStyles(id);
+				try {
+					const out = await m.render(id, source);
+					return { svg: cspSafeSvg(out.svg, id, held.rules) };
+				} finally {
+					held.release();
+				}
 			},
 		};
 	},
@@ -222,6 +227,48 @@ function reserveCytoscapeSheet() {
 	const marker = document.createElement("meta");
 	marker.id = CYTOSCAPE_SHEET;
 	document.head.append(marker);
+}
+
+/**
+ * Mermaid builds a diagram in a scratch <svg id=…> in the page and puts its
+ * theme CSS in a <style> there, which `style-src 'self'` refuses (and logs)
+ * the moment it lands. The refused sheet never styled the scratch copy, so
+ * while a render runs, a <style> bound for that diagram's <svg> stays out of
+ * the page and its text goes to cspSafeSvg, which applies it through CSSOM.
+ */
+const held = new Map<string, string[]>();
+let insertBefore: typeof Node.prototype.insertBefore | null = null;
+
+function holdStyles(id: string): { rules: string[]; release(): void } {
+	const rules: string[] = [];
+	held.set(id, rules);
+	if (!insertBefore) {
+		const original = Node.prototype.insertBefore;
+		insertBefore = original;
+		Node.prototype.insertBefore = function <T extends Node>(
+			this: Node,
+			node: T,
+			child: Node | null,
+		): T {
+			const into =
+				node instanceof HTMLStyleElement && this instanceof SVGSVGElement
+					? held.get(this.id)
+					: undefined;
+			if (!into) return original.call(this, node, child) as T;
+			into.push(node.textContent ?? "");
+			return node;
+		};
+	}
+	return {
+		rules,
+		release() {
+			if (held.get(id) === rules) held.delete(id);
+			if (held.size === 0 && insertBefore) {
+				Node.prototype.insertBefore = insertBefore;
+				insertBefore = null;
+			}
+		},
+	};
 }
 
 /** Mermaid colors read from the live tokens (hex/rgb only; Mermaid can't read var()). */
@@ -266,7 +313,8 @@ function mermaidPalette(): Record<string, string | boolean> {
 }
 
 /**
- * Mermaid's SVG carries a <style> element and style="" attributes, which
+ * Mermaid's SVG carries a <style> element (or its rules come held, see
+ * holdStyles) and style="" attributes, which
  * `style-src 'self'` blocks once the SVG is inserted. Parse it in an inert
  * document, move both into a constructed stylesheet (CSSOM, allowed by CSP)
  * keyed by data attributes, and return the SVG without inline styles.
@@ -274,21 +322,36 @@ function mermaidPalette(): Record<string, string | boolean> {
 const diagramSheets: CSSStyleSheet[] = [];
 const MAX_SHEETS = 40;
 
-function cspSafeSvg(svg: string, id: string): string {
+/** Where renameStyles puts a tag's style="" before the SVG is parsed. */
+const RENAMED_STYLE = "data-pulsar-css";
+
+/** style="" → data-pulsar-css="", inside tags only (label text stays as is). */
+function renameStyles(svg: string): string {
+	return svg.replace(/<[a-zA-Z][^>]*>/g, (tag) =>
+		tag.replace(/(\s)style=("[^"]*"|'[^']*')/g, `$1${RENAMED_STYLE}=$2`),
+	);
+}
+
+function cspSafeSvg(svg: string, id: string, heldRules: string[] = []): string {
 	try {
 		// HTML parsing: Mermaid labels hold HTML (<br>) that strict XML rejects.
-		// A DOMParser document is inert and has no CSP, so nothing is applied here.
-		const doc = new DOMParser().parseFromString(svg, "text/html");
+		// A DOMParser document is inert, so nothing is applied here; WebKit
+		// still logs a refused style="" in it, so those are renamed first.
+		const doc = new DOMParser().parseFromString(renameStyles(svg), "text/html");
 		const root = doc.body.querySelector("svg");
 		if (!root || !("adoptedStyleSheets" in document)) return svg;
 		const sheet = new CSSStyleSheet();
 		// Mermaid's own <style>: keep only parsed rules scoped to this diagram's
 		// id, so diagram text can't add page-wide CSS (e.g. hide the approval card).
 		const scope = `#${CSS.escape(root.id || id)}`;
-		for (const st of Array.from(root.querySelectorAll("style"))) {
+		const styles = Array.from(root.querySelectorAll("style"));
+		for (const css of [
+			...heldRules,
+			...styles.map((st) => st.textContent ?? ""),
+		]) {
 			const parsed = new CSSStyleSheet();
 			try {
-				parsed.replaceSync(st.textContent ?? "");
+				parsed.replaceSync(css);
 			} catch {}
 			for (const rule of Array.from(parsed.cssRules)) {
 				if (
@@ -297,21 +360,26 @@ function cspSafeSvg(svg: string, id: string): string {
 				)
 					sheet.insertRule(rule.cssText, sheet.cssRules.length);
 			}
-			st.remove();
 		}
-		// style="" attributes: declarations only, set through CSSOM.
+		for (const st of styles) st.remove();
+		// style="" attributes (renamed, or any renameStyles missed):
+		// declarations only, set through CSSOM.
 		let n = 0;
-		for (const el of [root, ...Array.from(root.querySelectorAll("[style]"))]) {
-			if (!el.hasAttribute("style")) continue;
+		const styled = `[style],[${RENAMED_STYLE}]`;
+		for (const el of [root, ...Array.from(root.querySelectorAll(styled))]) {
+			const css = [el.getAttribute(RENAMED_STYLE), el.getAttribute("style")]
+				.filter(Boolean)
+				.join(";");
+			el.removeAttribute(RENAMED_STYLE);
+			el.removeAttribute("style");
+			if (!css) continue;
 			const key = `${id}-${n++}`;
 			el.setAttribute("data-pulsar-style", key);
 			const i = sheet.insertRule(
 				`[data-pulsar-style="${CSS.escape(key)}"]{}`,
 				sheet.cssRules.length,
 			);
-			(sheet.cssRules[i] as CSSStyleRule).style.cssText =
-				el.getAttribute("style") ?? "";
-			el.removeAttribute("style");
+			(sheet.cssRules[i] as CSSStyleRule).style.cssText = css;
 		}
 		diagramSheets.push(sheet);
 		const dropped = diagramSheets.splice(
