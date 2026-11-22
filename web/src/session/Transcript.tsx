@@ -36,6 +36,7 @@ import { linkPrs } from "../lib/links.ts";
 import { sentHere } from "../lib/sent.ts";
 import { AttachedFiles } from "./AttachedFiles.tsx";
 import { CodeBlock } from "./CodeBlock.tsx";
+import { FileRefAgent } from "./file-ref.tsx";
 import { InlineCode } from "./highlight.tsx";
 import { buildItems, type Item, isGap } from "./items.ts";
 import { EventMedia, ImageThumb } from "./media.tsx";
@@ -171,18 +172,24 @@ export const Transcript = memo(function Transcript({
 			lastSentId,
 		],
 	);
+	const fileAgent = useMemo(
+		() => (agent ? { id: agent.id, cwd: agent.cwd } : null),
+		[agent?.id, agent?.cwd],
+	);
 	return (
 		<C.Provider value={ctx}>
-			<PulsarMessages.Provider value={known}>
-				<div
-					className={`ds-conv ds-conv--${variant}${variant === "phone" ? " ds-phone" : ""}${className ? ` ${className}` : ""}`}
-				>
-					{messages.map((m, i) => (
-						<MessageView key={m.id} m={m} prev={messages[i - 1]} />
-					))}
-					{working && <WorkingRow />}
-				</div>
-			</PulsarMessages.Provider>
+			<FileRefAgent.Provider value={fileAgent}>
+				<PulsarMessages.Provider value={known}>
+					<div
+						className={`ds-conv ds-conv--${variant}${variant === "phone" ? " ds-phone" : ""}${className ? ` ${className}` : ""}`}
+					>
+						{messages.map((m, i) => (
+							<MessageView key={m.id} m={m} prev={messages[i - 1]} />
+						))}
+						{working && <WorkingRow />}
+					</div>
+				</PulsarMessages.Provider>
+			</FileRefAgent.Provider>
 		</C.Provider>
 	);
 });

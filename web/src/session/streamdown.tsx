@@ -1,5 +1,6 @@
 import {
 	type ComponentProps,
+	type ReactNode,
 	useEffect,
 	useMemo,
 	useState,
@@ -16,6 +17,7 @@ import {
 import { API_HEADER } from "../api/types.ts";
 import "streamdown/styles.css";
 import { dollarGuard } from "./dollars.ts";
+import { FileRef, filePath, isFileHref } from "./file-ref.tsx";
 
 /**
  * Streamdown settings for transcript text. Agents write this text, so:
@@ -34,7 +36,9 @@ const origin =
 
 export const rehypePlugins: NonNullable<StreamdownProps["rehypePlugins"]> = [
 	defaultRehypePlugins.raw!,
+	fileUrls,
 	defaultRehypePlugins.sanitize!,
+	fileLinks,
 	[
 		harden,
 		{
@@ -49,6 +53,49 @@ export const rehypePlugins: NonNullable<StreamdownProps["rehypePlugins"]> = [
 	],
 	externalLinks,
 ];
+
+type HastEl = {
+	type: string;
+	tagName?: string;
+	value?: string;
+	properties?: Record<string, unknown>;
+	children?: HastEl[];
+};
+
+/** Calls `fn` on every `<a href>` in the tree. */
+function eachLink(fn: (a: HastEl, href: string) => void) {
+	const walk = (n: HastEl) => {
+		const href = n.properties?.href;
+		if (n.type === "element" && n.tagName === "a" && typeof href === "string")
+			fn(n, href);
+		for (const c of n.children ?? []) walk(c);
+	};
+	return (tree: HastEl) => walk(tree);
+}
+
+/** Before sanitize (which drops `file:`): a file: URL becomes its plain path. */
+function fileUrls() {
+	return eachLink((a, href) => {
+		if (/^file:/i.test(href)) a.properties!.href = filePath(href);
+	});
+}
+
+/**
+ * After sanitize, before harden (which would resolve a path against the
+ * app's origin): file paths become file references (session/file-ref.tsx),
+ * and an in-page `#anchor` becomes text (the app routes by its hash).
+ */
+function fileLinks() {
+	return eachLink((a, href) => {
+		if (href.startsWith("#")) {
+			a.tagName = "span";
+			a.properties = {};
+		} else if (isFileHref(href)) {
+			a.tagName = "file-ref";
+			a.properties = { path: filePath(href) };
+		}
+	});
+}
 
 const LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 
@@ -67,31 +114,20 @@ export function allowedLink(href: string): boolean {
  * text, the way harden shows the links it blocks.
  */
 function externalLinks() {
-	type El = {
-		type: string;
-		tagName?: string;
-		value?: string;
-		properties?: Record<string, unknown>;
-		children?: El[];
-	};
-	const walk = (n: El) => {
-		const href = n.properties?.href;
-		if (n.type === "element" && n.tagName === "a" && href) {
-			if (allowedLink(String(href))) {
-				n.properties!.target = "_blank";
-				n.properties!.rel = ["noopener", "noreferrer"];
-			} else {
-				n.tagName = "span";
-				n.properties = { title: "Blocked URL", className: ["text-gray-500"] };
-				n.children = [
-					...(n.children ?? []),
-					{ type: "text", value: " [blocked]" },
-				];
-			}
+	return eachLink((a, href) => {
+		if (!href) return;
+		if (allowedLink(href)) {
+			a.properties!.target = "_blank";
+			a.properties!.rel = ["noopener", "noreferrer"];
+		} else {
+			a.tagName = "span";
+			a.properties = { title: "Blocked URL", className: ["text-gray-500"] };
+			a.children = [
+				...(a.children ?? []),
+				{ type: "text", value: " [blocked]" },
+			];
 		}
-		for (const c of n.children ?? []) walk(c);
-	};
-	return (tree: El) => walk(tree);
+	});
 }
 
 // ---------------------------------------------------------------- lazy plugins
@@ -472,4 +508,16 @@ function MarkdownImage({
 	);
 }
 
-export const components: StreamdownProps["components"] = { img: MarkdownImage };
+export const components: StreamdownProps["components"] = {
+	img: MarkdownImage,
+	// Not an HTML tag: the file references fileLinks makes.
+	...({
+		"file-ref": ({
+			path,
+			children,
+		}: {
+			path?: string;
+			children?: ReactNode;
+		}) => <FileRef path={path ?? ""}>{children}</FileRef>,
+	} as StreamdownProps["components"]),
+};
