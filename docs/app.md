@@ -92,6 +92,18 @@ Pulsar finds the issue, in this order:
 
 The card is read with `gh` on the agent's machine, so that machine needs `gh` installed and logged in. It only reads; it never changes the issue. To message every agent on an issue, use the selector `issue=1378` in Broadcast; agents can use it too.
 
+## Review a PR
+
+**Review** on the PR card opens the agent's PR in the app, with three tabs:
+
+- **Summary**: the PR's description and its reviews.
+- **Files**: each changed file's diff as GitHub has it, with review threads at their lines. Outdated threads show above the diff, and resolved threads are folded. On a computer, pick a file on the left and switch between split and unified. On a phone, tap a file to open it.
+- **Checks**: failing checks first, each with a link to its run.
+
+To comment on a line, hover it and click the comment button (on a phone, tap the line number), then write and press **Comment**. Under a thread, **Reply** answers it and **Resolve** (or **Reopen**) changes its state. **Submit review** (**Review** on a phone) sends a summary as **Comment**, **Approve** or **Request changes**. GitHub does not let you approve or request changes on your own PR, so the app turns those off when the agent's `gh` account wrote the PR.
+
+These actions use `gh` on the agent's machine, as that machine's GitHub account. Each one needs a proven human and goes in the agent machine's audit log. For an agent on another machine, that machine checks your passkey for each comment, reply, resolve and review. If the PR gets new commits after you open it, a line comment is refused: reload and comment on the latest code. Text from GitHub shows as plain text.
+
 ## Usage
 
 **Usage** shows how many tokens your agents used and what that would cost at API prices. Open it with the chart button in the sidebar header (on a phone, on Home's top bar), from Cmd-K, or with Cmd-U.
@@ -138,6 +150,7 @@ It asks before you:
 - stop an agent;
 - start an agent;
 - commit, push or open a PR;
+- comment on, resolve or review a PR;
 - upload attachments;
 - turn on notifications;
 - remove a passkey or confirm a pool change.

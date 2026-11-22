@@ -80,8 +80,11 @@ export function PrHead({ r }: { r: GitPrReview }) {
 			<div>
 				<h2>
 					<ExtLink href={pr.url || null}>
-						{pr.title} <span className="prv-num">#{pr.number}</span>
-						{pr.url && <ExternalLinkIcon aria-hidden="true" />}
+						{pr.title}{" "}
+						<span className="prv-num">
+							#{pr.number}
+							{pr.url && <ExternalLinkIcon aria-hidden="true" />}
+						</span>
 					</ExtLink>
 				</h2>
 				<p className="prv-sub">
@@ -433,7 +436,7 @@ export function FileReview({
 							<button
 								type="button"
 								className="prv-add"
-								aria-label={`Comment on line ${line}`}
+								aria-label={`Comment on ${side === "LEFT" ? "old " : ""}line ${line}`}
 								title="Comment on this line"
 								onClick={() => setDraft(`${side}:${line}`)}
 							>
@@ -461,7 +464,7 @@ export function FileReview({
 								))}
 								{box && (
 									<TextBox
-										label={`Comment on line ${line}`}
+										label="New comment"
 										send="Comment"
 										placeholder="Leave a comment…"
 										mobile={mobile}
@@ -494,6 +497,9 @@ export function FileReview({
 		);
 	return (
 		<div className="prv-file-body">
+			{mobile && q.data?.patch != null && r.head && (
+				<p className="prv-tip">Tap a line number to comment.</p>
+			)}
 			{loose.length > 0 && (
 				<div className="prv-loose">
 					{loose.map((t) => (

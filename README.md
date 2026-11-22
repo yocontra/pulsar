@@ -90,6 +90,7 @@ Run `pulsar qr` and scan the code with your phone, then add the page to your hom
 - Start a new agent on any machine, in a folder or a new git worktree.
 - Review an agent's changes, then commit, push and open a PR.
 - See the GitHub issue an agent works on, with its card.
+- Review an agent's PR: comment on lines, reply, resolve threads, approve or request changes.
 - Search the pool, and ask "who is editing this file?"
 - Get notifications when an agent needs you, finishes or fails.
 - See token usage and an API cost estimate per harness, model and day.
