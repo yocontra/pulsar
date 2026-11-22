@@ -67,10 +67,17 @@ An agent that runs subagents (Claude Code tasks and agent-team members, Codex sp
 
 Subagents are not agents: they are never in the agent list, counts, selectors or broadcasts, and only their own page sends to them. The line above the composer says where a message goes:
 
-- **OpenCode**: into the subagent's own session.
+- **OpenCode**: into the subagent's own session, while it is running or idle.
 - **Claude Code, Codex, omp**: these harnesses give no way into a subagent, so the message goes to the parent agent, starting `For your subagent "<name>"`. Pulsar never says it reached the subagent.
 
-The sidebar lists running and idle subagents. To also list finished ones, dimmed, turn on **Show finished subagents** in Settings (saved per device).
+The sidebar lists running and idle subagents, and its count line counts only those: an agent whose subagents all finished shows no line. To also list finished ones, dimmed, turn on **Show finished subagents** in Settings (saved per device). A subagent that finished more than a day ago is not listed or counted even then; its parent's transcript card still opens it.
+
+A subagent is running only while it works, and idle only while it is alive and waiting; everything else is finished:
+
+- **Claude Code**: a task is running until it returns, or until its log has no new record for 10 minutes. A teammate is alive only while it is a member of an agent team that its parent leads (Claude Code's `teams/<team>/config.json`); a teammate that the lead shut down, or whose team is gone, is finished. Activity is the time of a log's last record, not the file's change time (Claude Code adds records to every subagent log when a session resumes).
+- **Codex, OpenCode**: a thread or child session that is not running is idle for 30 minutes after its last update, then finished.
+- **omp**: a task with no exit record and no write for 10 minutes is finished.
+- When the parent agent is gone, all its subagents are finished.
 
 Limits: Codex subagents are listed only while Codex's app-server runs, and a Codex subagent with no rollout file has no transcript. OpenCode subagents have no transcript, and only direct children are listed. Claude Code workflow runs are not listed. pi has no subagents.
 
@@ -223,7 +230,7 @@ Search covers prompts, replies, messages between agents and the titles of tool c
 
 The gear button opens Settings:
 
-- **Show finished subagents**: list finished subagents too, on this device.
+- **Show finished subagents**: list subagents that finished in the last day too, on this device.
 - **Notifications**: turn on "Approval pending" notifications for this browser.
 - **Agent activity**: what happens when an agent you started, messaged or opened in the last 6 hours finishes its turn or stops with an error (an API error or a refused model, not a failing command): **Off**, **Notifications only**, **Sound only** or **Notifications with sound**. Notifications need this browser's notifications on; Sound only works without them. **In-app notifications** shows a short note in the corner while Pulsar is open, with **Open agent**; it closes when you open that agent. While Pulsar is in the background, the app icon and the tab title count what you missed. Kept on this device, and with its notifications on the machine that served the app. A finish on another machine reaches this browser too.
 - **Usage limits**: warn when a plan usage limit passes a threshold or is reached (on by default, at 80% and 95%). On a computer, type up to three percents; on a phone, pick a set. Kept on the machine that served the app, for every device on it.

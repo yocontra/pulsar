@@ -14,13 +14,17 @@ import {
 	claudeSessionDir,
 	claudeSubagentReads,
 	claudeSubagentTranscript,
+	lastTimestamp,
 	listClaudeSubagents,
 	TASK_QUIET_MS,
+	TEAMMATE_QUIET_MS,
 } from "../src/harnesses/claude-subagents.ts";
 import {
+	IDLE_MAX_MS,
 	listCodexSubagents,
 	listOmpSubagents,
 	listOpencodeSubagents,
+	OMP_QUIET_MS,
 	ompSubagentReads,
 } from "../src/harnesses/more-subagents.ts";
 import { processSnapshot } from "../src/processes.ts";
@@ -32,7 +36,12 @@ import {
 } from "../src/service/pool.ts";
 import { newParseState } from "../src/transcripts/types.ts";
 import { restoreEnv } from "./helpers.ts";
-import { agentRecord, rec, writeClaudeSub } from "./subagent-fixtures.ts";
+import {
+	agentRecord,
+	rec,
+	writeClaudeSub,
+	writeClaudeTeam,
+} from "./subagent-fixtures.ts";
 
 /**
  * Subagent discovery per harness, on synthetic files and fake harness
@@ -139,6 +148,65 @@ describe("Claude Code subagents", () => {
 			},
 			{ mtime: now - 5 * 60_000, started: "2026-11-10T10:30:00.000Z" },
 		);
+		// The team this session leads: reviewer is its only member.
+		writeClaudeTeam(config, "t", lead.sessionId!, [
+			{ name: "reviewer", joinedAt: Date.parse("2026-11-10T10:30:00.000Z") },
+		]);
+		// Another session leads "t2" (a team name reused elsewhere).
+		writeClaudeTeam(config, "t2", "ffff0000-1111-4222-8333-444455556666", [
+			{ name: "x" },
+		]);
+		const mate = (name: string, teamName: string) => ({
+			agentType: "general-purpose",
+			description: `Work as ${name}`,
+			name,
+			taskKind: "in_process_teammate",
+			teamName,
+		});
+		// Shut down: no longer a member of its team.
+		writeClaudeSub(sessionDir, "a5stopped", mate("old-mate", "t"), {
+			mtime: now - 2 * 60_000,
+			started: "2026-11-10T09:30:00.000Z",
+		});
+		// An earlier "reviewer" (the name was spawned again since).
+		writeClaudeSub(sessionDir, "a6prior", mate("reviewer", "t"), {
+			mtime: now - 3 * 3600_000,
+			started: "2026-11-10T08:00:00.000Z",
+		});
+		// Its team was deleted.
+		writeClaudeSub(sessionDir, "a7noteam", mate("solo", "gone-team"), {
+			mtime: now - 30_000,
+			started: "2026-11-10T11:00:00.000Z",
+		});
+		// A member, but of a team another session leads.
+		writeClaudeSub(sessionDir, "a8foreign", mate("x", "t2"), {
+			mtime: now - 10_000,
+			started: "2026-11-10T11:00:00.000Z",
+		});
+		// Resumed: Claude appended untimestamped records (mtime now), but it
+		// last worked two hours ago and never got `finished`.
+		writeClaudeSub(
+			sessionDir,
+			"a9resumed",
+			{
+				agentType: "general-purpose",
+				description: "Unmatched task",
+				toolUseId: "toolu_8",
+			},
+			{
+				mtime: now - 1000,
+				started: "2026-11-10T09:50:00.000Z",
+				last: "2026-11-10T10:00:00.000Z",
+				trailer:
+					rec({ type: "data-flow-incomplete", v: 1, agentId: "a9resumed" }) +
+					rec({
+						type: "data-flow-records",
+						v: 1,
+						agentId: "a9resumed",
+						records: ["x".repeat(30_000)],
+					}),
+			},
+		);
 		writeClaudeSub(
 			sessionDir,
 			"a4nested",
@@ -168,6 +236,11 @@ describe("Claude Code subagents", () => {
 			"a2stale",
 			"a3mate",
 			"a4nested",
+			"a5stopped",
+			"a6prior",
+			"a7noteam",
+			"a8foreign",
+			"a9resumed",
 		]);
 		expect(by.get("a0done")).toMatchObject({
 			name: "Find the parser",
@@ -188,6 +261,44 @@ describe("Claude Code subagents", () => {
 			state: "idle",
 		});
 		expect(by.get("a4nested")?.parentKey).toBe("a1run");
+	});
+
+	test("only a member of a team this session leads is alive", async () => {
+		const by = new Map(
+			(await listClaudeSubagents(lead, now)).map((f) => [f.key, f]),
+		);
+		expect(by.get("a3mate")?.state).toBe("idle");
+		// Stopped, an older incarnation, no team, someone else's team: done.
+		for (const k of ["a5stopped", "a6prior", "a7noteam", "a8foreign"]) {
+			expect(by.get(k)?.state).toBe("done");
+			expect(by.get(k)?.finishedAt).toBe(by.get(k)!.updatedAt);
+		}
+		// A live member writing now is running.
+		const busy = await listClaudeSubagents(
+			lead,
+			Date.parse("2026-11-10T11:55:00.000Z") + TEAMMATE_QUIET_MS / 2,
+		);
+		expect(busy.find((f) => f.key === "a3mate")?.state).toBe("running");
+	});
+
+	test("activity is the last record's time, not the resumed log's mtime", async () => {
+		const sub = (await listClaudeSubagents(lead, now)).find(
+			(f) => f.key === "a9resumed",
+		);
+		expect(sub?.state).toBe("done");
+		expect(sub?.updatedAt).toBe(Date.parse("2026-11-10T10:00:00.000Z"));
+		expect(sub?.finishedAt).toBe(Date.parse("2026-11-10T10:00:00.000Z"));
+	});
+
+	test("lastTimestamp skips untimestamped and cut lines", () => {
+		const a = rec({ type: "user", timestamp: "2026-11-10T10:00:00.000Z" });
+		const b = rec({ type: "data-flow-records", records: [] });
+		expect(lastTimestamp(a + b, true)).toBe(
+			Date.parse("2026-11-10T10:00:00.000Z"),
+		);
+		// A cut first line is never trusted.
+		expect(lastTimestamp(a.slice(5) + b, false)).toBeNull();
+		expect(lastTimestamp(b, true)).toBeNull();
 	});
 
 	test("a gone parent's subagents are all done", async () => {
@@ -227,6 +338,25 @@ describe("Claude Code subagents", () => {
 		expect(
 			await listClaudeSubagents(agentRecord({ sessionId: "../../etc" })),
 		).toEqual([]);
+	});
+
+	test("a teammate the lead shuts down turns done", async () => {
+		const file = writeClaudeTeam(config, "t", lead.sessionId!, [], {
+			mtime: Date.now() + 10_000,
+		});
+		let found = await listClaudeSubagents(lead, now);
+		expect(found.find((f) => f.key === "a3mate")?.state).toBe("done");
+		// Back in the team (a later config write): alive again.
+		writeClaudeTeam(
+			config,
+			"t",
+			lead.sessionId!,
+			[{ name: "reviewer", joinedAt: Date.parse("2026-11-10T10:30:00.000Z") }],
+			{ mtime: Date.now() + 20_000 },
+		);
+		found = await listClaudeSubagents(lead, now);
+		expect(found.find((f) => f.key === "a3mate")?.state).toBe("idle");
+		expect(file).toContain("teams");
 	});
 
 	test("its own transcript drops the sidechain mark", async () => {
@@ -282,6 +412,13 @@ describe("omp subagents", () => {
 			`${head("Builder")}${rec({ type: "message", message: { role: "assistant" } })}`,
 		);
 		writeFileSync(join(folder, "1.bash.log"), "not a subagent");
+		// Died: no exit record, no result, no write for an hour.
+		writeFileSync(
+			join(folder, "Ghost.jsonl"),
+			`${head("Ghost")}${rec({ type: "message", message: { role: "assistant" } })}`,
+		);
+		const old = (Date.now() - OMP_QUIET_MS - 60_000) / 1000;
+		utimesSync(join(folder, "Ghost.jsonl"), old, old);
 	});
 
 	test("lists task sessions; exited ones are done", async () => {
@@ -293,8 +430,9 @@ describe("omp subagents", () => {
 		});
 		const found = await listOmpSubagents(parent);
 		const by = new Map(found.map((f) => [f.key, f]));
-		expect([...by.keys()].sort()).toEqual(["Builder", "Scout"]);
+		expect([...by.keys()].sort()).toEqual(["Builder", "Ghost", "Scout"]);
 		expect(by.get("Scout")?.state).toBe("done");
+		expect(by.get("Ghost")?.state).toBe("done");
 		expect(by.get("Builder")?.state).toBe("running");
 		expect(by.get("Builder")?.startedAt).toBe(
 			Date.parse("2026-11-10T10:05:00.000Z"),
@@ -388,6 +526,21 @@ describe("Codex subagents (fake app-server)", () => {
 				updatedAt: 1_790_000_020,
 				status: { type: "notLoaded" },
 			},
+			// Idle: one waiting now, one left loaded long after its work.
+			{
+				id: "t-wait",
+				parentThreadId: "t-lead",
+				createdAt: 1_790_000_000,
+				updatedAt: 1_790_000_200,
+				status: { type: "idle" },
+			},
+			{
+				id: "t-old",
+				parentThreadId: "t-lead",
+				createdAt: 1_780_000_000,
+				updatedAt: 1_780_000_100,
+				status: { type: "idle" },
+			},
 			{
 				id: "t-other",
 				parentThreadId: "t-someone-else",
@@ -401,9 +554,18 @@ describe("Codex subagents (fake app-server)", () => {
 				harness: "codex",
 				sessionId: "t-lead",
 			}),
+			1_790_000_200_000 + 60_000,
 		);
 		const by = new Map(found.map((f) => [f.key, f]));
-		expect([...by.keys()].sort()).toEqual(["t-child", "t-grand"]);
+		expect([...by.keys()].sort()).toEqual([
+			"t-child",
+			"t-grand",
+			"t-old",
+			"t-wait",
+		]);
+		expect(by.get("t-wait")?.state).toBe("idle");
+		// Idle longer than IDLE_MAX_MS: done.
+		expect(by.get("t-old")?.state).toBe("done");
 		expect(by.get("t-child")).toMatchObject({
 			name: "Ada",
 			kind: "thread",
@@ -456,6 +618,18 @@ process.stdout.write(JSON.stringify(r[key] ?? {}));
 							time: { created: 1_790_000_000_000, updated: 1_790_000_005_000 },
 						},
 						{ id: "ses_kid2", parentID: "ses_lead", title: "review" },
+						{
+							id: "ses_kid3",
+							parentID: "ses_lead",
+							title: "waiting",
+							time: { created: 1_790_000_000_000, updated: 1_790_000_010_000 },
+						},
+						{
+							id: "ses_kid4",
+							parentID: "ses_lead",
+							title: "long finished",
+							time: { created: 1_780_000_000_000, updated: 1_780_000_010_000 },
+						},
 						{ id: "ses_stranger", parentID: "ses_other", title: "no" },
 					],
 				},
@@ -479,8 +653,14 @@ process.stdout.write(JSON.stringify(r[key] ?? {}));
 				harness: "opencode",
 				sessionId: "ses_lead",
 			}),
+			1_790_000_010_000 + IDLE_MAX_MS / 2,
 		);
-		expect(found.map((f) => f.key).sort()).toEqual(["ses_kid1", "ses_kid2"]);
+		expect(found.map((f) => f.key).sort()).toEqual([
+			"ses_kid1",
+			"ses_kid2",
+			"ses_kid3",
+			"ses_kid4",
+		]);
 		expect(found.find((f) => f.key === "ses_kid1")).toMatchObject({
 			name: "explore the repo",
 			kind: "session",
@@ -488,6 +668,9 @@ process.stdout.write(JSON.stringify(r[key] ?? {}));
 			state: "running",
 			sessionId: "ses_kid1",
 		});
-		expect(found.find((f) => f.key === "ses_kid2")?.state).toBe("idle");
+		// Idle while recently updated; with no time or long quiet, done.
+		expect(found.find((f) => f.key === "ses_kid3")?.state).toBe("idle");
+		expect(found.find((f) => f.key === "ses_kid2")?.state).toBe("done");
+		expect(found.find((f) => f.key === "ses_kid4")?.state).toBe("done");
 	});
 });

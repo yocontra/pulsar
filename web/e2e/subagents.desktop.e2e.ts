@@ -76,6 +76,37 @@ test.describe("subagents (desktop)", () => {
 		);
 	});
 
+	test("an agent whose subagents all stopped shows none by default", async ({
+		page,
+		request,
+	}) => {
+		// chat-blocks: 30 teammates, all stopped (done). Dead ones count for nothing.
+		const lead = await agentId(request, "name=chat-blocks");
+		const auth = await agentId(request, "name=apparish-auth");
+		await openApparish(page);
+		// The live ones of another agent still show, so the tree has rendered.
+		await expect(page.locator(`[data-subs="${auth}"]`)).toHaveText(
+			"2 subagents · 1 running",
+		);
+		await expect(page.locator(`[data-subs="${lead}"]`)).toHaveCount(0);
+		await expect(
+			page.locator(".tree [data-subagent]", { hasText: "stopped-mate" }),
+		).toHaveCount(0);
+
+		// "Show finished subagents" lists them, dimmed.
+		await showFinished(page);
+		await page.reload();
+		await openApparish(page);
+		const toggle = page.locator(`[data-subs="${lead}"]`);
+		await expect(toggle).toHaveText("30 subagents");
+		await toggle.click();
+		const rows = page.locator(".tree [data-subagent]", {
+			hasText: "stopped-mate",
+		});
+		await expect(rows).toHaveCount(30);
+		await expect(rows.first()).toContainText(/Finished \d+[smhd] ago/);
+	});
+
 	test("expand an agent's subagents, open one, message it, go back", async ({
 		page,
 		request,

@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { TranscriptEvent } from "../transcripts/types.ts";
 import type { Agent } from "../types.ts";
-import { headAsync } from "../util.ts";
+import { headAsync, tailAsync } from "../util.ts";
 import { configDir } from "./claude-ident.ts";
 import { parseClaude } from "./claude-transcript.ts";
 import type { FoundSubagent, SubagentTranscript } from "./types.ts";
@@ -14,7 +14,20 @@ import type { FoundSubagent, SubagentTranscript } from "./types.ts";
  * `agentType`, `description`, `toolUseId` (the parent's Task/Agent call),
  * `finished: true` once it returned, `parentAgentId` when another subagent
  * started it, and for agent-team members `taskKind: "in_process_teammate"`
- * with `name`. Workflow runs (`subagents/workflows/`) are not listed.
+ * with `name` and `teamName`. Workflow runs (`subagents/workflows/`) are
+ * not listed.
+ *
+ * A teammate never gets `finished`: when the lead shuts it down (or the
+ * team is deleted) Claude drops it from the team's
+ * `teams/<teamName>/config.json` (`leadSessionId`, `members[]` with
+ * `name` and `joinedAt`). A teammate is alive only while it is a member of
+ * a team led by this session; a name can be spawned again, so only the
+ * log that started at or after the member's `joinedAt` (the newest one) is
+ * that member. Every other teammate log is done.
+ *
+ * On resume Claude appends records with no timestamp (`data-flow-records`)
+ * to every subagent log, so a log's mtime is not when it last worked: the
+ * last record's own timestamp is.
  */
 
 /** Session folder of a Claude session: `<projects>/<slug>/<session>/`. */
@@ -42,8 +55,12 @@ const KEY = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** A task with no write for this long and no `finished` mark is taken as done. */
 export const TASK_QUIET_MS = 10 * 60_000;
-/** A teammate with no write for this long is idle (waiting for work). */
+/** A live teammate with no write for this long is idle (waiting for work). */
 export const TEAMMATE_QUIET_MS = 60_000;
+/** A teammate log that started this long before its member joined is an older one. */
+const JOIN_SLACK_MS = 60_000;
+/** How much of a log's end is read for its last timestamp (resume records can be ~50 KB). */
+const TAIL_STEPS = [16 * 1024, 128 * 1024];
 
 interface Meta {
 	agentType: string | null;
@@ -53,12 +70,18 @@ interface Meta {
 	parentAgentId: string | null;
 	finished: boolean;
 	teammate: boolean;
+	teamName: string | null;
 }
 
 interface Cached {
 	metaMtime: number;
 	meta: Meta;
 	startedAt: number;
+	/** The log's size and mtime when `lastAt` was read. */
+	logSize: number;
+	logMtime: number;
+	/** The last record's timestamp (ms): when it last worked. */
+	lastAt: number;
 }
 
 /** Each subagent's meta and start time, kept while its meta file is unchanged. */
@@ -90,7 +113,96 @@ function readMeta(raw: string): Meta {
 		parentAgentId: parent && KEY.test(parent) ? parent : null,
 		finished: m.finished === true,
 		teammate: m.taskKind === "in_process_teammate",
+		teamName: (() => {
+			const t = text(m.teamName, 128);
+			return t && KEY_TEAM.test(t) ? t : null;
+		})(),
 	};
+}
+
+/** Team names that may reach a path. */
+const KEY_TEAM = /^[A-Za-z0-9._-]{1,128}$/;
+
+/** The last top-level `timestamp` among the complete lines of a log's tail. */
+export function lastTimestamp(tail: string, whole: boolean): number | null {
+	const lines = tail.split("\n");
+	// The first line is cut unless the tail is the whole file.
+	const from = whole ? 0 : 1;
+	for (let i = lines.length - 1; i >= from; i--) {
+		const line = lines[i]!;
+		if (!line.includes('"timestamp"')) continue;
+		try {
+			const v = JSON.parse(line) as { timestamp?: unknown };
+			const t =
+				typeof v?.timestamp === "string" ? Date.parse(v.timestamp) : Number.NaN;
+			if (Number.isFinite(t)) return t;
+		} catch {}
+	}
+	return null;
+}
+
+async function readLastAt(file: string, size: number): Promise<number | null> {
+	for (const n of TAIL_STEPS) {
+		const tail = await tailAsync(file, n);
+		claudeSubagentReads.bytes += tail.length;
+		const whole = size <= n;
+		const t = lastTimestamp(tail, whole);
+		if (t !== null || whole) return t;
+	}
+	return null;
+}
+
+interface Team {
+	mtime: number;
+	lead: string | null;
+	/** Member name → joinedAt (0 when unknown). */
+	members: Map<string, number>;
+}
+
+/** Team configs, kept while their mtime is unchanged. */
+const teams = new Map<string, Team>();
+
+/** A team's config, or null when it is gone (or unreadable). */
+async function readTeam(name: string): Promise<Team | null> {
+	const file = join(configDir(), "teams", name, "config.json");
+	const st = await stat(file).catch(() => null);
+	if (!st) {
+		teams.delete(file);
+		return null;
+	}
+	const hit = teams.get(file);
+	if (hit && hit.mtime === st.mtimeMs) return hit;
+	let raw: string;
+	try {
+		raw = await readFile(file, "utf8");
+	} catch {
+		return null;
+	}
+	claudeSubagentReads.bytes += raw.length;
+	let c: Record<string, unknown> = {};
+	try {
+		const v = JSON.parse(raw) as unknown;
+		if (v && typeof v === "object" && !Array.isArray(v))
+			c = v as Record<string, unknown>;
+	} catch {
+		// Mid-write: keep the last good copy if there is one.
+		return hit ?? null;
+	}
+	const members = new Map<string, number>();
+	for (const m of Array.isArray(c.members) ? c.members : []) {
+		if (!m || typeof m !== "object") continue;
+		const r = m as Record<string, unknown>;
+		const n = text(r.name, 80);
+		if (n) members.set(n, Number.isFinite(r.joinedAt) ? Number(r.joinedAt) : 0);
+	}
+	const team = {
+		mtime: st.mtimeMs,
+		lead: text(c.leadSessionId, 128),
+		members,
+	};
+	if (teams.size > 500) teams.clear();
+	teams.set(file, team);
+	return team;
 }
 
 /** The first record's timestamp (ms), or null. */
@@ -128,7 +240,7 @@ export async function listClaudeSubagents(
 		return [];
 	}
 	const parentGone = agent.status === "gone";
-	const out: FoundSubagent[] = [];
+	const rows: Array<{ key: string; file: string; hit: Cached }> = [];
 	for (const f of names) {
 		const m = /^agent-(.+)\.jsonl$/.exec(f);
 		const key = m?.[1];
@@ -160,20 +272,61 @@ export async function listClaudeSubagents(
 				metaMtime: metaStat?.mtimeMs ?? 0,
 				meta: readMeta(raw),
 				startedAt,
+				logSize: hit?.logSize ?? -1,
+				logMtime: hit?.logMtime ?? -1,
+				lastAt: hit?.lastAt ?? log.mtimeMs,
 			};
 			if (cache.size >= CACHE_MAX) cache.clear();
 			cache.set(file, hit);
 		}
+		if (hit.logSize !== log.size || hit.logMtime !== log.mtimeMs) {
+			// No timestamp in reach (one huge last record): the write time.
+			hit.lastAt = (await readLastAt(file, log.size)) ?? log.mtimeMs;
+			hit.logSize = log.size;
+			hit.logMtime = log.mtimeMs;
+		}
+		rows.push({ key, file, hit });
+	}
+
+	// Live teammates: the newest log of each member of a team this session leads.
+	const live = new Set<string>();
+	if (!parentGone) {
+		const newest = new Map<string, { file: string; startedAt: number }>();
+		for (const { file, hit } of rows) {
+			const { meta } = hit;
+			if (!meta.teammate || meta.finished || !meta.teamName || !meta.name)
+				continue;
+			const id = `${meta.teamName}\n${meta.name}`;
+			const cur = newest.get(id);
+			if (!cur || hit.startedAt > cur.startedAt)
+				newest.set(id, { file, startedAt: hit.startedAt });
+		}
+		const byTeam = new Map<string, Team | null>();
+		for (const [id, { file, startedAt }] of newest) {
+			const [teamName, name] = id.split("\n") as [string, string];
+			if (!byTeam.has(teamName)) byTeam.set(teamName, await readTeam(teamName));
+			const team = byTeam.get(teamName);
+			if (!team || (team.lead && team.lead !== agent.sessionId)) continue;
+			const joinedAt = team.members.get(name);
+			if (joinedAt === undefined) continue;
+			if (joinedAt > 0 && startedAt < joinedAt - JOIN_SLACK_MS) continue;
+			live.add(file);
+		}
+	}
+
+	const out: FoundSubagent[] = [];
+	for (const { key, file, hit } of rows) {
 		const { meta } = hit;
-		const quiet = now - log.mtimeMs;
-		const state = meta.finished
-			? "done"
-			: parentGone
+		const quiet = now - hit.lastAt;
+		const state =
+			meta.finished || parentGone
 				? "done"
 				: meta.teammate
-					? quiet < TEAMMATE_QUIET_MS
-						? "running"
-						: "idle"
+					? !live.has(file)
+						? "done"
+						: quiet < TEAMMATE_QUIET_MS
+							? "running"
+							: "idle"
 					: quiet < TASK_QUIET_MS
 						? "running"
 						: "done";
@@ -189,8 +342,8 @@ export async function listClaudeSubagents(
 			description: meta.name ? meta.description : null,
 			state,
 			startedAt: hit.startedAt,
-			updatedAt: log.mtimeMs,
-			finishedAt: state === "done" ? log.mtimeMs : null,
+			updatedAt: hit.lastAt,
+			finishedAt: state === "done" ? hit.lastAt : null,
 			callId: meta.toolUseId,
 			parentKey: meta.parentAgentId,
 			sessionId: null,

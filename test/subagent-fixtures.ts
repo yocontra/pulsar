@@ -30,17 +30,28 @@ export function agentRecord(over: Partial<Agent> = {}): Agent {
 
 export const rec = (o: Record<string, unknown>) => `${JSON.stringify(o)}\n`;
 
-/** A Claude subagent: its log (one user and one assistant record) and meta. */
+/**
+ * A Claude subagent: its log (one user and one assistant record) and meta.
+ * The assistant record is stamped `last`, else at `mtime` (when it last
+ * worked), else now (as the file's own mtime). `trailer` appends records with no timestamp,
+ * as Claude does on resume.
+ */
 export function writeClaudeSub(
 	sessionDir: string,
 	key: string,
 	meta: Record<string, unknown>,
-	opts: { mtime?: number; started?: string } = {},
+	opts: {
+		mtime?: number;
+		started?: string;
+		last?: string;
+		trailer?: string;
+	} = {},
 ) {
 	const sub = join(sessionDir, "subagents");
 	mkdirSync(sub, { recursive: true });
 	const file = join(sub, `agent-${key}.jsonl`);
 	const ts = opts.started ?? "2026-11-10T10:00:00.000Z";
+	const last = opts.last ?? new Date(opts.mtime ?? Date.now()).toISOString();
 	writeFileSync(
 		file,
 		rec({
@@ -56,18 +67,52 @@ export function writeClaudeSub(
 				uuid: `${key}-a1`,
 				isSidechain: true,
 				agentId: key,
-				timestamp: ts,
+				timestamp: last,
 				message: {
 					id: `msg_${key}`,
 					role: "assistant",
 					content: [{ type: "text", text: `done by ${key}` }],
 				},
-			}),
+			}) +
+			(opts.trailer ?? ""),
 	);
 	writeFileSync(join(sub, `agent-${key}.meta.json`), JSON.stringify(meta));
 	if (opts.mtime) {
 		const t = opts.mtime / 1000;
 		utimesSync(file, t, t);
 	}
+	return file;
+}
+
+/** A Claude agent team's config: `teams/<name>/config.json` under `configDir`. */
+export function writeClaudeTeam(
+	configDir: string,
+	name: string,
+	leadSessionId: string,
+	members: Array<{ name: string; joinedAt?: number }>,
+	opts: { mtime?: number } = {},
+) {
+	const dir = join(configDir, "teams", name);
+	mkdirSync(dir, { recursive: true });
+	const file = join(dir, "config.json");
+	writeFileSync(
+		file,
+		JSON.stringify({
+			name,
+			leadSessionId,
+			members: [
+				{ agentId: `team-lead@${name}`, name: "team-lead", joinedAt: 1 },
+				...members.map((m) => ({
+					agentId: `${m.name}@${name}`,
+					name: m.name,
+					joinedAt: m.joinedAt ?? 1,
+					backendType: "in-process",
+				})),
+			],
+		}),
+	);
+	// A distinct mtime per write, so a cached copy is never kept by mistake.
+	const t = (opts.mtime ?? Date.now()) / 1000;
+	utimesSync(file, t, t);
 	return file;
 }

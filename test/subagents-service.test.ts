@@ -14,12 +14,13 @@ import type {
 	TreeNode,
 } from "../src/http/wire.ts";
 import { PulsarService } from "../src/service/index.ts";
+import { DONE_KEEP_MS } from "../src/service/subagents.ts";
 import { Store } from "../src/store.ts";
 import type { TranscriptEvent } from "../src/transcripts/types.ts";
 import { HttpTransport } from "../src/transport/http.ts";
 import type { Agent } from "../src/types.ts";
 import { restoreEnv, until } from "./helpers.ts";
-import { writeClaudeSub } from "./subagent-fixtures.ts";
+import { writeClaudeSub, writeClaudeTeam } from "./subagent-fixtures.ts";
 
 /**
  * Subagents through the service and the app's API: kept apart from the
@@ -240,6 +241,173 @@ describe("listing", () => {
 		} finally {
 			list.list = real;
 		}
+	});
+});
+
+describe("dead subagents", () => {
+	const SESSION2 = "0000dddd-1111-4222-8333-444455556666";
+	let lead2: Agent;
+	let dir2: string;
+
+	beforeAll(() => {
+		lead2 = service.registry.upsert({
+			harness: "claude",
+			sessionId: SESSION2,
+			pid: null,
+			cwd: CWD,
+			project: "subs",
+			branch: "main",
+			tags: [],
+			name: "lead2",
+			meta: {},
+			registered: false,
+			status: "busy",
+		});
+		dir2 = claudeSessionDir(CWD, SESSION2)!;
+		const now = Date.now();
+		writeClaudeTeam(join(dir, "claude"), "team2", SESSION2, [
+			{ name: "mate", joinedAt: now - 60 * 60_000 },
+		]);
+		writeClaudeSub(
+			dir2,
+			"m1",
+			{
+				agentType: "general-purpose",
+				name: "mate",
+				description: "Wait for work",
+				taskKind: "in_process_teammate",
+				teamName: "team2",
+			},
+			{
+				mtime: now - 5 * 60_000,
+				started: new Date(now - 50 * 60_000).toISOString(),
+			},
+		);
+		// Finished two days ago: never listed or counted, still reachable.
+		writeClaudeSub(
+			dir2,
+			"old1",
+			{
+				agentType: "Explore",
+				description: "Long ago",
+				toolUseId: "toolu_old",
+				finished: true,
+			},
+			{
+				mtime: now - DONE_KEEP_MS - 24 * 60 * 60_000,
+				started: new Date(now - DONE_KEEP_MS - 25 * 3600_000).toISOString(),
+			},
+		);
+		// Finished an hour ago: listed (with "Show finished") and counted as done.
+		writeClaudeSub(
+			dir2,
+			"new1",
+			{
+				agentType: "Explore",
+				description: "Recent",
+				toolUseId: "toolu_new",
+				finished: true,
+			},
+			{
+				mtime: now - 60 * 60_000,
+				started: new Date(now - 70 * 60_000).toISOString(),
+			},
+		);
+	});
+
+	test("finished more than a day ago: left out of lists and counts, still opens", async () => {
+		await service.subagents.refresh(lead2.id);
+		expect(service.subagents.counts(lead2.id)).toEqual({
+			total: 2,
+			running: 0,
+			done: 1,
+		});
+		const list = (await (
+			await api(`/api/v1/agents/${enc(lead2.id)}/subagents`)
+		).json()) as SubagentList;
+		expect(list.items.map((i) => i.id.split("/sub:")[1]).sort()).toEqual([
+			"m1",
+			"new1",
+		]);
+		// Its transcript card still opens it.
+		const old = (await (
+			await api(`/api/v1/subagents/${enc(`${lead2.id}/sub:old1`)}`)
+		).json()) as SubagentRow;
+		expect(old).toMatchObject({ name: "Long ago", state: "done" });
+		expect(service.subagents.agentFor(`${lead2.id}/sub:old1`)).toBeTruthy();
+	});
+
+	test("a teammate shut down while idle turns done on the next sweep", async () => {
+		await service.subagents.refresh(lead2.id);
+		expect(
+			service.subagents.cached(lead2.id).find((r) => r.id.endsWith(":m1"))
+				?.state,
+		).toBe("idle");
+		// The lead stops it: Claude drops it from the team config. The
+		// subagents folder does not change.
+		writeClaudeTeam(join(dir, "claude"), "team2", SESSION2, [], {
+			mtime: Date.now() + 5000,
+		});
+		const real = service.subagents.now;
+		service.subagents.now = () => Date.now() + 60_000;
+		try {
+			await service.subagents.sweep();
+		} finally {
+			service.subagents.now = real;
+		}
+		expect(service.subagents.counts(lead2.id)).toEqual({
+			total: 2,
+			running: 0,
+			done: 2,
+		});
+	});
+
+	test("a gone parent's subagents are all done", async () => {
+		const found = await driverFor("claude")!.subagents!.list({
+			...lead2,
+			status: "gone",
+		});
+		expect(found.every((f) => f.state === "done")).toBe(true);
+	});
+});
+
+describe("the per-parent cap", () => {
+	test("keeps a live subagent even under 200 newer finished ones", async () => {
+		const SESSION3 = "0000eeee-1111-4222-8333-444455556666";
+		const lead3 = service.registry.upsert({
+			harness: "claude",
+			sessionId: SESSION3,
+			pid: null,
+			cwd: CWD,
+			project: "subs",
+			branch: "main",
+			tags: [],
+			name: "lead3",
+			meta: {},
+			registered: false,
+			status: "busy",
+		});
+		const dir3 = claudeSessionDir(CWD, SESSION3)!;
+		const now = Date.now();
+		writeClaudeSub(
+			dir3,
+			"live",
+			{ agentType: "general-purpose", description: "Still going" },
+			{ mtime: now, started: new Date(now - 3600_000).toISOString() },
+		);
+		for (let i = 0; i < 200; i++)
+			writeClaudeSub(
+				dir3,
+				`f${i}`,
+				{ agentType: "Explore", description: `F${i}`, finished: true },
+				{ mtime: now - 60_000, started: new Date(now - 60_000).toISOString() },
+			);
+		await service.subagents.refresh(lead3.id);
+		expect(service.subagents.counts(lead3.id)).toEqual({
+			total: 200,
+			running: 1,
+			done: 199,
+		});
 	});
 });
 

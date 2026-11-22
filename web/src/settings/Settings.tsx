@@ -290,9 +290,10 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 								<span className="d-set-text">
 									<span className="d-set-label">Show finished subagents</span>
 									<span className="d-set-help">
-										Off: the sidebar lists only running and idle subagents. A
-										finished one stays reachable from its card in the parent's
-										conversation. Saved on this device.
+										Off: the sidebar lists only running and idle subagents. On:
+										also those that finished in the last day. A finished one
+										stays reachable from its card in the parent's conversation.
+										Saved on this device.
 									</span>
 								</span>
 								<input

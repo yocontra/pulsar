@@ -28,6 +28,15 @@ function ms(v: unknown): number {
 	return n < 1e12 ? n * 1000 : n;
 }
 
+/**
+ * Codex and OpenCode keep a finished child thread or session around (loaded,
+ * "idle") long after its work. Idle counts as alive (waiting, reachable)
+ * only this long after its last update; then it is done.
+ */
+export const IDLE_MAX_MS = 30 * 60_000;
+/** An omp task with no exit record and no write for this long has died. */
+export const OMP_QUIET_MS = 10 * 60_000;
+
 /** Ids that may sit in a subagent id and a file name. */
 const KEY = /^[A-Za-z0-9._-]{1,100}$/;
 
@@ -79,7 +88,10 @@ export async function ompSubagentStamp(agent: Agent): Promise<string | null> {
 	}
 }
 
-export async function listOmpSubagents(agent: Agent): Promise<FoundSubagent[]> {
+export async function listOmpSubagents(
+	agent: Agent,
+	now = Date.now(),
+): Promise<FoundSubagent[]> {
 	const dir = await ompFolder(agent);
 	if (!dir) return [];
 	let names: string[];
@@ -120,7 +132,10 @@ export async function listOmpSubagents(agent: Agent): Promise<FoundSubagent[]> {
 			ompCache.set(file, hit);
 		}
 		const done =
-			hit.exited || results.has(`${key}.md`) || agent.status === "gone";
+			hit.exited ||
+			results.has(`${key}.md`) ||
+			agent.status === "gone" ||
+			now - st.mtimeMs >= OMP_QUIET_MS;
 		out.push({
 			key,
 			name: key,
@@ -176,6 +191,7 @@ interface CodexThread {
 
 export async function listCodexSubagents(
 	agent: Agent,
+	now = Date.now(),
 ): Promise<FoundSubagent[]> {
 	if (!agent.sessionId || !agent.cwd || !(await codexControlReady())) return [];
 	let threads: CodexThread[] = [];
@@ -218,15 +234,15 @@ export async function listCodexSubagents(
 		if (!t.id || t.id === agent.sessionId || !mine.has(t.id) || !KEY.test(t.id))
 			continue;
 		const status = t.status?.type;
+		const updatedAt = ms(t.updatedAt) || ms(t.createdAt);
 		const state =
 			agent.status === "gone"
 				? "done"
 				: status === "active"
 					? "running"
-					: status === "idle"
+					: status === "idle" && now - updatedAt < IDLE_MAX_MS
 						? "idle"
 						: "done";
-		const updatedAt = ms(t.updatedAt) || ms(t.createdAt);
 		const parent = t.parentThreadId ?? null;
 		out.push({
 			key: t.id,
@@ -257,7 +273,8 @@ export async function listCodexSubagents(
 /**
  * OpenCode (2.2.5): a subagent is a child session (`parentID`), listed by
  * `GET /api/session?parentID=…` on the shared service. Running ones are in
- * `session.active`. Only direct children are listed.
+ * `session.active`; the others are idle while recently updated (IDLE_MAX_MS),
+ * then done. Only direct children are listed.
  */
 interface OpencodeSession {
 	id?: string;
@@ -269,6 +286,7 @@ interface OpencodeSession {
 
 export async function listOpencodeSubagents(
 	agent: Agent,
+	now = Date.now(),
 ): Promise<FoundSubagent[]> {
 	if (!agent.sessionId || !KEY.test(agent.sessionId)) return [];
 	// `opencode api` starts a service when none runs: only ask one that does.
@@ -289,13 +307,15 @@ export async function listOpencodeSubagents(
 	const out: FoundSubagent[] = [];
 	for (const s of Array.isArray(sessions) ? sessions : []) {
 		if (!s?.id || !KEY.test(s.id) || s.parentID !== agent.sessionId) continue;
+		const updatedAt = ms(s.time?.updated) || ms(s.time?.created);
 		const state =
 			agent.status === "gone"
 				? "done"
 				: running[s.id]?.type === "running"
 					? "running"
-					: "idle";
-		const updatedAt = ms(s.time?.updated) || ms(s.time?.created);
+					: now - updatedAt < IDLE_MAX_MS
+						? "idle"
+						: "done";
 		out.push({
 			key: s.id,
 			name: text(s.title, 80) ?? "Subagent",

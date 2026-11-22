@@ -45,6 +45,29 @@ test.describe("subagents (phone)", () => {
 		await expect(done).toHaveCSS("opacity", "0.6");
 	});
 
+	test("an agent whose subagents all stopped shows none by default", async ({
+		page,
+		request,
+	}) => {
+		const lead = await agentId(request, "name=chat-blocks");
+		await ready(page);
+		await page.goto(`/#/a/${encodeURIComponent(lead)}`);
+		await expect(page.locator(".p-nav-title h1")).toHaveText("chat-blocks");
+		await expect(page.locator(`[data-subs-section="${lead}"]`)).toHaveCount(0);
+
+		await page.goto("/#/settings");
+		const sw = page.locator('[data-setting="show-finished-subagents"]');
+		await sw.click();
+		await expect(sw).toHaveJSProperty("checked", true);
+		await page.goto(`/#/a/${encodeURIComponent(lead)}`);
+		await expect(
+			page
+				.locator(`[data-subs-section="${lead}"]`)
+				.last()
+				.locator(".p-sa-toggle"),
+		).toContainText("30 subagents");
+	});
+
 	test("a hidden finished subagent opens from the parent's card", async ({
 		page,
 		request,

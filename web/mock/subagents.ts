@@ -5,6 +5,8 @@
  * finished task are linked from Task cards in its transcript. Claude Code subagents
  * can't take messages, so the composer offers the parent. The first OpenCode
  * agent on studio has one child session that takes messages directly.
+ * chat-blocks led an agent team whose 30 teammates were all stopped: every
+ * one is done, so by default it shows no subagents at all.
  */
 import type {
 	SubagentCounts,
@@ -12,7 +14,7 @@ import type {
 	SubagentRow,
 	TranscriptEvent,
 } from "../../src/http/wire.ts";
-import { agents, FIX, type MockAgent, NOW0 } from "./data.ts";
+import { agents, BLOCKS, FIX, type MockAgent, NOW0 } from "./data.ts";
 import { logFor } from "./transcript.ts";
 
 const subs = new Map<string, SubagentRow[]>();
@@ -164,6 +166,21 @@ function seed() {
 		"Review the refresh fix.",
 		"Waiting for the next task.",
 		true,
+	);
+	// A lead whose team was shut down: its teammates are all done.
+	subs.set(
+		BLOCKS.id,
+		Array.from({ length: 30 }, (_, i) =>
+			make(BLOCKS, `amate${i}`, {
+				name: `stopped-mate-${i + 1}`,
+				kind: "teammate",
+				agentType: "general-purpose",
+				state: "done",
+				startedAt: NOW0 - (22 - i * 0.5) * 3_600_000,
+				updatedAt: NOW0 - (20 - i * 0.5) * 3_600_000,
+				finishedAt: NOW0 - (20 - i * 0.5) * 3_600_000,
+			}),
+		),
 	);
 	const oc = agents.find(
 		(a) =>

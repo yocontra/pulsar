@@ -40,13 +40,28 @@ const FRESH_MS = 2000;
 const API_SWEEP_MS = 30_000;
 /** A parent someone looked at stays watched (swept even without a stamp) this long. */
 const WATCH_MS = 5 * 60_000;
-/** Most subagents kept per parent (newest first). */
+/** Most subagents kept per parent (live ones first, then newest). */
 const MAX_PER_PARENT = 200;
+/** A parent with a running or idle subagent is listed again at least this often (idle ends without a file change). */
+const LIVE_SWEEP_MS = 15_000;
+/** A parent with any subagents is listed again at least this often, so old finished ones age out. */
+const STALE_SWEEP_MS = 10 * 60_000;
+/**
+ * A subagent that finished longer ago than this is left out of lists and
+ * counts (even with "Show finished subagents"). Its id still resolves, so
+ * a parent's transcript card can open it.
+ */
+export const DONE_KEEP_MS = 24 * 60 * 60_000;
 
 interface Entry {
 	stamp: string | null;
 	found: FoundSubagent[];
+	/** Every found subagent's row (lookups by id). */
 	rows: SubagentRow[];
+	/** The rows lists and counts show: without long-finished ones. */
+	listed: SubagentRow[];
+	/** Found ones still running or idle. */
+	live: number;
 	counts: SubagentCounts | undefined;
 	listedAt: number;
 	inflight: Promise<void> | null;
@@ -105,6 +120,8 @@ export class Subagents {
 				stamp: null,
 				found: [],
 				rows: [],
+				listed: [],
+				live: 0,
 				counts: undefined,
 				listedAt: 0,
 				inflight: null,
@@ -124,7 +141,7 @@ export class Subagents {
 
 	/** A local agent's subagents as last listed (no I/O). */
 	cached(agentId: string): SubagentRow[] {
-		return this.entries.get(agentId)?.rows ?? [];
+		return this.entries.get(agentId)?.listed ?? [];
 	}
 
 	/**
@@ -154,7 +171,8 @@ export class Subagents {
 					found = e.found;
 				}
 				if (this.registry.closed) return;
-				found.sort((a, b) => b.startedAt - a.startedAt);
+				const live = (f: FoundSubagent) => (f.state === "done" ? 1 : 0);
+				found.sort((a, b) => live(a) - live(b) || b.startedAt - a.startedAt);
 				found = found.slice(0, MAX_PER_PARENT);
 				this.apply(agent, e, found);
 			} finally {
@@ -194,12 +212,17 @@ export class Subagents {
 				hasTranscript && Boolean(f.file || f.sessionId) && hasSource(driver, f),
 			messaging,
 		}));
-		const running = found.filter((f) => f.state === "running").length;
-		const done = found.filter((f) => f.state === "done").length;
-		const counts = found.length
-			? { total: found.length, running, done }
+		const cutoff = this.now() - DONE_KEEP_MS;
+		e.listed = e.rows.filter(
+			(r) => r.state !== "done" || (r.finishedAt ?? r.updatedAt) >= cutoff,
+		);
+		e.live = found.filter((f) => f.state !== "done").length;
+		const running = e.listed.filter((r) => r.state === "running").length;
+		const done = e.listed.filter((r) => r.state === "done").length;
+		const counts = e.listed.length
+			? { total: e.listed.length, running, done }
 			: undefined;
-		const key = JSON.stringify(e.rows, (k, v) =>
+		const key = JSON.stringify(e.listed, (k, v) =>
 			k === "updatedAt" && typeof v === "number" ? Math.floor(v / 60_000) : v,
 		);
 		const changed = key !== e.key;
@@ -221,6 +244,13 @@ export class Subagents {
 			if (!sub) continue;
 			const e = this.entries.get(agent.id);
 			const running = (e?.counts?.running ?? 0) > 0;
+			const since = now - (e?.listedAt ?? 0);
+			// Idle ends (a teammate leaves its team, a thread goes quiet) with
+			// no file change; finished ones age out of the list.
+			const due =
+				!!e &&
+				((e.live > 0 && since >= LIVE_SWEEP_MS) ||
+					(e.found.length > 0 && since >= STALE_SWEEP_MS));
 			if (sub.stamp) {
 				let stamp: string | null = null;
 				try {
@@ -228,14 +258,17 @@ export class Subagents {
 				} catch {}
 				if (stamp === null && !e) continue;
 				const entry = e ?? this.entry(agent.id);
-				if (stamp !== entry.stamp || running) {
+				if (stamp !== entry.stamp || running || due) {
 					entry.stamp = stamp;
 					await this.refresh(agent.id);
 				}
 				continue;
 			}
 			const watched = e && now - e.watchedAt < WATCH_MS;
-			if ((running || watched) && now - (e?.listedAt ?? 0) >= API_SWEEP_MS)
+			if (
+				((running || watched) && since >= API_SWEEP_MS) ||
+				(due && since >= API_SWEEP_MS)
+			)
 				await this.refresh(agent.id);
 		}
 		// Parents that left: drop them (they come back listed if they return).
@@ -287,7 +320,7 @@ export class Subagents {
 			e.watchedAt = this.now();
 			if (this.now() - e.listedAt >= FRESH_MS) await this.refresh(agentId);
 		}
-		const items = e?.rows ?? [];
+		const items = e?.listed ?? [];
 		return {
 			agentId,
 			items,
