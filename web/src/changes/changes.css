@@ -333,6 +333,14 @@
 	max-height: none;
 	overflow-y: visible;
 }
+/* Long lines scroll sideways inside a gutter, not under the window's edge;
+   the last character keeps room at the end of the scroll. */
+.cv-diff .ds-diff-scroll {
+	margin-inline-end: 12px;
+}
+.cv-diff .ds-diff-row {
+	padding-right: 24px;
+}
 .ds-diff-hunk {
 	grid-column: 1 / -1;
 	padding: 4px 14px 4px 26px;
