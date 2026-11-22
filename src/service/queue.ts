@@ -126,6 +126,8 @@ export class Queue {
 		if (action === "edit") checkBody(opts.body);
 		// This node's outbox: the message has not left for the agent's machine.
 		const parts = isRemote(agent) ? splitAddress(agent.id) : null;
+		if (parts && this.store.outboxIsSending(parts.machineId, messageId))
+			throw new RpcError("conflict", "It already left for that machine");
 		if (parts && this.inOutbox(parts.machineId, messageId, parts.localId)) {
 			const message = this.message(messageId);
 			if (isMine(p, message)) authorize(p, "send");
@@ -445,6 +447,7 @@ export class Queue {
 	}
 
 	private inOutbox(machineId: string, messageId: string, localId: string) {
+		if (this.store.outboxIsSending(machineId, messageId)) return false;
 		return this.store
 			.outboxFor(machineId)
 			.some((e) => e.messageId === messageId && e.targetIds.includes(localId));

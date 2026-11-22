@@ -287,4 +287,44 @@ describe("a remote agent's queue", () => {
 			tailnet.setOnline("home", true);
 		}
 	});
+
+	test("once its batch is on the wire, it can't be withdrawn or edited here", async () => {
+		tailnet.setOnline("home", false);
+		const peer = home.service.machineId;
+		try {
+			await until(
+				() => relay.service.registry.pool?.machine(peer)?.link !== "tailnet",
+				5000,
+			);
+			const m = await sendFromRelay("racing the flush");
+			// What a flush does while its post to the peer is in flight.
+			relay.store.outboxMarkSending(peer, [m.id], true);
+			expect(
+				await code(relay.service.queue.act(USER, address(), m.id, "withdraw")),
+			).toBe("conflict");
+			expect(
+				await code(
+					relay.service.queue.act(USER, address(), m.id, "edit", {
+						body: "changed",
+					}),
+				),
+			).toBe("conflict");
+			expect(relay.store.outboxFor(peer).map((e) => e.messageId)).toEqual([
+				m.id,
+			]);
+			expect(relay.store.getMessage(m.id)?.body).toBe("racing the flush");
+			expect(relay.store.receipt(m.id, address())?.state).not.toBe("withdrawn");
+			// The answer came back as a retry: it waits again and can be withdrawn.
+			relay.store.outboxMarkSending(peer, [m.id], false);
+			const r = await relay.service.queue.act(
+				USER,
+				address(),
+				m.id,
+				"withdraw",
+			);
+			expect(r.receipt?.state).toBe("withdrawn");
+		} finally {
+			tailnet.setOnline("home", true);
+		}
+	});
 });

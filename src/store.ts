@@ -1229,6 +1229,23 @@ export class Store {
 		).map(toOutbox);
 	}
 
+	/** Outbox entries on the wire to their peer right now (memory only). */
+	private outboxSending = new Set<string>();
+
+	/** Marks a peer's outbox entries as being sent (or no longer). */
+	outboxMarkSending(peer: string, messageIds: string[], on: boolean) {
+		for (const id of messageIds) {
+			const key = `${peer}\0${id}`;
+			if (on) this.outboxSending.add(key);
+			else this.outboxSending.delete(key);
+		}
+	}
+
+	/** True while a peer's outbox entry is on the wire: too late to change it. */
+	outboxIsSending(peer: string, messageId: string): boolean {
+		return this.outboxSending.has(`${peer}\0${messageId}`);
+	}
+
 	outboxDone(peer: string, messageId: string) {
 		this.db
 			.prepare("DELETE FROM outbox WHERE peer_machine = ? AND message_id = ?")
@@ -1249,6 +1266,8 @@ export class Store {
 	 * target is left. False when the target was not waiting there.
 	 */
 	outboxDropTarget(peer: string, messageId: string, targetId: string): boolean {
+		// Already on the wire: the peer may deliver it, so it can't be dropped.
+		if (this.outboxIsSending(peer, messageId)) return false;
 		const row = this.db
 			.prepare(
 				"SELECT target_ids FROM outbox WHERE peer_machine = ? AND message_id = ?",

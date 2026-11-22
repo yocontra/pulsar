@@ -1491,64 +1491,72 @@ export class Federation implements PoolView {
 					else store.outboxDone(machineId, entry.messageId);
 				}
 				if (batch.length === 0) continue;
-				let results: FrameResult[];
+				// While the batch is on the wire, a withdraw or edit would race the
+				// peer's delivery: the queue refuses them until the answer is in.
+				const sending = batch.map(({ message }) => message.id);
+				store.outboxMarkSending(machineId, sending, true);
 				try {
-					results = await this.post(
-						peer,
-						batch.map(({ entry, message }) => ({
-							type: "deliver",
-							message,
-							targets: entry.targetIds,
-							from:
-								this.parseSender(entry.sender) ?? this.storedSender(message),
-						})),
-					);
-				} catch (e) {
-					const error = (e as Error).message;
-					this.failed(peer);
-					for (const { entry } of batch) {
-						store.outboxRetry(
-							machineId,
-							entry.messageId,
-							Date.now() + this.backoff(entry.attempts),
-							error,
+					let results: FrameResult[];
+					try {
+						results = await this.post(
+							peer,
+							batch.map(({ entry, message }) => ({
+								type: "deliver",
+								message,
+								targets: entry.targetIds,
+								from:
+									this.parseSender(entry.sender) ?? this.storedSender(message),
+							})),
 						);
-						this.markWaiting(peer, entry.messageId, entry.targetIds);
+					} catch (e) {
+						const error = (e as Error).message;
+						this.failed(peer);
+						for (const { entry } of batch) {
+							store.outboxRetry(
+								machineId,
+								entry.messageId,
+								Date.now() + this.backoff(entry.attempts),
+								error,
+							);
+							this.markWaiting(peer, entry.messageId, entry.targetIds);
+						}
+						break;
 					}
-					break;
-				}
-				this.heard(peer);
-				for (const [i, { entry, message }] of batch.entries()) {
-					const r = results[i];
-					if (!r || typeof r !== "object") {
-						store.outboxRetry(
-							machineId,
-							message.id,
-							Date.now() + this.backoff(entry.attempts),
-							"no answer",
-						);
-					} else if (r.ok) {
-						store.outboxDone(machineId, message.id);
-						this.applyReceipts(peer, message.id, r.receipts);
-					} else if (PERMANENT.has(r.code)) {
-						store.outboxDone(machineId, message.id);
-						for (const id of entry.targetIds)
-							this.writeRemoteReceipt(peer, message.id, {
-								agentId: id,
-								agentName: id,
-								state: "refused",
-								via: "pool",
-								detail: `${peer.name} refused it: ${r.message}`,
-								updatedAt: Date.now(),
-							});
-					} else {
-						store.outboxRetry(
-							machineId,
-							message.id,
-							Date.now() + this.backoff(entry.attempts),
-							r.message,
-						);
+					this.heard(peer);
+					for (const [i, { entry, message }] of batch.entries()) {
+						const r = results[i];
+						if (!r || typeof r !== "object") {
+							store.outboxRetry(
+								machineId,
+								message.id,
+								Date.now() + this.backoff(entry.attempts),
+								"no answer",
+							);
+						} else if (r.ok) {
+							store.outboxDone(machineId, message.id);
+							this.applyReceipts(peer, message.id, r.receipts);
+						} else if (PERMANENT.has(r.code)) {
+							store.outboxDone(machineId, message.id);
+							for (const id of entry.targetIds)
+								this.writeRemoteReceipt(peer, message.id, {
+									agentId: id,
+									agentName: id,
+									state: "refused",
+									via: "pool",
+									detail: `${peer.name} refused it: ${r.message}`,
+									updatedAt: Date.now(),
+								});
+						} else {
+							store.outboxRetry(
+								machineId,
+								message.id,
+								Date.now() + this.backoff(entry.attempts),
+								r.message,
+							);
+						}
 					}
+				} finally {
+					store.outboxMarkSending(machineId, sending, false);
 				}
 			}
 		} finally {
