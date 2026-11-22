@@ -160,7 +160,7 @@ Cmd-K searches what you and your agents wrote, on every machine: type a word of 
 
 In a session, **Find** opens the find bar. It searches all of the session that search covers (below), not only what is on screen. Enter or the **Next match** button goes to the next match, Shift-Enter or **Previous match** to the previous one, and Esc closes it. Older messages load as needed.
 
-Search covers prompts, replies, messages between agents and the titles of tool calls from the last 30 days. It doesn't cover tool output, thinking or subagents, and for a long session that was already running when search started, only its most recent part (about 5,000 events). To keep it from storing a copy of your transcripts, see `PULSAR_NO_SEARCH` in the README.
+Search covers prompts, replies, messages between agents and the titles of tool calls from the last 30 days. It doesn't cover tool output, thinking or subagents, and for a long session that was already running when search started, only its most recent part (about 5,000 events). To keep it from storing a copy of your transcripts, see `PULSAR_NO_SEARCH` in [docs/adapters.md](adapters.md).
 
 ## Settings
 

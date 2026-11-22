@@ -90,4 +90,5 @@ Stop interrupts an agent's current turn; the session keeps running. Use the app 
 | `PULSAR_NAME` | detected | Name this agent registers under |
 | `PULSAR_TAGS` | none | Extra tags for this agent |
 | `PULSAR_NO_MESH` | unset | `pulsar mesh on` refuses to run (tests, sandboxes) |
+| `PULSAR_NO_SEARCH` | unset | No message search: the daemon keeps no copy of transcript text and deletes the copy it has |
 | `PULSAR_DEBUG` | unset | Log the MCP server to `mcp-debug.log` |

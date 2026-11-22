@@ -90,7 +90,7 @@ Run `pulsar qr` and scan the code with your phone, then add the page to your hom
 - Start a new agent on any machine, in a folder or a new git worktree.
 - Review an agent's changes, then commit, push and open a PR.
 - See the GitHub issue an agent works on, with its card.
-- Search the pool, and ask "who is editing this file?"
+- Search the pool and every session's messages, and ask "who is editing this file?"
 - Get notifications when an agent needs you, finishes or fails.
 - See token usage and an API cost estimate per harness, model and day.
 - See plan usage limits, with a warning when one passes 80% or 95% or is reached.
@@ -124,16 +124,6 @@ The app asks before you:
 - turn on notifications.
 
 You prove once in each machine's app. It lasts 12 hours in a computer's browser and 7 days on a phone. An action on an agent on another machine asks again, because each machine checks for itself.
-- A live list of machines, projects and agents, with a "needs you" inbox.
-- Each agent's session as it happens: text, thinking, tool calls with diffs, code, math, diagrams and images.
-- Start a new agent on any machine, in its folder or a new git worktree, with a first message.
-- Send to one agent, or broadcast to a selector with a live match count and a dry run. Ask "who is editing this file?" and then ask them directly. Stop an agent's turn.
-- Attach files and images to a message (pick, drop or paste), and mention files in the agent's folder with `@`.
-- See what an agent changed, then commit, push and open the PR from the app, with its checks and review comments.
-- Search every session's messages across the mesh, and jump to a match with a find bar.
-- Answer prompts remotely, signed with Face ID or Touch ID. The prompt stays on the machine too, and the first answer wins.
-- Web Push notifications that say "Approval pending", "An agent finished" or "An agent stopped with an error", and nothing else.
-- Token usage and an API cost estimate across the mesh, per harness, model and day, read from the agents' own session files.
 
 Some commands change who can reach your agents: `pulsar mesh allow`, `deny`, `forget`, `owner`, and `pulsar passkeys remove`. Agents can run them too, so each one waits until you confirm it with Touch ID (or Windows Hello, or polkit) on that machine, or with your passkey in the app. Details: [docs/presence.md](docs/presence.md).
 
@@ -159,18 +149,6 @@ pulsar doctor                      # check the daemon, harnesses and mesh
 - No telemetry.
 
 Read [SECURITY.md](SECURITY.md) for the full model and to report a vulnerability.
-
-## Environment
-
-| Variable | Default | Effect |
-| --- | --- | --- |
-| `PULSAR_HOME` | `~/.local/state/pulsar` | State folder: socket, message log, certificate |
-| `PULSAR_HTTP_PORT` | `7337` | Port of the app and the mesh |
-| `PULSAR_NAME` | detected | Name this agent registers under |
-| `PULSAR_TAGS` | none | Extra tags for this agent |
-| `PULSAR_NO_MESH` | unset | `pulsar mesh on` refuses to run (tests, sandboxes) |
-| `PULSAR_NO_SEARCH` | unset | No message search: the daemon keeps no copy of transcript text and deletes the copy it has |
-| `PULSAR_DEBUG` | unset | Log the MCP server to `mcp-debug.log` |
 
 ## Development
 

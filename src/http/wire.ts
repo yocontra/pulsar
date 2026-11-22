@@ -255,9 +255,7 @@ export type Feature =
 	/** Commit, push and PR from the app (`/agents/:id/git/*`). */
 	| "git"
 	/** The issue card of an agent's GitHub issue (`/agents/:id/issue`). */
-	| "issues";
-	| "git";
-	| "launch";
+	| "issues"
 	/** Message search (`GET /search/messages`); absent with PULSAR_NO_SEARCH. */
 	| "search";
 
