@@ -477,3 +477,74 @@ describe("end to end in one daemon", () => {
 		two.service.stop();
 	});
 });
+
+describe("one-time backfill on an existing install", () => {
+	test("files already read to the end seed the limits once, with no tokens counted twice and no stale warning", async () => {
+		const day = new Date(NOW).toISOString().slice(0, 10).split("-");
+		const codex = join(
+			dir,
+			"codex",
+			"sessions",
+			...day,
+			"rollout-x-01a1f571-f1a7-7a12-a14d-b85976acaa67.jsonl",
+		);
+		write(codex, [
+			...codexLines(NOW - 2 * HOUR, "gpt-5", [[1000, 0, 100]]),
+			codexLimitLine({ t: NOW - 10 * MIN, used: 83, resetsAt: RESET }),
+			// Padding past the read size: only the tail is read.
+			...Array.from({ length: 400 }, (_, i) =>
+				JSON.stringify({
+					type: "event_msg",
+					payload: { type: "x", text: "y".repeat(800), i },
+				}),
+			),
+		]);
+		// A Codex file with no limit line: read back to its start, then stop.
+		write(
+			codex.replace("acaa67", "acaa68"),
+			Array.from({ length: 700 }, (_, i) =>
+				JSON.stringify({
+					type: "event_msg",
+					payload: { type: "x", text: "z".repeat(900), i },
+				}),
+			),
+		);
+		write(join(dir, "claude", "projects", "-w", "s1.jsonl"), [
+			claudeLimitLine({ t: NOW - 9 * HOUR, resetsAt: NOW + DAY }),
+		]);
+		await usage.scanner.scan(NOW);
+		const tokens = () =>
+			usage
+				.local("7d", 0, NOW)
+				.rows.reduce((n, r) => n + r.input + r.output, 0);
+		const before = tokens();
+		expect(before).toBe(1100);
+		// A database from before limits were kept: offsets at the end, no readings.
+		for (const k of [
+			"usage.limits",
+			"usage.limitsBackfilled",
+			"usage.limitAnswered",
+		])
+			store.db.prepare("DELETE FROM meta WHERE key = ?").run(k);
+		const again = new Usage(store, { roots: () => rootsIn(dir) });
+		await again.scanner.scan(NOW);
+		const shown = () =>
+			again.limits
+				.local(NOW)
+				.map((l) => [l.harness, l.usedPercent])
+				.sort();
+		expect(shown()).toEqual([
+			["claude", 100],
+			["codex", 83],
+		]);
+		expect(tokens()).toBe(before);
+		// The Codex reading is recent (warns once); the 9-hour-old stop does not.
+		expect(again.limits.check(again.limits.local(NOW), NOW)).toEqual([
+			expect.objectContaining({ harness: "codex", level: 80 }),
+		]);
+		// Done once: losing the readings again does not read the tails again.
+		store.db.prepare("DELETE FROM meta WHERE key = ?").run("usage.limits");
+		await again.scanner.scan(NOW);
+		expect(shown()).toEqual([]);
+	});
+});
