@@ -1,19 +1,24 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EventHub } from "../src/http/events.ts";
 import type { LimitState } from "../src/http/wire.ts";
+import { PulsarService } from "../src/service/index.ts";
 import { Store } from "../src/store.ts";
 import type { Agent } from "../src/types.ts";
 import { cleanLocalUsage, type PoolUsage, Usage } from "../src/usage/index.ts";
 import { Limits, limitsOf, windowLabel } from "../src/usage/limits.ts";
 import { parseLine } from "../src/usage/parse.ts";
+import { until } from "./helpers.ts";
+import { browser, decrypt } from "./push-crypto.ts";
 import {
 	claudeLimitLine,
 	claudeLine,
 	codexLimitLine,
 	codexLines,
 	piLimitLine,
+	piLines,
 	rootsIn,
 	write,
 } from "./usage-fixtures.ts";
@@ -357,5 +362,118 @@ describe("warnings", () => {
 		expect(usage.limitsView("m1", NOW).limits).toEqual([
 			{ ...peer, machine: "m2" },
 		]);
+	});
+});
+
+describe("a hard stop is over once the harness answers again", () => {
+	test("Claude: a later reply clears it; pi/omp: only the same provider's", async () => {
+		write(join(dir, "claude", "projects", "-w", "s1.jsonl"), [
+			claudeLimitLine({ t: NOW - 2 * HOUR, resetsAt: NOW + DAY }),
+		]);
+		write(join(dir, "omp", "sessions", "-w", "1_a.jsonl"), [
+			piLimitLine({ t: NOW - 2 * HOUR, retryMs: DAY }),
+		]);
+		await usage.scanner.scan(NOW);
+		const reached = () =>
+			usage.limits
+				.local(NOW)
+				.map((s) => s.harness)
+				.sort();
+		expect(reached()).toEqual(["claude", "omp"]);
+		// Another provider answering says nothing about this one.
+		write(
+			join(dir, "omp", "sessions", "-w", "2_b.jsonl"),
+			piLines(NOW - HOUR, "other-model", [
+				{ input: 5, output: 5, cacheRead: 0, cacheWrite: 0 },
+			]),
+		);
+		write(join(dir, "claude", "projects", "-w", "s2.jsonl"), [
+			claudeLine({ id: "after", t: NOW - HOUR }),
+		]);
+		await usage.scanner.scan(NOW);
+		expect(reached()).toEqual(["omp"]);
+		const again = JSON.parse(
+			piLines(NOW - MIN, "m-flash", [
+				{ input: 5, output: 5, cacheRead: 0, cacheWrite: 0 },
+			])[1]!,
+		);
+		again.message.provider = "example-go";
+		write(join(dir, "omp", "sessions", "-w", "3_c.jsonl"), [
+			JSON.stringify(again),
+		]);
+		await usage.scanner.scan(NOW);
+		expect(reached()).toEqual([]);
+	});
+});
+
+describe("end to end in one daemon", () => {
+	test("a Codex line past 80% sends one push and one SSE event; a rescan or restart sends nothing", async () => {
+		const sent: Uint8Array[] = [];
+		const ua = browser();
+		const file = join(
+			dir,
+			"codex",
+			"sessions",
+			...new Date(NOW).toISOString().slice(0, 10).split("-"),
+			"rollout-x-01a1f571-f1a7-7a12-a14d-b85976acaa66.jsonl",
+		);
+		write(file, [
+			codexLimitLine({ t: Date.now() - MIN, used: 40, resetsAt: RESET }),
+		]);
+		const start = () => {
+			const service = new PulsarService({
+				store,
+				scan: false,
+				machine: "studio",
+				approvals: { probe: () => null },
+				push: {
+					keyFile: join(dir, "vapid.json"),
+					send: async (_url, init) => {
+						sent.push(init.body);
+						return { status: 201 };
+					},
+				},
+				usage: { roots: () => rootsIn(dir), scan: true, intervalMs: 40 },
+			});
+			const hub = new EventHub(service, { coalesceMs: 600_000 });
+			service.start();
+			hub.start();
+			return { service, hub };
+		};
+		const one = start();
+		one.service.push.subscribe(
+			{ kind: "human", login: "me@x", node: "phone" },
+			{ endpoint: "https://web.push.apple.com/lim", keys: ua.keys },
+		);
+		await until(() => sent.length >= 1);
+		sent.length = 0;
+		const reader = one.hub.open("me@x", null).getReader();
+		const next = async () =>
+			new TextDecoder().decode((await reader.read()).value);
+		await next();
+		appendFileSync(
+			file,
+			`${codexLimitLine({ t: Date.now(), used: 82, resetsAt: RESET })}\n`,
+		);
+		let text = "";
+		while (!text.includes("event: limit")) text += await next();
+		expect(text).toContain('"level":80');
+		expect(text).toContain('"harness":"codex"');
+		await until(() => sent.length >= 1);
+		expect(
+			JSON.parse(decrypt(Buffer.from(sent[0]!), ua.priv, ua.auth).toString()),
+		).toEqual({ kind: "limit", level: 80 });
+		// More scans of the same window: nothing new.
+		await new Promise((r) => setTimeout(r, 200));
+		expect(sent).toHaveLength(1);
+		await reader.cancel();
+		one.hub.stop();
+		one.service.stop();
+		// A restart on the same database: still nothing.
+		const two = start();
+		await new Promise((r) => setTimeout(r, 200));
+		expect(sent).toHaveLength(1);
+		two.hub.stop();
+		two.service.stop();
 	});
 });

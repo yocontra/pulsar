@@ -90,7 +90,7 @@ In a session's header (on a computer), a short line shows the session's cost so 
 
 ### Limits
 
-**Limits** on the Usage page lists the plan usage limits your harnesses reported on each machine: how much of each window is used and when it resets. Codex reports how much of each limit (for example the weekly one) is used. Claude Code, pi and omp only say when a limit is reached, so they show here only then. A window drops off the list once it resets.
+**Limits** on the Usage page lists the plan usage limits your harnesses reported on each machine: how much of each window is used and when it resets. Codex reports how much of each limit (for example the weekly one) is used. Claude Code, pi and omp only say when a limit is reached, so they show here only then, with when it was reached. A window drops off the list once it resets, and a reached limit drops off once that harness answers again (for example on extra usage or another model).
 
 When an agent's harness is past a warning threshold, its session header shows it (for example "Weekly limit: 88%"; on a phone, "88%"). Tap it to open Usage.
 

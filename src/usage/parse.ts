@@ -25,6 +25,8 @@ export interface UsageRecord {
 	 * the scanner counts each id once.
 	 */
 	dedupeId?: string;
+	/** pi/omp: the provider that answered (a later answer clears its reached limit). */
+	account?: string;
 }
 
 export interface FileState {
@@ -245,6 +247,8 @@ function piLine(d: Json, state: FileState): UsageRecord | null {
 	};
 	const id = str(m.responseId);
 	if (id) r.dedupeId = id;
+	const provider = str(m.provider);
+	if (provider) r.account = provider;
 	state.model = model;
 	state.context = { used: r.input + r.cacheRead + write, window: null };
 	return empty(r) ? null : r;

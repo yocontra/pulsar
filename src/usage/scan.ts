@@ -5,7 +5,7 @@ import { configDir } from "../harnesses/claude-ident.ts";
 import type { LimitState } from "../http/wire.ts";
 import { lazyCrypto } from "../lazy.ts";
 import type { Store } from "../store.ts";
-import { mergeLimits, saveLimits } from "./limits.ts";
+import { answeredKey, mergeLimits, saveLimits } from "./limits.ts";
 import {
 	type FileState,
 	parseLine,
@@ -259,7 +259,7 @@ export class UsageScanner {
 					const rec = line
 						? parseLine(f.harness, line, state, batch.onLimit)
 						: null;
-					if (rec && rec.t >= since) batch.add(rec, state);
+					if (rec && rec.t >= since) batch.add(rec, state, f.harness);
 				}
 				if (start < bytesRead) {
 					if (carryLen + bytesRead - start <= MAX_LINE)
@@ -362,7 +362,8 @@ ON CONFLICT (path) DO UPDATE SET
 				state.context?.window ?? null,
 				batch.lastAt,
 			);
-			if (batch.limits.size) saveLimits(this.store, batch.limits.values());
+			if (batch.limits.size || batch.answered.size)
+				saveLimits(this.store, batch.limits.values(), batch.answered);
 			db.exec("COMMIT");
 		} catch (e) {
 			db.exec("ROLLBACK");
@@ -385,9 +386,13 @@ class Batch {
 	items: { rec: UsageRecord; project: string }[] = [];
 	lastAt: number | null = null;
 	limits = new Map<string, LimitState>();
+	/** The newest answer per harness and account (a reached limit before it is over). */
+	answered = new Map<string, number>();
 	readonly onLimit = (s: LimitState) => mergeLimits(this.limits, [s]);
-	add(rec: UsageRecord, state: FileState) {
+	add(rec: UsageRecord, state: FileState, harness: UsageHarness) {
 		this.items.push({ rec, project: state.cwd ?? "" });
+		const k = answeredKey(harness, rec.account ?? "");
+		if (rec.t > (this.answered.get(k) ?? 0)) this.answered.set(k, rec.t);
 		if (this.lastAt === null || rec.t > this.lastAt) this.lastAt = rec.t;
 	}
 }

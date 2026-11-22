@@ -133,7 +133,7 @@ describe("sw.js finish and fail notifications", () => {
 
 describe("sw.js usage limit notifications", () => {
 	test("near and reached: plain copy with no names, one notice at a time, a tap opens Usage", async () => {
-		const w = worker({ focused: true });
+		const w = worker();
 		await w.push({ kind: "limit", level: 95 });
 		await w.push({ kind: "limit", level: 100, reached: true });
 		await w.push({ kind: "limit" });
@@ -153,5 +153,17 @@ describe("sw.js usage limit notifications", () => {
 			notification: { close: () => {}, data: { limit: true } },
 		});
 		expect(w.navigated).toEqual(["/#/usage"]);
+	});
+
+	test("a focused tab shows its own toast on Chromium; Safari still gets a notice", async () => {
+		const chrome = worker({ focused: true });
+		await chrome.push({ kind: "limit", level: 80 });
+		expect(chrome.shown).toHaveLength(0);
+		const safari = worker({
+			focused: true,
+			ua: "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Version/26.0 Mobile Safari/604.1",
+		});
+		await safari.push({ kind: "limit", level: 80 });
+		expect(safari.shown).toHaveLength(1);
 	});
 });

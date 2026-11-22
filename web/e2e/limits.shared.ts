@@ -115,6 +115,7 @@ export function limitsSuite(platform: "desktop" | "phone") {
 		await expect(rows).toHaveCount(2);
 		const claude = rows.filter({ hasText: "Claude Code" });
 		await expect(claude).toContainText("Limit reached");
+		await expect(claude).toContainText(/Reached .+ · Resets /);
 		await expect(claude).toContainText("on mbp-a");
 		await expect(claude).toHaveAttribute("data-level", "reached");
 		await expect(rows.filter({ hasText: "Codex" })).toHaveAttribute(
