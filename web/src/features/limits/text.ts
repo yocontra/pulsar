@@ -72,6 +72,15 @@ export function parseThresholds(text: string): number[] | null {
 	return [...new Set(parts)].sort((a, b) => a - b);
 }
 
+/** "Reached Sat 3:41 AM": when a harness last stopped at the limit. */
+export function reachedText(at: number, now = Date.now()): string {
+	const d = new Date(at);
+	const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+	if (new Date(now).toDateString() === d.toDateString())
+		return `Reached ${time}`;
+	return `Reached ${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+}
+
 /** The lowercase window name inside a sentence ("weekly", "5-hour"). */
 const inline = (label: string) =>
 	label === "Usage" ? "usage" : label.charAt(0).toLowerCase() + label.slice(1);

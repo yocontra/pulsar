@@ -656,9 +656,11 @@ export class PulsarService {
 				},
 				{ runNow: true },
 			);
-			// Peers' plan limits, so a limit on any machine warns here too.
+			// Peers' plan limits, so a limit on any machine warns here too. Only
+			// for a node with a push subscription (each ask is a forwarded,
+			// audited read); the app's Usage page asks the peers itself.
 			jobs.every("limits:pool", INTERVALS.limitsPoolMs, () =>
-				this.warnLimits(true),
+				this.push.hasSubscriptions() ? this.warnLimits(true) : undefined,
 			);
 		}
 		// Subagents: one cheap check per live agent; lists only what moved.

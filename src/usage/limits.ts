@@ -255,6 +255,7 @@ export function cleanLimits(v: unknown): LimitState[] {
 const STATE_KEY = "usage.limits";
 const SETTINGS_KEY = "usage.limitSettings";
 const WARNED_KEY = "usage.limitWarned";
+const ANSWERED_KEY = "usage.limitAnswered";
 
 export const DEFAULT_LIMIT_SETTINGS: LimitSettings = {
 	enabled: true,
@@ -270,11 +271,23 @@ interface Warned {
 	at: number;
 }
 
-/** Saves a commit's readings (call inside the scanner's transaction). */
-export function saveLimits(store: Store, states: Iterable<LimitState>) {
+/** Harness and account of a model answer (`saveLimits`' `answered`). */
+export const answeredKey = (harness: string, account: string) =>
+	`${harness}\0${account}`;
+
+/**
+ * Saves a commit's readings and the newest model answer per harness and
+ * account (call inside the scanner's transaction). A hard stop is a moment,
+ * not a state: an answer after it means the agent works again (extra
+ * usage, another model), so it no longer shows as reached.
+ */
+export function saveLimits(
+	store: Store,
+	states: Iterable<LimitState>,
+	answered: Map<string, number> = new Map(),
+) {
 	const all = new Map<string, LimitState>();
 	mergeLimits(all, readStates(store));
-	const before = all.size;
 	let changed = false;
 	for (const s of states) {
 		const prev = all.get(limitKey(s));
@@ -283,8 +296,28 @@ export function saveLimits(store: Store, states: Iterable<LimitState>) {
 			changed = true;
 		}
 	}
-	if (changed || all.size !== before)
-		store.metaSet(STATE_KEY, JSON.stringify([...all.values()]));
+	if (changed) store.metaSet(STATE_KEY, JSON.stringify([...all.values()]));
+	if (!answered.size) return;
+	const ok = readAnswered(store);
+	let moved = false;
+	for (const [k, t] of answered)
+		if (t > (ok[k] ?? 0)) {
+			ok[k] = t;
+			moved = true;
+		}
+	if (moved) store.metaSet(ANSWERED_KEY, JSON.stringify(ok));
+}
+
+function readAnswered(store: Store): Record<string, number> {
+	try {
+		const v = obj(JSON.parse(store.metaGet(ANSWERED_KEY) ?? "{}"));
+		const out: Record<string, number> = {};
+		for (const [k, t] of Object.entries(v ?? {}))
+			if (typeof t === "number" && Number.isFinite(t)) out[k] = t;
+		return out;
+	} catch {
+		return {};
+	}
 }
 
 function readStates(store: Store): LimitState[] {
@@ -307,10 +340,22 @@ export class Limits {
 		this.store = store;
 	}
 
-	/** This machine's current readings, newest first. */
+	/**
+	 * This machine's current readings, newest first. A hard stop the harness
+	 * answered after (for its account) is over.
+	 */
 	local(now = Date.now()): LimitState[] {
+		const ok = readAnswered(this.store);
 		return readStates(this.store)
-			.filter((s) => current(s, now))
+			.filter(
+				(s) =>
+					current(s, now) &&
+					!(
+						s.reached &&
+						s.harness !== "codex" &&
+						(ok[answeredKey(s.harness, s.account)] ?? 0) > s.at
+					),
+			)
 			.sort((a, b) => b.at - a.at);
 	}
 

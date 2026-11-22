@@ -3,6 +3,7 @@ import type { LimitState } from "../src/http/wire.ts";
 import {
 	levelOf,
 	parseThresholds,
+	reachedText,
 	resetText,
 	usedText,
 	warningText,
@@ -74,6 +75,8 @@ describe("limits in the app", () => {
 		const now = new Date(2026, 10, 21, 9, 0).getTime();
 		expect(resetText(now + 3_600_000, now)).toMatch(/^Resets 10:00/);
 		expect(resetText(now + 2 * 86_400_000, now)).toMatch(/^Resets Mon /);
+		expect(reachedText(now - 3_600_000, now)).toMatch(/^Reached 8:00/);
+		expect(reachedText(now - 86_400_000, now)).toMatch(/^Reached Fri /);
 	});
 
 	test("thresholds typed in Settings", () => {

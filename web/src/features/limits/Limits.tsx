@@ -6,7 +6,13 @@
  */
 import type { UsageReport } from "../../api/types.ts";
 import { AgentAvatar, harnessName } from "../../ds/index.ts";
-import { DEFAULT_SETTINGS, levelOf, resetText, usedText } from "./model.ts";
+import {
+	DEFAULT_SETTINGS,
+	levelOf,
+	reachedText,
+	resetText,
+	usedText,
+} from "./model.ts";
 import "./limits.css";
 
 export default function Limits({ report }: { report: UsageReport }) {
@@ -30,7 +36,12 @@ export default function Limits({ report }: { report: UsageReport }) {
 				{sorted.map((l) => {
 					const pct = l.reached ? 100 : Math.round(l.usedPercent ?? 0);
 					const level = levelOf(l, thresholds);
-					const reset = resetText(l.resetsAt);
+					const reset = [
+						l.reached ? reachedText(l.at) : null,
+						resetText(l.resetsAt),
+					]
+						.filter(Boolean)
+						.join(" · ");
 					return (
 						<li
 							key={`${l.machine}\0${l.harness}\0${l.account}\0${l.window}`}

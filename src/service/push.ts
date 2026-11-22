@@ -178,6 +178,15 @@ export class Push {
 		return { agentId };
 	}
 
+	/** True when some browser subscribed to this node's pushes. */
+	hasSubscriptions(): boolean {
+		return (
+			this.o.store.db
+				.prepare("SELECT 1 FROM push_subscriptions LIMIT 1")
+				.get() != null
+		);
+	}
+
 	/** `notify` in the background; a failure (no key file) is logged while running. */
 	private send(payload: PushPayload, per?: PerSubscription) {
 		this.notify(payload, per).catch((e) => {

@@ -138,25 +138,7 @@ self.addEventListener("push", (event) => {
 		return;
 	}
 	if (data.kind === "limit" && typeof data.level === "number") {
-		// A plan usage limit passed a threshold or was reached: no names here,
-		// the Usage page says which. One notice at a time (tag).
-		const reached = data.reached === true;
-		const level = Math.max(0, Math.min(100, Math.round(data.level)));
-		event.waitUntil(
-			self.registration.showNotification(
-				reached
-					? "An agent hit its usage limit"
-					: "An agent is near its usage limit",
-				{
-					body: reached
-						? "Open Pulsar to see when it resets."
-						: `A usage limit passed ${level}%. Open Pulsar to see which.`,
-					tag: "limit",
-					icon: "/icon.svg",
-					data: { limit: true },
-				},
-			),
-		);
+		event.waitUntil(limitNotice(data));
 		return;
 	}
 	if (
@@ -214,6 +196,36 @@ async function turnNotice(data) {
 			icon: "/icon.svg",
 			silent: data.sound !== true,
 			data: { turn: data.ref },
+		},
+	);
+}
+
+/**
+ * A plan usage limit passed a threshold or was reached: no names here, the
+ * Usage page says which. One notice at a time (tag). A focused Pulsar tab
+ * shows its own toast instead where the browser allows (as `turnNotice`).
+ */
+async function limitNotice(data) {
+	const tabs = await self.clients.matchAll({ type: "window" });
+	const chromium = /Chrome\//.test(self.navigator.userAgent);
+	if (
+		chromium &&
+		tabs.some((c) => c.focused && c.visibilityState === "visible")
+	)
+		return;
+	const reached = data.reached === true;
+	const level = Math.max(0, Math.min(100, Math.round(data.level)));
+	return self.registration.showNotification(
+		reached
+			? "An agent hit its usage limit"
+			: "An agent is near its usage limit",
+		{
+			body: reached
+				? "Open Pulsar to see when it resets."
+				: `A usage limit passed ${level}%. Open Pulsar to see which.`,
+			tag: "limit",
+			icon: "/icon.svg",
+			data: { limit: true },
 		},
 	);
 }
