@@ -31,8 +31,10 @@ import {
 	type DryRun,
 	type FacetKey,
 	type FacetsResponse,
+	type FileContent,
 	type FileDiff,
 	type FileSearch,
+	type FileTree,
 	type GitPrDetails,
 	type GitStatus,
 	type Hello,
@@ -538,6 +540,36 @@ export const api = {
 		request<FileSearch>(`/agents/${enc(agentId)}/files${query({ q })}`, {
 			signal,
 		}),
+	/** The file viewer: one folder of the agent's folder ("" for its top). */
+	fileTree: (agentId: string, path: string, signal?: AbortSignal) =>
+		request<FileTree>(
+			`/agents/${enc(agentId)}/files/tree${query({ path: path || null })}`,
+			{ signal },
+		),
+	/** The file viewer: one file's text, or what kind of file it is. */
+	fileContent: (agentId: string, path: string, signal?: AbortSignal) =>
+		request<FileContent>(
+			`/agents/${enc(agentId)}/files/content${query({ path })}`,
+			{ signal },
+		),
+	/** An image file's bytes, for a blob: URL (they need this tab's headers). */
+	fileImage: async (agentId: string, path: string, signal?: AbortSignal) => {
+		const res = await fetch(
+			`${API_BASE}/agents/${enc(agentId)}/files/content${query({ path, raw: 1 })}`,
+			{
+				headers: {
+					[API_HEADER]: "1",
+					...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+				},
+				credentials: "omit",
+				cache: "no-store",
+				signal,
+			},
+		);
+		if (!res.ok)
+			throw new ApiError(failureKind(res.status, null), res.status, null);
+		return res.blob();
+	},
 	/**
 	 * Interrupt/stop an agent; only when `/hello` lists the `stop` feature. A
 	 * local agent uses this node's passkey session. An agent on another

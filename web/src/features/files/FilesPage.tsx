@@ -1,0 +1,603 @@
+/**
+ * The file viewer (`#/file/<agent>?path=<path>&line=<n>`): read-only files of
+ * an agent's folder. Desktop: the main pane, a folder tree beside the open
+ * file. Phone: a pushed page per folder or file. Text is highlighted (no
+ * highlighting past 256 KB), images are shown, other files are described.
+ * "Copy path" copies the full path; "Open in Changes" shows when the file
+ * has uncommitted changes.
+ */
+import { useQuery } from "@tanstack/react-query";
+import {
+	ChevronRightIcon,
+	CopyIcon,
+	FileDiffIcon,
+	FileIcon,
+	FolderIcon,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { api } from "../../api/client.ts";
+import type { AgentRow, FileContent, FileEntry } from "../../api/types.ts";
+import { useChangesPeek } from "../../changes/data.ts";
+import { queryClient } from "../../data/hooks.ts";
+import { useAgent } from "../../data/index.ts";
+import { humanSize as formatBytes } from "../../lib/attachments.ts";
+import { fileRoute } from "../../lib/file-links.ts";
+import type { PageProps } from "../../lib/registry.tsx";
+import { navigate } from "../../lib/router.ts";
+import { findAgent } from "../../lib/store.ts";
+import { toast } from "../../lib/toast.ts";
+import { BackButton } from "../../mobile/BackButton.tsx";
+import {
+	IonButtons,
+	IonContent,
+	IonHeader,
+	IonTitle,
+	IonToolbar,
+} from "../../mobile/ionic.ts";
+import { CodeBlock } from "../../session/CodeBlock.tsx";
+import { langForPath } from "../../session/highlight.tsx";
+import "./files.css";
+
+/** Past this, text shows without highlighting. */
+const HIGHLIGHT_MAX = 256 * 1024;
+
+const useTree = (agentId: string, path: string, enabled = true) =>
+	useQuery(
+		{
+			queryKey: ["files", "tree", agentId, path],
+			queryFn: ({ signal }) => api.fileTree(agentId, path, signal),
+			enabled,
+			staleTime: 5_000,
+			retry: false,
+		},
+		queryClient,
+	);
+
+const useContent = (agentId: string, path: string) =>
+	useQuery(
+		{
+			queryKey: ["files", "content", agentId, path],
+			queryFn: ({ signal }) => api.fileContent(agentId, path, signal),
+			enabled: !!path,
+			staleTime: 5_000,
+			retry: false,
+		},
+		queryClient,
+	);
+
+/** What the route names: the agent, the path, and the line to show. */
+function useTarget({ arg, params }: PageProps) {
+	const agentId = arg;
+	const path = (params.path ?? "").replace(/^\/+|\/+$/g, "");
+	const line = Number(params.line) > 0 ? Number(params.line) : undefined;
+	const agent = useAgent(agentId || null).data as AgentRow | undefined;
+	const content = useContent(agentId, path);
+	// A path that is a folder: list it.
+	const isDir =
+		!path ||
+		(content.data?.available === false && content.data.reason === "not_file");
+	return { agentId, path, line, agent, content, isDir };
+}
+
+const nameOf = (p: string) => p.split("/").pop() ?? p;
+
+function fullPath(agent: AgentRow | undefined, path: string): string {
+	const cwd = agent?.cwd?.replace(/\/+$/, "");
+	if (!cwd) return path;
+	return path ? `${cwd}/${path}` : cwd;
+}
+
+/** Copies a path and says so. */
+async function copyPath(path: string): Promise<void> {
+	try {
+		await navigator.clipboard.writeText(path);
+		toast("Path copied", { tone: "success", description: path });
+	} catch {
+		toast("Couldn't copy the path", { tone: "error" });
+	}
+}
+
+function unavailableText(reason: string | undefined): string {
+	switch (reason) {
+		case "no_cwd":
+			return "This agent has no folder.";
+		case "refused":
+			return "Files in .git aren't shown.";
+		case "unsupported":
+			return "That machine runs an older Pulsar. Update it to browse files.";
+		case "unavailable":
+			return "Couldn't read this folder. Try again.";
+		default:
+			return "This file isn't in the agent's folder.";
+	}
+}
+
+// ------------------------------------------------------------------ pieces
+
+/** The path as links: the agent's folder name, then each folder. */
+function Breadcrumb({
+	agentId,
+	agent,
+	path,
+	replace,
+}: {
+	agentId: string;
+	agent: AgentRow | undefined;
+	path: string;
+	replace: boolean;
+}) {
+	const segs = path ? path.split("/") : [];
+	const top =
+		agent?.cwd?.split("/").filter(Boolean).pop() ??
+		findAgent(agentId)?.name ??
+		"Folder";
+	return (
+		<nav className="fv-crumbs" aria-label="Path">
+			<button
+				type="button"
+				className="fv-crumb"
+				onClick={() => navigate(fileRoute(agentId, ""), { replace })}
+			>
+				{top}
+			</button>
+			{segs.map((s, i) => {
+				const to = segs.slice(0, i + 1).join("/");
+				const last = i === segs.length - 1;
+				return (
+					<span key={to} className="fv-crumb-step">
+						<ChevronRightIcon aria-hidden="true" />
+						{last ? (
+							<span className="fv-crumb is-current" aria-current="page">
+								{s}
+							</span>
+						) : (
+							<button
+								type="button"
+								className="fv-crumb"
+								onClick={() => navigate(fileRoute(agentId, to), { replace })}
+							>
+								{s}
+							</button>
+						)}
+					</span>
+				);
+			})}
+		</nav>
+	);
+}
+
+/** Copy path, and Open in Changes when the file has uncommitted changes. */
+function Actions({
+	agentId,
+	agent,
+	path,
+	content,
+}: {
+	agentId: string;
+	agent: AgentRow | undefined;
+	path: string;
+	content: FileContent | undefined;
+}) {
+	const changes = useChangesPeek(agentId).data;
+	const repoPath = content?.available ? content.repoPath : null;
+	const changed =
+		!!repoPath &&
+		!!changes?.available &&
+		changes.files.some((f) => f.path === repoPath);
+	return (
+		<div className="fv-actions">
+			{changed && (
+				<button
+					type="button"
+					className="fv-btn"
+					onClick={() =>
+						navigate({ view: "changes", id: agentId, file: repoPath })
+					}
+				>
+					<FileDiffIcon aria-hidden="true" />
+					Open in Changes
+				</button>
+			)}
+			<button
+				type="button"
+				className="fv-btn"
+				onClick={() => void copyPath(fullPath(agent, path))}
+			>
+				<CopyIcon aria-hidden="true" />
+				Copy path
+			</button>
+		</div>
+	);
+}
+
+/** One folder's entries; a click opens a folder or file. */
+function FolderList({
+	agentId,
+	path,
+	replace,
+}: {
+	agentId: string;
+	path: string;
+	replace: boolean;
+}) {
+	const q = useTree(agentId, path);
+	const t = q.data;
+	if (q.isError)
+		return (
+			<p className="fv-empty" role="alert">
+				Couldn't read this folder.
+			</p>
+		);
+	if (!t)
+		return (
+			<div className="fv-loading" aria-busy="true">
+				<span className="fv-sr">Loading folder</span>
+			</div>
+		);
+	if (!t.available)
+		return (
+			<p className="fv-empty" role="status">
+				{t.reason === "not_found"
+					? "This folder isn't in the agent's folder."
+					: unavailableText(t.reason)}
+			</p>
+		);
+	if (!t.entries.length)
+		return (
+			<p className="fv-empty" role="status">
+				This folder is empty.
+			</p>
+		);
+	return (
+		<>
+			<ul className="fv-list" aria-label="Files">
+				{t.entries.map((e) => (
+					<li key={e.path}>
+						<button
+							type="button"
+							className="fv-row"
+							onClick={() => navigate(fileRoute(agentId, e.path), { replace })}
+						>
+							<EntryIcon e={e} />
+							<span className="fv-row-name">{e.name}</span>
+						</button>
+					</li>
+				))}
+			</ul>
+			{t.truncated && (
+				<p className="fv-more">Showing the first {t.entries.length} entries.</p>
+			)}
+		</>
+	);
+}
+
+const EntryIcon = ({ e }: { e: FileEntry }) =>
+	e.kind === "dir" ? (
+		<FolderIcon aria-hidden="true" className="fv-icon is-dir" />
+	) : (
+		<FileIcon aria-hidden="true" className="fv-icon" />
+	);
+
+/** An image file's bytes as a blob: URL (they need this tab's headers). */
+function ImageView({ agentId, path }: { agentId: string; path: string }) {
+	const [src, setSrc] = useState<string | null>(null);
+	const [failed, setFailed] = useState(false);
+	useEffect(() => {
+		setSrc(null);
+		setFailed(false);
+		const ac = new AbortController();
+		let url: string | null = null;
+		api
+			.fileImage(agentId, path, ac.signal)
+			.then((b) => {
+				url = URL.createObjectURL(b);
+				setSrc(url);
+			})
+			.catch((e) => {
+				if ((e as Error).name !== "AbortError") setFailed(true);
+			});
+		return () => {
+			ac.abort();
+			if (url) URL.revokeObjectURL(url);
+		};
+	}, [agentId, path]);
+	if (failed)
+		return (
+			<p className="fv-empty" role="alert">
+				Couldn't load this image.
+			</p>
+		);
+	if (!src)
+		return (
+			<div className="fv-loading" aria-busy="true">
+				<span className="fv-sr">Loading image</span>
+			</div>
+		);
+	return (
+		<div className="fv-image">
+			<img src={src} alt={nameOf(path)} />
+		</div>
+	);
+}
+
+/** The open file: text, image, or what it is. */
+function FileBody({
+	agentId,
+	path,
+	line,
+	content,
+	isError,
+}: {
+	agentId: string;
+	path: string;
+	line: number | undefined;
+	content: FileContent | undefined;
+	isError: boolean;
+}) {
+	const ref = useRef<HTMLDivElement>(null);
+	const text = content?.kind === "text" ? (content.text ?? "") : null;
+	// Bring the linked line into view once the text is on screen.
+	useEffect(() => {
+		if (!line || text === null) return;
+		const row = ref.current?.querySelectorAll(".ds-code-line")[line - 1];
+		if (!row) return;
+		row.classList.add("fv-hl");
+		row.scrollIntoView({ block: "center" });
+		return () => row.classList.remove("fv-hl");
+	}, [line, text]);
+	if (isError)
+		return (
+			<p className="fv-empty" role="alert">
+				Couldn't read this file.
+			</p>
+		);
+	if (!content)
+		return (
+			<div className="fv-loading" aria-busy="true">
+				<span className="fv-sr">Loading file</span>
+			</div>
+		);
+	if (!content.available)
+		return (
+			<p className="fv-empty" role="status">
+				{unavailableText(content.reason)}
+			</p>
+		);
+	const size = formatBytes(content.size ?? 0);
+	if (content.kind === "image")
+		return <ImageView agentId={agentId} path={path} />;
+	if (content.kind === "binary")
+		return (
+			<p className="fv-empty" role="status">
+				Binary file ({size}). Not shown.
+			</p>
+		);
+	if (content.kind === "too_large")
+		return (
+			<p className="fv-empty" role="status">
+				This image is too large to show ({size}).
+			</p>
+		);
+	return (
+		<div ref={ref} className="fv-text">
+			{content.truncated && (
+				<p className="fv-note" role="status">
+					Showing the first 1 MB of {size}.
+				</p>
+			)}
+			<CodeBlock
+				code={text ?? ""}
+				lang={(content.size ?? 0) > HIGHLIGHT_MAX ? null : langForPath(path)}
+				title={nameOf(path)}
+				lineNumbers
+			/>
+		</div>
+	);
+}
+
+/** The desktop's folder tree: folders open in place, files open on the right. */
+/**
+ * A folder's entries plus the step toward the open path when the listing
+ * leaves it out (git ignores it, and an agent linked to it).
+ */
+function withOnPath(
+	entries: FileEntry[],
+	folder: string,
+	current: string,
+	currentIsDir: boolean,
+): FileEntry[] {
+	const lead = folder ? `${folder}/` : "";
+	if (!current?.startsWith(lead)) return entries;
+	const rest = current.slice(lead.length);
+	const name = rest.split("/")[0];
+	if (!name || entries.some((e) => e.name === name)) return entries;
+	const kind = rest.includes("/") || currentIsDir ? "dir" : "file";
+	return [...entries, { name, path: lead + name, kind }];
+}
+
+function TreeFolder({
+	agentId,
+	path,
+	current,
+	currentIsDir,
+	depth,
+}: {
+	agentId: string;
+	path: string;
+	current: string;
+	currentIsDir: boolean;
+	depth: number;
+}) {
+	const q = useTree(agentId, path);
+	const t = q.data;
+	if (!t?.available) return null;
+	return (
+		<ul className="fv-tree" aria-label={depth ? undefined : "Folder tree"}>
+			{withOnPath(t.entries, path, current, currentIsDir).map((e) => (
+				<TreeRow
+					key={e.path}
+					agentId={agentId}
+					e={e}
+					current={current}
+					currentIsDir={currentIsDir}
+					depth={depth}
+				/>
+			))}
+		</ul>
+	);
+}
+
+function TreeRow({
+	agentId,
+	e,
+	current,
+	currentIsDir,
+	depth,
+}: {
+	agentId: string;
+	e: FileEntry;
+	current: string;
+	currentIsDir: boolean;
+	depth: number;
+}) {
+	const onPath = current === e.path || current.startsWith(`${e.path}/`);
+	const [open, setOpen] = useState(onPath);
+	useEffect(() => {
+		if (onPath) setOpen(true);
+	}, [onPath]);
+	const dir = e.kind === "dir";
+	return (
+		<li>
+			<button
+				type="button"
+				className={`fv-node${current === e.path ? " is-current" : ""}`}
+				aria-expanded={dir ? open : undefined}
+				aria-current={current === e.path ? "page" : undefined}
+				style={{ paddingInlineStart: 8 + depth * 14 }}
+				onClick={() => {
+					if (dir) setOpen(!open);
+					else navigate(fileRoute(agentId, e.path), { replace: true });
+				}}
+			>
+				{dir ? (
+					<ChevronRightIcon
+						aria-hidden="true"
+						className={`fv-chev${open ? " is-open" : ""}`}
+					/>
+				) : (
+					<span className="fv-chev-gap" />
+				)}
+				<EntryIcon e={e} />
+				<span className="fv-row-name">{e.name}</span>
+			</button>
+			{dir && open && (
+				<TreeFolder
+					agentId={agentId}
+					path={e.path}
+					current={current}
+					currentIsDir={currentIsDir}
+					depth={depth + 1}
+				/>
+			)}
+		</li>
+	);
+}
+
+// ------------------------------------------------------------------ pages
+
+/** The desktop's main pane; the shell's Esc goes back. */
+export function FilesDesktop(props: PageProps) {
+	const { agentId, path, line, agent, content, isDir } = useTarget(props);
+	return (
+		<main className="fv fv-desktop" aria-label="Files">
+			<header className="fv-head">
+				<Breadcrumb agentId={agentId} agent={agent} path={path} replace />
+				<Actions
+					agentId={agentId}
+					agent={agent}
+					path={path}
+					content={isDir ? undefined : content.data}
+				/>
+			</header>
+			<div className="fv-split">
+				<aside className="fv-side">
+					<TreeFolder
+						agentId={agentId}
+						path=""
+						current={path}
+						currentIsDir={isDir}
+						depth={0}
+					/>
+				</aside>
+				<section className="fv-main" aria-label={isDir ? "Folder" : "File"}>
+					{isDir ? (
+						<FolderList agentId={agentId} path={path} replace />
+					) : (
+						<FileBody
+							agentId={agentId}
+							path={path}
+							line={line}
+							content={content.data}
+							isError={content.isError}
+						/>
+					)}
+				</section>
+			</div>
+		</main>
+	);
+}
+
+/** The phone: one pushed page per folder or file. */
+export function FilesPhone(props: PageProps) {
+	const { agentId, path, line, agent, content, isDir } = useTarget(props);
+	const title = path
+		? nameOf(path)
+		: (agent?.cwd?.split("/").filter(Boolean).pop() ?? "Files");
+	return (
+		<>
+			<IonHeader>
+				<IonToolbar>
+					<IonButtons slot="start">
+						<BackButton route={fileRoute(agentId, path)} />
+					</IonButtons>
+					<IonTitle>
+						<span className="p-nav-title">
+							<h1>{title}</h1>
+						</span>
+					</IonTitle>
+				</IonToolbar>
+			</IonHeader>
+			<IonContent className="p-plain">
+				<div className="fv fv-phone">
+					<div className="fv-head">
+						<Breadcrumb
+							agentId={agentId}
+							agent={agent}
+							path={path}
+							replace={false}
+						/>
+						<Actions
+							agentId={agentId}
+							agent={agent}
+							path={path}
+							content={isDir ? undefined : content.data}
+						/>
+					</div>
+					{isDir ? (
+						<FolderList agentId={agentId} path={path} replace={false} />
+					) : (
+						<FileBody
+							agentId={agentId}
+							path={path}
+							line={line}
+							content={content.data}
+							isError={content.isError}
+						/>
+					)}
+				</div>
+			</IonContent>
+		</>
+	);
+}
+
+export default FilesDesktop;

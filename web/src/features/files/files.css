@@ -1,0 +1,245 @@
+/* File viewer (features/files): breadcrumb and actions, the desktop's
+   folder tree beside the open file, the phone's lists. Colors come from
+   the design tokens, so both themes follow. */
+
+.fv {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	color: var(--ds-text);
+	font-family: var(--ds-font-sans);
+}
+.fv-desktop {
+	flex: 1;
+	height: 100%;
+}
+.fv-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--ds-border);
+}
+.fv-crumbs {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+	font-size: 13px;
+}
+.fv-crumb-step {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+}
+.fv-crumb-step > svg {
+	width: 14px;
+	height: 14px;
+	color: var(--ds-text-2);
+	flex: none;
+}
+.fv-crumb {
+	border: 0;
+	background: none;
+	color: var(--ds-text-2);
+	font: inherit;
+	padding: 2px 4px;
+	border-radius: 4px;
+	cursor: pointer;
+	overflow-wrap: anywhere;
+}
+.fv-crumb:hover {
+	background: var(--ds-surface-hover);
+	color: var(--ds-text);
+}
+.fv-crumb.is-current {
+	color: var(--ds-text);
+	font-weight: 600;
+	cursor: default;
+}
+.fv-crumb.is-current:hover {
+	background: none;
+}
+.fv-crumb:focus-visible,
+.fv-row:focus-visible,
+.fv-node:focus-visible {
+	outline: 2px solid var(--ds-focus);
+	outline-offset: -2px;
+}
+.fv-actions {
+	display: flex;
+	gap: 6px;
+	flex: none;
+}
+.fv-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 30px;
+	padding: 0 10px;
+	border: 1px solid var(--ds-border);
+	border-radius: 8px;
+	background: var(--ds-surface);
+	color: var(--ds-text);
+	font: inherit;
+	font-size: 13px;
+	cursor: pointer;
+}
+.fv-btn:hover {
+	background: var(--ds-surface-hover);
+}
+.fv-btn:focus-visible {
+	outline: 2px solid var(--ds-focus);
+	outline-offset: 1px;
+}
+.fv-btn > svg {
+	width: 14px;
+	height: 14px;
+	flex: none;
+}
+.fv-phone .fv-btn {
+	min-height: 36px;
+	font-size: 15px;
+}
+.fv-split {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+}
+.fv-side {
+	width: 260px;
+	flex: none;
+	overflow: auto;
+	border-right: 1px solid var(--ds-border);
+	padding: 6px 0;
+}
+.fv-main {
+	flex: 1;
+	min-width: 0;
+	overflow: auto;
+	padding: 12px 16px;
+}
+.fv-tree,
+.fv-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.fv-node,
+.fv-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	border: 0;
+	background: none;
+	color: var(--ds-text);
+	font: inherit;
+	font-size: 13px;
+	text-align: left;
+	cursor: pointer;
+}
+.fv-node {
+	padding-block: 3px;
+	padding-inline-end: 8px;
+}
+.fv-node:hover,
+.fv-row:hover {
+	background: var(--ds-surface-hover);
+}
+.fv-node.is-current {
+	background: var(--ds-surface-active);
+	font-weight: 600;
+}
+.fv-row {
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--ds-border);
+	font-size: 15px;
+}
+.fv-desktop .fv-row {
+	padding: 6px 8px;
+	font-size: 13px;
+	border-bottom: 0;
+	border-radius: 6px;
+}
+.fv-row-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fv-icon {
+	width: 15px;
+	height: 15px;
+	flex: none;
+	color: var(--ds-text-2);
+}
+.fv-icon.is-dir {
+	color: var(--ds-accent);
+}
+.fv-chev,
+.fv-chev-gap {
+	width: 14px;
+	height: 14px;
+	flex: none;
+	color: var(--ds-text-2);
+	transition: transform 0.12s ease;
+}
+.fv-chev.is-open {
+	transform: rotate(90deg);
+}
+.fv-empty,
+.fv-more,
+.fv-note {
+	color: var(--ds-text-2);
+	font-size: 14px;
+	padding: 16px;
+	margin: 0;
+}
+.fv-note {
+	padding: 0 0 8px;
+	font-size: 13px;
+}
+.fv-loading {
+	min-height: 120px;
+}
+.fv-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+.fv-text .ds-code-line.fv-hl {
+	background: var(--ds-surface-active);
+}
+.fv-phone .fv-text,
+.fv-phone .fv-image,
+.fv-phone .fv-head {
+	padding-inline: 12px;
+}
+.fv-phone .fv-head {
+	padding-block: 10px;
+}
+.fv-image {
+	display: flex;
+	justify-content: center;
+	padding: 12px 0;
+}
+.fv-image img {
+	max-width: 100%;
+	height: auto;
+	border-radius: 6px;
+	border: 1px solid var(--ds-border);
+	background: var(--ds-surface);
+}
+@media (prefers-reduced-motion: reduce) {
+	.fv-chev {
+		transition: none;
+	}
+}

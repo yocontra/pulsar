@@ -113,6 +113,7 @@ import {
 	OMP_BLOCKS,
 	rng,
 } from "./data.ts";
+import { mockContent, mockImage, mockTree } from "./files.ts";
 import {
 	GitMockError,
 	gitCommit,
@@ -2648,6 +2649,31 @@ async function route(
 			available: true,
 			items: searchFiles(q.get("q") ?? ""),
 		});
+	}
+	// The file viewer (web/mock/files.ts): one folder, one file, image bytes.
+	if (GET && seg[0] === "agents" && seg[2] === "files" && seg.length === 4) {
+		const a = agentOr404(seg[1]!);
+		if (seg[3] === "tree") return json(mockTree(a.id, q.get("path") ?? ""));
+		if (seg[3] === "content") {
+			const path = q.get("path");
+			if (!path) throw badRequest("path: required");
+			if (q.get("raw") !== "1") return json(mockContent(a.id, path));
+			const image = mockImage(path);
+			if (!image)
+				throw new ApiError(
+					415,
+					"unsupported_media",
+					"the file is not an image",
+				);
+			return new Response(image as Uint8Array<ArrayBuffer>, {
+				headers: {
+					"Content-Type": "image/png",
+					"Content-Disposition": "inline",
+					"X-Content-Type-Options": "nosniff",
+					"Content-Security-Policy": "sandbox; default-src 'none'",
+				},
+			});
+		}
 	}
 	// New agent (features/launch): web/mock/launch.ts.
 	const launched = await launchRoute(req, url, seg, {
