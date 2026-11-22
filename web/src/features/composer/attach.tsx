@@ -553,7 +553,10 @@ function useDropAndPaste(
 		zone.addEventListener("dragleave", leave);
 		zone.addEventListener("drop", drop);
 		ta.addEventListener("paste", paste);
+		// Drops and pastes are taken from here on (tests wait for this).
+		zone.dataset.attach = "ready";
 		return () => {
+			delete zone.dataset.attach;
 			zone.removeEventListener("dragenter", enter);
 			zone.removeEventListener("dragover", over);
 			zone.removeEventListener("dragleave", leave);

@@ -42,6 +42,9 @@ export async function openAgent(
 	);
 	const composer = page.locator(".composer").last();
 	await expect(composer.locator(".composer-input")).toBeVisible();
+	// The drop and paste handlers come with the composer's lazy chunk (and
+	// the agent's row): a paste before then is the browser's own.
+	await expect(composer).toHaveAttribute("data-attach", "ready");
 	return composer;
 }
 
