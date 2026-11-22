@@ -174,9 +174,9 @@ export function liveSuite(platform: "desktop" | "phone") {
 		const found: Record<string, string[]> = {};
 		for (const [name, open] of screens) {
 			await open();
-			// Let the screen and its lazy parts settle.
-			await page.waitForLoadState("networkidle").catch(() => {});
-			await page.waitForTimeout(400);
+			// Let the screen and its lazy parts settle (the event stream never
+			// lets the network go idle).
+			await page.waitForTimeout(800);
 			const bad = await refreshControls(page);
 			if (bad.length) found[name] = bad;
 		}
