@@ -32,6 +32,7 @@ import {
 	PrHead,
 	ReviewForm,
 	Summary,
+	ThreadsTruncated,
 } from "./Review.tsx";
 import "../../changes/changes.css";
 import "../git/git.css";
@@ -132,9 +133,12 @@ function Overview({
 						<p className="prv-empty">{r.message ?? "No files changed."}</p>
 					) : (
 						<>
-							{open > 0 && (
+							<ThreadsTruncated r={r} />
+							{(open > 0 || r.threadsTruncated) && (
 								<p className="prv-note">
-									{open} open {open === 1 ? "thread" : "threads"}
+									{open}
+									{r.threadsTruncated ? "+" : ""} open{" "}
+									{open === 1 && !r.threadsTruncated ? "thread" : "threads"}
 								</p>
 							)}
 							<FileList

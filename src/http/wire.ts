@@ -1092,6 +1092,8 @@ export interface GitReviewThread {
 	canResolve: boolean;
 	canReply: boolean;
 	comments: GitThreadComment[];
+	/** Comments past the first 100, not read (see them on GitHub). */
+	moreComments?: number;
 }
 
 /**
@@ -1118,6 +1120,11 @@ export interface GitPrReview {
 	/** More files changed than are listed. */
 	truncated: boolean;
 	threads: GitReviewThread[];
+	/**
+	 * Some threads or comments were not read (or reading them failed): the
+	 * open count is a lower bound. The app says so and links to GitHub.
+	 */
+	threadsTruncated: boolean;
 }
 
 /** `GET /agents/:id/git/review/file?path=`: one file's patch (hunks only). */

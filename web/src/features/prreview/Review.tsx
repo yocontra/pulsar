@@ -122,6 +122,18 @@ export function noPrText(r: GitPrReview | undefined, error: unknown): string {
 	return "No PR for this branch.";
 }
 
+/** Some threads or comments weren't read: say so, never hide feedback silently. */
+export function ThreadsTruncated({ r }: { r: GitPrReview }) {
+	if (!r.threadsTruncated) return null;
+	return (
+		<p className="prv-note warn" role="note">
+			Not every review thread or comment is shown here.{" "}
+			<ExtLink href={r.pr?.url || null}>See them all on GitHub</ExtLink> before
+			you approve.
+		</p>
+	);
+}
+
 export function Summary({
 	r,
 	onFiles,
@@ -141,10 +153,13 @@ export function Summary({
 					</button>
 				</li>
 				<li>
-					{open} open {open === 1 ? "thread" : "threads"}
+					{open}
+					{r.threadsTruncated ? "+" : ""} open{" "}
+					{open === 1 && !r.threadsTruncated ? "thread" : "threads"}
 				</li>
 				<li className={`g-sum ${sum.tone}`}>{sum.text}</li>
 			</ul>
+			<ThreadsTruncated r={r} />
 			<section aria-label="Description" className="prv-sec">
 				<h3>Description</h3>
 				{r.body.trim() ? (
@@ -340,6 +355,14 @@ export function Thread({
 							</li>
 						))}
 					</ul>
+					{t.moreComments ? (
+						<p className="prv-note">
+							<ExtLink href={first?.url ?? null}>
+								{t.moreComments} more{" "}
+								{t.moreComments === 1 ? "comment" : "comments"} on GitHub
+							</ExtLink>
+						</p>
+					) : null}
 					{replying ? (
 						<TextBox
 							label="Reply"
@@ -429,7 +452,9 @@ export function FileReview({
 	);
 	// Threads whose line no row shows (a file not shown, a line outside the
 	// hunks) go above the diff with outdated ones, never out of sight.
-	const shown = file.binary || file.tooLarge || patch === null || !!parsed;
+	// A diff that failed to load places nothing: its threads go above it.
+	const shown =
+		file.binary || file.tooLarge || patch === null || !!parsed || !!q.error;
 	const loose = useMemo(() => {
 		const out = [...(threads?.loose ?? [])];
 		if (!threads || !shown) return out;

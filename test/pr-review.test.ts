@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+	afterAll,
+	beforeAll,
+	describe,
+	expect,
+	setDefaultTimeout,
+	test,
+} from "bun:test";
 import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +23,9 @@ import { cleanupRepos, g, gitRepo, tmpFolder } from "./git-repo.ts";
  * repo whose `origin` reads as a GitHub repo, with a fake `gh` on PATH
  * that records every argv.
  */
+
+// Each gh call is a process (the fake gh): slow on a busy machine.
+setDefaultTimeout(30_000);
 
 process.env.GIT_CONFIG_GLOBAL = "/dev/null";
 process.env.GIT_CONFIG_NOSYSTEM = "1";
@@ -309,6 +319,52 @@ describe("read", () => {
 			"-F",
 			"number=12",
 		]);
+	});
+
+	test("threads: every page read; past five pages, or a long thread, says so", async () => {
+		const d = await branch("rv-threads");
+		const thread = (i: number, comments = 1) => ({
+			id: `PRRT_t${i}`,
+			isResolved: false,
+			path: "a.txt",
+			line: 4,
+			diffSide: "RIGHT",
+			comments: {
+				totalCount: comments,
+				nodes: [{ databaseId: i, body: `c${i}` }],
+			},
+		});
+		gh.set(
+			state("rv-threads", {
+				threads: Array.from({ length: 230 }, (_, i) => thread(i)),
+			}),
+		);
+		let r = await prReview("a", d, true);
+		expect(r.threads.length).toBe(230);
+		expect(r.threadsTruncated).toBe(false);
+		const pages = gh
+			.calls()
+			.filter(
+				(c) => c[1] === "graphql" && c.some((x) => x.includes("reviewThreads")),
+			)
+			.slice(-3);
+		expect(
+			pages.map((c) => c.find((x) => x.startsWith("after=")) ?? null),
+		).toEqual([null, "after=c100", "after=c200"]);
+		// More than five pages: the first 500, and the flag.
+		gh.set(
+			state("rv-threads", {
+				threads: Array.from({ length: 520 }, (_, i) => thread(i)),
+			}),
+		);
+		r = await prReview("a", d, true);
+		expect(r.threads.length).toBe(500);
+		expect(r.threadsTruncated).toBe(true);
+		// A thread with more comments than one page.
+		gh.set(state("rv-threads", { threads: [thread(1, 120)] }));
+		r = await prReview("a", d, true);
+		expect(r.threads[0]!.moreComments).toBe(119);
+		expect(r.threadsTruncated).toBe(true);
 	});
 
 	test("cached briefly; files over three pages say so; no PR; gh logged out", async () => {

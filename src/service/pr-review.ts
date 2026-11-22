@@ -8,6 +8,7 @@ import type {
 } from "../http/wire.ts";
 import {
 	addComment,
+	empty,
 	NODE_ID,
 	prReview,
 	prReviewFile,
@@ -180,23 +181,7 @@ export class PrReviewOps {
 		const address = this.remote(id);
 		if (!address) return prReview(id, this.local(id).cwd, fresh);
 		const r = await this.read(address, null, as);
-		if (!r)
-			return {
-				agent: id,
-				pr: null,
-				reason: "gh_error",
-				message: "That machine runs an older Pulsar.",
-				head: null,
-				body: "",
-				author: null,
-				ownPr: false,
-				checks: [],
-				review: null,
-				reviews: [],
-				files: [],
-				truncated: false,
-				threads: [],
-			};
+		if (!r) return empty(id, "gh_error", "That machine runs an older Pulsar.");
 		return { ...(r as GitPrReview), agent: id };
 	}
 

@@ -232,6 +232,44 @@ test.describe("PR review", () => {
 		);
 	});
 
+	test("feedback never hides: threads not all read, and a diff that fails to load", async ({
+		page,
+		request,
+		context,
+		errors,
+	}) => {
+		await mock(request, "prreview", {
+			agent: "apparish-auth",
+			set: { threadsTruncated: true, failFile: "src/auth/refresh.ts" },
+		});
+		const { main } = await openReview(page, request, context);
+		await expect(main.locator(".prv-stats")).toContainText("2+ open threads");
+		const note = main.getByRole("note");
+		await expect(note).toContainText(
+			"Not every review thread or comment is shown here.",
+		);
+		await expect(
+			note.getByRole("link", { name: "See them all on GitHub" }),
+		).toHaveAttribute("href", /\/pull\/1402$/);
+		await main.getByRole("tab", { name: /Files/ }).click();
+		await expect(main.getByRole("tab", { name: /Files/ })).toContainText(
+			"2+ open",
+		);
+		const refresh = main.getByRole("region", { name: "src/auth/refresh.ts" });
+		await expect(refresh).toContainText("Couldn't load this diff.");
+		// Its line thread moves above the diff, with its line.
+		const open = refresh
+			.locator(".prv-loose")
+			.getByRole("region", { name: "Thread by reviewer", exact: true })
+			.filter({ hasText: "Use the mutex here too." });
+		await expect(open).toContainText("Line 39");
+		errors.splice(
+			0,
+			errors.length,
+			...errors.filter((e) => !/status of 503/.test(e)),
+		);
+	});
+
 	test("on another machine each write is one passkey check for exactly its params", async ({
 		page,
 		request,

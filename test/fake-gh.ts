@@ -121,7 +121,11 @@ if (a[0] === "api" && a[1] === "graphql") {
 		console.log(JSON.stringify({ data: { node: pr ? { pullRequest: { number: pr.number, repository: { nameWithOwner: pr.repo } } } : null } }));
 		process.exit(0);
 	}
-	console.log(JSON.stringify({ data: { repository: { pullRequest: { viewerDidAuthor: !!st.viewerDidAuthor, reviewThreads: { nodes: st.threads ?? [] } } } } }));
+	// Pages of 100 threads; the cursor is "c<index>".
+	const all = st.threads ?? [];
+	const from = f.after ? Number(f.after.slice(1)) : 0;
+	const to = from + 100;
+	console.log(JSON.stringify({ data: { repository: { pullRequest: { viewerDidAuthor: !!st.viewerDidAuthor, reviewThreads: { pageInfo: { hasNextPage: to < all.length, endCursor: "c" + to }, nodes: all.slice(from, to) } } } } }));
 	process.exit(0);
 }
 if (a[0] === "api" && (a.find((x) => x.startsWith("repos/")) ?? "").endsWith("/files")) {

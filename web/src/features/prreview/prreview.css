@@ -525,3 +525,18 @@
 .prv-phone .prv-thread {
 	font-size: 14px;
 }
+
+.prv-note.warn {
+	padding: 8px 12px;
+	border-radius: 8px;
+	background: var(--ds-needs-soft);
+	color: var(--ds-needs-text);
+}
+.prv-note.warn a {
+	color: inherit;
+	text-decoration: underline;
+}
+.prv-files-main + .prv-note.warn,
+.prv-panel.files > .prv-note.warn {
+	margin: 12px 16px 0;
+}
