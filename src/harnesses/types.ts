@@ -405,7 +405,11 @@ export interface HarnessDriver {
 
 	/** `pulsar setup` / `doctor` / `--uninstall`. */
 	setup?: {
-		detect(): boolean;
+		/**
+		 * Found on this machine. `path`: the PATH to look on (this process's
+		 * by default; doctor under the service passes the login shell's).
+		 */
+		detect(path?: string): boolean;
 		/** True when pulsar is already wired into this harness. */
 		configured(): boolean;
 		/** The changes setup would make. Must not change anything itself. */

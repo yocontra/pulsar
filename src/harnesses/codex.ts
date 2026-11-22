@@ -235,7 +235,8 @@ export const codex: HarnessDriver = {
 	},
 
 	setup: {
-		detect: () => !!which("codex") || exists(join(homedir(), ".codex")),
+		detect: (path) =>
+			!!which("codex", path) || exists(join(homedir(), ".codex")),
 		configured: () => {
 			try {
 				return runCli("codex", ["mcp", "get", "pulsar"]).includes("pulsar");

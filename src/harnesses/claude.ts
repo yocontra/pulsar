@@ -524,7 +524,8 @@ export const claude: HarnessDriver = {
 	},
 
 	setup: {
-		detect: () => !!which("claude") || exists(join(homedir(), ".claude")),
+		detect: (path) =>
+			!!which("claude", path) || exists(join(homedir(), ".claude")),
 		configured: () =>
 			!!getPath(readJsonc(claudeJson()), ["mcpServers", "pulsar"]),
 		plan: (ctx) => [

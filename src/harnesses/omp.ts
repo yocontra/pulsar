@@ -35,7 +35,8 @@ export const omp: HarnessDriver = {
 	sessionLog: (agent) => piSessionLog(".omp", agent.cwd),
 
 	setup: {
-		detect: () => !!which("omp") || exists(join(homedir(), ".omp", "agent")),
+		detect: (path) =>
+			!!which("omp", path) || exists(join(homedir(), ".omp", "agent")),
 		configured: () =>
 			!!getPath(readJsonc(join(homedir(), ".omp", "agent", "mcp.json")), [
 				"mcpServers",

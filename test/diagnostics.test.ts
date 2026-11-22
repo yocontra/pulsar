@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -27,9 +27,11 @@ import { RpcError } from "../src/rpc.ts";
 import type { Principal } from "../src/service/caller.ts";
 import {
 	commandPath,
+	detectHarnesses,
 	parseBinLines,
 	parseVersion,
 } from "../src/setup/doctor.ts";
+import { which } from "../src/setup/files.ts";
 import { shimStatus, writeShim } from "../src/setup/shim.ts";
 import { VERSION } from "../src/version.ts";
 
@@ -155,6 +157,44 @@ describe("structured checks", () => {
 			expect(commandPath(true, null, servicePath)).toBeNull();
 		} finally {
 			rmSync(home, { recursive: true, force: true });
+		}
+	});
+
+	test("run under the service, harnesses are found on the login shell's PATH", () => {
+		const dir = mkdtempSync(join(tmpdir(), "pulsar-diag-bin-"));
+		try {
+			// A harness installed only in a folder the service's PATH lacks.
+			const bin = join(dir, ".local", "bin");
+			mkdirSync(bin, { recursive: true });
+			writeFileSync(join(bin, "fakeharness"), "#!/bin/sh\n", { mode: 0o755 });
+			const servicePath = "/usr/bin:/bin";
+			const shellPath = `${bin}:/usr/bin:/bin`;
+			const env = process.env.PATH;
+			process.env.PATH = servicePath;
+			try {
+				const clients = [
+					{
+						id: "fakeharness",
+						detect: (p?: string) => !!which("fakeharness", p),
+					},
+				];
+				// The bug: on the service's PATH it isn't found at all.
+				expect(detectHarnesses(clients, false, null).detected).toEqual([]);
+				// Doctor's child (--json) looks on the login shell's PATH.
+				expect(detectHarnesses(clients, true, shellPath)).toEqual({
+					detected: clients,
+					partial: false,
+				});
+				// No login shell PATH: what the service's PATH finds, flagged as partial.
+				expect(detectHarnesses(clients, true, null)).toEqual({
+					detected: [],
+					partial: true,
+				});
+			} finally {
+				process.env.PATH = env;
+			}
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
 		}
 	});
 

@@ -319,8 +319,9 @@ export const opencode: HarnessDriver = {
 	},
 
 	setup: {
-		detect: () =>
-			!!which("opencode") || exists(join(homedir(), ".config", "opencode")),
+		detect: (path) =>
+			!!which("opencode", path) ||
+			exists(join(homedir(), ".config", "opencode")),
 		configured: () => {
 			const cfg = readJsonc(opencodeConfig());
 			return !!(

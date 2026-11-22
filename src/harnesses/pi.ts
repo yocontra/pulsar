@@ -29,7 +29,8 @@ export const pi: HarnessDriver = {
 	sessionLog: (agent) => piSessionLog(".pi", agent.cwd),
 
 	setup: {
-		detect: () => !!which("pi") || exists(join(homedir(), ".pi", "agent")),
+		detect: (path) =>
+			!!which("pi", path) || exists(join(homedir(), ".pi", "agent")),
 		configured: () =>
 			JSON.stringify(
 				readJsonc(join(homedir(), ".pi", "agent", "settings.json")) ?? {},

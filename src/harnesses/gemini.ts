@@ -10,7 +10,8 @@ export const gemini: HarnessDriver = {
 	...geminiIdent,
 
 	setup: {
-		detect: () => !!which("gemini") || exists(join(homedir(), ".gemini")),
+		detect: (path) =>
+			!!which("gemini", path) || exists(join(homedir(), ".gemini")),
 		configured: () =>
 			!!getPath(readJsonc(join(homedir(), ".gemini", "settings.json")), [
 				"mcpServers",

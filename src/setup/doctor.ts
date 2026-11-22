@@ -59,6 +59,25 @@ export function commandPath(
 	return json ? shellPath : envPath;
 }
 
+/**
+ * The harnesses on this machine. In a terminal, found on this process's
+ * PATH. With `json` (the service daemon's child), on the login shell's
+ * PATH: the service's own PATH misses harnesses in ~/.local/bin and the
+ * like. Without that PATH, the service's own still finds some, and
+ * `partial` says the list may be short (never a false "not installed").
+ */
+export function detectHarnesses<C extends { detect(path?: string): boolean }>(
+	clients: readonly C[],
+	json: boolean,
+	shellPath: string | null,
+): { detected: C[]; partial: boolean } {
+	const path = json ? (shellPath ?? undefined) : undefined;
+	return {
+		detected: clients.filter((c) => c.detect(path)),
+		partial: json && shellPath === null,
+	};
+}
+
 /** A harness's `--version`: its first version number, else its first line. */
 export function parseVersion(out: string): string | null {
 	const m = out.match(/\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?/);
@@ -206,14 +225,22 @@ async function doctorChecks(
 	}
 
 	checks.group = "harnesses";
-	const detected = CLIENTS.filter((c) => c.detect());
-	// For the app (the CLI never asked): harness versions, and the PATH the
-	// operator's commands run with (the service's own PATH is not it).
+	// For the app (the CLI never asked): the PATH the operator's commands
+	// run with (the service's own PATH is not it), and harness versions.
 	const paths = opts.json
 		? await loginShellPaths(
-				detected.map((c) => c.id).filter((id) => /^[a-z]+$/.test(id)),
+				CLIENTS.map((c) => c.id).filter((id) => /^[a-z]+$/.test(id)),
 			)
 		: null;
+	const { detected, partial } = detectHarnesses(
+		CLIENTS,
+		opts.json === true,
+		paths?.path ?? null,
+	);
+	if (partial)
+		note(
+			"harnesses: only those found without your login shell are listed (its PATH couldn't be read)",
+		);
 	const found: Promise<DiagHarness>[] = [];
 	for (const c of detected) {
 		const configured = c.configured();
@@ -226,7 +253,7 @@ async function doctorChecks(
 		if (opts.json)
 			found.push(
 				harnessVersion(
-					paths?.bins.get(c.id) ?? which(c.id),
+					paths?.bins.get(c.id) ?? which(c.id, paths?.path ?? undefined),
 					paths?.path ?? null,
 				).then((version) => ({
 					id: c.id,

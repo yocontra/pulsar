@@ -18,9 +18,15 @@ let jsonc: JsoncParser | null = null;
  * drivers import this module, so it never imports the parser itself: the MCP
  * server, daemon and extension load the drivers but never edit configs.
  */
-/** Absolute path of a command on PATH, or null (setup's harness detection). */
-export function which(cmd: string): string | null {
-	for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+/**
+ * Absolute path of a command on PATH (this process's, or `path`), or null
+ * (setup's harness detection).
+ */
+export function which(
+	cmd: string,
+	path = process.env.PATH ?? "",
+): string | null {
+	for (const dir of path.split(delimiter)) {
 		const full = join(dir, cmd);
 		if (dir && existsSync(full)) return full;
 	}
