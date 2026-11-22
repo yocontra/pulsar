@@ -49,8 +49,41 @@ export const test = base.extend<
 		await use(page);
 	},
 	errors: [
-		async ({ page }, use) => {
+		async ({ page, browserName }, use) => {
 			const errors: string[] = [];
+			// WebKit names the page, not the script, in a CSP report on the console,
+			// and logs a style attribute even in an inert parsed document (Mermaid's
+			// DOMPurify pass, d3 on its scratch nodes), where nothing is applied. The
+			// page's securitypolicyviolation event names the real source: count the
+			// events from Mermaid and the libraries it loads that hit no element on
+			// the page, and excuse that many of WebKit's refused-style reports. Any
+			// other report (app code, a style the page really lost) still fails.
+			const webkit = browserName === "webkit";
+			let mermaidStyleEvents = 0;
+			if (webkit) {
+				await page.exposeFunction("__pulsarMermaidStyle", () => {
+					mermaidStyleEvents++;
+				});
+				await page.addInitScript(() => {
+					document.addEventListener(
+						"securitypolicyviolation",
+						(e) => {
+							if (!/^style-src-(attr|elem)$/.test(e.violatedDirective)) return;
+							if (
+								!/\/(mermaid|d3-|cytoscape|purify)[^/]*\.js$/.test(e.sourceFile)
+							)
+								return;
+							if (e.target instanceof Element && e.target.isConnected) return;
+							void (
+								window as unknown as {
+									__pulsarMermaidStyle: () => Promise<void>;
+								}
+							).__pulsarMermaidStyle();
+						},
+						true,
+					);
+				});
+			}
 			// WebKit reports a request that a navigation (a reload) cancelled
 			// as an access-control failure. Same-origin API calls can't fail
 			// CORS here.
@@ -100,6 +133,19 @@ export const test = base.extend<
 				void d.dismiss();
 			});
 			await use(errors);
+			if (webkit) {
+				// Violation events are queued tasks: let any still pending arrive.
+				await page
+					.evaluate(() => new Promise((r) => setTimeout(r, 0)))
+					.catch(() => {});
+				// The reports stay in `errors` until now, so a test that drops the
+				// ones its own screenshots cause (see ui.ios) still finds them.
+				for (let i = errors.length - 1; i >= 0 && mermaidStyleEvents > 0; i--)
+					if (/^Refused to apply a stylesheet/.test(errors[i] ?? "")) {
+						errors.splice(i, 1);
+						mermaidStyleEvents--;
+					}
+			}
 			expect(errors, "console errors / CSP violations / dialogs").toEqual([]);
 		},
 		{ auto: true },

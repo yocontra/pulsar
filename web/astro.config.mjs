@@ -212,6 +212,13 @@ export default defineConfig({
 											// that costs a round trip before "app" loads.
 											/index\.astro\?astro&type=script/.test(id),
 									},
+									// DOMPurify (Mermaid's only) under a stable name: the e2e
+									// fixture names it among Mermaid's sources of WebKit CSP
+									// reports (e2e/fixtures.ts). Loaded with Mermaid only.
+									{
+										name: "purify",
+										test: /node_modules\/dompurify\//,
+									},
 								],
 							},
 						},
