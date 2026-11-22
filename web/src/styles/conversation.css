@@ -841,8 +841,14 @@
 	color: var(--ds-danger-text);
 	background: var(--ds-danger-soft);
 }
+/* A narrow head (a phone, a nested card) ends in ellipses rather than
+   pushing the chevron out of the card: the facts give way first, then the
+   object; the verb keeps its width up to a cap. */
 .ds-tool-verb {
 	flex: none;
+	max-width: 45%;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	font-weight: var(--ds-weight-medium);
 	color: var(--ds-text-2);
 	white-space: nowrap;
@@ -889,7 +895,9 @@
 	display: inline;
 }
 .ds-tool-meta {
-	flex: none;
+	flex: 0 4 auto;
+	min-width: 0;
+	overflow: hidden;
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
@@ -899,8 +907,10 @@
 	white-space: nowrap;
 }
 .ds-tool-sum {
-	display: inline-flex;
-	gap: 0;
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 .ds-tool-sum > span + span::before {
 	content: "·";

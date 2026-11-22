@@ -2,14 +2,12 @@
 .p-changes-btn {
 	position: relative;
 }
-.p-changes-btn svg {
-	width: 22px;
-	height: 22px;
-}
 .p-changes-n {
+	/* Centered near the icon's top-right corner (the icon is centered in
+	   the button; the slotted content box starts 7 px down). */
 	position: absolute;
-	top: 2px;
-	right: 0;
+	top: -5px;
+	left: calc(50% + 2px);
 	min-width: 16px;
 	height: 16px;
 	padding: 0 4px;

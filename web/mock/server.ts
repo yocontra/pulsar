@@ -1705,7 +1705,14 @@ type RealtimeChange =
 	 * answer its relayed Bash prompt ran out first.
 	 */
 	| { action: "terminal"; id: string; expired?: boolean }
-	| { action: "transcript"; id: string; text: string }
+	| {
+			action: "transcript";
+			id: string;
+			text: string;
+			/** Default "assistant"; "user" or "peer" (with `from`) for bubbles. */
+			role?: "assistant" | "user" | "peer";
+			from?: string;
+	  }
 	/** The agent edits a file in its worktree (the diff viewer goes live). */
 	| { action: "changes"; id: string; path: string; line: string }
 	| {
@@ -1829,7 +1836,7 @@ function realtime(raw: unknown) {
 		}
 		case "transcript": {
 			const a = agentOr404(c.id);
-			const e = appendLine(a, c.text);
+			const e = appendLine(a, c.text, c.role, c.from ? { from: c.from } : {});
 			for (const s of streams.values())
 				if (s.push && s.sub.session === a.id)
 					write(s, "transcript", { agent: a.id, events: [e] });

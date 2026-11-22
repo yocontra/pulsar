@@ -193,16 +193,6 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 	const [view, setView] = useState<View>("overview");
 	const [ask, setAsk] = useState("");
 	const modal = useRef<HTMLIonModalElement | null>(null);
-	// The top bar's title keeps clear of a third button (git.css).
-	const button = useRef<HTMLIonButtonElement | null>(null);
-	const shown = !!status?.available && can("git");
-	useEffect(() => {
-		const title = shown
-			? button.current?.closest("ion-toolbar")?.querySelector("ion-title")
-			: null;
-		title?.classList.add("g-has-git");
-		return () => title?.classList.remove("g-has-git");
-	}, [shown]);
 	// A form or the PR card needs the whole height (its buttons sit at the end).
 	useEffect(() => {
 		if (open && view !== "overview")
@@ -223,19 +213,20 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 		setOpen(false);
 		setView("overview");
 	};
-	const dot = running
-		? null
-		: status.dirty > 0
-			? "dirty"
-			: status.pr && prOpen(status)
-				? "pr"
-				: null;
+	// No badge: the Changes button beside it counts the changed files, and
+	// one orange badge per header reads as one thing to act on.
+	const label = [
+		`Git: ${status.branch ?? "detached HEAD"}`,
+		status.dirty ? `${status.dirty} changed` : null,
+		status.pr && prOpen(status) ? `PR #${status.pr.number} open` : null,
+	]
+		.filter(Boolean)
+		.join(", ");
 	return (
 		<>
 			<IonButton
-				ref={button}
 				className="g-phone-btn"
-				aria-label={`Git: ${status.branch ?? "detached HEAD"}${status.dirty ? `, ${status.dirty} changed` : ""}`}
+				aria-label={label}
 				onClick={() => {
 					setView("overview");
 					setMounted(true);
@@ -247,7 +238,6 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 				) : (
 					<GitBranchIcon aria-hidden="true" />
 				)}
-				{dot && <span className={`g-dot ${dot}`} aria-hidden="true" />}
 			</IonButton>
 			{/*
 			 * Portaled to ion-app: Ionic moves the sheet there, out of this
