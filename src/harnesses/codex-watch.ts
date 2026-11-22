@@ -84,7 +84,9 @@ export function codexPrompt(
 			tool: "exec",
 			input,
 			prompt: null,
-			sessionRules: command ? [command] : null,
+			// Allow once only: what Codex's "for the session" covers isn't
+			// known exactly, and the card must list what an answer allows.
+			sessionRules: null,
 			// Input to a running command, or a command the user typed: the TUI.
 			...(params.kind && params.kind !== "command" ? { readOnly: true } : {}),
 		};
@@ -100,7 +102,7 @@ export function codexPrompt(
 					: {}),
 			},
 			prompt: null,
-			sessionRules: ["file changes in this session"],
+			sessionRules: null,
 		};
 	if (method === QUESTION) {
 		const prompt = codexQuestions(params.questions);

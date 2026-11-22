@@ -94,7 +94,7 @@ describe("Codex prompts answered from the app (app-server client)", () => {
 				cwd: "/repo",
 				reason: "clean the build",
 			},
-			sessionRules: ["rm -rf build"],
+			sessionRules: null,
 		});
 		expect(p!.readOnly).toBeUndefined();
 		const ok = await w.reply({ ...p!, sessionId: T1 }, ALLOW);

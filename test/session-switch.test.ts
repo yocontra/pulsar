@@ -274,11 +274,6 @@ describe("a Claude process that switched sessions", () => {
 				}),
 			);
 		const needs = () => registry().needsYou("claude:sess-d1");
-		// /config or a menu: Claude asks nothing, so no card.
-		waiting("dialog open");
-		await scan();
-		await scan();
-		expect(needs()).toBeNull();
 		// A permission prompt nobody relayed (the hook timed out or is not installed).
 		waiting("permission prompt");
 		await scan();

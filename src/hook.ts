@@ -112,6 +112,7 @@ async function attempt(
 	sock: string,
 	registration: Registration,
 	params: Record<string, unknown>,
+	retrying: boolean,
 ): Promise<Attempt> {
 	const socket = await open(sock);
 	if (!socket) return { kind: "lost", connected: false };
@@ -143,8 +144,10 @@ async function attempt(
 			registration,
 		});
 		if (!hello) return lost;
-		// Refused (another protocol, not allowed): no decision.
-		if (!("result" in hello)) return { kind: "answer", decision: null };
+		// Refused (another protocol, not allowed): no decision. On a retry, a
+		// daemon still stopping may refuse: wait for the next one.
+		if (!("result" in hello))
+			return retrying ? lost : { kind: "answer", decision: null };
 		const r = await call("approval.request", params);
 		if (!r) return lost;
 		if (!("result" in r)) return { kind: "answer", decision: null };
@@ -221,6 +224,7 @@ export async function claudePermission(
 			registration,
 			// Asked again after a restart: the daemon's deadline keeps the time spent.
 			tries ? { ...request, elapsedMs } : request,
+			tries > 0,
 		);
 		if (r.kind === "answer") {
 			const decision = r.decision;

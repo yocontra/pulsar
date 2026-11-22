@@ -268,12 +268,8 @@ async function scanClaude(): Promise<Scanned[]> {
 							(await delegatedActive(rec.cwd ?? null, rec.sessionId)),
 					),
 					model: await claudeModel(rec.cwd ?? null, rec.sessionId),
-					// "dialog open" (/config, a menu) asks nothing: Claude's own
-					// viewer doesn't flag it either, so it is no terminal wait.
 					waitingFor:
-						rec.status === "waiting" && rec.waitingFor !== "dialog open"
-							? rec.waitingFor || "a dialog"
-							: null,
+						rec.status === "waiting" ? rec.waitingFor || "a dialog" : null,
 					meta: {
 						...(rec.messagingSocketPath
 							? { socket: rec.messagingSocketPath }
