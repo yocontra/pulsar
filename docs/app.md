@@ -189,6 +189,17 @@ In a session, **Find** opens the find bar. It searches all of the session that s
 
 Search covers prompts, replies, messages between agents and the titles of tool calls from the last 30 days. It doesn't cover tool output, thinking or subagents, and for a long session that was already running when search started, only its most recent part (about 5,000 events). To keep it from storing a copy of your transcripts, see `PULSAR_NO_SEARCH` in [docs/adapters.md](adapters.md).
 
+## Diagnostics
+
+**Diagnostics** runs `pulsar doctor` on every machine in the pool and shows the results in one place. Open it from Cmd-K ("Diagnostics", or type "doctor"), or from Settings → **Diagnostics**.
+
+- Each machine runs the checks itself, the same ones `pulsar doctor` prints in its terminal: the daemon, each harness, approvals, remote access, Tailscale, certificates, the background service and the other devices. Each check is passed (✓), a note (·) or a problem (✗). A problem shows how to fix it.
+- Under each machine's name: its Pulsar version, how long its daemon has run, event-loop delay, live agents, Tailscale state and version, when its certificate expires, and each harness's version.
+- When machines run different Pulsar versions, a note at the top says which machines to upgrade. A machine too old to answer says so.
+- A machine that is asleep or offline is listed with the reason.
+- This machine shows first; each other machine fills in as it answers, with "Checking…" until then. A machine that doesn't answer within 35 seconds says so. Results are a few seconds old at most; **Check again** runs the checks again on every machine now.
+- Diagnostics only reads. Before a machine sends its report, it replaces home folder paths with `~` and removes anything that looks like a token or password.
+
 ## Settings
 
 The gear button opens Settings:
@@ -197,6 +208,7 @@ The gear button opens Settings:
 - **Notifications**: turn on "Approval pending" notifications for this browser.
 - **Agent activity**: what happens when an agent you started, messaged or opened in the last 6 hours finishes its turn or stops with an error (an API error or a refused model, not a failing command): **Off**, **Notifications only**, **Sound only** or **Notifications with sound**. Notifications need this browser's notifications on; Sound only works without them. **In-app notifications** shows a short note in the corner while Pulsar is open, with **Open agent**; it closes when you open that agent. While Pulsar is in the background, the app icon and the tab title count what you missed. Kept on this device, and with its notifications on the machine that served the app. A finish on another machine reaches this browser too.
 - **Usage limits**: warn when a plan usage limit passes a threshold or is reached (on by default, at 80% and 95%). On a computer, type up to three percents; on a phone, pick a set. Kept on the machine that served the app, for every device on it.
+- **Diagnostics**: opens Diagnostics, the checks of every machine.
 - **Passkeys**: every passkey on this machine, with Remove.
 - **Confirmed browsers**: browsers that confirmed with Face ID / Touch ID recently (12 hours on a computer that runs Pulsar, 7 days on a phone or tablet), with Sign out. Sending as you, Stop, answering prompts and removing a passkey need this. Signing out a browser signs out all its open tabs.
 
@@ -228,4 +240,4 @@ On Linux and Windows, Ctrl replaces Cmd.
 
 ## When something is wrong
 
-The app says which: Tailscale is off on this device, the machine's Pulsar isn't running, or you're signed in to Tailscale as someone else. When the machine you opened goes to sleep, open another machine's address. `pulsar doctor` on a machine checks everything the app needs.
+The app says which: Tailscale is off on this device, the machine's Pulsar isn't running, or you're signed in to Tailscale as someone else. When the machine you opened goes to sleep, open another machine's address. `pulsar doctor` on a machine checks everything the app needs; **Diagnostics** shows the same checks for every machine.

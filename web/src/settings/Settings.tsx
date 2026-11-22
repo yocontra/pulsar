@@ -470,7 +470,7 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 								aria-labelledby={`set-x-${x.id}`}
 							>
 								<h3 id={`set-x-${x.id}`}>{x.title}</h3>
-								<Body />
+								<Body close={onClose} />
 							</section>
 						);
 					})}

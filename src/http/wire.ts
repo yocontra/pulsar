@@ -259,7 +259,9 @@ export type Feature =
 	/** Message search (`GET /search/messages`); absent with PULSAR_NO_SEARCH. */
 	| "search"
 	/** Review an agent's PR: files, threads, comments, reviews (`/agents/:id/git/review`). */
-	| "prreview";
+	| "prreview"
+	/** `pulsar doctor` for every machine (`GET /diagnostics`). */
+	| "diagnostics";
 
 /** `GET /hello`. */
 export interface Hello {
@@ -1726,4 +1728,85 @@ export interface LaunchRefs {
 	/** The checked-out branch (null: detached or no repo). */
 	current: string | null;
 	branches: { name: string; remote: boolean }[];
+}
+
+/** A doctor row: passed, worth knowing, or a problem. */
+export type DiagLevel = "ok" | "note" | "bad";
+
+/** One `pulsar doctor` check, as the CLI prints it and the app shows it. */
+export interface DiagCheck {
+	/** Where it belongs: "daemon", "harnesses", "approvals", "remote access", "mesh", "devices". */
+	group: string;
+	level: DiagLevel;
+	text: string;
+	/** What to do about it, when there is something to do. */
+	fix: string | null;
+}
+
+/** A harness doctor found on the machine. */
+export interface DiagHarness {
+	id: string;
+	label: string;
+	/** Its `--version`, when it answered. */
+	version: string | null;
+	configured: boolean;
+}
+
+/** What doctor read about a machine, besides the checks. */
+export interface DiagFacts {
+	/** Tailscale: "running", "stopped", "logged-out", "needs-approval", "not-running", "missing". */
+	tailscale: {
+		state: string;
+		version: string | null;
+		dnsName: string | null;
+		magicDns: boolean | null;
+	} | null;
+	/** Days until the node certificate expires (negative: expired). */
+	certDays: number | null;
+	harnesses: DiagHarness[];
+}
+
+/** One machine's doctor report, made by its own daemon. */
+export interface LocalDiagnostics {
+	version: string;
+	platform: string;
+	/** Daemon uptime in seconds. */
+	uptimeS: number;
+	agents: number;
+	/** Event-loop delay since the daemon started (ms). */
+	eventLoop: { p99: number; max: number; stalls: number } | null;
+	checks: DiagCheck[];
+	facts: DiagFacts;
+	/** When the checks ran (ms). */
+	checkedAt: number;
+}
+
+/** `GET /diagnostics`: a machine in the pool. */
+export interface MachineDiagnostics {
+	machineId: string;
+	name: string;
+	/** The machine serving this answer. */
+	self: boolean;
+	/** Its Pulsar version, from its report or its last hello. */
+	version: string | null;
+	report: LocalDiagnostics | null;
+	/** Why there is no report (offline, too old, failed). */
+	error: string | null;
+	/** "upgrade pulsar on studio": it runs an older version than the newest in the pool. */
+	upgrade: string | null;
+	/**
+	 * In `GET /diagnostics`: its report is still to come; ask for it with
+	 * `GET /diagnostics/:machineId`. False once answered (or unreachable).
+	 */
+	pending: boolean;
+}
+
+/**
+ * `GET /diagnostics`: every machine in the pool, at once, with no reports
+ * yet (`pending`), or why one can't be asked; `newest` from their hellos.
+ */
+export interface DiagnosticsReport {
+	machines: MachineDiagnostics[];
+	/** The newest Pulsar version in the pool. */
+	newest: string | null;
 }

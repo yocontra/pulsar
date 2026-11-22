@@ -1,0 +1,296 @@
+/* Diagnostics: desktop pane (diag-desktop) and phone page (diag-phone).
+   Colors come from the design tokens, so both themes follow. Status is a
+   shape and a word as well as a color. */
+
+.diag-page {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	overflow-y: auto;
+	background: var(--ds-bg);
+}
+.diag {
+	display: flex;
+	flex-direction: column;
+	gap: var(--ds-space-4);
+	padding: 0 var(--ds-space-4) var(--ds-space-6);
+	color: var(--ds-text);
+}
+.diag-phone {
+	padding: 0 16px 24px;
+	gap: var(--ds-space-3);
+}
+.diag-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+.diag-muted {
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-secondary);
+}
+.diag-loading {
+	margin: var(--ds-space-4) 0;
+}
+.diag code {
+	padding: 0 4px;
+	border-radius: 4px;
+	background: var(--ds-code-inline-bg);
+	font-family: var(--ds-font-mono, ui-monospace, monospace);
+	font-size: 0.92em;
+	overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------ header */
+.diag-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: var(--ds-space-3);
+	min-height: 48px;
+	margin: 0 calc(-1 * var(--ds-space-4));
+	padding: var(--ds-space-2) var(--ds-space-4);
+	border-bottom: 1px solid var(--ds-border);
+	background: var(--ds-bg);
+}
+.diag-title {
+	margin: 0;
+	font-size: var(--ds-text-headline);
+	font-weight: var(--ds-weight-semibold);
+}
+.diag-spacer {
+	flex: 1;
+}
+.diag-phone-bar {
+	display: flex;
+	justify-content: flex-end;
+	padding: 8px 16px 0;
+}
+.diag-refresh,
+.diag-progress {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: var(--ds-hit, 32px);
+	padding: 0 10px;
+	border-radius: var(--ds-radius-sm, 6px);
+	font-size: var(--ds-text-secondary);
+	white-space: nowrap;
+}
+.diag-refresh {
+	border: 1px solid var(--ds-border-strong);
+	background: var(--ds-surface);
+	color: var(--ds-text);
+	cursor: pointer;
+}
+.diag-refresh:hover {
+	background: var(--ds-surface-hover);
+}
+.diag-progress {
+	color: var(--ds-text-2);
+	font-variant-numeric: tabular-nums;
+}
+.diag-refresh svg,
+.diag-progress svg {
+	width: 15px;
+	height: 15px;
+}
+.diag-spin {
+	animation: diag-spin 1s linear infinite;
+}
+@keyframes diag-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.diag-spin {
+		animation: none;
+	}
+}
+
+/* ---------------------------------------------------------------- notices */
+.diag-skew,
+.diag-upgrade {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--ds-space-2);
+	margin: 0;
+	padding: var(--ds-space-2) var(--ds-space-3);
+	border-radius: var(--ds-radius-md, 8px);
+	background: var(--ds-needs-soft);
+	color: var(--ds-needs-text);
+	font-size: var(--ds-text-secondary);
+}
+.diag-skew {
+	margin-top: var(--ds-space-3);
+}
+.diag-skew svg,
+.diag-upgrade svg {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	margin-top: 2px;
+}
+.diag-error {
+	margin: 0;
+	padding: var(--ds-space-2) var(--ds-space-3);
+	border-radius: var(--ds-radius-md, 8px);
+	background: var(--ds-danger-soft);
+	color: var(--ds-danger-text);
+	font-size: var(--ds-text-secondary);
+}
+
+/* ---------------------------------------------------------------- machine */
+.diag-machine {
+	display: flex;
+	flex-direction: column;
+	gap: var(--ds-space-3);
+	padding: var(--ds-space-3) var(--ds-space-4);
+	border: 1px solid var(--ds-border);
+	border-radius: var(--ds-radius-lg, 10px);
+	background: var(--ds-surface);
+}
+.diag-desktop .diag-machine:first-of-type {
+	margin-top: var(--ds-space-2);
+}
+.diag-phone .diag-machine {
+	padding: 12px;
+}
+.diag-machine-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--ds-space-2);
+}
+.diag-machine-name {
+	display: flex;
+	align-items: center;
+	gap: var(--ds-space-2);
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: var(--ds-text-body, 15px);
+	font-weight: var(--ds-weight-semibold);
+	overflow-wrap: anywhere;
+}
+.diag-tag {
+	padding: 1px 6px;
+	border-radius: 999px;
+	background: var(--ds-surface-2);
+	color: var(--ds-text-2);
+	font-size: 11px;
+	font-weight: 500;
+}
+.diag-health {
+	font-size: var(--ds-text-secondary);
+	font-weight: 550;
+}
+.diag-health.is-problems {
+	color: var(--ds-danger-text);
+}
+.diag-health.is-ok {
+	color: var(--ds-success-text);
+}
+.diag-health.is-checking {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--ds-text-2);
+}
+.diag-health.is-checking svg {
+	width: 14px;
+	height: 14px;
+}
+.diag-health.is-notes,
+.diag-health.is-unknown {
+	color: var(--ds-text-3);
+}
+
+.diag-facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: var(--ds-space-2) var(--ds-space-4);
+	margin: 0;
+}
+.diag-fact {
+	min-width: 0;
+}
+.diag-fact dt {
+	color: var(--ds-text-3);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+.diag-fact dd {
+	margin: 0;
+	font-size: var(--ds-text-secondary);
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+
+.diag-group-name {
+	margin: 0 0 var(--ds-space-1);
+	color: var(--ds-text-2);
+	font-size: var(--ds-text-secondary);
+	font-weight: var(--ds-weight-semibold);
+}
+.diag-checks {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.diag-check {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--ds-space-2);
+	padding: 4px 0;
+	font-size: var(--ds-text-secondary);
+	line-height: 1.45;
+}
+.diag-check-body {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.diag-level {
+	display: inline-flex;
+	flex: none;
+	margin-top: 2px;
+}
+.diag-level svg {
+	width: 15px;
+	height: 15px;
+}
+.diag-level.is-ok {
+	color: var(--ds-success);
+}
+.diag-level.is-bad {
+	color: var(--ds-danger);
+}
+.diag-level.is-note {
+	color: var(--ds-text-3);
+}
+.diag-check.is-bad .diag-check-text {
+	color: var(--ds-text);
+	font-weight: 550;
+}
+.diag-fix {
+	color: var(--ds-text-2);
+}
+.diag-fix-label {
+	font-weight: 550;
+}

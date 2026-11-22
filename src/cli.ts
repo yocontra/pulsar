@@ -39,7 +39,7 @@ Usage:
                                   a change waits for you to confirm it (Touch ID, or your passkey in the app)
   pulsar passkeys [remove <id>]   devices that proved you're human in the app (Prove Human);
                                   remove waits for you to confirm it, like mesh changes
-  pulsar doctor [--mesh]          check the daemon, each harness and the agent mesh (--mesh: mesh only, read-only)
+  pulsar doctor [--mesh] [--json] check the daemon, each harness and the agent mesh (--mesh: mesh only, read-only; --json: one JSON line)
   pulsar status                   daemon status
   pulsar stop                     stop the daemon (it restarts on next use; not the background service)
   pulsar mcp                      run the MCP server (your agent's config runs this)
@@ -460,10 +460,13 @@ async function main(argv: string[]) {
 		case "doctor": {
 			const { values } = parseArgs({
 				args: rest,
-				options: { mesh: { type: "boolean" } },
+				options: { mesh: { type: "boolean" }, json: { type: "boolean" } },
 			});
 			const { runDoctor } = await import("./setup/doctor.ts");
-			process.exitCode = await runDoctor({ meshOnly: values.mesh === true });
+			process.exitCode = await runDoctor({
+				meshOnly: values.mesh === true,
+				json: values.json === true,
+			});
 			return;
 		}
 		case "setup": {

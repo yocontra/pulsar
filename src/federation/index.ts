@@ -31,6 +31,7 @@ import { USAGE_PERIODS } from "../usage/index.ts";
 import { VERSION } from "../version.ts";
 import { RemoteAttachmentsRelay } from "./attachments.ts";
 import { RemoteChangesReader } from "./changes.ts";
+import { RemoteDiagnostics } from "./diagnostics.ts";
 import { LocalFeed } from "./local.ts";
 import { isOwner, type PoolMembers } from "./members.ts";
 import {
@@ -227,6 +228,7 @@ export class Federation implements PoolView {
 	readonly transcripts: RemoteTranscriptReader;
 	readonly changes: RemoteChangesReader;
 	readonly usage: RemoteUsage;
+	readonly diagnostics: RemoteDiagnostics;
 	readonly attachments: RemoteAttachmentsRelay;
 	/** Prompts of remote agents: shared in their records, decided by their home node. */
 	readonly approvals: RemoteApprovals = {
@@ -335,6 +337,7 @@ export class Federation implements PoolView {
 		this.transcripts = new RemoteTranscriptReader(this);
 		this.changes = new RemoteChangesReader(this);
 		this.usage = new RemoteUsage(this);
+		this.diagnostics = new RemoteDiagnostics(this);
 		this.attachments = new RemoteAttachmentsRelay(this);
 		this.state.selfProtocol = this.protocol;
 		this.state.onApproval = (approval) =>
@@ -2685,6 +2688,15 @@ export class Federation implements PoolView {
 				if (!agent)
 					return fail("not_found", `no agent ${String(action.agent)}`);
 				return { ok: true, usage: this.service.usage.localAgent(agent) };
+			}
+			case "diag.read": {
+				authorize(user, "diagnostics");
+				return {
+					ok: true,
+					report: await this.service.diagnostics.local.read(
+						action.fresh === true,
+					),
+				};
 			}
 			default:
 				return fail(

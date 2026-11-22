@@ -1,5 +1,10 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
+import {
+	type LocalDiagnosticsDeps,
+	LocalDiagnosticsRunner,
+} from "../diagnostics/local.ts";
+import { diagnosticsList, machineDiagnostics } from "../diagnostics/pool.ts";
 import { execStats } from "../exec.ts";
 import { PoolAdmin, type PoolVerb } from "../federation/admin.ts";
 import { PoolMembers } from "../federation/members.ts";
@@ -11,6 +16,8 @@ import type {
 	AgentUsage,
 	AskRequest,
 	AskResponse,
+	DiagnosticsReport,
+	MachineDiagnostics,
 	SendDone,
 	StopResult,
 	UsagePeriod,
@@ -173,6 +180,8 @@ export interface ServiceOptions {
 	delivery?: Partial<DeliveryConfig>;
 	/** Poll harness servers for prompts (OpenCode); defaults to `scan`. */
 	serverInteractions?: boolean;
+	/** Diagnostics: how doctor runs (the daemon's own CLI by default; tests fake it). */
+	diagnostics?: Pick<LocalDiagnosticsDeps, "doctor" | "home" | "now">;
 }
 
 /**
@@ -218,6 +227,8 @@ export class PulsarService {
 	readonly ask: Lookup;
 	/** Token usage read from harness session files, and its API estimate. */
 	readonly usage: Usage;
+	/** This machine's `pulsar doctor` report for the app (src/diagnostics/). */
+	readonly diagnostics: { local: LocalDiagnosticsRunner };
 	private readonly usageOpts: ServiceOptions["usage"];
 	/** Full-text search over transcripts (`GET /search/messages`). */
 	readonly messages: MessageSearch;
@@ -516,6 +527,44 @@ export class PulsarService {
 			this.transcripts.tailer.tap = this.messages.tap;
 			this.app.extraFeatures = () => ["search"];
 		}
+		this.diagnostics = {
+			local: new LocalDiagnosticsRunner({
+				...opts.diagnostics,
+				daemon: () => {
+					const lag = this.lag.stats();
+					return {
+						agents: this.registry.live().length,
+						eventLoop: { p99: lag.p99, max: lag.max, stalls: lag.stalls },
+					};
+				},
+			}),
+		};
+	}
+
+	/** Every machine in the pool, at once, reports to come (`GET /diagnostics`). */
+	diagnosticsList(as: Principal): DiagnosticsReport {
+		authorize(as, "diagnostics");
+		return diagnosticsList(
+			{ id: this.machineId, name: this.machine },
+			this.registry.pool?.diagnostics ?? null,
+		);
+	}
+
+	/** One machine's doctor report, made by its own daemon (`GET /diagnostics/:machineId`). */
+	machineDiagnostics(
+		as: Principal,
+		machineId: string,
+		fresh: boolean,
+	): Promise<MachineDiagnostics> {
+		authorize(as, "diagnostics");
+		return machineDiagnostics(
+			{ id: this.machineId, name: this.machine },
+			this.diagnostics.local,
+			this.registry.pool?.diagnostics ?? null,
+			machineId,
+			as,
+			fresh,
+		);
 	}
 
 	/** The pool's token usage, priced on this node (`GET /usage`). */
