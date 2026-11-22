@@ -269,7 +269,10 @@ export function DiffBody({
 			c.sign === " " ? (side === "a" ? A?.[c.a!] : B?.[c.b!]) : tok(c, A, B);
 		return (
 			<span key={key} className={`ds-diff-cell ${cls}`}>
-				{extras?.gutter?.(c, side === "a" ? "LEFT" : "RIGHT")}
+				{/* A context line takes comments on its new side only. */}
+				{c.sign === " " && side === "a"
+					? null
+					: extras?.gutter?.(c, side === "a" ? "LEFT" : "RIGHT")}
 				{ln(side === "a" ? c.oldLine : c.newLine)}
 				<span className="sign" aria-hidden="true">
 					{c.sign === " " ? "" : c.sign === "-" ? "−" : "+"}

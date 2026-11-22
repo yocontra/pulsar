@@ -118,7 +118,16 @@ function seed(a: MockAgent): MockReview {
 			status: "added",
 			added: 0,
 			removed: 0,
-			binary: true,
+			binary: false,
+			tooLarge: false,
+		},
+		{
+			path: "src/auth/lock.ts",
+			oldPath: "src/auth/mutex.ts",
+			status: "renamed",
+			added: 0,
+			removed: 0,
+			binary: false,
 			tooLarge: false,
 		},
 	];
@@ -126,6 +135,7 @@ function seed(a: MockAgent): MockReview {
 		"src/auth/refresh.ts": REFRESH,
 		"test/refresh.test.ts": TEST,
 		"docs/flow.png": null,
+		"src/auth/lock.ts": null,
 	};
 	r.threads = [
 		{
@@ -173,6 +183,28 @@ function seed(a: MockAgent): MockReview {
 					author: "apparish",
 					body: "Done in the next commit.",
 					at: "2026-11-19T11:00:00Z",
+					url: null,
+				},
+			],
+		},
+		{
+			// A line outside the hunks: shown above the diff.
+			id: "PRRT_mock_far",
+			path: "src/auth/refresh.ts",
+			line: 80,
+			startLine: null,
+			originalLine: 80,
+			side: "RIGHT",
+			outdated: false,
+			resolved: true,
+			canResolve: true,
+			canReply: true,
+			comments: [
+				{
+					id: 5,
+					author: "reviewer",
+					body: "Same pattern in logout().",
+					at: "2026-11-18T09:30:00Z",
 					url: null,
 				},
 			],

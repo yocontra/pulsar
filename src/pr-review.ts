@@ -186,8 +186,8 @@ export function fileOf(f: RawFile): {
 	const s = String(f.status);
 	const patch = typeof f.patch === "string" ? f.patch : null;
 	const big = patch !== null && patch.length > MAX_PATCH;
-	// No patch: binary, or GitHub left it out (too large). A changed text
-	// file counts lines; a binary one counts none.
+	// No patch: GitHub left it out (too large) when lines changed; else a
+	// binary or empty file, or a pure rename (GitHub doesn't say which).
 	const noPatch = patch === null;
 	const counted = Number(f.changes ?? 0) > 0;
 	return {
@@ -204,7 +204,7 @@ export function fileOf(f: RawFile): {
 							: "modified",
 			added: Number(f.additions) || 0,
 			removed: Number(f.deletions) || 0,
-			binary: noPatch && !counted && s !== "renamed",
+			binary: false,
 			tooLarge: big || (noPatch && counted),
 		},
 		patch: big ? null : patch,
@@ -467,8 +467,11 @@ async function current(
 	}
 	const pr = json<{ number?: number; headRefOid?: string }>(r);
 	if (!pr) throw new RpcError("git_failed", "gh sent something unreadable");
-	if (Number(pr.number) !== number)
+	if (Number(pr.number) !== number) {
+		// The reload that follows must read the PR as it is now.
+		forgetReview(at.root);
 		refuse("The branch's PR changed. Reload and try again.");
+	}
 	return { ...at, head: pr.headRefOid ?? null };
 }
 
@@ -507,8 +510,10 @@ export async function addComment(
 	p: GitCommentParams,
 ): Promise<{ ok: true }> {
 	const at = await current(cwd, p.number);
-	if (at.head !== p.head)
+	if (at.head !== p.head) {
+		forgetReview(at.root);
 		refuse("The PR has new commits. Reload to comment on the latest code.");
+	}
 	const r = await gh(
 		at.cwd,
 		[

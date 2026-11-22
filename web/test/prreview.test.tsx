@@ -7,6 +7,7 @@ import {
 	openThreads,
 	threadIndex,
 } from "../src/features/prreview/data.ts";
+import { hrefFor, parseHash, registerPageName } from "../src/lib/hash.ts";
 import { DiffBody } from "../src/session/Diff.tsx";
 
 const PATCH = "@@ -10,3 +10,4 @@ fn\n a\n-b\n+B\n+C\n c\n@@ -40 +41 @@\n-x\n+y";
@@ -58,6 +59,9 @@ describe("line numbers", () => {
 			expect(html.match(/class="ds-diff-after"/g)?.length).toBe(1);
 			expect(html).toContain('data-g="RIGHT:11"');
 			expect(html).toContain('data-g="LEFT:11"');
+			// A context line takes comments on its new side only.
+			expect(html).toContain('data-g="RIGHT:10"');
+			expect(html).not.toContain('data-g="LEFT:10"');
 		}
 		const plain = renderToStaticMarkup(
 			<DiffBody items={p.items} A={null} B={null} layout="unified" />,
@@ -135,4 +139,17 @@ describe("threads", () => {
 			}),
 		).toMatchObject({ added: null, removed: null });
 	});
+});
+
+test("the review page's route round-trips a remote agent's address and a file", () => {
+	try {
+		registerPageName("pr");
+	} catch {}
+	const r = {
+		view: "page" as const,
+		name: "pr",
+		arg: "m-7f3a/claude:abc/def",
+		params: { f: "src/a b?c.ts" },
+	};
+	expect(parseHash(hrefFor(r))).toEqual(r);
 });

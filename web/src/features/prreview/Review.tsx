@@ -280,11 +280,14 @@ export function Thread({
 	number,
 	t,
 	mobile,
+	apart = false,
 }: {
 	agentId: string;
 	number: number;
 	t: GitReviewThread;
 	mobile: boolean;
+	/** Shown above the diff, not at its line: say which line. */
+	apart?: boolean;
 }) {
 	const [shown, setShown] = useState(!t.resolved);
 	const [replying, setReplying] = useState(false);
@@ -299,8 +302,15 @@ export function Thread({
 			<header className="prv-thread-head">
 				{t.outdated && <span className="prv-tag">Outdated</span>}
 				{t.resolved && <span className="prv-tag ok">Resolved</span>}
-				{t.line === null && t.originalLine && (
+				{t.line === null && t.originalLine ? (
 					<span className="prv-at">was line {t.originalLine}</span>
+				) : (
+					apart &&
+					t.line && (
+						<span className="prv-at">
+							{t.side === "LEFT" ? "Old line" : "Line"} {t.line}
+						</span>
+					)
 				)}
 				{t.resolved && (
 					<button
@@ -412,7 +422,26 @@ export function FileReview({
 	);
 	const [draft, setDraft] = useState<string | null>(null);
 	const number = r.pr!.number;
-	const loose = threads?.loose ?? [];
+	const patch = q.data?.patch;
+	const parsed = useMemo(
+		() => (patch != null ? parsePatch(patch) : null),
+		[patch],
+	);
+	// Threads whose line no row shows (a file not shown, a line outside the
+	// hunks) go above the diff with outdated ones, never out of sight.
+	const shown = file.binary || file.tooLarge || patch === null || !!parsed;
+	const loose = useMemo(() => {
+		const out = [...(threads?.loose ?? [])];
+		if (!threads || !shown) return out;
+		const rows = new Set<string>();
+		for (const it of parsed?.items ?? [])
+			if ("sign" in it) {
+				if (it.oldLine) rows.add(`LEFT:${it.oldLine}`);
+				if (it.newLine) rows.add(`RIGHT:${it.newLine}`);
+			}
+		for (const [k, list] of threads.at) if (!rows.has(k)) out.push(...list);
+		return out;
+	}, [threads, parsed, shown]);
 	let body: ReactNode;
 	if (file.binary)
 		body = <p className="cv-placeholder">Binary file, not shown.</p>;
@@ -422,10 +451,12 @@ export function FileReview({
 				This diff is too large to show. Open it on GitHub.
 			</p>
 		);
-	else if (q.data?.patch != null)
+	else if (q.data && patch === null)
+		body = <p className="cv-placeholder">No line changes to show.</p>;
+	else if (parsed)
 		body = (
 			<ReviewPatch
-				patch={q.data.patch}
+				p={parsed}
 				path={file.path}
 				layout={layout}
 				extras={{
@@ -497,7 +528,7 @@ export function FileReview({
 		);
 	return (
 		<div className="prv-file-body">
-			{mobile && q.data?.patch != null && r.head && (
+			{mobile && parsed && r.head && (
 				<p className="prv-tip">Tap a line number to comment.</p>
 			)}
 			{loose.length > 0 && (
@@ -509,6 +540,7 @@ export function FileReview({
 							number={number}
 							t={t}
 							mobile={mobile}
+							apart
 						/>
 					))}
 				</div>
@@ -519,12 +551,12 @@ export function FileReview({
 }
 
 function ReviewPatch({
-	patch,
+	p,
 	path,
 	layout,
 	extras,
 }: {
-	patch: string;
+	p: ReturnType<typeof parsePatch>;
 	path: string;
 	layout: "split" | "unified";
 	extras: {
@@ -532,7 +564,6 @@ function ReviewPatch({
 		after: (r: DiffRow, side: DiffSide) => ReactNode;
 	};
 }) {
-	const p = useMemo(() => parsePatch(patch), [patch]);
 	const lang = langForPath(path);
 	const A = useTokens(p.before, p.before ? lang : null);
 	const B = useTokens(p.after, p.after ? lang : null);
