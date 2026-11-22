@@ -7,6 +7,8 @@ import type {
 } from "../http/wire.ts";
 import { RpcError } from "../rpc.ts";
 import type { Principal } from "../service/caller.ts";
+// The viewer's own caps, so a peer can't send more.
+import { IMAGE_MAX, TEXT_MAX, TREE_MAX } from "../service/files.ts";
 import type { RemoteAttachments } from "../service/pool.ts";
 import type { Federation } from "./index.ts";
 
@@ -27,10 +29,6 @@ const CONTENT_KINDS = new Set([
 	"too_large",
 	"sensitive",
 ]);
-/** The viewer's caps, so a peer can't send more (src/service/files.ts). */
-const TREE_MAX = 2000;
-const TEXT_MAX = 1024 * 1024;
-const IMAGE_MAX = 10 * 1024 * 1024;
 
 const str = (v: unknown, max: number) =>
 	typeof v === "string" ? v.slice(0, max) : undefined;
