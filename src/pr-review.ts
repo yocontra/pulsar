@@ -116,7 +116,9 @@ function json<T>(r: GitResult): T | null {
 	}
 }
 
-const THREADS_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){viewerDidAuthor reviewThreads(first:100){nodes{id isResolved isOutdated viewerCanResolve viewerCanUnresolve viewerCanReply path line startLine originalLine diffSide comments(first:50){nodes{databaseId author{login} body createdAt url}}}}}}}`;
+const THREADS_QUERY = `query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$number){viewerDidAuthor reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated viewerCanResolve viewerCanUnresolve viewerCanReply path line startLine originalLine diffSide comments(first:100){totalCount nodes{databaseId author{login} body createdAt url}}}}}}}`;
+/** Pages of 100 review threads read at most; past that, `threadsTruncated`. */
+const THREAD_PAGES = 5;
 
 interface RawThread {
 	id?: string;
@@ -131,6 +133,7 @@ interface RawThread {
 	originalLine?: number | null;
 	diffSide?: string;
 	comments?: {
+		totalCount?: number;
 		nodes?: {
 			databaseId?: number;
 			author?: { login?: string } | null;
@@ -147,6 +150,8 @@ const num = (v: unknown) =>
 export function threadOf(t: RawThread): GitReviewThread | null {
 	if (!t.id || !NODE_ID.test(t.id) || !t.path) return null;
 	const resolved = !!t.isResolved;
+	const shown = t.comments?.nodes?.length ?? 0;
+	const more = Number(t.comments?.totalCount ?? 0) - shown;
 	return {
 		id: t.id,
 		path: String(t.path),
@@ -165,7 +170,66 @@ export function threadOf(t: RawThread): GitReviewThread | null {
 			at: c.createdAt ?? null,
 			url: httpsUrl(c.url),
 		})),
+		...(more > 0 ? { moreComments: more } : {}),
 	};
+}
+
+/**
+ * Every review thread, a page of 100 at a time, up to THREAD_PAGES pages:
+ * a thread left unread would hide feedback, so `more` says some were.
+ */
+async function readThreads(at: Located, number: number) {
+	const [owner, name] = at.repos.base.split("/") as [string, string];
+	const threads: GitReviewThread[] = [];
+	let after: string | null = null;
+	let own = false;
+	for (let page = 0; page < THREAD_PAGES; page++) {
+		const r = await gh(at.cwd, [
+			"api",
+			"graphql",
+			"-f",
+			`query=${THREADS_QUERY}`,
+			"-f",
+			`owner=${owner}`,
+			"-f",
+			`name=${name}`,
+			"-F",
+			`number=${number}`,
+			...(after ? ["-f", `after=${after}`] : []),
+		]);
+		const pr = json<{
+			data?: {
+				repository?: {
+					pullRequest?: {
+						viewerDidAuthor?: boolean;
+						reviewThreads?: {
+							pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+							nodes?: RawThread[];
+						};
+					};
+				};
+			};
+		}>(r)?.data?.repository?.pullRequest;
+		if (!r.ok || !pr)
+			return {
+				ok: false,
+				message: r.ok ? "gh sent something unreadable" : r.message,
+				own,
+				threads,
+				more: page > 0,
+			};
+		if (page === 0) own = !!pr.viewerDidAuthor;
+		for (const t of pr.reviewThreads?.nodes ?? []) {
+			const x = threadOf(t);
+			if (x) threads.push(x);
+		}
+		const info = pr.reviewThreads?.pageInfo;
+		const next = typeof info?.endCursor === "string" ? info.endCursor : null;
+		if (!info?.hasNextPage || !next || next.length > 400)
+			return { ok: true, message: "", own, threads, more: false };
+		after = next;
+	}
+	return { ok: true, message: "", own, threads, more: true };
 }
 
 interface RawFile {
@@ -242,7 +306,8 @@ function reviewsOf(
 	return out.slice(-MAX_REVIEWS);
 }
 
-const empty = (
+/** A review with no PR: why, if known. */
+export const empty = (
 	agent: string,
 	reason?: GitPrReview["reason"],
 	message?: string,
@@ -261,6 +326,7 @@ const empty = (
 	files: [],
 	truncated: false,
 	threads: [],
+	threadsTruncated: false,
 });
 
 /** The branch's PR for review (cached briefly; `fresh` reads again). */
@@ -306,42 +372,18 @@ export async function prReview(
 		typeof raw.headRefOid === "string" && SHA.test(raw.headRefOid)
 			? raw.headRefOid
 			: null;
-	const [owner, name] = repos.base.split("/") as [string, string];
 	const [threadsRes, filesRes] = await Promise.all([
-		gh(at.cwd, [
-			"api",
-			"graphql",
-			"-f",
-			`query=${THREADS_QUERY}`,
-			"-f",
-			`owner=${owner}`,
-			"-f",
-			`name=${name}`,
-			"-F",
-			`number=${pr.number}`,
-		]),
+		readThreads(at, pr.number),
 		readFiles(at, pr.number),
 	]);
-	const g = json<{
-		data?: {
-			repository?: {
-				pullRequest?: {
-					viewerDidAuthor?: boolean;
-					reviewThreads?: { nodes?: RawThread[] };
-				};
-			};
-		};
-	}>(threadsRes)?.data?.repository?.pullRequest;
-	const threads = (g?.reviewThreads?.nodes ?? [])
-		.map(threadOf)
-		.filter((t): t is GitReviewThread => !!t);
+	const threads = threadsRes.threads;
 	const d = String(raw.reviewDecision ?? "").toUpperCase();
 	const review: Omit<GitPrReview, "agent"> = {
 		pr,
 		head,
 		body: clip(raw.body, 60_000),
 		author: raw.author?.login ? String(raw.author.login) : null,
-		ownPr: !!g?.viewerDidAuthor,
+		ownPr: threadsRes.own,
 		checks: (raw.statusCheckRollup ?? []).map(checkOf),
 		review:
 			d === "APPROVED"
@@ -356,6 +398,10 @@ export async function prReview(
 		truncated:
 			filesRes.more || Number(raw.changedFiles ?? 0) > filesRes.files.length,
 		threads,
+		threadsTruncated:
+			threadsRes.more ||
+			!threadsRes.ok ||
+			threads.some((t) => (t.moreComments ?? 0) > 0),
 		...(!threadsRes.ok
 			? { message: `Couldn't read review threads: ${threadsRes.message}` }
 			: !filesRes.ok

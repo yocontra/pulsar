@@ -18,6 +18,10 @@ interface MockReview {
 	head: string;
 	body: string;
 	ownPr: boolean;
+	/** Some threads were not read (the daemon's page limit). */
+	threadsTruncated?: boolean;
+	/** This file's patch fails to load. */
+	failFile?: string;
 	files: GitReviewFile[];
 	patches: Record<string, string | null>;
 	threads: GitReviewThread[];
@@ -257,6 +261,7 @@ export function prReview(a: MockAgent): GitPrReview {
 		review: d.review,
 		reviews: d.comments.filter((c) => c.path === null),
 		truncated: false,
+		threadsTruncated: false,
 	};
 	if (!d.pr)
 		return {
@@ -277,6 +282,7 @@ export function prReview(a: MockAgent): GitPrReview {
 		ownPr: r.ownPr,
 		files: r.files,
 		threads: r.threads,
+		threadsTruncated: !!r.threadsTruncated,
 	};
 }
 
@@ -285,6 +291,8 @@ export function prReviewFile(a: MockAgent, path: string): GitReviewPatch {
 	const f = r.files.find((x) => x.path === path);
 	if (!gitPrDetails(a).pr || !f)
 		throw new GitMockError(404, "not_found", "the PR has no such file");
+	if (r.failFile === path)
+		throw new GitMockError(503, "unreachable", "GitHub didn't answer");
 	return {
 		agent: a.id,
 		path,
@@ -419,7 +427,9 @@ export function prReviewAct(
 export function prReviewControl(
 	a: MockAgent,
 	body: {
-		set?: Partial<Pick<MockReview, "ownPr" | "head">>;
+		set?: Partial<
+			Pick<MockReview, "ownPr" | "head" | "threadsTruncated" | "failFile">
+		>;
 		fail?: MockReview["fail"];
 	},
 ) {

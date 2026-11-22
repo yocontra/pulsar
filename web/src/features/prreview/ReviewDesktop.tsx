@@ -23,6 +23,7 @@ import {
 	PrHead,
 	ReviewForm,
 	Summary,
+	ThreadsTruncated,
 } from "./Review.tsx";
 import "../../changes/changes.css";
 import "../git/git.css";
@@ -61,79 +62,82 @@ function Files({ agent, r }: { agent: AgentRow; r: GitPrReview }) {
 	if (r.files.length === 0)
 		return <p className="prv-empty">{r.message ?? "No files changed."}</p>;
 	return (
-		<div className="prv-files">
-			<nav className="prv-files-nav" aria-label="Files">
-				<FileList
-					files={r.files.map(asChanged)}
-					label="Changed files"
-					selected={current}
-					onSelect={(f) => {
-						setCurrent(f.path);
-						pane.current
-							?.querySelector(`[data-file="${CSS.escape(f.path)}"]`)
-							?.scrollIntoView({ block: "start" });
-					}}
-				/>
-				{r.truncated && (
-					<p className="cv-more">Showing the first {r.files.length} files.</p>
-				)}
-			</nav>
-			<div className="prv-files-main" ref={pane}>
-				<div className="prv-files-bar">
-					<div className="cv-modes" role="radiogroup" aria-label="Layout">
-						{(["split", "unified"] as const).map((l) => (
-							<button
-								key={l}
-								type="button"
-								role="radio"
-								aria-checked={layout === l}
-								className={`cv-mode${layout === l ? " on" : ""}`}
-								onClick={() => setLayout(l)}
-							>
-								{l === "split" ? "Split" : "Unified"}
-							</button>
-						))}
+		<>
+			<ThreadsTruncated r={r} />
+			<div className="prv-files">
+				<nav className="prv-files-nav" aria-label="Files">
+					<FileList
+						files={r.files.map(asChanged)}
+						label="Changed files"
+						selected={current}
+						onSelect={(f) => {
+							setCurrent(f.path);
+							pane.current
+								?.querySelector(`[data-file="${CSS.escape(f.path)}"]`)
+								?.scrollIntoView({ block: "start" });
+						}}
+					/>
+					{r.truncated && (
+						<p className="cv-more">Showing the first {r.files.length} files.</p>
+					)}
+				</nav>
+				<div className="prv-files-main" ref={pane}>
+					<div className="prv-files-bar">
+						<div className="cv-modes" role="radiogroup" aria-label="Layout">
+							{(["split", "unified"] as const).map((l) => (
+								<button
+									key={l}
+									type="button"
+									role="radio"
+									aria-checked={layout === l}
+									className={`cv-mode${layout === l ? " on" : ""}`}
+									onClick={() => setLayout(l)}
+								>
+									{l === "split" ? "Split" : "Unified"}
+								</button>
+							))}
+						</div>
 					</div>
+					{r.files.map((f) => {
+						const { dir, name } = splitPath(f.path);
+						const open = openThreads(r.threads, f.path);
+						return (
+							<section
+								key={f.path}
+								className="prv-file"
+								data-file={f.path}
+								aria-label={f.path}
+							>
+								<h3 className="prv-file-head">
+									<StatusMark file={asChanged(f)} />
+									<span className="cv-name">
+										<span className="cv-base">{name}</span>
+										{f.oldPath ? (
+											<span className="cv-dir">from {f.oldPath}</span>
+										) : (
+											dir && (
+												<span className="cv-dir">{dir.replace(/\/$/, "")}</span>
+											)
+										)}
+									</span>
+									{open > 0 && <span className="prv-open">{open} open</span>}
+									<Counts file={asChanged(f)} />
+								</h3>
+								<WhenNear>
+									<FileReview
+										agent={agent}
+										r={r}
+										file={f}
+										layout={layout}
+										mobile={false}
+									/>
+								</WhenNear>
+							</section>
+						);
+					})}
 				</div>
-				{r.files.map((f) => {
-					const { dir, name } = splitPath(f.path);
-					const open = openThreads(r.threads, f.path);
-					return (
-						<section
-							key={f.path}
-							className="prv-file"
-							data-file={f.path}
-							aria-label={f.path}
-						>
-							<h3 className="prv-file-head">
-								<StatusMark file={asChanged(f)} />
-								<span className="cv-name">
-									<span className="cv-base">{name}</span>
-									{f.oldPath ? (
-										<span className="cv-dir">from {f.oldPath}</span>
-									) : (
-										dir && (
-											<span className="cv-dir">{dir.replace(/\/$/, "")}</span>
-										)
-									)}
-								</span>
-								{open > 0 && <span className="prv-open">{open} open</span>}
-								<Counts file={asChanged(f)} />
-							</h3>
-							<WhenNear>
-								<FileReview
-									agent={agent}
-									r={r}
-									file={f}
-									layout={layout}
-									mobile={false}
-								/>
-							</WhenNear>
-						</section>
-					);
-				})}
 			</div>
-		</div>
+		</>
 	);
 }
 
@@ -200,7 +204,12 @@ function ReviewDesktopImpl({ arg, params }: PageProps) {
 		files: (
 			<>
 				Files <span className="prv-count">{r.files.length}</span>
-				{open > 0 && <span className="prv-count warn">{open} open</span>}
+				{(open > 0 || r.threadsTruncated) && (
+					<span className="prv-count warn">
+						{open}
+						{r.threadsTruncated ? "+" : ""} open
+					</span>
+				)}
 			</>
 		),
 		checks: (
