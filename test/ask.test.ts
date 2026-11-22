@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { driverFor } from "../src/harnesses/index.ts";
 import type { HarnessDriver } from "../src/harnesses/types.ts";
 import { StaticIdentity } from "../src/http/identity.ts";
-import type { AgentRow, AskResponse } from "../src/http/wire.ts";
+import type { AgentRow } from "../src/http/wire.ts";
 import {
 	callTouches,
 	parseQuestion,
@@ -155,7 +155,7 @@ describe("question parsing", () => {
 	});
 });
 
-describe("POST /ask on a daemon", () => {
+describe("ask on a daemon (askPool)", () => {
 	let dir: string;
 	let store: Store;
 	let service: PulsarService;
@@ -163,14 +163,13 @@ describe("POST /ask on a daemon", () => {
 	let base: string;
 	const logs = new Map<string, string>();
 
-	const ask = async (question: string, selector?: string) => {
-		const res = await fetch(`${base}/api/v1/ask`, {
-			method: "POST",
-			headers: { "X-Pulsar": "1", "Content-Type": "application/json" },
-			body: JSON.stringify({ question, ...(selector ? { selector } : {}) }),
-		});
-		return { status: res.status, body: (await res.json()) as AskResponse };
-	};
+	// What socket `lookup` (`pulsar ask`, MCP `list_agents question`) runs.
+	const ask = async (question: string, selector?: string) => ({
+		body: await service.askPool(
+			{ question, ...(selector ? { selector } : {}) },
+			{ kind: "human", login: "me@example.com", node: "phone" },
+		),
+	});
 
 	beforeAll(async () => {
 		dir = mkdtempSync(join(tmpdir(), "pulsar-ask-"));
@@ -243,7 +242,6 @@ describe("POST /ask on a daemon", () => {
 
 	test("who is editing a file: from the logs, with evidence, nobody woken", async () => {
 		const r = await ask("who is editing src/auth/session.ts?");
-		expect(r.status).toBe(200);
 		expect(r.body.matches.map((m) => m.agent.name)).toEqual(["fixer"]);
 		expect(r.body.matches[0]!.evidence[0]).toMatch(
 			/^Edited src\/auth\/session\.ts \d+[smhd] ago$/,
@@ -300,11 +298,14 @@ describe("POST /ask on a daemon", () => {
 		expect((await ask("who touched net.ts", "harness=claude")).body.total).toBe(
 			0,
 		);
-		const bad = await fetch(`${base}/api/v1/ask`, {
+	});
+
+	test("the app's HTTP ask route is gone", async () => {
+		const res = await fetch(`${base}/api/v1/ask`, {
 			method: "POST",
 			headers: { "X-Pulsar": "1", "Content-Type": "application/json" },
-			body: JSON.stringify({ question: "" }),
+			body: JSON.stringify({ question: "who touched net.ts" }),
 		});
-		expect(bad.status).toBe(400);
+		expect(res.status).toBe(404);
 	});
 });

@@ -209,23 +209,7 @@ result(
 	sent.reply ?? `status ${sent.status}`,
 );
 
-// 4. Ask across machines (nobody is woken).
-const ask = await api<{
-	matches: { agent: { name: string; machine?: string }; evidence: string[] }[];
-}>(MAC, "/ask", {
-	method: "POST",
-	body: { question: "who is editing src/auth/session.ts" },
-});
-const hit = ask.body.matches?.find((m) => m.agent.name === "fixer");
-result(
-	Boolean(
-		hit?.evidence.some((e) => e.startsWith("Edited src/auth/session.ts")),
-	),
-	"Ask on the Mac finds the remote fixer with evidence",
-	hit?.evidence.join("; ") ?? JSON.stringify(ask.body).slice(0, 200),
-);
-
-// 5. The remote agent's transcript, read through the Mac.
+// 4. The remote agent's transcript, read through the Mac.
 const page = await api<{ events: { text: string }[]; available: boolean }>(
 	MAC,
 	`/agents/${encodeURIComponent(fixer.id)}/transcript`,
@@ -239,7 +223,7 @@ result(
 	`${page.body.events?.length ?? 0} events`,
 );
 
-// 6. Stop without a passkey session is refused.
+// 5. Stop without a passkey session is refused.
 const stop = await api<{ error?: { code: string } }>(
 	MAC,
 	`/agents/${encodeURIComponent(reviewer.id)}/stop`,
@@ -251,7 +235,7 @@ result(
 	`${stop.status} ${stop.body.error?.code ?? ""}`,
 );
 
-// 7. Broadcast dry run to the remote fake agents.
+// 6. Broadcast dry run to the remote fake agents.
 const dry = await api<{
 	count: number;
 	breakdown: { machine: string; count: number }[];
@@ -267,7 +251,7 @@ result(
 	`${dry.body.count} on ${dry.body.breakdown?.map((b) => b.machine).join(",")}`,
 );
 
-// 8. Link drop: pause the container, send, unpause, the outbox delivers.
+// 7. Link drop: pause the container, send, unpause, the outbox delivers.
 if (pause) {
 	execFileSync("docker", ["pause", CONTAINER]);
 	console.log(`… ${CONTAINER} paused`);

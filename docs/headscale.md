@@ -67,4 +67,4 @@ Pulsar needs only TCP to each machine's app port (7337 by default, or `PULSAR_HT
 
 ## Test it
 
-`scripts/live/headscale.sh` runs the whole setup in a private Docker network: Headscale (pinned), a test CA, two Linux machines with Pulsar from this checkout and a tagged machine. It then runs the cross-machine checks (`scripts/live/checks.ts`): link, send and reply, Ask, transcripts, Stop refused without a passkey session, and the outbox while a machine is paused. It removes everything it created when it finishes (`KEEP=1` keeps it).
+`scripts/live/headscale.sh` runs the whole setup in a private Docker network: Headscale (pinned), a test CA, two Linux machines with Pulsar from this checkout and a tagged machine. It then runs the cross-machine checks (`scripts/live/checks.ts`): link, send and reply, transcripts, Stop refused without a passkey session, and the outbox while a machine is paused. It removes everything it created when it finishes (`KEEP=1` keeps it).

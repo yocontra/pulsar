@@ -325,13 +325,6 @@ const SendBody = z
 	})
 	.strict();
 
-const AskBody = z
-	.object({
-		question: z.string().min(1).max(2000),
-		selector: z.string().max(4000).optional(),
-	})
-	.strict();
-
 const SessionOptionsBody = z
 	.object({ device: z.string().max(200).optional() })
 	.strict();
@@ -1468,12 +1461,6 @@ export class HttpTransport {
 			)
 				requireSession(c);
 			return c.json(await svc.send(who(c), body));
-		});
-		// Ask: answered from the registry and the touched-files index; nobody is woken.
-		api.post("/ask", async (c) => {
-			this.service.authorize(who(c), "lookup");
-			const body = parse(AskBody, await jsonBody(c));
-			return c.json(await this.service.askPool(body, who(c)));
 		});
 		// Token usage across the pool, priced here ("API estimate").
 		api.get("/usage", async (c) => {

@@ -243,7 +243,6 @@ export type Feature =
 	| "transcripts"
 	| "receipts"
 	| "stop"
-	| "ask"
 	| "approvals"
 	| "push"
 	| "subagents"
@@ -1220,7 +1219,7 @@ export interface GitReviewParams {
 	body: string;
 }
 
-/** What a question is about (`POST /ask`), as the parser read it. */
+/** What a question is about (socket `lookup`), as the parser read it. */
 export interface AskIntent {
 	paths: string[];
 	/** PR / issue numbers. */
@@ -1243,7 +1242,7 @@ export interface AskMatch {
 	evidence: string[];
 }
 
-/** `POST /ask {question, selector?}`: answered from what pulsar knows; nobody is woken. */
+/** Socket `lookup {question, selector?}` (`pulsar ask`, MCP `list_agents question`): answered from what pulsar knows; nobody is woken. */
 export interface AskRequest {
 	question: string;
 	selector?: string;

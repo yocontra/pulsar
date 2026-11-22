@@ -215,10 +215,6 @@ Each machine checks for itself. An action on an agent on another machine asks fo
 
 Cmd-Shift-B (or Broadcast… on a phone) opens the builder. Pick values in the facets (machine, project, harness, model, branch, status, PR, role, tags) or type a selector; the match count and a preview update live, and each preview row says whether the message will wake the agent. **Dry run** shows who would get it, per machine. Sends to many agents ask you to confirm, and sending to everyone (`*`) asks you to type the count. Results stream in with receipts and replies.
 
-## Ask
-
-Cmd-K, then type `?` (or pick Ask): "who is editing src/auth/session.ts", "who has PR 1402", "what is codex@apparish doing", "who is idle on apparish". Answers come from what Pulsar already knows, with the evidence ("Edited src/auth/session.ts 4m ago", "branch fix-1378"); nobody is woken. Tick the agents to ask and press **Ask them directly** to send them your question and watch the replies, with who hasn't answered yet.
-
 ## Search messages
 
 Cmd-K searches what you and your agents wrote, on every machine: type a word of 3 letters or more and matching messages show under **In messages**, each with the agent, a snippet ("You:" for your own words, "Agent:" for the agent's) and when it was written. On a phone, tap the search button on the Agents screen. Choosing a message opens its session at that message, with the find bar open.
@@ -254,7 +250,7 @@ The gear button opens Settings:
 
 | Key | Does |
 | --- | --- |
-| Cmd-K | Search the pool and messages; `?` switches to Ask |
+| Cmd-K | Search the pool and messages |
 | Enter / Shift-Enter | Next / previous match (in the find bar) |
 | `/` | Filter the tree |
 | `j` / `k` | Move down / up |

@@ -48,7 +48,6 @@ const FEATURES: Feature[] = [
 	"approvals",
 	"push",
 	"stop",
-	"ask",
 	"subagents",
 	"usage",
 	"attachments",

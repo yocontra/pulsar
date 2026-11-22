@@ -27,12 +27,6 @@ import {
 	withoutKey,
 } from "../../src/selector.ts";
 import { actDigest } from "../../src/service/acting.ts";
-import {
-	type AgentWork,
-	parseQuestion,
-	rank,
-	workFrom,
-} from "../../src/service/ask-core.ts";
 import type { Principal } from "../../src/service/caller.ts";
 import {
 	answerApproves,
@@ -55,8 +49,6 @@ import type {
 	AgentsPage,
 	Approval,
 	ApprovalDecision,
-	AskRequest,
-	AskResponse,
 	AttentionItem,
 	AttentionList,
 	DeliveredMessage,
@@ -201,7 +193,6 @@ const FEATURES: Feature[] = [
 		"stop",
 		"approvals",
 		"push",
-		"ask",
 		"usage",
 		"attachments",
 		"launch",
@@ -687,38 +678,6 @@ function hello(): Hello {
 		agents: agents.filter((a) => a.status !== "offline").length,
 		firstRun: false,
 	};
-}
-
-/**
- * Ask, like the daemon's Lookup: the same parser and ranking (ask-core), the
- * touched files read from the newest transcript page of the most recently
- * active agents (live ones only).
- */
-function ask(question: string, selector?: string): AskResponse {
-	const live = matching(selector ?? "*").filter((a) => a.status !== "offline");
-	const rows = live.map(row);
-	const intent = parseQuestion(question, rows);
-	const work = new Map<string, AgentWork>();
-	if (
-		intent.paths.length +
-		intent.numbers.length +
-		intent.agents.length +
-		intent.words.length
-	) {
-		const named = new Set(intent.agents);
-		const candidates = live
-			.filter((a) => a.hasTranscript)
-			.sort(
-				(x, y) =>
-					Number(named.has(y.name.toLowerCase())) -
-						Number(named.has(x.name.toLowerCase())) ||
-					y.lastActive - x.lastActive,
-			)
-			.slice(0, 150);
-		for (const a of candidates)
-			work.set(a.id, workFrom(transcriptPage(a, null).events, null));
-	}
-	return rank(question, intent, rows, (r) => work.get(r.id) ?? null);
 }
 
 /** Who waits on the user: approvals first, newest first (like the daemon). */
@@ -3268,12 +3227,6 @@ async function route(
 				},
 			}),
 		);
-	}
-	if (POST && path === "/ask") {
-		const body = (await jsonBody(req)) as Partial<AskRequest>;
-		if (typeof body.question !== "string" || !body.question.trim())
-			throw new ApiError(400, "bad_request", "question: required");
-		return json(ask(body.question, body.selector));
 	}
 	if (POST && path === "/send") {
 		const input = subagentSend(parseSend(await jsonBody(req)));

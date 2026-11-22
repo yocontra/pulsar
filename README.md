@@ -93,7 +93,7 @@ Run `pulsar qr` and scan the code with your phone, then add the page to your hom
 - See the GitHub issue an agent works on, with its card.
 - Browse the files in an agent's folder; file links in its replies open there.
 - Review an agent's PR: comment on lines, reply, resolve threads, approve or request changes.
-- Search the pool and every session's messages, and ask "who is editing this file?"
+- Search the pool and every session's messages.
 - Get notifications when an agent needs you, finishes or fails.
 - See token usage and an API cost estimate per harness, model and day.
 - See plan usage limits, with a warning when one passes 80% or 95% or is reached.

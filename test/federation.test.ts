@@ -1141,19 +1141,16 @@ describe("pool-wide attention, idle waits and stop", () => {
 		);
 		const address = `${c.service.machineId}/${logged.id}`;
 		await until(() => b.service.registry.find(address) !== undefined, 8000);
-		const r = await api<{
-			matches: { agent: { id: string; machine: string }; evidence: string[] }[];
-			scanned: number;
-		}>("b", "/ask", {
-			method: "POST",
-			body: JSON.stringify({ question: "who touched src/auth/session.ts?" }),
-		});
-		expect(r.status).toBe(200);
-		const hit = r.body.matches.find((m) => m.agent.id === address);
+		// The user's ask (`pulsar ask` on B): askPool, as socket `lookup` runs it.
+		const r = await b.service.askPool(
+			{ question: "who touched src/auth/session.ts?" },
+			{ kind: "human", login: OWNER, node: "b" },
+		);
+		const hit = r.matches.find((m) => m.agent.id === address);
 		expect(hit).toBeDefined();
 		expect(hit!.agent.machine).toBe("c");
 		expect(hit!.evidence.join(" ")).toContain("session.ts");
-		expect(r.body.scanned).toBeGreaterThanOrEqual(6);
+		expect(r.scanned).toBeGreaterThanOrEqual(6);
 		// The socket `lookup` (an agent asking) spans the pool too.
 		const viaSocket = (await agents.a1!.call("lookup", {
 			question: "who touched src/auth/session.ts?",
@@ -1219,18 +1216,13 @@ describe("pool-wide attention, idle waits and stop", () => {
 		};
 		try {
 			const t0 = Date.now();
-			const r = await api<{
-				partial?: boolean;
-				missing?: string[];
-				matches: unknown[];
-			}>("b", "/ask", {
-				method: "POST",
-				body: JSON.stringify({ question: "who is on web?" }),
-			});
+			const r = await b.service.askPool(
+				{ question: "who is on web?" },
+				{ kind: "human", login: OWNER, node: "b" },
+			);
 			expect(Date.now() - t0).toBeLessThan(5000);
-			expect(r.status).toBe(200);
-			expect(r.body.partial).toBe(true);
-			expect(r.body.missing).toEqual(["c"]);
+			expect(r.partial).toBe(true);
+			expect(r.missing).toEqual(["c"]);
 		} finally {
 			ask.local = original;
 		}
