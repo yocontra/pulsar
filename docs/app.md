@@ -22,6 +22,8 @@ The sidebar (the home screen on a phone) lists every agent as a tree: machines, 
 
 Open an agent to watch its session live: your prompts, its replies and thinking (collapsed), tool calls as one line each (Edit and Write expand to a diff), code with highlighting, math, Mermaid diagrams, tables and images. Older events load with "Load earlier". Agent text is shown as text: raw HTML, scripts and remote images never run or load. Web links open in a new tab. A link to a file path (`/Users/…/report.html`, `./src/a.ts`, `file://…`) is not a web page: click it to open the file in Changes when the agent changed it, or to copy the path.
 
+A turn that edited files ends with "Changed 3 files +42 −7". Open it to list the files with their lines added and removed; click a file for its diff, or **Show all diffs** for the whole turn. It is built from the turn's edit tool calls (subagents' edits included), not from git, and shows once the turn ends.
+
 The composer at the bottom sends to this agent. Choose how urgent it is:
 
 - **Interrupt now** (`urgent`): lands mid-turn where the harness supports it.
