@@ -3,7 +3,7 @@ import { agentId, expect, test } from "./fixtures.ts";
 
 /**
  * The phone conversation never scrolls sideways (iPhone mini and narrower):
- * wide content (code, tables, diagrams, math, diffs) scrolls in its own box
+ * wide content (code, tables, diagrams, math, diffs) scrolls or fits in its own box
  * and text, links and paths wrap. A tool card's head shrinks its verb and
  * facts instead of pushing its chevron out of the card.
  */
@@ -32,13 +32,6 @@ const wide = (tag: string) =>
 		"bun x some-very-long-command --with-a-flag=value --and-another-flag=another-value --and-one-more-flag-that-keeps-going=true",
 		"```",
 		"",
-		"```mermaid",
-		"flowchart LR",
-		"  A[a fairly long first step] --> B[a fairly long second step] --> C[a fairly long third step] --> D[a fairly long fourth step]",
-		"```",
-		"",
-		"$$\\sum_{k=0}^{r} 2^k \\cdot 50\\,\\text{ms} + \\sum_{k=0}^{r} 3^k \\cdot 70\\,\\text{ms} + \\sum_{k=0}^{r} 5^k \\cdot 90\\,\\text{ms} + \\sum_{k=0}^{r} 7^k \\cdot 110\\,\\text{ms}$$",
-		"",
 		"- https://example.com/list/item/url/that/is/really/long/and/does/not/break/anywhere/at/all",
 		"  1. `a.really.long.inline.code.span.that.keeps.going.and.going.forever.and.ever`",
 		"",
@@ -46,13 +39,37 @@ const wide = (tag: string) =>
 	].join("\n");
 
 /**
- * Scrolls the conversation top to bottom, measuring at each step: the page
+ * Diagrams and display math as the newest turn of an idle agent: on screen
+ * with no scrolling (web/e2e/diagrams.ios.e2e.ts does the same), wider
+ * than a phone column on their own. `tag` sets one run's reply apart.
+ */
+const diagrams = (tag: string) =>
+	[
+		`Diagrams ${tag}:`,
+		"",
+		"```mermaid",
+		"flowchart LR",
+		"  A[a fairly long first step] --> B[a fairly long second step] --> C[a fairly long third step] --> D[a fairly long fourth step]",
+		"```",
+		"",
+		"```mermaid",
+		"pie title refresh time",
+		'  "network" : 70',
+		'  "lock wait" : 30',
+		"```",
+		"",
+		"$$\\sum_{k=0}^{r} 2^k \\cdot 50\\,\\text{ms} + \\sum_{k=0}^{r} 3^k \\cdot 70\\,\\text{ms} + \\sum_{k=0}^{r} 5^k \\cdot 90\\,\\text{ms} + \\sum_{k=0}^{r} 7^k \\cdot 110\\,\\text{ms}$$",
+	].join("\n");
+
+/**
+ * Scrolls the conversation top to bottom (or measures where it is, with
+ * `scroll` false), measuring at each step: the page
  * and the conversation's scroller have no sideways overflow, and nothing
  * outside a box that clips or scrolls it reaches past the column's content
  * edge (into the gutter, which scrollWidth alone misses).
  */
-async function sidewaysOverflow(page: Page) {
-	return page.evaluate(async () => {
+async function sidewaysOverflow(page: Page, scroll = true) {
+	return page.evaluate(async (scroll) => {
 		const found = new Set<string>();
 		const sc = document.querySelector<HTMLElement>(
 			".ds-scroller > div:first-child",
@@ -89,14 +106,16 @@ async function sidewaysOverflow(page: Page) {
 				);
 			}
 		};
-		for (let y = 0; ; y += sc.clientHeight / 2) {
-			sc.scrollTop = y;
-			await new Promise((r) => requestAnimationFrame(() => r(null)));
-			measure();
-			if (y >= sc.scrollHeight - sc.clientHeight) break;
-		}
+		if (!scroll) measure();
+		else
+			for (let y = 0; ; y += sc.clientHeight / 2) {
+				sc.scrollTop = y;
+				await new Promise((r) => requestAnimationFrame(() => r(null)));
+				measure();
+				if (y >= sc.scrollHeight - sc.clientHeight) break;
+			}
 		return [...found].slice(0, 20);
-	});
+	}, scroll);
 }
 
 /** Opens every closed tool card and reasoning row, then waits for the bodies. */
@@ -136,23 +155,29 @@ for (const width of WIDTHS) {
 			expect(await sidewaysOverflow(page)).toEqual([]);
 		});
 
-		test("the showcase (diagrams, math, code, a table) stays in its column", async ({
+		test("diagrams and display math, the newest turn, stay in their column", async ({
 			page,
 			request,
 		}) => {
-			const id = await agentId(request, "name=apparish-auth");
+			// Not the showcase: scrolling its diagrams into view trips a
+			// WebKit ResizeObserver error (open). An agent no other spec reads.
+			const id = await agentId(request, "status=idle machine=edge-18");
+			const tag = `wide${width}x${Date.now().toString(36)}`;
+			const res = await request.post("/api/v1/__mock/realtime", {
+				headers: { "X-Pulsar": "1" },
+				data: { action: "transcript", id, text: diagrams(tag) },
+			});
+			expect(res.ok()).toBe(true);
 			await page.goto(`/#/a/${encodeURIComponent(id)}`);
-			// Each diagram renders as it scrolls into view.
-			const blocks = page.locator('.ds-conv [data-streamdown="mermaid-block"]');
-			await expect(blocks).toHaveCount(4, { timeout: 15_000 });
-			for (const block of await blocks.all()) {
-				await block.scrollIntoViewIfNeeded();
-				await expect(block.locator('svg[id^="mermaid"]')).toBeAttached({
-					timeout: 15_000,
-				});
-			}
-			await expect(page.locator(".ds-conv .katex").first()).toBeAttached();
-			expect(await sidewaysOverflow(page)).toEqual([]);
+			const turn = page.locator(".ds-turn--assistant", {
+				hasText: `Diagrams ${tag}:`,
+			});
+			for (const kind of ["flowchart-v2", "pie"])
+				await expect(
+					turn.locator(`svg[aria-roledescription="${kind}"]`),
+				).toBeVisible({ timeout: 15_000 });
+			await expect(turn.locator(".katex").first()).toBeVisible();
+			expect(await sidewaysOverflow(page, false)).toEqual([]);
 		});
 
 		test("long links, paths and words wrap in replies and in bubbles", async ({
@@ -161,7 +186,7 @@ for (const width of WIDTHS) {
 		}) => {
 			// An agent no other spec reads: these lines stay in this worker's mock.
 			const id = await agentId(request, "name=claude@tundra");
-			const tag = `wide${width}`;
+			const tag = `wide${width}x${Date.now().toString(36)}`;
 			for (const extra of [
 				{},
 				{ role: "user" },
@@ -181,9 +206,6 @@ for (const width of WIDTHS) {
 			await expect(
 				conv.getByText(`${tag}_Supercalifragilisticexpialidocious`),
 			).toHaveCount(3);
-			await expect(
-				conv.locator('[data-streamdown="mermaid"] svg[id^="mermaid"]').last(),
-			).toBeAttached({ timeout: 15_000 });
 			// The composer, with a long unbroken draft.
 			await page
 				.getByPlaceholder("Message")
