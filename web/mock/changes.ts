@@ -10,7 +10,7 @@ import type {
 	ChangesSummary,
 	FileDiff,
 } from "../../src/http/wire.ts";
-import type { MockAgent } from "./data.ts";
+import { type MockAgent, README_POOL } from "./data.ts";
 
 interface MockFile {
 	file: Omit<ChangedFile, "key">;
@@ -238,7 +238,10 @@ function filesOf(a: MockAgent): MockFile[] | "not_a_repo" {
 	if (!s) {
 		s =
 			a.name === "apparish-auth"
-				? authFiles()
+				? // The README shots leave out the huge fixture file.
+					authFiles().filter(
+						(f) => !(README_POOL && f.file.path === "fixtures/recording.json"),
+					)
 				: a.name === "omp@apparish"
 					? "not_a_repo"
 					: [];

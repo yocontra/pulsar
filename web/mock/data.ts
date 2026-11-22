@@ -700,6 +700,9 @@ export function makeInteraction(a: MockAgent, kind: string): Approval {
 	}
 }
 
+/** PULSAR_MOCK_POOL=small: the README screenshots (see the end of this file). */
+export const README_POOL = process.env.PULSAR_MOCK_POOL === "small";
+
 addNeeds(FIX.auth, "approval");
 FIX.auth.approval = {
 	requestId: "apr_fixture1",
@@ -707,12 +710,18 @@ FIX.auth.approval = {
 	machine: FIX.auth.machine,
 	createdAt: NOW0,
 	state: "pending",
-	sessionRules: ["Bash(bun build *)"],
+	sessionRules: [README_POOL ? "Bash(bun run build *)" : "Bash(bun build *)"],
 	tool: "Bash",
-	input: {
-		command: "rm -rf dist && bun build\necho \u202Etxt.exe",
-		description: "Clean and rebuild  (two spaces)\u200B",
-	},
+	// The README shots get a plain command; the tests' one hides characters.
+	input: README_POOL
+		? {
+				command: "bun run build && bun test test/auth.test.ts",
+				description: "Rebuild and run the auth tests",
+			}
+		: {
+				command: "rm -rf dist && bun build\necho \u202Etxt.exe",
+				description: "Clean and rebuild  (two spaces)\u200B",
+			},
 	inputHash: "sha256:9f2c41d07ab3e85c",
 	cwd: "~/Projects/apparish",
 	branch: "fix-1378",
@@ -783,7 +792,7 @@ export const OMP_BLOCKS = makeAgent(machines.at(-1)!, "demo", {
  * for README screenshots. Filtered after generation so the seeded pool stays
  * the same.
  */
-if (process.env.PULSAR_MOCK_POOL === "small") {
+if (README_POOL) {
 	const keep = new Set(["studio", "mbp-a", "mbp-b", "desk"]);
 	const prune = <T>(xs: T[], ok: (x: T) => boolean) =>
 		xs.splice(0, xs.length, ...xs.filter(ok));

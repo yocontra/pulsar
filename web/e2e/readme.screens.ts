@@ -145,27 +145,16 @@ test.describe("readme screens", () => {
 		only("phone");
 		await phoneChrome(page);
 		await faceId(page);
-		const id = await agentId(request, "name=apparish-auth");
+		// A working agent with tool cards and a message from a peer: clean
+		// demo data, unlike apparish-auth's approval fixture.
+		const id = await agentId(request, "name=codex@apparish");
 		await home(page);
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
-		await page.locator(".p-nav-title h1").waitFor();
+		await page.locator(".p-nav-title h1").first().waitFor();
+		await page.getByText("Heads up: I'm rebasing").last().waitFor();
 		await page.waitForTimeout(1500);
-		// Open the last file write and stay at the bottom, past the image.
-		const write = page
-			.locator(".ev.tool[data-tool='Write'], [data-tool='Write']")
-			.last();
-		if (await write.count()) {
-			await write.locator("button").first().click();
-			await page.waitForTimeout(500);
-		}
-		const jump = page.getByRole("button", { name: /Jump to latest|latest/i });
-		if (
-			await jump
-				.first()
-				.isVisible()
-				.catch(() => false)
-		)
-			await jump.first().click();
+		const jump = page.getByRole("button", { name: "Jump to latest" });
+		if (await jump.isVisible()) await jump.click();
 		await page.waitForTimeout(800);
 		await shot(page, "phone-session");
 	});

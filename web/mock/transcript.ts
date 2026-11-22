@@ -573,7 +573,8 @@ function showcase(log: Log, agent: MockAgent): TranscriptEvent[] {
 		role: "peer",
 		kind: "peer",
 		text: "Heads up: I'm rebasing `main` in ~5 min. Push before then and I'll pick up your lock change.",
-		from: "codex@apparish · m_7a1",
+		// Never from the session's own agent (the codex README shot).
+		from: `${agent === FIX.codex ? "apparish-auth" : "codex@apparish"} · m_7a1`,
 	});
 	return out;
 }
