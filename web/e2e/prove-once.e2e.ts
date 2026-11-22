@@ -11,7 +11,7 @@ import {
 
 /**
  * Prove Human once per session (SECURITY.md, docs/app.md): one passkey
- * check, then sends, Stop, Ask directly, permission prompts and questions on
+ * check, then sends, Stop, permission prompts and questions on
  * this machine go on with no second ceremony; every open tab shares it; a
  * reload keeps it only where the token may persist (the installed phone app)
  * or while another tab holds it. Runs in `prove-once-desktop` and

@@ -1,7 +1,7 @@
 /**
  * Phone UI invariants (WebKit, iPhone 13 mini, plus 390 and 430 px wide):
  * pointer cursors on everything clickable, every bar (composer dock,
- * segmented controls, broadcast dock, Ask bar) fully on screen and clear of
+ * segmented controls, broadcast dock) fully on screen and clear of
  * the safe areas in the installed app and in a Safari tab, keyboard hints
  * hidden on touch, the Appearance setting, and AA contrast in both themes
  * with a screenshot per screen.
