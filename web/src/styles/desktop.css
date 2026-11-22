@@ -2741,3 +2741,42 @@
 	line-height: 18px;
 	overflow-wrap: anywhere;
 }
+
+/* ------------------------------------------------- compact session header */
+/* The header compacts with its own width (the window minus the sidebar and
+   any panel), so the agent's name always keeps its room: first the harness
+   and model go, then the context words and the diff counts, then button
+   labels turn into their icons (the label stays the accessible name), then
+   the token / cost figure. The name's room itself is set above (.d-sh-id). */
+.d-session-head {
+	container: sh / inline-size;
+}
+.d-btn-label {
+	white-space: nowrap;
+}
+@container sh (max-width: 1080px) {
+	.d-session-head .d-sh-model {
+		display: none;
+	}
+	.d-session-head .usage-agent-ctx > span:first-child {
+		display: none;
+	}
+}
+@container sh (max-width: 960px) {
+	.d-session-head .g-head-stat {
+		display: none;
+	}
+	.d-sh-actions .d-btn-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}
+@container sh (max-width: 820px) {
+	.d-session-head .usage-agent > span:last-child {
+		display: none;
+	}
+}

@@ -174,7 +174,7 @@ function DesktopSessionHeaderImpl({
 						title={`Stop the current turn (${MOD}.)`}
 					>
 						<SquareIcon aria-hidden="true" />
-						Stop
+						<span className="d-btn-label">Stop</span>
 					</button>
 				)}
 			</div>

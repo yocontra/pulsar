@@ -48,7 +48,7 @@ function FindPlaceholder({ mobile }: { mobile: boolean }) {
 				disabled
 			>
 				<SearchIcon aria-hidden="true" />
-				Find
+				<span className="d-btn-label">Find</span>
 			</button>
 		</span>
 	);

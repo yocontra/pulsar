@@ -199,6 +199,39 @@ test.describe("desktop UI", () => {
 		await expect(nav.locator('[aria-current="true"]')).toHaveText("Machines");
 	});
 
+	for (const width of [1280, 1100])
+		test(`session header fits at ${width} px: no action past its edge, the name visible`, async ({
+			page,
+			request,
+		}) => {
+			await page.setViewportSize({ width, height: 800 });
+			// The busiest headers in the mock: git, PR and issue chips, usage, Stop.
+			for (const name of ["apparish-auth", "codex@billing", "codex@apparish"]) {
+				const id = await agentId(request, `name=${name}`);
+				await page.goto(`/#/a/${encodeURIComponent(id)}`);
+				const head = page.locator(".d-session-head");
+				await expect(head.locator("h1")).toHaveText(name);
+				await expect(
+					head.locator(".d-sh-actions .d-btn").first(),
+				).toBeVisible();
+				const m = await head.evaluate((h) => {
+					const edge = h.getBoundingClientRect().right;
+					const actions = h.querySelector(".d-sh-actions")!;
+					const right = Math.max(
+						...[...actions.querySelectorAll("*")]
+							.filter((e) => e.getBoundingClientRect().width > 0)
+							.map((e) => e.getBoundingClientRect().right),
+					);
+					const h1 = h.querySelector("h1")!;
+					return { past: right - edge, name: h1.getBoundingClientRect().width };
+				});
+				expect(m.past, `${name}: actions past the header`).toBeLessThanOrEqual(
+					0,
+				);
+				expect(m.name, `${name}: the name's width`).toBeGreaterThanOrEqual(80);
+			}
+		});
+
 	test("agent rows, needs badges and the header pill line up", async ({
 		page,
 		request,

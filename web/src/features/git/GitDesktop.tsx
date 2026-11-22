@@ -184,7 +184,9 @@ function GitDesktopImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 								>
 									<GitPullRequestIcon aria-hidden="true" />
 									{/* The PR chip beside it shows the number and state. */}
-									{status.pr ? "View PR" : quick.label}
+									<span className="d-btn-label">
+										{status.pr ? "View PR" : quick.label}
+									</span>
 								</a>
 							) : (
 								<button
@@ -199,7 +201,7 @@ function GitDesktopImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 										const Icon = ICON[quick.steps.at(-1) ?? "commit"];
 										return <Icon aria-hidden="true" />;
 									})()}
-									{quick.label}
+									<span className="d-btn-label">{quick.label}</span>
 								</button>
 							)}
 						</Tip>

@@ -161,7 +161,7 @@ function ChangesToggleImpl({ id }: { id: string }) {
 			onClick={toggleChanges}
 		>
 			<FileDiffIcon aria-hidden="true" />
-			Changes
+			<span className="d-btn-label">Changes</span>
 			{n > 0 && (
 				<>
 					<span className="cv-badge" aria-hidden="true">
