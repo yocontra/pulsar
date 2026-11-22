@@ -9,19 +9,10 @@
 	align-items: center;
 	gap: 6px;
 }
-/* Narrow heads: the object keeps room, facts and extra chips give way. */
+/* Narrow heads: the object keeps room, facts and extra chips give way
+   (the facts' ellipsis: conversation.css). */
 .ds-tool.is-pulsar .ds-tool-main {
 	min-width: 4.5rem;
-}
-.ds-tool.is-pulsar .ds-tool-meta {
-	flex: 0 1 auto;
-	min-width: 0;
-	overflow: hidden;
-}
-.ds-tool.is-pulsar .ds-tool-meta .ds-tool-sum {
-	display: block;
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
 .ds-pulsar-text {
 	flex: 0 1 auto;

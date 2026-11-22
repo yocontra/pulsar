@@ -1185,11 +1185,15 @@ ion-action-sheet {
 }
 
 /* The agent's top bar: a chevron-only back button (BackButton compact),
-   then the title, left-aligned, in all the room up to the end buttons (two,
-   or three with git: git.css). At 375 px that is about 177 px, not the
-   128 px a centered title between "‹ Agents" and the buttons had. */
+   then the title, left-aligned, in all the room up to the end buttons. The
+   title takes its place in the toolbar's row (not Ionic's centered overlay
+   with a fixed inset), so it never runs under the end buttons, however many
+   there are (Find, git, Changes, More, a limit chip). It starts over the
+   chevron button's empty end. */
 .p-agent-header ion-title {
-	padding-inline: 2.8rem 6.2rem;
+	position: relative;
+	padding-inline: 0 8px;
+	margin-inline-start: -12px;
 }
 .p-agent-header .p-nav-title {
 	align-items: flex-start;

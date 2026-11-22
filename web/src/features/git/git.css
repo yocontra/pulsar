@@ -547,32 +547,6 @@
 
 /* Phone */
 
-.g-phone-btn {
-	position: relative;
-	--padding-start: 2px;
-	--padding-end: 2px;
-}
-/* A third button at the end of the agent's top bar: the title keeps clear
-   of the three (each 44 px wide) and centers in the room left. */
-.p-agent-header ion-title.g-has-git {
-	padding-inline-end: 150px;
-}
-.g-phone-btn svg {
-	width: 22px;
-	height: 22px;
-}
-.g-dot {
-	position: absolute;
-	top: 6px;
-	right: 4px;
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: var(--ds-busy);
-}
-.g-dot.pr {
-	background: var(--ds-success);
-}
 .g-sheet {
 	display: flex;
 	flex-direction: column;
