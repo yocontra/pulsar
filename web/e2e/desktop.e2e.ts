@@ -4,7 +4,6 @@ import {
 	agentId,
 	expect,
 	localhostBase,
-	pressUntil,
 	proveInSheet,
 	ready,
 	resetPasskeys,
@@ -801,7 +800,8 @@ test.describe("desktop", () => {
 	test("keyboard: help, palette, j/k and Enter", async ({ page }) => {
 		await ready(page);
 		const help = page.getByRole("dialog", { name: "Keyboard shortcuts" });
-		await pressUntil(page, "?", help);
+		await page.keyboard.press("?");
+		await expect(help).toBeVisible();
 		await page.keyboard.press("Escape");
 		await page.keyboard.press("ControlOrMeta+k");
 		await page

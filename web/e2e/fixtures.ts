@@ -2,7 +2,6 @@ import {
 	type APIRequestContext,
 	test as base,
 	expect,
-	type Locator,
 	type Page,
 } from "@playwright/test";
 import { type E2EWorkerOptions, startServer } from "./infra.ts";
@@ -128,18 +127,6 @@ export async function agentId(
 export async function ready(page: Page) {
 	await page.goto("/");
 	await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
-}
-
-/**
- * Presses a shortcut until `target` shows. The tree can paint (from the
- * last-screen snapshot) before the shortcut handler is attached, so a single
- * press right after `ready()` may land on nothing.
- */
-export async function pressUntil(page: Page, key: string, target: Locator) {
-	await expect(async () => {
-		if (!(await target.isVisible())) await page.keyboard.press(key);
-		await expect(target).toBeVisible({ timeout: 1000 });
-	}).toPass({ timeout: 15_000 });
 }
 
 export const SHOTS = new URL("../screenshots/", import.meta.url).pathname;
