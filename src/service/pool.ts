@@ -113,6 +113,11 @@ export interface PoolView extends ActingRelay {
 		what: "status" | "pr",
 		as?: Principal,
 	): Promise<unknown>;
+	/**
+	 * A remote agent's issue card, read on its home node (src/service/issues.ts).
+	 * Older peers answer unsupported.
+	 */
+	issueRead?(address: string, as?: Principal): Promise<unknown>;
 	/** Permission prompts of remote agents, decided by their home node. */
 	readonly approvals: RemoteApprovals;
 	/** Token usage of other machines and their agents (absent before usage existed). */

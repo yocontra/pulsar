@@ -898,7 +898,7 @@ export async function runMcp() {
 		{
 			title: "Say what you are doing",
 			description:
-				"Tell other agents what you work on so they can find you, and see your identity. Set activity when you start a task ('reviewing PR #1402', 'fixing issue #1378'), and tag the work: tags_add ['pr:1402', 'role:reviewer'] or ['issue:1378', 'role:author']. Pulsar already tags your harness, model, project, branch and open PR. Also sets your name and inbound policy. Returns your name, id, tags and unread count (call with no arguments to only read them).",
+				"Tell other agents what you work on so they can find you, and see your identity. Set activity when you start a task ('reviewing PR #1402', 'fixing issue #1378'), and tag the work: tags_add ['pr:1402', 'role:reviewer'] or ['issue:1378', 'role:author']. Pulsar already tags your harness, model, project, branch, open PR and the issue it detects. Also sets your name and inbound policy. Returns your name, id, tags and unread count (call with no arguments to only read them).",
 			input: $.object({
 				activity: $.str({
 					description:

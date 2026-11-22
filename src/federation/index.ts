@@ -615,6 +615,19 @@ export class Federation implements PoolView {
 		return what === "pr" ? r.pr : r.status;
 	}
 
+	/** A remote agent's issue card, read on its home node. */
+	async issueRead(address: string, as?: Principal): Promise<unknown> {
+		const slash = address.indexOf("/");
+		const r = await this.act(
+			address,
+			{ op: "issue.read", agent: address.slice(slash + 1) },
+			as,
+			// gh asks GitHub: slower than a local read.
+			40_000,
+		);
+		return r.issue;
+	}
+
 	/** A linked machine's id, by id or name. */
 	machineIdOf(machine: string): string | null {
 		if (this.state.peers.has(machine)) return machine;
@@ -2368,6 +2381,13 @@ export class Federation implements PoolView {
 				if (action.what === "pr")
 					return { ok: true, pr: await this.service.git.pr(agent) };
 				return { ok: true, status: await this.service.git.status(agent) };
+			}
+			case "issue.read": {
+				const agent = String(action.agent);
+				authorize(user, "transcript.read", agent);
+				if (!this.service.registry.get(agent))
+					return fail("not_found", `no agent ${agent}`);
+				return { ok: true, issue: await this.service.issues.details(agent) };
 			}
 			case "stop.options": {
 				const agent = String(action.agent);

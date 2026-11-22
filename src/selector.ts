@@ -7,7 +7,8 @@ import type { PublicAgent } from "./types.ts";
  * - `key=value` terms are ANDed. Known keys match fields (`harness`, `project`,
  *   `branch`, `machine`, `status`, `name`, `id`); `activity` matches words in the agent's
  *   activity text; `model` matches part of the model id (`model=fable`); any other key matches the tag `key:value` (so `pr=1402`
- *   matches the tag `pr:1402`). A value may end in `*` for a prefix match.
+ *   matches the tag `pr:1402`, and `issue=1378` the tag `issue:1378` that an
+ *   agent sets or pulsar detects, src/service/issues.ts). A value may end in `*` for a prefix match.
  *   `key=a|b` matches either value (OR within one key).
  * - `~text` (or `#1378`, or `q=text`) matches text anywhere in the agent's name,
  *   branch, project, tags or activity: "find whoever is on 1378".

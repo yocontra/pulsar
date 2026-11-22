@@ -227,6 +227,8 @@ export type FedAction =
 	| { op: "changes.file"; agent: string; mode: ChangesMode; path: string }
 	/** The agent's git status, or its branch's PR (the app's git actions). */
 	| { op: "git.read"; agent: string; what: "status" | "pr" }
+	/** The issue card of the issue the agent works on (its own `issue:` tag). */
+	| { op: "issue.read"; agent: string }
 	/** Ask about the receiver's own agents (`service.ask.local`). */
 	| { op: "ask"; question: string; selector?: string }
 	/*
