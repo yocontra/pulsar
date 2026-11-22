@@ -255,7 +255,9 @@ export type Feature =
 	/** Commit, push and PR from the app (`/agents/:id/git/*`). */
 	| "git"
 	/** The issue card of an agent's GitHub issue (`/agents/:id/issue`). */
-	| "issues";
+	| "issues"
+	/** Review an agent's PR: files, threads, comments, reviews (`/agents/:id/git/review`). */
+	| "prreview";
 
 /** `GET /hello`. */
 export interface Hello {
@@ -1050,6 +1052,113 @@ export interface GitPrResult {
 	pr: GitPr;
 	/** False: the branch already had this PR. */
 	created: boolean;
+}
+
+/** One file of a PR's diff, as GitHub has it at the PR's head. */
+export interface GitReviewFile {
+	path: string;
+	/** A rename's old path. */
+	oldPath: string | null;
+	status: "added" | "removed" | "modified" | "renamed";
+	added: number;
+	removed: number;
+	/** GitHub sent no patch: a binary file, or one too large to show. */
+	binary: boolean;
+	tooLarge: boolean;
+}
+
+/** One comment of a review thread (text from GitHub: untrusted). */
+export interface GitThreadComment {
+	id: number;
+	author: string;
+	body: string;
+	at: string | null;
+	url: string | null;
+}
+
+/** A review thread on a line of the PR's diff. */
+export interface GitReviewThread {
+	/** GitHub's node id (resolve, reply). */
+	id: string;
+	path: string;
+	/** The line on its side at the PR's head; null when outdated. */
+	line: number | null;
+	startLine: number | null;
+	originalLine: number | null;
+	/** LEFT: the old side (a removed line); RIGHT: the new side. */
+	side: "LEFT" | "RIGHT";
+	outdated: boolean;
+	resolved: boolean;
+	canResolve: boolean;
+	canReply: boolean;
+	comments: GitThreadComment[];
+}
+
+/**
+ * `GET /agents/:id/git/review`: the branch's PR for review: its
+ * description, files, threads, checks and reviews. Patches come per file
+ * (`GET /agents/:id/git/review/file`).
+ */
+export interface GitPrReview {
+	agent: string;
+	pr: GitPr | null;
+	reason?: GitPrDetails["reason"];
+	message?: string;
+	/** The PR's head commit (a line comment names it). */
+	head: string | null;
+	body: string;
+	author: string | null;
+	/** The gh account on the agent's machine wrote the PR (no approve). */
+	ownPr: boolean;
+	checks: GitCheck[];
+	review: GitPrDetails["review"];
+	/** Submitted reviews with a summary or a verdict. */
+	reviews: GitReviewComment[];
+	files: GitReviewFile[];
+	/** More files changed than are listed. */
+	truncated: boolean;
+	threads: GitReviewThread[];
+}
+
+/** `GET /agents/:id/git/review/file?path=`: one file's patch (hunks only). */
+export interface GitReviewPatch {
+	agent: string;
+	path: string;
+	patch: string | null;
+	binary: boolean;
+	tooLarge: boolean;
+}
+
+/** `POST /agents/:id/git/comment`: a new comment on a line of the PR. */
+export interface GitCommentParams {
+	/** The PR and head commit the operator saw; refused if they moved. */
+	number: number;
+	head: string;
+	path: string;
+	line: number;
+	side: "LEFT" | "RIGHT";
+	body: string;
+}
+
+/** `POST /agents/:id/git/reply`: a reply in a review thread. */
+export interface GitReplyParams {
+	number: number;
+	thread: string;
+	body: string;
+}
+
+/** `POST /agents/:id/git/resolve`: resolve or reopen a review thread. */
+export interface GitResolveParams {
+	number: number;
+	thread: string;
+	resolved: boolean;
+}
+
+/** `POST /agents/:id/git/review`: submit a review. */
+export interface GitReviewParams {
+	number: number;
+	event: "comment" | "approve" | "request_changes";
+	body: string;
 }
 
 /** What a question is about (`POST /ask`), as the parser read it. */

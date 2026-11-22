@@ -61,6 +61,11 @@ export const ACTING_OPS = [
 	"git.commit",
 	"git.push",
 	"git.pr",
+	/** PR review: a line comment, a reply, a resolve, a review (src/service/pr-review.ts). */
+	"git.comment",
+	"git.reply",
+	"git.resolve",
+	"git.review",
 ] as const;
 
 /**

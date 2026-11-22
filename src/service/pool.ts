@@ -118,6 +118,15 @@ export interface PoolView extends ActingRelay {
 	 * Older peers answer unsupported.
 	 */
 	issueRead?(address: string, as?: Principal): Promise<unknown>;
+	/**
+	 * A remote agent's PR review (`path` null), or one file's patch, read on
+	 * its home node (src/service/pr-review.ts). Older peers answer unsupported.
+	 */
+	gitReview?(
+		address: string,
+		path: string | null,
+		as?: Principal,
+	): Promise<unknown>;
 	/** Permission prompts of remote agents, decided by their home node. */
 	readonly approvals: RemoteApprovals;
 	/** Token usage of other machines and their agents (absent before usage existed). */

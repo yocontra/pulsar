@@ -264,3 +264,103 @@ test("the home node's refusal comes back with its message", async () => {
 		message: "Worktree is clean. Make changes before committing.",
 	});
 });
+
+test("PR review: reads from the home node; a resolve needs a proof for exactly its params", async () => {
+	const head = "c".repeat(40);
+	const thread = "PRRT_kwDOFed1";
+	gh.set({
+		prs: {
+			feat: {
+				number: 5,
+				url: "https://github.com/acme/demo/pull/5",
+				title: "Relayed",
+				state: "OPEN",
+				baseRefName: "main",
+				headRefName: "feat",
+				headRefOid: head,
+				body: "",
+				statusCheckRollup: [],
+				reviews: [],
+			},
+		},
+		files: [
+			{
+				filename: "a.txt",
+				status: "modified",
+				additions: 1,
+				deletions: 0,
+				changes: 1,
+				patch: "@@ -1 +1,2 @@\n one\n+four",
+			},
+		],
+		threads: [
+			{
+				id: thread,
+				isResolved: false,
+				viewerCanResolve: true,
+				viewerCanReply: true,
+				path: "a.txt",
+				line: 2,
+				diffSide: "RIGHT",
+				comments: { nodes: [{ databaseId: 1, body: "Hm" }] },
+			},
+		],
+		threadPrs: { [thread]: { number: 5, repo: "acme/demo" } },
+	});
+	const r = await api(`/agents/${enc(address)}/git/review`);
+	expect(r.status).toBe(200);
+	expect(await r.json()).toMatchObject({
+		agent: address,
+		pr: { number: 5 },
+		head,
+		files: [{ path: "a.txt" }],
+		threads: [{ id: thread, line: 2 }],
+	});
+	const f = await api(`/agents/${enc(address)}/git/review/file?path=a.txt`);
+	expect(await f.json()).toMatchObject({
+		agent: address,
+		path: "a.txt",
+		patch: "@@ -1 +1,2 @@\n one\n+four",
+	});
+	expect(
+		(await api(`/agents/${enc(address)}/git/review/file?path=b.txt`)).status,
+	).toBe(404);
+
+	const params = { number: 5, thread, resolved: true };
+	// Signed for the other direction: refused.
+	let res = await api(`/agents/${enc(address)}/git/resolve`, {
+		...params,
+		assertion: await signed("git.resolve", { ...params, resolved: false }),
+	});
+	expect(res.status).toBe(403);
+	res = await api(`/agents/${enc(address)}/git/resolve`, params);
+	expect(res.status).toBe(401);
+	res = await api(`/agents/${enc(address)}/git/resolve`, {
+		...params,
+		assertion: await signed("git.resolve", params),
+	});
+	expect(res.status).toBe(200);
+	expect((gh.state().threads as { isResolved: boolean }[])[0]!.isResolved).toBe(
+		true,
+	);
+	const review = { number: 5, event: "comment", body: "Looks fine" };
+	res = await api(`/agents/${enc(address)}/git/review`, {
+		...review,
+		assertion: await signed("git.review", review),
+	});
+	expect(res.status).toBe(200);
+	expect(gh.state().submitted).toEqual([
+		{ number: "5", flag: "--comment", body: "Looks fine" },
+	]);
+	const audit = home.store.db
+		.prepare(
+			"SELECT op FROM audit WHERE op IN ('git.resolve', 'git.resolve.relayed', 'git.review', 'git.review.relayed') AND ok = 1 ORDER BY id",
+		)
+		.all() as { op: string }[];
+	expect(audit.map((a) => a.op)).toEqual([
+		"git.resolve.relayed",
+		"git.resolve",
+		"git.review.relayed",
+		"git.review",
+	]);
+});

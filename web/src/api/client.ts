@@ -34,6 +34,8 @@ import {
 	type FileDiff,
 	type FileSearch,
 	type GitPrDetails,
+	type GitPrReview,
+	type GitReviewPatch,
 	type GitStatus,
 	type Hello,
 	type InteractionAnswer,
@@ -498,6 +500,14 @@ export const api = {
 	/** What the git actions need about the agent's worktree (features/git). */
 	gitStatus: (agentId: string) =>
 		request<GitStatus>(`/agents/${enc(agentId)}/git/status`),
+	/** The branch's PR for review: files, threads, checks (features/prreview). */
+	gitReview: (agentId: string) =>
+		request<GitPrReview>(`/agents/${enc(agentId)}/git/review`),
+	/** One file's patch at the PR's head. */
+	gitReviewFile: (agentId: string, path: string) =>
+		request<GitReviewPatch>(
+			`/agents/${enc(agentId)}/git/review/file${query({ path })}`,
+		),
 	/** The branch's PR with checks and review comments. */
 	gitPr: (agentId: string) =>
 		request<GitPrDetails>(`/agents/${enc(agentId)}/git/pr`),
@@ -510,7 +520,7 @@ export const api = {
 	 */
 	gitAct: <T>(
 		agentId: string,
-		what: "commit" | "push" | "pr",
+		what: "commit" | "push" | "pr" | "comment" | "reply" | "resolve" | "review",
 		params: object,
 	) =>
 		api.acting<T>(`git.${what}`, { agent: agentId }, params, (assertion) =>
@@ -746,7 +756,11 @@ export type ActingOp =
 	| "agents.launch"
 	| "git.commit"
 	| "git.push"
-	| "git.pr";
+	| "git.pr"
+	| "git.comment"
+	| "git.reply"
+	| "git.resolve"
+	| "git.review";
 
 /**
  * One attached file's bytes into an open upload (`PUT`, streamed; XHR for

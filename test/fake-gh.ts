@@ -23,6 +23,18 @@ export interface FakeGhState {
 	next?: number;
 	/** Issues by number, in `gh issue view --json`'s shape (missing: not found). */
 	issues?: Record<string, Record<string, unknown>>;
+	/** PR review: `api .../pulls/N/files` (paged by `page`). */
+	files?: Record<string, unknown>[];
+	/** PR review: GraphQL review threads, and whether the viewer wrote the PR. */
+	threads?: Record<string, unknown>[];
+	viewerDidAuthor?: boolean;
+	/** A thread id's PR (`node(id:)`): number and `owner/name`. */
+	threadPrs?: Record<string, { number: number; repo: string }>;
+	/** Line comments posted (`api -X POST .../comments`), and reviews submitted. */
+	posted?: Record<string, string>[];
+	submitted?: { number: string; flag: string; body: string }[];
+	/** The next write (`pr review`, a POST, a mutation) fails with this on stderr. */
+	writeError?: string;
 }
 
 const SCRIPT = `#!/usr/bin/env bun
@@ -77,6 +89,53 @@ if (a[0] === "issue" && a[1] === "view") {
 	const out = {};
 	for (const f of opt("--json").split(",")) out[f] = issue[f];
 	console.log(JSON.stringify(out));
+	process.exit(0);
+}
+const save = () => writeFileSync(file, JSON.stringify(st));
+const fields = () => { const o = {}; for (let i = 0; i < a.length; i++) if (a[i] === "-f" || a[i] === "-F") { const kv = a[i + 1]; const eq = kv.indexOf("="); o[kv.slice(0, eq)] = kv.slice(eq + 1); } return o; };
+const writeFail = () => { if (st.writeError) { const m = st.writeError; delete st.writeError; save(); console.error(m); process.exit(1); } };
+if (a[0] === "pr" && a[1] === "review") {
+	writeFail();
+	const flag = a.find((x) => x === "--approve" || x === "--comment" || x === "--request-changes");
+	const body = (a.find((x) => x.startsWith("--body=")) ?? "--body=").slice(7);
+	(st.submitted ??= []).push({ number: a[2], flag, body });
+	save();
+	process.exit(0);
+}
+if (a[0] === "api" && a[1] === "graphql") {
+	const f = fields();
+	const q = f.query ?? "";
+	if (q.startsWith("mutation")) {
+		writeFail();
+		const t = (st.threads ?? []).find((x) => x.id === f.thread);
+		if (!t) { console.error("GraphQL: Could not resolve to a node with the global id of '" + f.thread + "'"); process.exit(1); }
+		if (q.includes("unresolveReviewThread")) t.isResolved = false;
+		else if (q.includes("resolveReviewThread")) t.isResolved = true;
+		else if (q.includes("addPullRequestReviewThreadReply")) t.comments.nodes.push({ databaseId: 900 + t.comments.nodes.length, author: { login: "me" }, body: f.body, createdAt: "2026-11-21T10:00:00Z", url: "https://github.com/x/y/pull/1#r9" });
+		save();
+		console.log(JSON.stringify({ data: {} }));
+		process.exit(0);
+	}
+	if (q.includes("node(id:")) {
+		const pr = (st.threadPrs ?? {})[f.id];
+		console.log(JSON.stringify({ data: { node: pr ? { pullRequest: { number: pr.number, repository: { nameWithOwner: pr.repo } } } : null } }));
+		process.exit(0);
+	}
+	console.log(JSON.stringify({ data: { repository: { pullRequest: { viewerDidAuthor: !!st.viewerDidAuthor, reviewThreads: { nodes: st.threads ?? [] } } } } }));
+	process.exit(0);
+}
+if (a[0] === "api" && (a.find((x) => x.startsWith("repos/")) ?? "").endsWith("/files")) {
+	const f = fields();
+	const per = Number(f.per_page ?? 30), page = Number(f.page ?? 1);
+	console.log(JSON.stringify((st.files ?? []).slice((page - 1) * per, page * per)));
+	process.exit(0);
+}
+if (a[0] === "api" && a.includes("POST")) {
+	writeFail();
+	const f = fields();
+	(st.posted ??= []).push(f);
+	save();
+	console.log(JSON.stringify({ id: 1 }));
 	process.exit(0);
 }
 if (a[0] === "api") { console.log(JSON.stringify(st.comments ?? [])); process.exit(0); }
