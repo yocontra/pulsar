@@ -17,7 +17,7 @@ test("the phone's draft: chips, picker pages, and Prove Human to start", async (
 		page.locator("ion-title", { hasText: "New agent" }).last(),
 	).toBeVisible();
 	await expect(d.getByRole("heading", { level: 1 })).toContainText(
-		/on\s*studio\s*to start/,
+		/Start an agent in.+on\s*studio/,
 	);
 
 	// A picker is a page with Back.

@@ -297,6 +297,7 @@ function DraftImpl({
 
 	const hero = (
 		<h1 className="ld-headline">
+			<span className="ld-word">Start an agent in</span>{" "}
 			<Picker
 				label="Project"
 				variant="hero"
@@ -351,8 +352,7 @@ function DraftImpl({
 					setBase(null);
 				}}
 				testId="launch-machine"
-			/>{" "}
-			<span className="ld-word">to start</span>
+			/>
 		</h1>
 	);
 

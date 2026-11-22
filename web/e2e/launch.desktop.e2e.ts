@@ -39,7 +39,7 @@ test("start an agent here: draft, Prove Human, steps, then its session", async (
 	await expect(page).toHaveURL(/#\/new$/);
 	const d = draft(page);
 	await expect(d.getByRole("heading", { level: 1 })).toContainText(
-		/on\s*studio\s*to start/,
+		/Start an agent in.+on\s*studio/,
 	);
 	// The machine's most recent project is picked; harnesses carry marks.
 	await expect(page.getByTestId("launch-project")).toHaveAccessibleName(
