@@ -79,6 +79,22 @@ const WAKE_WORDS: Record<keyof typeof WAKE_LABEL, string> = {
 	queued: "Queued",
 };
 
+/** The wake most agents in the scope have (from the totals, else the rows). */
+function usualWake(
+	page: AgentsPage,
+): AgentsPage["items"][number]["wake"] | null {
+	const counts = new Map<string, number>();
+	if (page.totals)
+		for (const [k, v] of Object.entries(page.totals)) counts.set(k, v ?? 0);
+	else
+		for (const a of page.items)
+			counts.set(a.wake, (counts.get(a.wake) ?? 0) + 1);
+	let best: string | null = null;
+	for (const [k, v] of counts)
+		if (v > 0 && (!best || v > counts.get(best)!)) best = k;
+	return best as AgentsPage["items"][number]["wake"] | null;
+}
+
 function PreviewImpl({ page }: { page: AgentsPage | null }) {
 	if (!page)
 		return (
@@ -96,6 +112,11 @@ function PreviewImpl({ page }: { page: AgentsPage | null }) {
 			</div>
 		);
 	const more = page.total - page.items.length;
+	// Say only what differs between rows: the machine when the scope spans
+	// several, the wake word where it is not the usual one (the summary line
+	// above counts every kind).
+	const oneMachine = page.machines <= 1;
+	const usual = usualWake(page);
 	return (
 		<div className="preview">
 			<ul className="preview-list d-card">
@@ -109,16 +130,21 @@ function PreviewImpl({ page }: { page: AgentsPage | null }) {
 						>
 							{a.name}
 						</button>
-						<span className="muted d-prev-machine">{a.machine}</span>
+						{!oneMachine && (
+							<span className="muted d-prev-machine">{a.machine}</span>
+						)}
 						<AgentStatus
 							state={a.state}
 							since={a.stateSince}
 							needsReason={a.needsYou?.reason}
+							short
 							lastSession={a.sessionFrom === "folder"}
 							variant={a.state === "needs-you" ? "soft" : "plain"}
 							className="d-prev-status"
 						/>
-						<span className={`wake w-${a.wake}`}>{WAKE_WORDS[a.wake]}</span>
+						{a.wake !== usual && (
+							<span className={`wake w-${a.wake}`}>{WAKE_WORDS[a.wake]}</span>
+						)}
 					</li>
 				))}
 			</ul>

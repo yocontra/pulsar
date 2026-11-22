@@ -124,6 +124,13 @@ test.describe("mobile", () => {
 		const sheet = page.locator("ion-modal");
 		await expect(sheet.locator("h1")).toHaveText("Everyone on studio");
 		await expect(sheet.locator(".selector-line")).toHaveText("machine=studio");
+		// Rows say only what differs: no machine (all on studio), and no wake
+		// word where it is the usual one (the summary line counts them).
+		const rows = sheet.locator(".preview-list li");
+		await expect(rows.first()).toBeVisible();
+		await expect(sheet.locator(".preview-list .d-prev-machine")).toHaveCount(0);
+		await expect(sheet.locator(".preview-list .wake.w-wakes")).toHaveCount(0);
+		await expect(sheet.locator(".wake-summary")).toContainText("Wakes");
 		await page.goBack();
 		await expect(page.locator("ion-modal")).toHaveCount(0);
 		await expect(node(page, "m:studio")).toBeVisible();
