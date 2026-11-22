@@ -14,8 +14,11 @@ import "../styles/desktop.css";
 			content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
 		/>
 		<meta name="color-scheme" content="light dark" />
-		<meta name="theme-color" content="#f2f2f7" media="(max-width: 1023px) and (prefers-color-scheme: light)" />
-		<meta name="theme-color" content="#000000" media="(max-width: 1023px) and (prefers-color-scheme: dark)" />
+		<!-- Phone: the page background (--ds-bg-sunken), which the large-title
+		     pages show at the top. Keep in sync with public/prefs.js and
+		     src/lib/theme.ts. -->
+		<meta name="theme-color" content="#f4f3f1" media="(max-width: 1023px) and (prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#0b0b0a" media="(max-width: 1023px) and (prefers-color-scheme: dark)" />
 		<meta name="theme-color" content="#f7f7f5" media="(min-width: 1024px) and (prefers-color-scheme: light)" />
 		<meta name="theme-color" content="#151517" media="(min-width: 1024px) and (prefers-color-scheme: dark)" />
 		<meta name="referrer" content="no-referrer" />

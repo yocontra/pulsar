@@ -389,7 +389,7 @@ test.describe("desktop UI", () => {
 		expect(await pageLuminance(page)).toBeLessThan(0.05);
 		await expect(
 			page.locator('meta[name="theme-color"]').first(),
-		).toHaveAttribute("content", "#000000");
+		).toHaveAttribute("content", "#0b0b0a");
 
 		// Before first paint: hold the app's scripts and look at the boot shell.
 		let release = () => {};

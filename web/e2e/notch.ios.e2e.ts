@@ -289,6 +289,54 @@ const SCREENS: Screen[] = [
 	],
 ];
 
+/** The theme-color meta that applies now, and the body's painted colour, as hex. */
+function barColors(page: Page) {
+	return page.evaluate(() => {
+		const cv = document.createElement("canvas");
+		cv.width = cv.height = 1;
+		const cx = cv.getContext("2d")!;
+		const hex = (c: string) => {
+			cx.clearRect(0, 0, 1, 1);
+			cx.fillStyle = c;
+			cx.fillRect(0, 0, 1, 1);
+			const [r, g, b] = cx.getImageData(0, 0, 1, 1).data;
+			return `#${[r, g, b].map((x) => x!.toString(16).padStart(2, "0")).join("")}`;
+		};
+		const meta = [
+			...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'),
+		].find((m) => !m.media || matchMedia(m.media).matches);
+		return {
+			meta: meta ? hex(meta.content) : null,
+			body: hex(getComputedStyle(document.body).backgroundColor),
+		};
+	});
+}
+
+test("the browser bar colour matches the page in each theme, live", async ({
+	page,
+}) => {
+	await page.emulateMedia({ colorScheme: "light" });
+	await page.goto("/#/settings");
+	const group = page.getByRole("radiogroup", { name: "Appearance" });
+	await group.waitFor();
+	const same = async (what: string) => {
+		const c = await barColors(page);
+		expect(c.meta, what).toBe(c.body);
+		return c.body;
+	};
+	expect(await same("system light")).toBe("#f4f3f1");
+	// System: the phone flips to dark while the app stays open.
+	await page.emulateMedia({ colorScheme: "dark" });
+	expect(await same("system dark")).toBe("#0b0b0a");
+	// Forced themes beat the system one.
+	await group.getByRole("radio", { name: "Light" }).tap();
+	expect(await same("forced light")).toBe("#f4f3f1");
+	await group.getByRole("radio", { name: "Dark" }).tap();
+	await page.emulateMedia({ colorScheme: "light" });
+	expect(await same("forced dark")).toBe("#0b0b0a");
+	await group.getByRole("radio", { name: "System" }).tap();
+});
+
 test.describe("notch and home indicator", () => {
 	for (const [layout, w, h, ins] of LAYOUTS)
 		for (const scheme of ["light", "dark"] as const)

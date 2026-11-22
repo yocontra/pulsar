@@ -309,7 +309,7 @@ test.describe("phone UI", () => {
 		expect(await pageLuminance(page)).toBeLessThan(0.05);
 		await expect(
 			page.locator('meta[name="theme-color"]').first(),
-		).toHaveAttribute("content", "#000000");
+		).toHaveAttribute("content", "#0b0b0a");
 		await settled(page);
 		await page.reload();
 		await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");

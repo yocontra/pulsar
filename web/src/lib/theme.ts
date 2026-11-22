@@ -17,8 +17,8 @@ export const APPEARANCES: readonly [Appearance, string][] = [
 /** Shared with public/prefs.js. */
 const KEY = "pulsar.appearance";
 const COLORS = {
-	light: { phone: "#f2f2f7", desktop: "#f7f7f5" },
-	dark: { phone: "#000000", desktop: "#151517" },
+	light: { phone: "#f4f3f1", desktop: "#f7f7f5" },
+	dark: { phone: "#0b0b0a", desktop: "#151517" },
 } as const;
 
 function read(): Appearance {

@@ -32,8 +32,8 @@
 	// The status bar and window chrome: every theme-color meta shows the
 	// forced theme's color for its layout (phone below 1024 px, desktop above).
 	const COLORS = {
-		light: { phone: "#f2f2f7", desktop: "#f7f7f5" },
-		dark: { phone: "#000000", desktop: "#151517" },
+		light: { phone: "#f4f3f1", desktop: "#f7f7f5" },
+		dark: { phone: "#0b0b0a", desktop: "#151517" },
 	};
 	for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
 		const media = m.getAttribute("media") || "";
