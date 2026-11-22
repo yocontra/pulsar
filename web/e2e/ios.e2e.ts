@@ -83,6 +83,15 @@ async function center(l: Locator): Promise<Pt> {
 	return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
+/** The center of the part of `l` that shows inside `view`. */
+async function visibleCenter(l: Locator, view: Locator): Promise<Pt> {
+	const b = (await l.boundingBox())!;
+	const v = (await view.boundingBox())!;
+	const top = Math.max(b.y, v.y);
+	const bottom = Math.min(b.y + b.height, v.y + v.height);
+	return { x: b.x + b.width / 2, y: (top + bottom) / 2 };
+}
+
 const node = (page: Page, id: string) =>
 	page.locator(`[data-tree-node="${id}"]`);
 const title = (page: Page) => page.locator(".p-nav-title h1");
@@ -176,10 +185,17 @@ test.describe("ios gestures", () => {
 	}) => {
 		await openSession(page);
 		await expect(page.locator(".p-agent .ds-msg-actions")).toHaveCount(0);
-		const msg = page.locator(".p-agent .ds-turn--assistant .ds-parts").last();
-		// The conversation follows the latest turn, so the last one is on screen.
+		// The agent is working: the mock streams new turns into the
+		// conversation. Press the text of the latest turn that has some (a
+		// turn that just started has none yet, so it has nothing to copy),
+		// at the part of it on screen (a long turn is taller than the screen).
+		const msg = page.locator(".p-agent .ds-turn--assistant .ds-parts p").last();
 		await expect(msg).toBeVisible();
-		const c = await center(msg);
+		await msg.scrollIntoViewIfNeeded();
+		const c = await visibleCenter(
+			msg,
+			page.locator(".p-agent .ds-scroller").first(),
+		);
 		await touch(page, "touchstart", c);
 		await page.waitForTimeout(650);
 		await touch(page, "touchend", c);
