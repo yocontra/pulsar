@@ -34,6 +34,8 @@ Receipts follow each send: handed over, in its conversation, read, replied. Repl
 
 **Mention a file**: type `@` to search the files in the agent's folder (what git tracks, plus new files it doesn't ignore). Use the arrow keys and Enter or Tab to insert `@path`. Mentions show as chips above the field, and Backspace deletes a mention in one step.
 
+**Dictate** with the mic: your words appear in the draft as you speak, with a timer on the mic; tap it again to stop, or press Esc to cancel and put the draft back. Your browser's own speech recognition hears you (it may use its maker's service); nothing goes through Pulsar. The mic shows only in browsers that can dictate.
+
 **Stop** (in the header, or Cmd-.) interrupts the agent's current turn after you confirm. While the agent works and your draft is empty, the composer's Send button turns into a red Stop button. Stop shows only when Pulsar can reach the agent this way; see [Stop](adapters.md#stop) for each harness.
 
 ## Subagents
