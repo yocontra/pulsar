@@ -115,6 +115,8 @@ test.describe("tabs", () => {
 		const id = await agentId(request, "name=apparish-auth");
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
 		await expect(page).toHaveURL(/#\/a\//);
+		// The app is up (it put Agents under the page in history).
+		await expect(bar(page)).toBeAttached();
 		await expect(bar(page)).not.toBeInViewport();
 		// The system back (Android) lands on Agents first.
 		await page.goBack();

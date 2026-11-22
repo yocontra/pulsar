@@ -222,7 +222,7 @@ export function limitsSuite(platform: "desktop" | "phone") {
 			const saved = put((b) => String(b.thresholds) === "70,90");
 			await row.tap();
 			await page
-				.locator("ion-action-sheet")
+				.getByTestId("actions")
 				.getByRole("button", { name: "70%, 90%" })
 				.tap();
 			await saved;

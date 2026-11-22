@@ -11,15 +11,6 @@ import type {
 	ToggleChangeEventDetail,
 } from "@ionic/core";
 import {
-	type ActionSheetButton,
-	actionSheetController,
-	toastController,
-} from "@ionic/core/components";
-import {
-	IonActionSheet as ActionSheetEl,
-	defineCustomElement as defineActionSheet,
-} from "@ionic/core/components/ion-action-sheet.js";
-import {
 	defineCustomElement as defineFooter,
 	IonFooter as FooterEl,
 } from "@ionic/core/components/ion-footer.js";
@@ -75,10 +66,6 @@ import {
 	defineCustomElement as defineTextarea,
 	IonTextarea as TextareaEl,
 } from "@ionic/core/components/ion-textarea.js";
-import {
-	defineCustomElement as defineToast,
-	IonToast as ToastEl,
-} from "@ionic/core/components/ion-toast.js";
 import {
 	defineCustomElement as defineToggle,
 	IonToggle as ToggleEl,
@@ -254,17 +241,9 @@ export const IonSpinner = createComponent<InstanceType<typeof SpinnerEl>>({
 	defineCustomElement: defineSpinner,
 });
 
-// Controller overlays (created imperatively) need their elements defined.
-defineActionSheet();
-defineToast();
-void ActionSheetEl;
-void ToastEl;
-
 export type {
-	ActionSheetButton,
 	ItemSlidingCustomEvent,
 	ModalBreakpointChangeEventDetail,
 	RefresherEventDetail,
 	ToggleChangeEventDetail,
 };
-export { actionSheetController, toastController };

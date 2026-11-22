@@ -127,7 +127,7 @@ export function notifySuite(platform: "desktop" | "phone") {
 			const req = saved();
 			await row.tap();
 			await page
-				.locator("ion-action-sheet")
+				.getByTestId("actions")
 				.getByRole("button", { name: "Notifications with sound" })
 				.tap();
 			expect((await req).postDataJSON()).toMatchObject({
@@ -190,7 +190,7 @@ export function notifySuite(platform: "desktop" | "phone") {
 			await expect(row).toContainText("Off");
 			await row.tap();
 			await page
-				.locator("ion-action-sheet")
+				.getByTestId("actions")
 				.getByRole("button", { name: "Notifications only" })
 				.tap();
 			// iPhone Safari (not the Home Screen app) can't subscribe.

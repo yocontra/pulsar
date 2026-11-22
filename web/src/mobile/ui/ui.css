@@ -18,6 +18,9 @@ html.p-tabs ion-nav > .ion-page:last-child {
 		transform var(--ds-dur) ease,
 		opacity var(--ds-dur) ease;
 }
+.p-tabbar.is-settling * {
+	transition: none !important;
+}
 .p-tabbar.is-hidden {
 	transform: translateY(100%);
 	opacity: 0;
@@ -129,4 +132,16 @@ html.md ion-header.p-bar.header-md::after {
 /* The page under a PageShell: the sunken background (= theme-color). */
 ion-content.p-page {
 	--background: var(--ds-bg-sunken);
+}
+
+/* Android: Ionic's Material mode has no condensing large title, and hides
+   the condense header with it. Pages not yet on PageShell keep what else
+   that header holds (Home's search field); only the large title goes. */
+html.md ion-header.header-collapse-condense {
+	display: block;
+}
+html.md
+	ion-header.header-collapse-condense
+	ion-toolbar:has(ion-title.title-large) {
+	display: none;
 }

@@ -36,7 +36,8 @@ test.describe("usage page", () => {
 		await sheet.getByRole("button", { name: "Close" }).last().click();
 		await expect(sheet).toHaveCount(0);
 
-		await p.getByRole("button", { name: "Back" }).click();
+		// Usage is a tab: back to Agents through the tab bar.
+		await page.getByTestId("tab-agents").click();
 		await expect(page).not.toHaveURL(/#\/usage/);
 	});
 });

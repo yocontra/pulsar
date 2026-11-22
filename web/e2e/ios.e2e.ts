@@ -199,7 +199,7 @@ test.describe("ios gestures", () => {
 		await touch(page, "touchstart", c);
 		await page.waitForTimeout(650);
 		await touch(page, "touchend", c);
-		const sheet = page.locator("ion-action-sheet");
+		const sheet = page.getByTestId("actions");
 		await expect(sheet.getByRole("button", { name: "Copy" })).toBeVisible();
 		await sheet.getByRole("button", { name: "Cancel" }).tap();
 		await expect(sheet).toHaveCount(0);
@@ -214,7 +214,7 @@ test.describe("ios gestures", () => {
 		await touch(page, "touchstart", c);
 		await page.waitForTimeout(650);
 		await touch(page, "touchend", c);
-		const sheet = page.locator("ion-action-sheet");
+		const sheet = page.getByTestId("actions");
 		await expect(sheet).toBeVisible();
 		await expect(sheet).toContainText("Message Everyone on studio");
 		// The lift's click didn't toggle the row.

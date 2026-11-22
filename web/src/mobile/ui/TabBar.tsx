@@ -10,7 +10,7 @@ import {
 	LayoutListIcon,
 	SettingsIcon,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { hrefFor } from "../../lib/router.ts";
 import { observer } from "../../lib/signals.ts";
 import { attention } from "../../lib/store.ts";
@@ -23,10 +23,24 @@ const ICONS: Record<TabId, typeof InboxIcon> = {
 	settings: SettingsIcon,
 };
 
+// AA in both themes: the link tint (lighter than the fill in dark), and the
+// needs badge's own text color.
+const LINK = { textActiveIos: "text-[var(--ds-link)]" };
+const BADGE = {
+	bg: "bg-[var(--ds-needs-badge)]",
+	text: "text-[var(--ds-on-needs)]",
+};
+
 function TabBarImpl() {
 	const shown = atTabRoot.value;
 	const active = activeTab.value;
 	const needs = attention.value.length;
+	// Konsta places the active tab's highlight after mounting: no slide in.
+	const [settled, setSettled] = useState(false);
+	useEffect(() => {
+		const t = setTimeout(() => setSettled(true), 100);
+		return () => clearTimeout(t);
+	}, []);
 	// Tab roots pad their content for the bar (mobile/ui/ui.css).
 	useEffect(() => {
 		document.documentElement.classList.toggle("p-tabs", shown);
@@ -35,7 +49,7 @@ function TabBarImpl() {
 		<Tabbar
 			labels
 			icons
-			className={`p-tabbar fixed start-0 bottom-0 z-30${shown ? "" : " is-hidden"}`}
+			className={`p-tabbar fixed start-0 bottom-0 z-30${shown ? "" : " is-hidden"}${settled ? "" : " is-settling"}`}
 			aria-hidden={!shown}
 			inert={!shown}
 			data-testid="tabbar"
@@ -49,6 +63,7 @@ function TabBarImpl() {
 						<TabbarLink
 							key={t.id}
 							active={on}
+							colors={LINK}
 							linkProps={{
 								href: hrefFor(t.route),
 								"aria-current": on ? "page" : undefined,
@@ -64,7 +79,7 @@ function TabBarImpl() {
 									ios={<I className="size-7" strokeWidth={1.75} />}
 									material={<I className="size-6" />}
 									badge={badge}
-									badgeColors={{ bg: "bg-[var(--ds-needs-badge)]" }}
+									badgeColors={BADGE}
 								/>
 							}
 							label={t.label}

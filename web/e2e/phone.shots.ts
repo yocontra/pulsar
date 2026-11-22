@@ -273,7 +273,7 @@ test.describe("phone screens", () => {
 			.locator(".p-agent .ds-turn--assistant .ds-parts")
 			.last()
 			.dispatchEvent("contextmenu");
-		await page.locator("ion-action-sheet").waitFor();
+		await page.getByTestId("actions").waitFor();
 		await page.waitForTimeout(500);
 		await shot(page, "06e-message-menu");
 	});
@@ -506,7 +506,7 @@ test.describe("phone screens", () => {
 		await page
 			.locator('[data-tree-node="m:studio"] ion-item')
 			.dispatchEvent("contextmenu");
-		await page.locator("ion-action-sheet").waitFor();
+		await page.getByTestId("actions").waitFor();
 		await page.waitForTimeout(600);
 		await shot(page, "15-long-press-menu");
 	});

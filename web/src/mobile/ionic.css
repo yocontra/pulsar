@@ -1,10 +1,12 @@
 /*
- * Ionic's global CSS, in the `ionic` cascade layer (declared in
- * styles/globals.css): above Tailwind's preflight, below its utilities, so
- * Konsta's utility classes win over Ionic's normalize on the same element.
- * Pulsar's own phone CSS is unlayered and wins over both.
+ * Ionic's global CSS. Its element rules (normalize, structure, typography)
+ * go in the `ionic` cascade layer (declared in styles/globals.css): above
+ * Tailwind's preflight, below its utilities, so Konsta's utility classes
+ * win over Ionic's normalize on the same element. core.css stays unlayered:
+ * it has no element rules, and its !important color classes would beat
+ * every unlayered !important override from inside a layer.
  */
-@import "@ionic/react/css/core.css" layer(ionic);
+@import "@ionic/react/css/core.css";
 @import "@ionic/react/css/normalize.css" layer(ionic);
 @import "@ionic/react/css/structure.css" layer(ionic);
 @import "@ionic/react/css/typography.css" layer(ionic);

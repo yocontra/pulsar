@@ -116,6 +116,8 @@ export default defineConfig<unknown, E2EWorkerOptions>({
 			// and the phone specs both platforms run (*.phone.e2e.ts).
 			name: "ios",
 			testMatch: /(ios|phone)\.e2e\.ts$/,
+			// e2e/real/*.phone.e2e.ts run against a real daemon (playwright.real).
+			testIgnore: /\/real\//,
 			use: { ...devices["iPhone 13 Mini"] },
 		},
 		{
@@ -123,6 +125,7 @@ export default defineConfig<unknown, E2EWorkerOptions>({
 			// theme (mobile/platform.ts picks them from the user agent).
 			name: "android",
 			testMatch: /(android|phone)\.e2e\.ts$/,
+			testIgnore: /\/real\//,
 			use: { ...devices["Pixel 7"] },
 		},
 	],
