@@ -19,7 +19,7 @@ function SubagentPageImpl({ id }: { id: string }) {
 	const sub = useSubagent(id).data;
 	return (
 		<>
-			<IonHeader className="p-agent-header">
+			<IonHeader className="p-agent-header p-sub-header">
 				<IonToolbar>
 					<IonButtons slot="start">
 						<BackButton route={{ view: "subagent", id }} />

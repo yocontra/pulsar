@@ -225,6 +225,37 @@ test.describe("phone UI", () => {
 		);
 	});
 
+	for (const w of [375, 320])
+		test(`a subagent's back button and title never overlap at ${w} px`, async ({
+			page,
+			request,
+		}) => {
+			await page.setViewportSize({ width: w, height: 700 });
+			const auth = await agentId(request, "name=apparish-auth");
+			// The mock's longest subagent name.
+			const sub = `${auth}/sub:a1explore`;
+			await page.goto(`/#/a/${encodeURIComponent(auth)}`);
+			await expect(page.locator(".p-nav-title h1").last()).toHaveText(
+				"apparish-auth",
+			);
+			await page.goto(`/#/s/${encodeURIComponent(sub)}`);
+			const header = page.locator(".p-sub-header").last();
+			const title = header.locator(".p-nav-title h1");
+			await expect(title).toHaveText("Find other refresh callers");
+			const back = header.locator("ion-button.p-back");
+			await expect(back).toContainText(/\S/);
+			await settled(page);
+			const b = (await back.boundingBox())!;
+			const t = (await title.boundingBox())!;
+			// Side by side, never on top of each other, and inside the screen.
+			expect(t.x).toBeGreaterThanOrEqual(b.x + b.width);
+			expect(t.x + t.width).toBeLessThanOrEqual(w);
+			// A name too long for the bar ends in an ellipsis.
+			expect(
+				await title.evaluate((el) => getComputedStyle(el).textOverflow),
+			).toBe("ellipsis");
+		});
+
 	test("keyboard hints are hidden on touch", async ({ page }) => {
 		await home(page);
 		const display = await page.evaluate(() => {
