@@ -2060,6 +2060,15 @@
 .prompt-inline--phone .ix-actions .m-btn {
 	min-height: 44px;
 }
+/* Phone prompts lay out their buttons like the approval card: full width,
+   two side by side, a plan's choices (often three, long) one per row. */
+.prompt-inline--phone .ix-actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+}
+.prompt-inline--phone .ix-plan-choices {
+	grid-template-columns: 1fr;
+}
 
 .d-confirm {
 	width: min(420px, calc(100vw - 48px));

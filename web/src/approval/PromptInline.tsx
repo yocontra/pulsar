@@ -34,23 +34,43 @@ function PromptInlineImpl({
 			// copy button in a plan is not where focus belongs.
 			const enabled =
 				"button:not(:disabled), input:not(:disabled), textarea:not(:disabled)";
-			const first =
-				el?.querySelector<HTMLElement>(
-					`:is(.ix-q, .ix-actions, .approval-actions, .m-ap-actions) :is(${enabled})`,
-				) ?? el?.querySelector<HTMLElement>(enabled);
+			const first = el?.querySelector<HTMLElement>(
+				`:is(.ix-q, .ix-feedback, .ix-actions, .approval-actions, .m-ap-actions) :is(${enabled})`,
+			);
 			if (el && (first || tries > 20)) {
 				// Its end (the buttons) in view, above the floating "Jump to
 				// latest" lane (scroll-margin-bottom in conversation.css).
 				el.scrollIntoView({ block: "end" });
 				// No enabled control (this device can't answer): the card itself.
 				(first ?? el).focus({ preventScroll: true });
+				// Parts load after this (a diff, highlighting) and grow the card:
+				// keep its end in view while it settles, unless the person scrolls.
+				let last = el.getBoundingClientRect().height;
+				grow = new ResizeObserver(() => {
+					const h = el.getBoundingClientRect().height;
+					if (h > last) el.scrollIntoView({ block: "end" });
+					last = h;
+				});
+				grow.observe(el);
+				const opts = { capture: true, signal: done.signal };
+				settle = setTimeout(() => done.abort(), 2000);
+				addEventListener("wheel", () => done.abort(), opts);
+				addEventListener("touchstart", () => done.abort(), opts);
+				done.signal.addEventListener("abort", () => grow?.disconnect());
 				return;
 			}
 			tries++;
 			timer = setTimeout(go, 50);
 		};
+		let grow: ResizeObserver | undefined;
+		const done = new AbortController();
+		let settle: ReturnType<typeof setTimeout> | undefined;
 		let timer = setTimeout(go, 0);
-		return () => clearTimeout(timer);
+		return () => {
+			clearTimeout(timer);
+			clearTimeout(settle);
+			done.abort();
+		};
 	}, [want]);
 
 	// Tell the page whether the card is on screen (the phone's banner).
