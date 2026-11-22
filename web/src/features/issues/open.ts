@@ -12,7 +12,9 @@ import { can } from "../../lib/store.ts";
 export const issueAsk = signal<string | null>(null);
 
 /** The issue number an agent's tags name, when the daemon serves cards. */
-export function issueOf(agent: { tags: string[] }): string | null {
+export function issueOf(agent: { id: string; tags: string[] }): string | null {
+	// A subagent's record carries no issue of its own.
+	if (agent.id.includes("/sub:")) return null;
 	const n = tagValue(agent.tags, "issue");
 	return n && /^\d{1,7}$/.test(n) && can("issues") ? n : null;
 }
