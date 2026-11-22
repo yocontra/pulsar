@@ -14,6 +14,7 @@ import type {
 	UsageTokens,
 } from "../api/types.ts";
 import { AgentAvatar, harnessName, plural } from "../ds/index.ts";
+import Limits from "../features/limits/Limits.tsx";
 import { useUsage } from "./data.ts";
 import { ModelSheet, PricesSheet } from "./ModelSheet.tsx";
 import {
@@ -338,6 +339,7 @@ function Body({
 		return (
 			<div className={`usage-body${dim ? " usage-dim" : ""}`}>
 				<MachineErrors errors={errors} />
+				<Limits report={report} />
 				<p className="usage-empty" role="status">
 					{report.scanning && !report.scannedAt
 						? "Reading session files…"
@@ -348,6 +350,7 @@ function Body({
 	return (
 		<div className={`usage-body${dim ? " usage-dim" : ""}`}>
 			<MachineErrors errors={errors} />
+			<Limits report={report} />
 			<section className="usage-top">
 				<div className="usage-summary">
 					<p className="usage-figure" data-testid="usage-total">
