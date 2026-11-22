@@ -12,7 +12,7 @@ import { Fragment } from "react";
 import type { Approval } from "../api/types.ts";
 import { AgentAvatar } from "../components/ui/agent-avatar.tsx";
 import { Exact, Marked } from "./exact.tsx";
-import { hasHidden, ToolInput } from "./ToolInput.tsx";
+import { ToolInput } from "./ToolInput.tsx";
 
 export { Exact, Marked };
 
@@ -115,18 +115,6 @@ export function ApprovalDetails({
 							</code>
 						</Fragment>
 					))}
-				</p>
-			)}
-			{hasHidden(ap.input) && (
-				<p className="ds-ap-foot">
-					Hidden characters show as <span className="mk mk-ctl">red tags</span>{" "}
-					and tabs as <span className="mk mk-tab">→</span>.
-				</p>
-			)}
-			{!readOnly && (
-				<p className="ds-ap-foot" title={`Input ${ap.inputHash}`}>
-					Also on {agent.machine ?? "its machine"}'s screen; the first answer
-					wins.
 				</p>
 			)}
 		</div>

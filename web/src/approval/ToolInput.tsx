@@ -9,7 +9,6 @@
 import { lazy, type ReactNode, Suspense } from "react";
 import { InlineCode, langForPath, MarkHidden } from "../session/highlight.tsx";
 import { Exact, Marked } from "./exact.tsx";
-import { visible } from "./visible.ts";
 
 const Diff = lazy(() =>
 	import("../session/Diff.tsx").then((m) => ({ default: m.Diff })),
@@ -224,14 +223,4 @@ export function ToolInput({ tool, input }: { tool: string; input: Input }) {
 			)}
 		</MarkHidden.Provider>
 	);
-}
-
-/** True when any key or string in the input has a hidden character or a tab (the legend then explains the tags). */
-export function hasHidden(v: unknown): boolean {
-	if (typeof v === "string")
-		return visible(v).some((p) => p.mark === "ctl" || p.mark === "tab");
-	if (Array.isArray(v)) return v.some(hasHidden);
-	if (v && typeof v === "object")
-		return Object.entries(v).some(([k, x]) => hasHidden(k) || hasHidden(x));
-	return false;
 }
