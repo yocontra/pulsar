@@ -12,6 +12,8 @@ import { Store } from "../src/store.ts";
 import { Usage } from "../src/usage/index.ts";
 import {
 	claudeCachedLimits,
+	type OpencodeUsageAnswer,
+	opencodeGoLimits,
 	opencodeLimit,
 	readOpencodeLimits,
 } from "../src/usage/limit-sources.ts";
@@ -177,6 +179,63 @@ describe("OpenCode Go hard stops", () => {
 	});
 });
 
+describe("OpenCode Go meters from OpenCode's server", () => {
+	const meter = (percent: number, limited = false, resetIn = DAY) => ({
+		percent,
+		limited,
+		resetsAt: NOW + resetIn,
+	});
+
+	test("each window's percent, limited and reset; no workspace details", () => {
+		const out = opencodeGoLimits(
+			{
+				workspace: {
+					id: "wrk_test",
+					name: "Test Workspace",
+					usageURL: "https://example.test/usage",
+				},
+				go: {
+					rolling: meter(37, false, 3 * HOUR),
+					weekly: meter(82),
+					monthly: meter(64, true, 9 * DAY),
+				},
+				budgets: [],
+			},
+			NOW,
+		);
+		expect(
+			out.map((l) => [l.window, l.label, l.usedPercent, l.reached]),
+		).toEqual([
+			["rolling", "Rolling", 37, false],
+			["weekly", "Weekly", 82, false],
+			// Limited is the hard stop, whatever the percent says.
+			["monthly", "Monthly", 100, true],
+		]);
+		expect(out[0]).toMatchObject({
+			harness: "opencode",
+			account: "opencode-go",
+			resetsAt: NOW + 3 * HOUR,
+			at: NOW,
+			plan: "Go",
+		});
+		const text = JSON.stringify(out);
+		expect(text).not.toContain("wrk_test");
+		expect(text).not.toContain("Test Workspace");
+		expect(text).not.toContain("example.test");
+	});
+
+	test("no Go subscription (null data, no go) or a bad meter: nothing", () => {
+		expect(opencodeGoLimits(null, NOW)).toEqual([]);
+		expect(opencodeGoLimits({ workspace: { id: "w" } }, NOW)).toEqual([]);
+		expect(
+			opencodeGoLimits(
+				{ go: { rolling: { percent: "x" }, weekly: null } },
+				NOW,
+			),
+		).toEqual([]);
+	});
+});
+
 let dir: string;
 
 beforeEach(() => {
@@ -335,5 +394,95 @@ describe("the scanner", () => {
 		const [l] = usage.limits.local(NOW);
 		expect(l?.usedPercent).toBe(60);
 		expect(usage.limits.local(NOW)).toHaveLength(1);
+	});
+
+	test("asks OpenCode's server at most every 5 minutes, only while it runs, slower after failures", async () => {
+		const answers: OpencodeUsageAnswer[] = [];
+		let asked = 0;
+		const ask = async (): Promise<OpencodeUsageAnswer> => {
+			asked++;
+			return answers.shift() ?? { running: false };
+		};
+		store.close();
+		store = new Store(join(dir, "pulsar2.db"));
+		usage = new Usage(store, {
+			roots: () => ({ ...rootsIn(dir), opencodeUsage: ask }),
+		});
+		const go = (weekly: number) => ({
+			running: true as const,
+			ok: true as const,
+			data: {
+				go: {
+					rolling: { percent: 10, limited: false, resetsAt: NOW + HOUR },
+					weekly: { percent: weekly, limited: false, resetsAt: NOW + DAY },
+					monthly: { percent: 20, limited: false, resetsAt: NOW + 9 * DAY },
+				},
+			},
+		});
+		// Not running: asked again on the next scan.
+		await usage.scanner.scan(NOW);
+		await usage.scanner.scan(NOW + MIN);
+		expect(asked).toBe(2);
+		answers.push(go(81));
+		await usage.scanner.scan(NOW + 2 * MIN);
+		expect(asked).toBe(3);
+		const week = usage.limits
+			.local(NOW + 2 * MIN)
+			.find((l) => l.harness === "opencode" && l.window === "weekly");
+		expect(week).toMatchObject({
+			usedPercent: 81,
+			plan: "Go",
+			at: NOW + 2 * MIN,
+		});
+		expect(usage.limits.forHarness("opencode", NOW + 2 * MIN)).toHaveLength(3);
+		// Within 5 minutes: not asked.
+		await usage.scanner.scan(NOW + 6 * MIN);
+		expect(asked).toBe(3);
+		// A failure waits 5, then 10 minutes.
+		answers.push({ running: true, ok: false }, { running: true, ok: false });
+		await usage.scanner.scan(NOW + 7 * MIN);
+		expect(asked).toBe(4);
+		await usage.scanner.scan(NOW + 11 * MIN);
+		expect(asked).toBe(4);
+		await usage.scanner.scan(NOW + 12 * MIN);
+		expect(asked).toBe(5);
+		await usage.scanner.scan(NOW + 21 * MIN);
+		expect(asked).toBe(5);
+		// Back to every 5 minutes after it answers.
+		answers.push(go(90));
+		await usage.scanner.scan(NOW + 22 * MIN);
+		expect(asked).toBe(6);
+		await usage.scanner.scan(NOW + 27 * MIN);
+		expect(asked).toBe(7);
+	});
+
+	test("a hard stop newer than the server's last reading shows as reached", async () => {
+		let answer: OpencodeUsageAnswer = {
+			running: true,
+			ok: true,
+			data: {
+				go: {
+					rolling: { percent: 10, limited: false, resetsAt: NOW + HOUR },
+					weekly: { percent: 97, limited: false, resetsAt: NOW + DAY },
+					monthly: { percent: 50, limited: false, resetsAt: NOW + 9 * DAY },
+				},
+			},
+		};
+		store.close();
+		store = new Store(join(dir, "pulsar3.db"));
+		usage = new Usage(store, {
+			roots: () => ({ ...rootsIn(dir), opencodeUsage: async () => answer }),
+		});
+		await usage.scanner.scan(NOW - 2 * HOUR);
+		answer = { running: false };
+		const oc = opencodeDb(join(dir, "opencode", "opencode.db"));
+		oc.stop(NOW - HOUR, "weekly");
+		await usage.scanner.scan(NOW);
+		const week = usage.limits
+			.local(NOW)
+			.filter((l) => l.harness === "opencode" && l.window === "weekly");
+		expect(week).toHaveLength(1);
+		expect(week[0]).toMatchObject({ reached: true, at: NOW - HOUR });
+		oc.db.close();
 	});
 });

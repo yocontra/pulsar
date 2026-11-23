@@ -1,9 +1,9 @@
 /**
  * The Usage page's "Limits" section: each plan limit a harness reported,
- * with how much is used and when it resets. Codex and Claude Code report
- * a percentage (Claude Code's is from its last `/usage`, so an old one
- * says when it was read); OpenCode, pi and omp only say when a limit is
- * reached, so they show here only then.
+ * with how much is used and when it resets. Codex, Claude Code and
+ * OpenCode (OpenCode Go) report a percentage (Claude Code's is from its
+ * last `/usage`, so an old one says when it was read); pi and omp only say
+ * when a limit is reached, so they show here only then.
  */
 import type { UsageReport } from "../../api/types.ts";
 import { AgentAvatar, harnessName } from "../../ds/index.ts";
@@ -81,9 +81,9 @@ export default function Limits({ report }: { report: UsageReport }) {
 				})}
 			</ul>
 			<p className="limits-note">
-				Codex and Claude Code report how much of each limit is used (Claude Code
-				as of the last time you opened /usage). OpenCode, pi and omp show here
-				only when a limit is reached.
+				Codex, Claude Code and OpenCode Go report how much of each limit is used
+				(Claude Code as of the last time you opened /usage). pi and omp show
+				here only when a limit is reached.
 			</p>
 		</section>
 	);

@@ -13,6 +13,12 @@
  *   `retryAfterMs` until the reset, and the window ("rolling", "weekly",
  *   "monthly") in the message. The message text is never kept. A later
  *   assistant answer from the same provider without an error ends it.
+ * - OpenCode Go percentages, with the operator's consent: while OpenCode's
+ *   shared server runs, the scanner asks it (on this machine) for
+ *   `GET /api/experimental/usage/limits`, at most every 5 minutes. OpenCode
+ *   answers by asking opencode.ai with its own credential; Pulsar never
+ *   reads that credential. Only `go.{rolling,weekly,monthly}` is kept
+ *   (`percent`, `limited`, `resetsAt`); the workspace's name and id are not.
  */
 
 import { readFile, stat } from "node:fs/promises";
@@ -20,7 +26,12 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
+import {
+	opencodeRequest,
+	opencodeServiceRunning,
+} from "../harnesses/opencode-api.ts";
 import type { LimitState } from "../http/wire.ts";
+import { freshProcessSnapshot } from "../processes.ts";
 import { answeredKey, claudeWindow } from "./limits.ts";
 
 type Json = Record<string, unknown>;
@@ -151,6 +162,67 @@ export function opencodeLimit(r: OpencodeRow): LimitState | null {
 		resetsAt: retry ? r.t + r.retryAfterMs! : null,
 		at: r.t,
 		plan: null,
+	};
+}
+
+/**
+ * OpenCode Go's meters from its server's `usage/limits` answer (the `data`
+ * part). Same `account` and `window` as a hard stop, so the newer shows.
+ */
+export function opencodeGoLimits(data: unknown, at: number): LimitState[] {
+	const go = obj(obj(data)?.go);
+	if (!go) return [];
+	const out: LimitState[] = [];
+	for (const [window, label] of Object.entries(GO_WINDOWS)) {
+		const m = obj(go[window]);
+		const pct = fin(m?.percent);
+		if (!m || pct === null) continue;
+		const limited = m.limited === true;
+		const used = Math.max(0, Math.min(100, pct));
+		out.push({
+			harness: "opencode",
+			account: "opencode-go",
+			window,
+			label,
+			usedPercent: limited ? 100 : used,
+			reached: limited || used >= 100,
+			resetsAt: fin(m.resetsAt),
+			at,
+			plan: "Go",
+		});
+	}
+	return out;
+}
+
+/** One ask of OpenCode's server: not running, its answer, or a failure. */
+export type OpencodeUsageAnswer =
+	| { running: false }
+	| { running: true; ok: true; data: unknown }
+	| { running: true; ok: false };
+
+/**
+ * Asks OpenCode's shared server for its usage limits, only when it runs,
+ * over HTTP at the address in OpenCode's own `service.json` (never through
+ * `opencode api`, which starts a server when none runs).
+ */
+export async function askOpencodeUsage(): Promise<OpencodeUsageAnswer> {
+	const table = await freshProcessSnapshot(10_000);
+	if (!table || !opencodeServiceRunning(table)) return { running: false };
+	const r = await opencodeRequest(
+		table,
+		"GET",
+		"/api/experimental/usage/limits",
+		{
+			timeoutMs: 15_000,
+			httpOnly: true,
+		},
+	);
+	if (!r.ok) return { running: true, ok: false };
+	const body = obj(r.body);
+	return {
+		running: true,
+		ok: true,
+		data: body && "data" in body ? body.data : null,
 	};
 }
 

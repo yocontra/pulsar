@@ -174,6 +174,8 @@ export interface ApiOptions {
 	body?: unknown;
 	timeoutMs?: number;
 	lane?: Lane;
+	/** HTTP to the service only, never `opencode api` (an optional read). */
+	httpOnly?: boolean;
 }
 
 /**
@@ -234,6 +236,8 @@ export async function opencodeRequest(
 			)
 				return { ok: false, status: null, error: "timed out" };
 		}
+	if (opts.httpOnly)
+		return httpError ?? { ok: false, status: null, error: "no service" };
 	const r = await exec(
 		await opencodeBin(table, ep?.pid ?? null),
 		[
