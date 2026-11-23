@@ -6,6 +6,7 @@
  * of runtime and `node:` imports, so the browser build can compile it.
  */
 import type {
+	NoticeColor,
 	TranscriptEvent,
 	TranscriptPage as TranscriptPageBase,
 } from "../transcripts/types.ts";
@@ -125,6 +126,12 @@ export interface SubagentRow {
 	name: string;
 	harness: string;
 	kind: SubagentKind;
+	/**
+	 * The color the harness gave it (a Claude teammate's, the same one its
+	 * messages carry), null when it gave none: the app then picks one from
+	 * the name.
+	 */
+	color: NoticeColor | null;
 	/** The harness's agent type (`Explore`, a Codex role), when it says. */
 	agentType: string | null;
 	/** What it was asked to do, one line, when the harness says. */

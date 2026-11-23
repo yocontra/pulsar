@@ -287,6 +287,7 @@ describe("subagents across the pool", () => {
 						name: "o\u202ek\u0007",
 						state: "running",
 						kind: "task",
+						color: "cyan",
 					},
 					{ id: "claude:other/sub:k2", name: "not this parent" },
 					{ id: "claude:x/sub:a/b", name: "bad key" },
@@ -295,6 +296,7 @@ describe("subagents across the pool", () => {
 						name: "x".repeat(500),
 						state: "weird",
 						kind: "?",
+						color: "url(x)",
 					},
 					"junk",
 				],
@@ -311,6 +313,9 @@ describe("subagents across the pool", () => {
 		expect(list.items[1]!.name.length).toBe(80);
 		expect(list.items[1]!.state).toBe("done");
 		expect(list.items[1]!.kind).toBe("task");
+		// A color is one of the teammate names, or none.
+		expect(list.items[0]!.color).toBe("cyan");
+		expect(list.items[1]!.color).toBeNull();
 		expect(list.running).toBe(1);
 	});
 });

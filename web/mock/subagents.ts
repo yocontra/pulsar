@@ -6,7 +6,8 @@
  * can't take messages, so the composer offers the parent. The first OpenCode
  * agent on studio has one child session that takes messages directly.
  * chat-blocks led an agent team whose 30 teammates were all stopped: every
- * one is done, so by default it shows no subagents at all.
+ * one is done, so by default it shows no subagents at all. The first few
+ * carry the names and colors its transcript's team messages use.
  */
 import type {
 	SubagentCounts,
@@ -41,6 +42,7 @@ function make(
 		id: `${parent.id}/sub:${key}`,
 		parentId: parent.id,
 		harness: parent.harness,
+		color: null,
 		agentType: null,
 		description: null,
 		startedAt: NOW0 - 10 * 60_000,
@@ -96,9 +98,9 @@ function log(id: string, task: string, reply: string, done: boolean) {
  * A Task call in a mock agent's log, newest first (`back` 0), so its card
  * links to the subagent.
  */
-function taskCall(a: MockAgent, back = 0): string | null {
+function taskCall(a: MockAgent, back = 0, tool = "Task"): string | null {
 	const calls = logFor(a)
-		.events.filter((e) => e.kind === "tool_call" && e.tool?.name === "Task")
+		.events.filter((e) => e.kind === "tool_call" && e.tool?.name === tool)
 		.map((e) => e.tool!.callId);
 	return calls[calls.length - 1 - back] ?? null;
 }
@@ -167,7 +169,27 @@ function seed() {
 		"Waiting for the next task.",
 		true,
 	);
-	// A lead whose team was shut down: its teammates are all done.
+	// A lead whose team was shut down: its teammates are all done. The newest
+	// ones are the senders and recipients in its transcript (web/mock/
+	// blocks.ts), with the colors Claude gave them (reviewer has none: the
+	// app hashes its name), and the Explore task its Agent card started.
+	const named: Array<
+		Pick<SubagentRow, "name" | "kind" | "color"> &
+			Partial<Pick<SubagentRow, "agentType" | "callId">>
+	> = [
+		{ name: "parser", kind: "teammate", color: "blue" },
+		{ name: "docs", kind: "teammate", color: "green" },
+		{ name: "tester", kind: "teammate", color: "red" },
+		{ name: "planner", kind: "teammate", color: "purple" },
+		{ name: "reviewer", kind: "teammate", color: null },
+		{
+			name: "Find other refresh callers",
+			kind: "task",
+			color: null,
+			agentType: "Explore",
+			callId: taskCall(BLOCKS, 0, "Agent"),
+		},
+	];
 	subs.set(
 		BLOCKS.id,
 		Array.from({ length: 30 }, (_, i) =>
@@ -179,6 +201,8 @@ function seed() {
 				startedAt: NOW0 - (22 - i * 0.5) * 3_600_000,
 				updatedAt: NOW0 - (20 - i * 0.5) * 3_600_000,
 				finishedAt: NOW0 - (20 - i * 0.5) * 3_600_000,
+				// The newest: listed first.
+				...named[29 - i],
 			}),
 		),
 	);

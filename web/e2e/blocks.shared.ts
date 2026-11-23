@@ -146,7 +146,7 @@ export function blocksSuite(platform: "desktop" | "phone") {
 			// Agent-team messages and task results: notice cards, never JSON.
 			await has(".ds-notice-turn", 7);
 			await has('.ds-notice-quiet[data-notice="idle_notification"]');
-			await has('.ds-notice-dot[data-color="blue"]');
+			await has('.ds-notice-dot[data-agent-color="blue"]');
 			await has(".ds-notice-label.is-error");
 			await has(".ds-notice-body table");
 			const finished = conv

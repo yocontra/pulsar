@@ -6,7 +6,8 @@ import { Composer } from "../components/Composer.tsx";
 import { kindWord, SubagentStateWord } from "../components/SubagentRows.tsx";
 import { useNow } from "../data/clock.ts";
 import { useAgent, useSubagent, useTranscript } from "../data/index.ts";
-import { AgentAvatar } from "../ds/index.ts";
+import { AgentAvatar, AgentMark } from "../ds/index.ts";
+import { agentColor } from "../lib/agent-color.ts";
 import { age } from "../lib/format.ts";
 import { navigate } from "../lib/router.ts";
 import { findAgent } from "../lib/store.ts";
@@ -166,6 +167,7 @@ export function SubagentHeader({
 			</nav>
 			<div className="sub-title">
 				<AgentAvatar harness={sub?.harness} size="sm" />
+				<AgentMark color={sub ? agentColor(sub) : null} />
 				<h1>{sub?.name ?? "Subagent"}</h1>
 				{sub && <SubagentStateWord sub={sub} now={now} />}
 			</div>

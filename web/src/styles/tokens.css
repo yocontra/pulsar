@@ -148,6 +148,16 @@
 	--ds-peer: #7c4ddb;
 	--ds-peer-text: #6936c9;
 	--ds-peer-soft: #f3eefd;
+	/* Subagent colors (lib/agent-color.ts): Claude Code's teammate names,
+	   each at least 3:1 against every surface. */
+	--ds-agent-red: #d93036;
+	--ds-agent-blue: #2f6fe4;
+	--ds-agent-green: #218a4c;
+	--ds-agent-yellow: #a87a00;
+	--ds-agent-purple: #8445bc;
+	--ds-agent-orange: #c95a10;
+	--ds-agent-pink: #c7348f;
+	--ds-agent-cyan: #00849a;
 
 	/* Conversation */
 	--ds-bubble-user: #eeedea;
@@ -279,6 +289,14 @@
 		--ds-peer: #a98bff;
 		--ds-peer-text: #c0a8ff;
 		--ds-peer-soft: rgba(169, 139, 255, 0.13);
+		--ds-agent-red: #f2555a;
+		--ds-agent-blue: #5b94ff;
+		--ds-agent-green: #3fb96f;
+		--ds-agent-yellow: #e5b52a;
+		--ds-agent-purple: #ab76e8;
+		--ds-agent-orange: #f5893d;
+		--ds-agent-pink: #ea5db5;
+		--ds-agent-cyan: #25b8cc;
 		--ds-bubble-user: #2a2927;
 		--ds-bubble-mine: #2f7bf0;
 		--ds-code-bg: #161615;
@@ -391,6 +409,14 @@
 	--ds-peer: #a98bff;
 	--ds-peer-text: #c0a8ff;
 	--ds-peer-soft: rgba(169, 139, 255, 0.13);
+	--ds-agent-red: #f2555a;
+	--ds-agent-blue: #5b94ff;
+	--ds-agent-green: #3fb96f;
+	--ds-agent-yellow: #e5b52a;
+	--ds-agent-purple: #ab76e8;
+	--ds-agent-orange: #f5893d;
+	--ds-agent-pink: #ea5db5;
+	--ds-agent-cyan: #25b8cc;
 	--ds-bubble-user: #2a2927;
 	--ds-bubble-mine: #2f7bf0;
 	--ds-code-bg: #161615;

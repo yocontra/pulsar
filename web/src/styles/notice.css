@@ -1,48 +1,18 @@
 /*
  * Agent-team messages and background-task results (NoticeCard.tsx). The
- * card reuses the peer bubble (.ds-peer-body); this file adds the teammate
- * color dot, the "what happened" label, the title, the clamp and the quiet
- * one-line idle row.
+ * card reuses the peer bubble (.ds-peer-body); this file adds the sender's
+ * color stripe (the dot is agent-color.css), the "what happened" label, the
+ * title, the clamp and the quiet one-line idle row.
  */
-.ds-notice-dot {
-	flex: none;
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: var(--tm, var(--ds-peer));
-}
 .ds-notice-icon {
 	flex: none;
 	width: 13px;
 	height: 13px;
 	color: var(--ds-text-3);
 }
-:where(.ds-notice-dot, .ds-notice-card)[data-color="red"] {
-	--tm: #e5484d;
-}
-:where(.ds-notice-dot, .ds-notice-card)[data-color="blue"] {
-	--tm: #3e7bfa;
-}
-:where(.ds-notice-dot, .ds-notice-card)[data-color="green"] {
-	--tm: #2f9e5b;
-}
-:where(.ds-notice-dot, .ds-notice-card)[data-color="yellow"] {
-	--tm: #d6a20a;
-}
-:where(.ds-notice-dot, .ds-notice-card)[data-color="purple"] {
-	--tm: #8e4ec6;
-}
-:where(.ds-notice-dot, .ds-notice-card)[data-color="orange"] {
-	--tm: #f0782a;
-}
-:where(.ds-notice-dot, .ds-notice-card)[data-color="pink"] {
-	--tm: #d6409f;
-}
-:where(.ds-notice-dot, .ds-notice-card)[data-color="cyan"] {
-	--tm: #0fa4b8;
-}
-.ds-notice-card[data-color] {
-	box-shadow: inset 3px 0 0 var(--tm, var(--ds-peer));
+/* The sender's color (agent-color.css) as a stripe down the card. */
+.ds-notice-card[data-agent-color] {
+	box-shadow: inset 3px 0 0 var(--agent, var(--ds-peer));
 }
 
 .ds-notice-label {

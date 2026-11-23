@@ -1,6 +1,8 @@
 import { ArrowUpRightIcon } from "lucide-react";
 import { useSubagents } from "../data/index.ts";
+
 import { navigate } from "../lib/router.ts";
+import { SubagentDot } from "./subagent-colors.tsx";
 
 /**
  * In a parent's transcript, a subagent card's way to the subagent's own
@@ -24,6 +26,7 @@ export function SubagentLink({
 			data-subagent-link={sub.id}
 			onClick={() => navigate({ view: "subagent", id: sub.id })}
 		>
+			<SubagentDot name={sub.name} callId={sub.callId} />
 			Open {sub.name}
 			<ArrowUpRightIcon aria-hidden="true" />
 		</button>

@@ -1,6 +1,10 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { TranscriptEvent } from "../transcripts/types.ts";
+import {
+	NOTICE_COLORS,
+	type NoticeColor,
+	type TranscriptEvent,
+} from "../transcripts/types.ts";
 import type { Agent } from "../types.ts";
 import { headAsync, tailAsync } from "../util.ts";
 import { configDir } from "./claude-ident.ts";
@@ -14,7 +18,8 @@ import type { FoundSubagent, SubagentTranscript } from "./types.ts";
  * `agentType`, `description`, `toolUseId` (the parent's Task/Agent call),
  * `finished: true` once it returned, `parentAgentId` when another subagent
  * started it, and for agent-team members `taskKind: "in_process_teammate"`
- * with `name` and `teamName`. Workflow runs (`subagents/workflows/`) are
+ * with `name`, `teamName` and `color` (the teammate color its messages
+ * carry, one of `NOTICE_COLORS`). Workflow runs (`subagents/workflows/`) are
  * not listed.
  *
  * A teammate never gets `finished`: when the lead shuts it down (or the
@@ -71,6 +76,7 @@ interface Meta {
 	finished: boolean;
 	teammate: boolean;
 	teamName: string | null;
+	color: NoticeColor | null;
 }
 
 interface Cached {
@@ -117,6 +123,7 @@ function readMeta(raw: string): Meta {
 			const t = text(m.teamName, 128);
 			return t && KEY_TEAM.test(t) ? t : null;
 		})(),
+		color: NOTICE_COLORS.find((c) => c === m.color) ?? null,
 	};
 }
 
@@ -338,6 +345,7 @@ export async function listClaudeSubagents(
 				meta.agentType ??
 				(meta.teammate ? "Teammate" : "Subagent"),
 			kind: meta.teammate ? "teammate" : "task",
+			color: meta.color,
 			agentType: meta.agentType,
 			description: meta.name ? meta.description : null,
 			state,

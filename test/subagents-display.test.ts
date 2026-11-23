@@ -29,6 +29,7 @@ function row(
 		name: key,
 		harness: "claude",
 		kind: "task",
+		color: null,
 		agentType: null,
 		description: null,
 		state,

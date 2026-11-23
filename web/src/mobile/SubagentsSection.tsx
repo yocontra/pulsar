@@ -3,7 +3,8 @@ import { useState } from "react";
 import { subagentStateText } from "../components/SubagentRows.tsx";
 import { useNow } from "../data/clock.ts";
 import { useSubagents } from "../data/index.ts";
-import { AgentAvatar } from "../ds/index.ts";
+import { AgentAvatar, AgentMark } from "../ds/index.ts";
+import { agentColor } from "../lib/agent-color.ts";
 import { navigate } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import {
@@ -76,7 +77,10 @@ function SubagentsSectionImpl({ agentId }: { agentId: string }) {
 									status={sub.state === "running" ? "busy" : undefined}
 								/>
 								<span className="p-sa-lines">
-									<span className="p-sa-name">{sub.name}</span>
+									<span className="p-sa-name">
+										<AgentMark color={agentColor(sub)} />
+										{sub.name}
+									</span>
 									<span className="p-sa-line">
 										{[subagentStateText(sub, now), sub.agentType]
 											.filter(Boolean)

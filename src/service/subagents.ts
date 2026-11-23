@@ -213,6 +213,7 @@ export class Subagents {
 			name: f.name,
 			harness: agent.harness,
 			kind: f.kind,
+			color: f.color ?? null,
 			agentType: f.agentType,
 			description: f.description,
 			state: f.state,

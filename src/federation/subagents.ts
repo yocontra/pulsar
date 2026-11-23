@@ -5,6 +5,7 @@ import type {
 	SubagentRow,
 	SubagentState,
 } from "../http/wire.ts";
+import { NOTICE_COLORS } from "../transcripts/types.ts";
 import { clean } from "./protocol.ts";
 
 /**
@@ -69,6 +70,7 @@ export function cleanSubagentList(
 			kind: KINDS.has(x.kind as SubagentKind)
 				? (x.kind as SubagentKind)
 				: "task",
+			color: NOTICE_COLORS.find((c) => c === x.color) ?? null,
 			agentType: text(x.agentType, 80),
 			description: text(x.description, 300),
 			state: STATES.has(x.state as SubagentState)

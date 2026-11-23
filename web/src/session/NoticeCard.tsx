@@ -1,9 +1,12 @@
 import { BellIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useContext, useState } from "react";
 import type { TranscriptEvent, TranscriptNotice } from "../api/types.ts";
 import { MessageResponse } from "../components/ai-elements/message.tsx";
+import { AgentMark } from "../ds/index.ts";
+import { agentColor, nameKey } from "../lib/agent-color.ts";
 import { clock } from "../lib/format.ts";
 import { peerFrom } from "./messages.ts";
+import { SubagentColors } from "./subagent-colors.tsx";
 
 /**
  * A Claude Code agent-team message or a background task's result (an event
@@ -27,14 +30,15 @@ export function NoticeCard({
 	const label = noticeLabel(n, !!text);
 	const tone = noticeTone(n);
 	const [open, setOpen] = useState(false);
+	// The sender's color, the same as on its subagent row and cards.
+	const senders = useContext(SubagentColors).senders;
+	const color = task
+		? null
+		: agentColor({ color: n.color ?? senders.get(nameKey(name)), name });
 	const dot = task ? (
 		<BellIcon className="ds-notice-icon" aria-hidden="true" />
 	) : (
-		<span
-			className="ds-notice-dot"
-			data-color={n.color ?? "none"}
-			aria-hidden="true"
-		/>
+		<AgentMark color={color} className="ds-notice-dot" />
 	);
 	const time = ev.ts ? (
 		<time className="ds-time" dateTime={new Date(ev.ts).toISOString()}>
@@ -75,7 +79,10 @@ export function NoticeCard({
 				{label && <span className={`ds-notice-label${tone}`}>{label}</span>}
 				{time}
 			</div>
-			<div className="ds-peer-body ds-notice-card" data-color={n.color}>
+			<div
+				className="ds-peer-body ds-notice-card"
+				data-agent-color={color ?? undefined}
+			>
 				{/* Kept for search and tests: "from lead". */}
 				<span className="sr-only">from {name}</span>
 				{n.summary && <div className="ds-notice-title">{n.summary}</div>}

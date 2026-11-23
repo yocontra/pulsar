@@ -1,7 +1,8 @@
 import { ChevronRightIcon } from "lucide-react";
 import type { SubagentRow } from "../api/types.ts";
 import { useNow } from "../data/clock.ts";
-import { AgentAvatar } from "../ds/index.ts";
+import { AgentAvatar, AgentMark } from "../ds/index.ts";
+import { agentColor } from "../lib/agent-color.ts";
 import { navigate } from "../lib/router.ts";
 import {
 	STATE_WORD,
@@ -80,6 +81,7 @@ export function SubagentTreeRow({
 			/>
 			<span className="d-lines">
 				<span className="d-line1">
+					<AgentMark color={agentColor(s)} />
 					<span className="d-name">{s.name}</span>
 					<span className="d-trail">
 						<SubagentStateWord sub={s} now={now} />

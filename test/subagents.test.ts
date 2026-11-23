@@ -147,6 +147,7 @@ describe("Claude Code subagents", () => {
 				name: "reviewer",
 				taskKind: "in_process_teammate",
 				teamName: "t",
+				color: "cyan",
 			},
 			{ mtime: now - 5 * 60_000, started: "2026-11-10T10:30:00.000Z" },
 		);
@@ -165,11 +166,16 @@ describe("Claude Code subagents", () => {
 			taskKind: "in_process_teammate",
 			teamName,
 		});
-		// Shut down: no longer a member of its team.
-		writeClaudeSub(sessionDir, "a5stopped", mate("old-mate", "t"), {
-			mtime: now - 2 * 60_000,
-			started: "2026-11-10T09:30:00.000Z",
-		});
+		// Shut down: no longer a member of its team. Its color stays.
+		writeClaudeSub(
+			sessionDir,
+			"a5stopped",
+			{ ...mate("old-mate", "t"), color: "pink" },
+			{
+				mtime: now - 2 * 60_000,
+				started: "2026-11-10T09:30:00.000Z",
+			},
+		);
 		// An earlier "reviewer" (the name was spawned again since).
 		writeClaudeSub(sessionDir, "a6prior", mate("reviewer", "t"), {
 			mtime: now - 3 * 3600_000,
@@ -227,6 +233,15 @@ describe("Claude Code subagents", () => {
 		mkdirSync(join(sessionDir, "subagents", "workflows", "wf_1"), {
 			recursive: true,
 		});
+	});
+
+	test("a teammate keeps the color Claude gave it; others have none", async () => {
+		const found = await listClaudeSubagents(lead, now);
+		const color = (k: string) => found.find((f) => f.key === k)?.color;
+		expect(color("a3mate")).toBe("cyan");
+		expect(color("a5stopped")).toBe("pink");
+		expect(color("a1run")).toBeNull();
+		expect(color("a6prior")).toBeNull();
 	});
 
 	test("lists tasks, teammates and nested runs with their state", async () => {

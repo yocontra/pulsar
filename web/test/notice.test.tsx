@@ -49,7 +49,9 @@ describe("notice card", () => {
 	test("a finished teammate: color dot, label, title, Markdown body, clamp", () => {
 		const html = card(gallery(/four fixes/));
 		expect(html).toContain('data-notice="idle_notification"');
-		expect(html).toContain('class="ds-notice-dot" data-color="blue"');
+		expect(html).toContain(
+			'class="ds-agent-mark ds-notice-dot" data-agent-color="blue"',
+		);
 		expect(html).toContain(">parser<");
 		expect(html).toContain(">Finished<");
 		expect(html).toContain(

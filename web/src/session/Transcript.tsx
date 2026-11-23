@@ -49,6 +49,7 @@ import {
 	userAuthor,
 } from "./messages.ts";
 import { NoticeCard } from "./NoticeCard.tsx";
+import { SubagentColors, SubagentDot, sendersOf } from "./subagent-colors.tsx";
 import { ToolCard } from "./ToolCard.tsx";
 import { knownMessages, PulsarMessages } from "./tools/pulsar-messages.ts";
 import {
@@ -192,23 +193,33 @@ export const Transcript = memo(function Transcript({
 		() => (agent ? { id: agent.id, cwd: agent.cwd } : null),
 		[agent?.id, agent?.cwd],
 	);
+	const senders = useMemo(() => sendersOf(events), [events]);
+	const colors = useMemo(
+		() => ({
+			agentId: agent?.id && agent.subagents ? agent.id : null,
+			senders,
+		}),
+		[agent?.id, !!agent?.subagents, senders],
+	);
 	return (
 		<C.Provider value={ctx}>
 			<FileRefAgent.Provider value={fileAgent}>
 				<PulsarMessages.Provider value={known}>
-					<div
-						className={`ds-conv ds-conv--${variant}${variant === "phone" ? " ds-phone" : ""}${className ? ` ${className}` : ""}`}
-					>
-						{messages.map((m, i) => (
-							<MessageView
-								key={m.id}
-								m={m}
-								prev={messages[i - 1]}
-								changes={turns.get(m.id)}
-							/>
-						))}
-						{working && <WorkingRow />}
-					</div>
+					<SubagentColors.Provider value={colors}>
+						<div
+							className={`ds-conv ds-conv--${variant}${variant === "phone" ? " ds-phone" : ""}${className ? ` ${className}` : ""}`}
+						>
+							{messages.map((m, i) => (
+								<MessageView
+									key={m.id}
+									m={m}
+									prev={messages[i - 1]}
+									changes={turns.get(m.id)}
+								/>
+							))}
+							{working && <WorkingRow />}
+						</div>
+					</SubagentColors.Provider>
 				</PulsarMessages.Provider>
 			</FileRefAgent.Provider>
 		</C.Provider>
@@ -528,6 +539,12 @@ function PartView({ part, next }: { part: Item; next?: Item }) {
 						describeCall(part.call.tool?.name ?? "Task", part.call.tool?.input)
 							.target?.text || "Subagent"
 					}
+					mark={
+						<SubagentDot
+							name={taskName(part.call.tool?.input)}
+							callId={part.call.tool?.callId ?? null}
+						/>
+					}
 					steps={part.steps}
 					tool={part.call.tool?.name}
 					running={!part.result && !part.call.tool?.done}
@@ -633,9 +650,26 @@ export function ReasoningRow({
 	);
 }
 
+/**
+ * The name a Task/Agent call gives its subagent, as the daemon names the
+ * row: a teammate's `name`, else what it was asked to do.
+ */
+function taskName(input: unknown): string | null {
+	const a =
+		input && typeof input === "object"
+			? (input as Record<string, unknown>)
+			: {};
+	for (const k of ["name", "description"]) {
+		const v = a[k];
+		if (typeof v === "string" && v.trim()) return v;
+	}
+	return null;
+}
+
 /** A subagent's run, folded: its steps render as a nested thread. */
 export function SubagentCard({
 	title,
+	mark,
 	steps,
 	running,
 	result,
@@ -645,6 +679,8 @@ export function SubagentCard({
 	children,
 }: {
 	title: string;
+	/** The subagent's color dot (session/subagent-colors.tsx), before the title. */
+	mark?: ReactNode;
 	/** Opens the subagent's own page, when Pulsar found it. */
 	link?: ReactNode;
 	/** The harness's tool name (`Task`, `Agent`), for `data-tool`. */
@@ -667,6 +703,7 @@ export function SubagentCard({
 				</span>
 				<span className="ds-tool-verb">Subagent</span>
 				<span className="ds-tool-main">
+					{mark}
 					<span className="ds-tool-target">{title}</span>
 				</span>
 				<span className="ds-tool-meta">

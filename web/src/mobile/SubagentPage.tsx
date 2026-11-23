@@ -5,6 +5,8 @@
  */
 import { useRef } from "react";
 import { useSubagent } from "../data/index.ts";
+import { AgentMark } from "../ds/index.ts";
+import { agentColor } from "../lib/agent-color.ts";
 import { observer } from "../lib/signals.ts";
 import { SubagentView } from "../session/SubagentView.tsx";
 import { AgentBar, useUnderGlass } from "./AgentBar.tsx";
@@ -20,6 +22,7 @@ function SubagentPageImpl({ id }: { id: string }) {
 			<AgentBar
 				route={{ view: "subagent", id }}
 				name={sub?.name ?? "Subagent"}
+				mark={<AgentMark color={sub ? agentColor(sub) : null} />}
 				sub={
 					sub && (
 						<>

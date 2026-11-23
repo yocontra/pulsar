@@ -40,6 +40,7 @@ import { harnessUi } from "../harnesses/index.ts";
 import { sentence } from "../lib/format.ts";
 import { InlineCode } from "./highlight.tsx";
 import type { Item } from "./items.ts";
+import { SubagentDot } from "./subagent-colors.tsx";
 import { stripAnsi } from "./tools/ansi.ts";
 import type { BodyProps } from "./tools/bodies.tsx";
 import { pulsarCard } from "./tools/PulsarHead.tsx";
@@ -387,6 +388,10 @@ export function ToolCard({
 					<>
 						<span className="ds-tool-verb">{line.verb}</span>
 						<span className="ds-tool-main">
+							{kind === "message" && line.target?.as === "name" && (
+								// A message to a subagent: its color (only a known one).
+								<SubagentDot name={line.target.text} knownOnly />
+							)}
 							<Target line={line} />
 						</span>
 						<span className="ds-tool-meta tool-summary">

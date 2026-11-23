@@ -7,6 +7,7 @@ import type {
 } from "../http/wire.ts";
 import type { Action, SetupContext } from "../setup/actions.ts";
 import type {
+	NoticeColor,
 	ParseState,
 	TranscriptEvent,
 	TranscriptSource,
@@ -45,6 +46,8 @@ export interface FoundSubagent {
 	key: string;
 	name: string;
 	kind: SubagentKind;
+	/** The color the harness gave it (a Claude teammate's), when it gave one. */
+	color?: NoticeColor | null;
 	agentType: string | null;
 	description: string | null;
 	state: SubagentState;

@@ -1,0 +1,44 @@
+/*
+ * A subagent's color (lib/agent-color.ts): `data-agent-color="<name>"` sets
+ * `--agent` from the themed `--ds-agent-*` tokens; `.ds-agent-mark` draws it
+ * as the dot next to the subagent's name, in lists and in the chat.
+ */
+[data-agent-color="red"] {
+	--agent: var(--ds-agent-red);
+}
+[data-agent-color="blue"] {
+	--agent: var(--ds-agent-blue);
+}
+[data-agent-color="green"] {
+	--agent: var(--ds-agent-green);
+}
+[data-agent-color="yellow"] {
+	--agent: var(--ds-agent-yellow);
+}
+[data-agent-color="purple"] {
+	--agent: var(--ds-agent-purple);
+}
+[data-agent-color="orange"] {
+	--agent: var(--ds-agent-orange);
+}
+[data-agent-color="pink"] {
+	--agent: var(--ds-agent-pink);
+}
+[data-agent-color="cyan"] {
+	--agent: var(--ds-agent-cyan);
+}
+.ds-agent-mark {
+	display: inline-block;
+	flex: none;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--agent, var(--ds-peer));
+	vertical-align: middle;
+}
+/* Inline before a name (a card's title, a list row's name, a page title). */
+:where(.ds-tool-main, .p-sa-name, .p-nav-title h1) > .ds-agent-mark {
+	margin-right: 6px;
+	position: relative;
+	top: -1px;
+}

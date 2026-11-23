@@ -16,6 +16,7 @@ export {
 	harnessKey,
 	harnessName,
 } from "../components/ui/agent-avatar.tsx";
+export { AgentMark } from "../components/ui/agent-mark.tsx";
 export { Kbd } from "../components/ui/kbd.tsx";
 export {
 	Skeleton,
