@@ -126,9 +126,80 @@ export function limitsSuite(platform: "desktop" | "phone") {
 			u.getByRole("meter", { name: "Codex weekly limit used" }),
 		).toHaveAttribute("aria-valuenow", "88");
 		await expect(u.locator(".limits-note")).toContainText(
-			"Claude Code, pi and omp show here only when a limit is reached",
+			"OpenCode, pi and omp show here only when a limit is reached",
 		);
 		expect(await contrastFailures(page, ".limits *")).toEqual([]);
+	});
+
+	test(`Claude Code's cached /usage percentages and an OpenCode Go stop show on Usage (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const now = Date.now();
+		await post(request, "usage", {
+			limits: [
+				// Read from Claude Code's last /usage, a day ago.
+				{
+					...reading({
+						machine: "studio",
+						harness: "claude",
+						window: "five_hour",
+						label: "5-hour",
+						used: 41,
+					}),
+					resetsAt: now + 3 * 3_600_000,
+					at: now - DAY,
+					plan: "Test Plan",
+				},
+				{
+					...reading({
+						machine: "studio",
+						harness: "claude",
+						window: "seven_day",
+						label: "Weekly",
+						used: 83,
+					}),
+					at: now - 5 * 60_000,
+					plan: "Test Plan",
+				},
+				{
+					...reading({
+						machine: "studio",
+						harness: "opencode",
+						window: "weekly",
+						label: "Weekly",
+						used: 100,
+					}),
+					account: "opencode-go",
+				},
+			],
+		});
+		await ready(page);
+		await openUsage(page);
+		const u = view(page, phone);
+		const rows = u.getByTestId("limit-row");
+		await expect(rows).toHaveCount(3);
+		const five = rows.filter({ hasText: "Claude Code · 5-hour" });
+		await expect(five).toContainText("(Test Plan)");
+		await expect(five).toContainText("41% used");
+		await expect(five).toContainText(/As of \w+ .+ · Resets /);
+		await expect(five).toHaveAttribute("data-level", "ok");
+		const week = rows.filter({ hasText: "Claude Code · Weekly" });
+		await expect(week).toContainText("83% used");
+		await expect(week).not.toContainText("As of");
+		await expect(week).toHaveAttribute("data-level", "near");
+		await expect(
+			u.getByRole("meter", { name: "Claude Code weekly limit used" }),
+		).toHaveAttribute("aria-valuenow", "83");
+		const go = rows.filter({ hasText: "OpenCode · Weekly" });
+		await expect(go).toContainText("Limit reached");
+		await expect(go).toContainText(/Reached .+ · Resets /);
+		await expect(go).toHaveAttribute("data-level", "reached");
+		expect(await contrastFailures(page, ".limits *")).toEqual([]);
+		if (process.env.PULSAR_LIMIT_SHOTS)
+			await u.locator(".limits").screenshot({
+				path: `${process.env.PULSAR_LIMIT_SHOTS}/limits-${platform}.png`,
+			});
 	});
 
 	test(`the session header notes a limit past a threshold and opens Usage (${platform})`, async ({

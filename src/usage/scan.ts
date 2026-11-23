@@ -5,6 +5,12 @@ import { configDir } from "../harnesses/claude-ident.ts";
 import type { LimitState } from "../http/wire.ts";
 import { lazyCrypto } from "../lazy.ts";
 import type { Store } from "../store.ts";
+import {
+	claudeStatePath,
+	opencodeDbPath,
+	readClaudeCached,
+	readOpencodeLimits,
+} from "./limit-sources.ts";
 import { answeredKey, mergeLimits, saveLimits } from "./limits.ts";
 import {
 	type FileState,
@@ -13,8 +19,16 @@ import {
 	type UsageRecord,
 } from "./parse.ts";
 
-/** Where each harness keeps its session files (null: don't scan it). */
-export type UsageRoots = Record<UsageHarness, string | null>;
+/**
+ * Where each harness keeps its session files (null: don't scan it), and
+ * the two limit sources that are not session files (src/usage/limit-sources.ts).
+ */
+export type UsageRoots = Record<UsageHarness, string | null> & {
+	/** Claude Code's `.claude.json` (its cached `/usage` answer). */
+	claudeState: string | null;
+	/** OpenCode's database (OpenCode Go hard stops). */
+	opencodeDb: string | null;
+};
 
 /** The harnesses' own folders, read at call time (tests point HOME elsewhere). */
 export function defaultRoots(): UsageRoots {
@@ -24,6 +38,8 @@ export function defaultRoots(): UsageRoots {
 		codex: join(process.env.CODEX_HOME ?? join(home, ".codex"), "sessions"),
 		pi: join(home, ".pi", "agent", "sessions"),
 		omp: join(home, ".omp", "agent", "sessions"),
+		claudeState: claudeStatePath(),
+		opencodeDb: opencodeDbPath(),
 	};
 }
 
@@ -42,6 +58,8 @@ const BACKFILL_MS = 8 * DAY;
 const BACKFILL_BYTES = 256 * 1024;
 const BACKFILL_CODEX_BYTES = 8 << 20;
 const BACKFILL_KEY = "usage.limitsBackfilled";
+/** The last OpenCode `session_message` rowid read for limits. */
+const OPENCODE_CURSOR_KEY = "usage.opencodeLimitCursor";
 
 interface Found {
 	path: string;
@@ -110,6 +128,8 @@ export class UsageScanner {
 	onStored: (() => void) | null = null;
 	/** Files committed by the running scan. */
 	private stored = 0;
+	/** The mtime of Claude Code's state file when last read. */
+	private claudeStateMtime: number | null = null;
 
 	private readonly chunk: number;
 	private readonly commitBytes: number;
@@ -162,6 +182,7 @@ export class UsageScanner {
 			if (k && k.size === f.size && k.mtime === f.mtime) continue;
 			await this.readFile(f, k, since);
 		}
+		await this.readOtherLimits(roots, now);
 		this.prune(now);
 		this.scannedAt = Date.now();
 	}
@@ -224,6 +245,53 @@ export class UsageScanner {
 				saveLimits(this.store, batch.limits.values(), batch.answered);
 			this.store.metaSet(BACKFILL_KEY, String(now));
 			db.exec("COMMIT");
+		} catch (e) {
+			db.exec("ROLLBACK");
+			throw e;
+		}
+	}
+
+	/**
+	 * Limit readings outside session files: Claude Code's cached `/usage`
+	 * answer (when the file changed) and OpenCode's new hard stops and
+	 * answers (from a rowid cursor in `meta`).
+	 */
+	private async readOtherLimits(roots: UsageRoots, now: number) {
+		const batch = new Batch();
+		if (roots.claudeState) {
+			const r = await readClaudeCached(
+				roots.claudeState,
+				this.claudeStateMtime,
+			);
+			if (r) {
+				this.claudeStateMtime = r.mtime;
+				for (const l of r.limits) batch.onLimit(l);
+			}
+		}
+		let cursor: number | null = null;
+		let moved = false;
+		if (roots.opencodeDb) {
+			const saved = Number(this.store.metaGet(OPENCODE_CURSOR_KEY) ?? "NaN");
+			const from = Number.isFinite(saved) ? saved : null;
+			const r = readOpencodeLimits(roots.opencodeDb, from, now, BACKFILL_MS);
+			for (const l of r.limits) batch.onLimit(l);
+			for (const [k, t] of r.answered)
+				if (t > (batch.answered.get(k) ?? 0)) batch.answered.set(k, t);
+			cursor = r.cursor;
+			moved = cursor !== null && cursor !== from;
+		}
+		if (!batch.limits.size && !batch.answered.size && !moved) return;
+		const db = this.store.db;
+		db.exec("BEGIN IMMEDIATE");
+		try {
+			const changed = saveLimits(
+				this.store,
+				batch.limits.values(),
+				batch.answered,
+			);
+			if (moved) this.store.metaSet(OPENCODE_CURSOR_KEY, String(cursor));
+			db.exec("COMMIT");
+			if (changed) this.stored++;
 		} catch (e) {
 			db.exec("ROLLBACK");
 			throw e;

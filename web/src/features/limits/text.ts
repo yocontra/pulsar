@@ -81,6 +81,27 @@ export function reachedText(at: number, now = Date.now()): string {
 	return `Reached ${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
 }
 
+/** A percentage read this long ago says when it was read. */
+const STALE_MS = 3_600_000;
+
+/**
+ * "As of Sat 3:41 AM" for a percentage read over an hour ago (Claude
+ * Code's is as old as the operator's last `/usage`), else null.
+ */
+export function asOfText(l: LimitState, now = Date.now()): string | null {
+	if (l.reached || now - l.at <= STALE_MS) return null;
+	const d = new Date(l.at);
+	const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+	if (new Date(now).toDateString() === d.toDateString()) return `As of ${time}`;
+	return `As of ${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+}
+
+/** "Max" or "Pro": the plan a harness names, first letter upper case. */
+export function planText(plan: string | null): string | null {
+	const p = plan?.trim();
+	return p ? p.charAt(0).toUpperCase() + p.slice(1) : null;
+}
+
 /** The lowercase window name inside a sentence ("weekly", "5-hour"). */
 const inline = (label: string) =>
 	label === "Usage" ? "usage" : label.charAt(0).toLowerCase() + label.slice(1);

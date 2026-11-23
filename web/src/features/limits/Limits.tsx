@@ -1,14 +1,17 @@
 /**
  * The Usage page's "Limits" section: each plan limit a harness reported,
- * with how much is used and when it resets. Codex reports a percentage;
- * the other harnesses only say when a limit is reached, so they show here
- * only then.
+ * with how much is used and when it resets. Codex and Claude Code report
+ * a percentage (Claude Code's is from its last `/usage`, so an old one
+ * says when it was read); OpenCode, pi and omp only say when a limit is
+ * reached, so they show here only then.
  */
 import type { UsageReport } from "../../api/types.ts";
 import { AgentAvatar, harnessName } from "../../ds/index.ts";
 import {
+	asOfText,
 	DEFAULT_SETTINGS,
 	levelOf,
+	planText,
 	reachedText,
 	resetText,
 	usedText,
@@ -36,8 +39,9 @@ export default function Limits({ report }: { report: UsageReport }) {
 				{sorted.map((l) => {
 					const pct = l.reached ? 100 : Math.round(l.usedPercent ?? 0);
 					const level = levelOf(l, thresholds);
+					const plan = planText(l.plan);
 					const reset = [
-						l.reached ? reachedText(l.at) : null,
+						l.reached ? reachedText(l.at) : asOfText(l),
 						resetText(l.resetsAt),
 					]
 						.filter(Boolean)
@@ -52,6 +56,7 @@ export default function Limits({ report }: { report: UsageReport }) {
 							<AgentAvatar harness={l.harness} size="xs" />
 							<span className="limits-name">
 								{harnessName(l.harness)} · {l.label}
+								{plan && <span className="limits-machine"> ({plan})</span>}
 								{machines.size > 1 && (
 									<span className="limits-machine">
 										{" "}
@@ -76,8 +81,9 @@ export default function Limits({ report }: { report: UsageReport }) {
 				})}
 			</ul>
 			<p className="limits-note">
-				Codex reports how much of each limit is used. Claude Code, pi and omp
-				show here only when a limit is reached.
+				Codex and Claude Code report how much of each limit is used (Claude Code
+				as of the last time you opened /usage). OpenCode, pi and omp show here
+				only when a limit is reached.
 			</p>
 		</section>
 	);

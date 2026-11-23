@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { LimitState } from "../src/http/wire.ts";
 import {
+	asOfText,
 	levelOf,
 	parseThresholds,
+	planText,
 	reachedText,
 	resetText,
 	usedText,
@@ -85,5 +87,24 @@ describe("limits in the app", () => {
 		expect(parseThresholds("90,90")).toEqual([90]);
 		for (const bad of ["", "0", "100", "50.5", "1 2 3 4", "abc"])
 			expect(parseThresholds(bad)).toBeNull();
+	});
+
+	test("an old percentage says when it was read; a reached one does not", () => {
+		const now = new Date(2026, 0, 7, 15, 0).getTime();
+		expect(asOfText(l(40, { at: now - 30 * 60_000 }), now)).toBeNull();
+		expect(asOfText(l(40, { at: now - 2 * 3_600_000 }), now)).toMatch(
+			/^As of 1:00/,
+		);
+		expect(asOfText(l(40, { at: now - 2 * 86_400_000 }), now)).toMatch(
+			/^As of \w{3} 3:00/,
+		);
+		expect(asOfText(l(100, { at: now - 2 * 86_400_000 }), now)).toBeNull();
+	});
+
+	test("the plan name, first letter upper case", () => {
+		expect(planText("pro")).toBe("Pro");
+		expect(planText("Test Plan")).toBe("Test Plan");
+		expect(planText(null)).toBeNull();
+		expect(planText("  ")).toBeNull();
 	});
 });

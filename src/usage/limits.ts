@@ -4,9 +4,13 @@
  * - Codex: every `token_count` event carries `rate_limits` with each
  *   window's `used_percent`, length and reset time. The only harness that
  *   reports a percentage.
- * - Claude Code: only the hard stop. When the plan's limit is reached it
- *   writes a placeholder assistant line with `apiError: "usage_limit_reached"`
- *   and `quotaLimits` (`status: "rejected"`, `resetsAt`, `rateLimitType`).
+ * - Claude Code: in session files only the hard stop. When the plan's limit
+ *   is reached it writes a placeholder assistant line with
+ *   `apiError: "usage_limit_reached"` and `quotaLimits` (`status:
+ *   "rejected"`, `resetsAt`, `rateLimitType`). Percentages come from its
+ *   cached `/usage` answer (src/usage/limit-sources.ts).
+ * - OpenCode: only the OpenCode Go hard stop, from its database
+ *   (src/usage/limit-sources.ts).
  * - pi and omp: only the hard stop, as an assistant error with status 429,
  *   "usage limit" in the message and `retry-after-ms`. The message text
  *   (it can hold an account URL) is never kept.
@@ -58,7 +62,10 @@ export function windowLabel(minutes: number | null): string {
 }
 
 /** Claude Code's `rateLimitType` ("five_hour", "seven_day_opus", …). */
-function claudeWindow(type: string): { minutes: number | null; label: string } {
+export function claudeWindow(type: string): {
+	minutes: number | null;
+	label: string;
+} {
 	const base: Record<string, number> = {
 		five_hour: 300,
 		seven_day: 7 * 24 * 60,
@@ -285,19 +292,21 @@ export function saveLimits(
 	store: Store,
 	states: Iterable<LimitState>,
 	answered: Map<string, number> = new Map(),
-) {
+): boolean {
 	const all = new Map<string, LimitState>();
 	mergeLimits(all, readStates(store));
 	let changed = false;
 	for (const s of states) {
 		const prev = all.get(limitKey(s));
 		if (!prev || s.at >= prev.at) {
+			// A source read again with nothing new (same reading) is no change.
+			if (prev && JSON.stringify(prev) === JSON.stringify(s)) continue;
 			all.set(limitKey(s), s);
 			changed = true;
 		}
 	}
 	if (changed) store.metaSet(STATE_KEY, JSON.stringify([...all.values()]));
-	if (!answered.size) return;
+	if (!answered.size) return changed;
 	const ok = readAnswered(store);
 	let moved = false;
 	for (const [k, t] of answered)
@@ -306,6 +315,7 @@ export function saveLimits(
 			moved = true;
 		}
 	if (moved) store.metaSet(ANSWERED_KEY, JSON.stringify(ok));
+	return changed || moved;
 }
 
 function readAnswered(store: Store): Record<string, number> {
@@ -359,9 +369,16 @@ export class Limits {
 			.sort((a, b) => b.at - a.at);
 	}
 
-	/** Current readings of one harness (the session header). */
+	/**
+	 * Current readings of one harness (the session header). A percentage
+	 * read long ago (Claude Code's cached `/usage`) is left out: the header
+	 * says how the agent stands now.
+	 */
 	forHarness(harness: string, now = Date.now()): LimitState[] {
-		return this.local(now).filter((s) => s.harness === harness);
+		return this.local(now).filter(
+			(s) =>
+				s.harness === harness && (s.reached || now - s.at <= WARN_RECENT_MS),
+		);
 	}
 
 	settings(): LimitSettings {
