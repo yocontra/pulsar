@@ -191,6 +191,62 @@ test("the command sheet: a keyboard focus rings the row, a press does not (phone
 	).toBe("2px");
 });
 
+test("the command sheet: a drag on the scrolled list scrolls, not the sheet; the header drags it (phone)", async ({
+	page,
+	request,
+}) => {
+	const composer = await openAgent(page, request, "name=apparish-auth");
+	const sheet = await openSheet(page, composer);
+	const top = () =>
+		sheet.evaluate(
+			(m) =>
+				m.shadowRoot!.querySelector(".modal-wrapper")!.getBoundingClientRect()
+					.top,
+		);
+	await expect
+		.poll(async () => {
+			const a = await top();
+			await page.waitForTimeout(100);
+			return (await top()) === a;
+		})
+		.toBe(true);
+	const before = await top();
+	// Scroll a row into the middle of the list.
+	const row = sheet.locator(".slash-row:not(.is-off)").nth(6);
+	await row.evaluate((el) => el.scrollIntoView({ block: "center" }));
+	const body = sheet.locator(".p-sheet-body");
+	expect(await body.evaluate((b) => b.scrollTop)).toBeGreaterThan(0);
+	// Drag down on it (mouse: Ionic's sheet gesture takes both).
+	const box = (await row.boundingBox())!;
+	const x = box.x + 60;
+	const y = box.y + box.height / 2;
+	await page.mouse.move(x, y);
+	await page.mouse.down();
+	for (let i = 1; i <= 10; i++) {
+		await page.mouse.move(x, y + 15 * i);
+		await page.waitForTimeout(20);
+	}
+	// Read mid-drag: a short drag would snap back to the detent on release.
+	expect(Math.abs((await top()) - before)).toBeLessThan(2);
+	// Release off the row, so it is not a tap that inserts.
+	await page.mouse.move(x, 5);
+	await page.mouse.up();
+	await expect(
+		page.getByRole("dialog", { name: "Skills & Commands" }),
+	).toBeVisible();
+	await expect(composer.locator(".composer-input")).toHaveValue("");
+	// A fling down on the header dismisses it.
+	const head = (await sheet.locator(".p-sheet-head h2").boundingBox())!;
+	await page.mouse.move(head.x + 10, head.y + 5);
+	await page.mouse.down();
+	for (let i = 1; i <= 5; i++) {
+		await page.mouse.move(head.x + 10, head.y + 5 + 70 * i);
+		await page.waitForTimeout(10);
+	}
+	await page.mouse.up();
+	await expect(page.getByTestId("slash-sheet")).toHaveCount(0);
+});
+
 test("the mode chip above the composer opens the mode sheet (phone)", async ({
 	page,
 	request,
