@@ -43,19 +43,24 @@ export const PERIODS: { value: UsagePeriod; label: string }[] = [
 	{ value: "30d", label: "30d" },
 	{ value: "90d", label: "90d" },
 ];
-const METRICS: { value: Metric; label: string; key: string }[] = [
+export const METRICS: { value: Metric; label: string; key: string }[] = [
 	{ value: "cost", label: "Cost", key: "C" },
 	{ value: "tokens", label: "Tokens", key: "T" },
 ];
 
 /** Page choices that survive closing the page (per browser). */
 const PREFS_KEY = "pulsar.usage";
-interface Prefs {
+export interface Prefs {
 	period: UsagePeriod;
 	metric: Metric;
 	breakdown: "model" | "day";
 }
-function loadPrefs(): Prefs {
+export function savePrefs(p: Prefs) {
+	try {
+		localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+	} catch {}
+}
+export function loadPrefs(): Prefs {
 	const d: Prefs = { period: "7d", metric: "cost", breakdown: "model" };
 	try {
 		const v = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}");
@@ -264,7 +269,7 @@ export function UsageView({ variant }: { variant: "desktop" | "phone" }) {
 	);
 }
 
-function harnessesOf(report: UsageReport | undefined): string[] {
+export function harnessesOf(report: UsageReport | undefined): string[] {
 	if (!report) return [];
 	return [...new Set(report.rows.map((r) => r.harness))].sort();
 }
@@ -430,7 +435,7 @@ function Body({
 	);
 }
 
-function MachineErrors({ errors }: { errors: UsageReport["machines"] }) {
+export function MachineErrors({ errors }: { errors: UsageReport["machines"] }) {
 	if (!errors.length) return null;
 	return (
 		<ul className="usage-machine-errors" aria-label="Machines not counted">
@@ -444,7 +449,13 @@ function MachineErrors({ errors }: { errors: UsageReport["machines"] }) {
 	);
 }
 
-function Unpriced({ records, models }: { records: number; models: string[] }) {
+export function Unpriced({
+	records,
+	models,
+}: {
+	records: number;
+	models: string[];
+}) {
 	const [open, setOpen] = useState(false);
 	return (
 		<span className="usage-unpriced">
@@ -508,7 +519,7 @@ function Totals({
 	);
 }
 
-function TypeShares({
+export function TypeShares({
 	report,
 	rows,
 	metric,

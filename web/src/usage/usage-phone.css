@@ -1,0 +1,81 @@
+/* The phone's Usage tab (UsagePhone.tsx): Konsta blocks, lists and cards
+   on the page; only the pieces Konsta doesn't lay out are styled here. */
+.p-usage-body {
+	padding-bottom: 8px;
+}
+/* Period over Cost/Tokens, each the full width. */
+.p-usage-controls {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 4px;
+}
+.p-usage-summary .usage-figure {
+	font-size: 2.1rem;
+	line-height: 1.15;
+}
+.p-usage-summary .usage-sub {
+	margin-bottom: 0;
+	flex-wrap: wrap;
+}
+/* The chart card: full width, the axis labels at a readable size. */
+.p-usage-chart {
+	overflow: visible;
+}
+.p-usage-chart .usage-chart {
+	margin-inline: -4px;
+}
+.p-usage-chart :is(.usage-chart-y, .usage-chart-x) {
+	font-size: max(12px, 0.75rem);
+}
+.p-usage-media {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+/* Totals: a two-column grid of cards. */
+.p-usage-totals {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	margin: 0;
+}
+.p-usage-total {
+	min-width: 0;
+	padding: 10px 12px;
+	border-radius: 12px;
+	background: var(--ds-surface);
+}
+html.k-material .p-usage-total {
+	border-radius: 16px;
+	background: var(--ds-surface-2);
+}
+.p-usage-total dt {
+	color: var(--ds-text-3);
+	font-size: var(--ds-text-footnote);
+}
+.p-usage-total dd {
+	margin: 2px 0 0;
+	font-size: var(--ds-text-headline);
+	font-weight: var(--ds-weight-semibold);
+	overflow-wrap: anywhere;
+}
+.p-usage-types section {
+	margin: 0;
+}
+.p-usage-model {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.p-usage .usage-breakdown .usage-bar {
+	width: 100%;
+	margin-top: 6px;
+}
+.p-usage-sheet {
+	padding: 0 16px 16px;
+}
+/* iOS segmented controls are 32 tall; a comfortable target on Android too. */
+.p-usage [role="radiogroup"] [role="radio"] {
+	min-height: 32px;
+}

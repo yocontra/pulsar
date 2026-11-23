@@ -110,6 +110,17 @@ html.ios ion-header.p-bar > .header-background {
 	z-index: -1;
 	pointer-events: none;
 }
+/* The page color holds under the status bar and the title, then fades: the
+   condensed title stays legible over content (blur alone isn't enough over
+   cards and charts, and Reduce Transparency drops it). */
+html.ios .p-bar-bg {
+	background-image: linear-gradient(
+		to bottom,
+		var(--ds-bg-sunken) 0%,
+		var(--ds-bg-sunken) 62%,
+		transparent 100%
+	);
+}
 .p-bar-glass {
 	display: flex;
 	align-items: center;
@@ -128,6 +139,9 @@ html.md ion-header.p-bar ion-title {
 	font-family: Roboto, system-ui, sans-serif;
 	font-size: 22px;
 	font-weight: 400;
+}
+html.md ion-header.p-bar {
+	box-shadow: none;
 }
 html.md ion-header.p-bar.header-md::after {
 	display: none;
@@ -148,4 +162,35 @@ html.md
 	ion-header.header-collapse-condense
 	ion-toolbar:has(ion-title.title-large) {
 	display: none;
+}
+
+/* ------------------------------------------------------------ sheets
+   SheetShell (ui/SheetShell.tsx): a fixed header over a scrolling body. */
+.p-sheet-frame {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+.p-sheet-frame > .m-sheet-head {
+	flex: none;
+}
+
+/* ------------------------------------------------------------ segmented
+   Konsta's strong segmented control on Pulsar's tokens (UsagePhone and
+   others pass colors={…} with these): the selected segment is a raised
+   surface, the labels are body text in both themes. */
+:root {
+	--p-seg-on: var(--ds-surface);
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--p-seg-on: rgba(255, 250, 240, 0.2);
+	}
+}
+:root[data-theme="dark"] {
+	--p-seg-on: rgba(255, 250, 240, 0.2);
+}
+.p-seg .k-button {
+	color: var(--ds-text) !important;
 }

@@ -64,13 +64,16 @@ export function SheetShell({
 			}}
 			data-testid={testId}
 		>
-			<IonContent className="p-sheet-content">
-				<header className="m-sheet-head">
-					<span />
-					<h2>{title}</h2>
-					{end ?? <CloseX onClick={onClose} />}
-				</header>
-				<div className="p-sheet-body">{children}</div>
+			{/* The header stays put; the body scrolls (a detent shows its top). */}
+			<IonContent className="p-sheet-content" scrollY={false}>
+				<div className="p-sheet-frame">
+					<header className="m-sheet-head">
+						<span />
+						<h2>{title}</h2>
+						{end ?? <CloseX onClick={onClose} />}
+					</header>
+					<div className="m-sheet-scroll p-sheet-body">{children}</div>
+				</div>
 			</IonContent>
 		</lz.IonModal>,
 		document.querySelector("ion-app") ?? document.body,

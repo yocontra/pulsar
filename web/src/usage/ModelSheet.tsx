@@ -24,6 +24,13 @@ import {
 } from "./model.ts";
 import { UsageChart } from "./UsageChart.tsx";
 
+/** The frame a sheet renders in: the page's own overlay, or the phone's SheetShell. */
+export type SheetFrame = (p: {
+	title: string;
+	onClose: () => void;
+	children: ReactNode;
+}) => ReactNode;
+
 function Sheet({
 	title,
 	onClose,
@@ -211,12 +218,14 @@ export function ModelSheet({
 	model,
 	metric,
 	onClose,
+	frame: Frame = Sheet,
 }: {
 	report: UsageReport;
 	rows: UsageRow[];
 	model: string;
 	metric: Metric;
 	onClose: () => void;
+	frame?: SheetFrame;
 }) {
 	const mine = rows.filter((r) => r.model === model);
 	const tokens = mine.reduce(addTokens, ZERO);
@@ -227,7 +236,7 @@ export function ModelSheet({
 	const fmt = metric === "cost" ? money : compact;
 	const price = priceOf(model, report.prices);
 	return (
-		<Sheet title={model} onClose={onClose}>
+		<Frame title={model} onClose={onClose}>
 			<dl className="usage-totals usage-totals-3">
 				<div>
 					<dt>{priced ? "API estimate" : "Cost"}</dt>
@@ -255,16 +264,18 @@ export function ModelSheet({
 			/>
 			<h3 className="usage-h2">Price</h3>
 			<PriceForm model={model} current={price} />
-		</Sheet>
+		</Frame>
 	);
 }
 
 export function PricesSheet({
 	report,
 	onClose,
+	frame: Frame = Sheet,
 }: {
 	report: UsageReport;
 	onClose: () => void;
+	frame?: SheetFrame;
 }) {
 	const [editing, setEditing] = useState<string | null>(null);
 	const [adding, setAdding] = useState("");
@@ -272,7 +283,7 @@ export function PricesSheet({
 		...new Set(report.rows.filter((r) => r.cost === null).map((r) => r.model)),
 	].sort();
 	return (
-		<Sheet title="Model prices" onClose={onClose}>
+		<Frame title="Model prices" onClose={onClose}>
 			<p className="usage-muted">
 				Used for every machine's tokens. A price covers model ids that start
 				with its name.
@@ -327,6 +338,6 @@ export function PricesSheet({
 					onSaved={() => setAdding("")}
 				/>
 			)}
-		</Sheet>
+		</Frame>
 	);
 }

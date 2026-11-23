@@ -52,9 +52,10 @@
 	--color-ios-dark-surface-variant: var(--ds-surface-3);
 
 	--color-md-light-primary: var(--ds-primary);
-	--color-md-dark-primary: var(--ds-primary);
+	/* Material 3's dark primary is the light tint, with dark text on it. */
+	--color-md-dark-primary: var(--ds-link);
 	--color-md-light-on-primary: var(--ds-on-primary);
-	--color-md-dark-on-primary: var(--ds-on-primary);
+	--color-md-dark-on-primary: var(--ds-bg);
 	--color-md-light-primary-container: var(--ds-primary-soft);
 	--color-md-dark-primary-container: var(--ds-primary-soft);
 	--color-md-light-on-primary-container: var(--ds-text);

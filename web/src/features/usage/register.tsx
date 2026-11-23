@@ -22,9 +22,8 @@ const UsageDesktop = lazy<PageProps>(() =>
 		default: m.UsageDesktop,
 	})),
 );
-const UsagePhone = lazy<PageProps>(() =>
-	import("../../usage/UsagePages.tsx").then((m) => ({ default: m.UsagePhone })),
-);
+// The phone's Usage tab (Konsta): its own chunk, so the desktop's has none.
+const UsagePhone = lazy<PageProps>(() => import("../../usage/UsagePhone.tsx"));
 const AgentUsage = lazy<{ agentId: string }>(
 	() => import("../../usage/AgentUsage.tsx"),
 	none,
