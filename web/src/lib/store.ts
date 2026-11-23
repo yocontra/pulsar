@@ -274,6 +274,12 @@ function applyDefaultExpansion(top: TreeNode[]) {
 export function loadMore(branchId: string) {
 	const b = branches.get(branchId);
 	if (!b || b.loading || !b.nextCursor) return;
+	// Loading from now, not from when the data layer runs: a second call in
+	// between fetched the same page again, and the first to finish cleared
+	// `loading` while the other ran, so the "more" row's one-shot observer
+	// was never set again and the list stopped loading.
+	b.loading = true;
+	bumpTree();
 	withData((d) => d.loadMore(branchId));
 }
 

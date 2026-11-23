@@ -44,15 +44,21 @@ test.describe("mobile", () => {
 		});
 		await ready(page);
 		const content = page.locator("ion-content").first();
-		for (let i = 0; i < 8 && pages.length < 4; i++) {
-			await content.evaluate((el) =>
-				(
-					el as HTMLElement & { scrollToBottom: (ms: number) => Promise<void> }
-				).scrollToBottom(0),
-			);
-			await page.waitForTimeout(400);
-		}
-		expect(pages.length).toBeGreaterThanOrEqual(4);
+		// Each next page loads once the last one shows: scroll to the bottom
+		// until its request comes, page by page (no fixed number of tries).
+		for (let n = 1; n <= 4; n++)
+			await expect
+				.poll(async () => {
+					await content.evaluate((el) =>
+						(
+							el as HTMLElement & {
+								scrollToBottom: (ms: number) => Promise<void>;
+							}
+						).scrollToBottom(0),
+					);
+					return pages.length;
+				})
+				.toBeGreaterThanOrEqual(n);
 	});
 
 	test("home is search-first; a group row expands in place", async ({
