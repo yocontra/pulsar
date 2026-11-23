@@ -29,7 +29,6 @@
 	--p-offline: var(--ds-offline, #aeaeb2);
 	--p-danger: var(--ds-danger, #d70015);
 	--p-success: var(--ds-success, #248a3d);
-	--p-material: var(--ds-material, rgba(249, 249, 249, 0.8));
 	--p-skeleton: var(--ds-skeleton, rgba(118, 118, 128, 0.16));
 	--p-font: var(
 		--ds-font-sans,
@@ -87,7 +86,6 @@
 		--p-needs-text: var(--ds-needs-text, #ff9f0a);
 		--p-danger: var(--ds-danger, #ff453a);
 		--p-success: var(--ds-success, #30d158);
-		--p-material: var(--ds-material, rgba(29, 29, 31, 0.78));
 		--p-skeleton: var(--ds-skeleton, rgba(118, 118, 128, 0.26));
 	}
 }
@@ -109,7 +107,6 @@
 	--p-needs-text: var(--ds-needs-text, #ff9f0a);
 	--p-danger: var(--ds-danger, #ff453a);
 	--p-success: var(--ds-success, #30d158);
-	--p-material: var(--ds-material, rgba(29, 29, 31, 0.78));
 	--p-skeleton: var(--ds-skeleton, rgba(118, 118, 128, 0.26));
 }
 
@@ -137,14 +134,6 @@ ion-title.title-large {
 	font-weight: 700;
 	letter-spacing: 0.01em;
 }
-/* Text-colored Ionic controls take the text tint, not the fill blue. */
-ion-back-button {
-	--color: var(--p-tint);
-}
-ion-label.ion-color-primary,
-ion-text.ion-color-primary {
-	--ion-color-base: var(--p-tint) !important;
-}
 ion-buttons ion-button {
 	--color: var(--p-tint);
 	min-width: 44px;
@@ -154,13 +143,6 @@ ion-buttons ion-button svg {
 	width: 1.35rem;
 	height: 1.35rem;
 	stroke-width: 1.9;
-}
-ion-searchbar.p-search {
-	--background: var(--p-fill);
-	--placeholder-color: var(--p-label-3);
-	--icon-color: var(--p-label-3);
-	--color: var(--p-label);
-	padding-inline: 12px;
 }
 .p-nav-sub {
 	display: block;
@@ -175,17 +157,6 @@ ion-searchbar.p-search {
 .p-nav-sub.is-needs {
 	color: var(--p-needs-text);
 }
-
-/* Live/connection status: a dot whose shape (ring, solid) carries meaning too. */
-.p-live {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	font-size: var(--p-foot);
-	color: var(--p-label-2);
-}
-
-/* ------------------------------------------------------------ segment */
 
 /* ------------------------------------------------------------ list */
 
@@ -226,11 +197,6 @@ ion-searchbar.p-search {
 	font-weight: 700;
 	color: var(--p-label);
 	letter-spacing: 0.01em;
-}
-.p-section h2 .p-count {
-	margin-left: 6px;
-	color: var(--p-needs-text);
-	font-weight: 600;
 }
 /* "See All": a text button that never changes the header's height; its
    44 pt touch target comes from an invisible ::after. */
@@ -313,10 +279,6 @@ ion-searchbar.p-search {
 	display: grid;
 	place-items: center;
 	color: #fff;
-}
-/* An icon in an IonItem's start slot: the gap a .p-row's lead gets. */
-.p-item-icon {
-	margin-inline-end: 12px;
 }
 .p-icon svg {
 	width: 1.06rem;
@@ -476,74 +438,7 @@ ion-searchbar.p-search {
 	--ds-nb: 1.059rem; /* 18 */
 }
 
-/* Amber "needs you" badge: the only count a row shows. */
-.p-badge {
-	min-width: 1.35rem;
-	height: 1.35rem;
-	padding: 0 6px;
-	box-sizing: border-box;
-	border-radius: 999px;
-	display: inline-grid;
-	place-items: center;
-	background: var(--p-needs);
-	color: #fff;
-	font-size: var(--p-foot);
-	font-weight: 700;
-	line-height: 1;
-	font-variant-numeric: tabular-nums;
-}
-
-/* Status dot on avatars: busy pulses, needs-you is a filled amber
-   triangle-ish badge, idle is hollow, offline is grey. */
-.p-dot {
-	position: absolute;
-	right: -3px;
-	bottom: -3px;
-	width: 12px;
-	height: 12px;
-	border-radius: 50%;
-	border: 2.5px solid var(--p-cell);
-	box-sizing: content-box;
-	background: var(--p-idle);
-}
-.p-dot.is-busy {
-	background: var(--p-busy);
-}
-.p-dot.is-needs {
-	background: var(--p-needs);
-}
-.p-dot.is-offline {
-	background: var(--p-offline);
-}
-.p-dot.is-idle {
-	background: var(--p-cell);
-	box-shadow: inset 0 0 0 2px var(--p-idle);
-}
-.p-pulse {
-	display: inline-block;
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	background: currentColor;
-	margin-right: 5px;
-	vertical-align: 1px;
-	animation: p-pulse 1.6s ease-in-out infinite;
-}
-@keyframes p-pulse {
-	0%,
-	100% {
-		opacity: 1;
-		transform: scale(1);
-	}
-	50% {
-		opacity: 0.35;
-		transform: scale(0.8);
-	}
-}
 @media (prefers-reduced-motion: reduce) {
-	.p-pulse {
-		animation: none;
-	}
 	.p-disclose {
 		transition: none;
 	}
@@ -576,9 +471,6 @@ ion-searchbar.p-search {
 	--background: var(--p-skeleton);
 	--background-rgb: 118, 118, 128;
 	margin: 0;
-}
-ion-skeleton-text.p-sk {
-	line-height: 1;
 }
 .p-sk-line {
 	height: 0.82em;
@@ -762,13 +654,6 @@ ion-skeleton-text.p-sk {
 	font: var(--p-foot) / 1.45 var(--p-mono);
 }
 
-.p-status ion-list-header {
-	font-size: var(--p-foot);
-	text-transform: uppercase;
-	letter-spacing: 0.02em;
-	color: var(--p-label-2);
-	font-weight: 400;
-}
 .p-step {
 	width: 26px;
 	height: 26px;
@@ -871,16 +756,6 @@ html.ios
 	> ion-title:not(.title-large) {
 	position: relative;
 	padding-inline: 4px;
-}
-ion-segment-button {
-	margin-block: 2px;
-}
-ion-badge {
-	padding: var(--padding-top) var(--padding-end) var(--padding-bottom)
-		var(--padding-start);
-}
-ion-toggle {
-	box-sizing: content-box;
 }
 
 /* ------------------------------------------------------------ agent page */
@@ -995,62 +870,8 @@ ion-toggle {
 	height: 100%;
 }
 
-/* ------------------------------------------------------------ grouped lists */
+/* ------------------------------------------------------------ settings */
 
-.p-group-head,
-.p-set-head {
-	margin: 0;
-	padding: 20px 20px 6px;
-	font-size: var(--p-foot);
-	line-height: var(--p-foot-lh);
-	font-weight: 400;
-	text-transform: uppercase;
-	letter-spacing: 0.02em;
-	color: var(--p-label-2);
-}
-ion-list.p-group,
-ion-list.p-set-list {
-	margin: 0 16px 8px;
-	border-radius: 12px;
-	--ion-item-background: var(--p-cell);
-}
-ion-list.p-group {
-	margin-top: 0;
-	margin-bottom: 8px;
-	background: transparent;
-	overflow: visible;
-}
-ion-list.p-group .p-group-head {
-	padding: 12px 4px 6px;
-}
-ion-list.p-group ion-item:first-of-type {
-	border-top-left-radius: 12px;
-	border-top-right-radius: 12px;
-}
-ion-list.p-group ion-item:last-of-type {
-	border-bottom-left-radius: 12px;
-	border-bottom-right-radius: 12px;
-}
-ion-list.p-group ion-item,
-ion-list.p-set-list ion-item {
-	--background: var(--p-cell);
-	--background-activated: var(--p-cell-pressed);
-	--background-activated-opacity: 1;
-	--padding-start: 16px;
-	--inner-padding-end: 12px;
-	--detail-icon-color: var(--p-label-3);
-	--detail-icon-opacity: 1;
-	--min-height: 2.588rem;
-	font-size: var(--p-body);
-}
-.p-set-foot {
-	margin: 0;
-	padding: 6px 20px 4px;
-	font-size: var(--p-foot);
-	line-height: var(--p-foot-lh);
-	color: var(--p-label-2);
-}
-.p-set-foot code,
 .p-settings code {
 	font-family: var(--p-mono);
 	font-size: 0.92em;
@@ -1088,23 +909,6 @@ ion-list.p-set-list ion-item {
 	color: var(--p-tint);
 	stroke-width: 2.4;
 }
-.p-set-title {
-	display: block;
-	font-size: var(--p-body);
-	line-height: var(--p-body-lh);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.p-set-sub {
-	display: block;
-	font-size: var(--p-foot);
-	line-height: var(--p-foot-lh);
-	color: var(--p-label-2);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
 .p-set-action {
 	appearance: none;
 	border: 0;
@@ -1118,27 +922,8 @@ ion-list.p-set-list ion-item {
 .p-set-action.is-danger {
 	color: var(--p-danger);
 }
-.p-settings ion-note {
-	font-size: var(--p-body);
-	color: var(--p-label-2);
-}
 .p-settings {
 	--padding-bottom: calc(32px + var(--ion-safe-area-bottom, 0px));
-}
-
-/* ------------------------------------------------------------ toast */
-
-ion-toast.p-toast {
-	--background: var(--p-material);
-	--color: var(--p-label);
-	--border-radius: 14px;
-	--box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
-	--start: 16px;
-	--end: 16px;
-	font-size: var(--p-sub);
-}
-ion-toast.p-toast.is-warn {
-	--color: var(--p-danger);
 }
 
 /* ------------------------------------------------------------ sheets */
@@ -1201,37 +986,6 @@ ion-button.p-back span {
 .p-step {
 	margin-inline-end: 14px;
 	flex: none;
-}
-.p-status ion-item {
-	--padding-top: 10px;
-	--padding-bottom: 10px;
-}
-
-/* Action sheets and alerts: iOS materials in both themes. */
-:root {
-	--p-overlay: rgba(249, 249, 249, 0.94);
-	--p-overlay-pressed: rgba(222, 222, 226, 0.94);
-	--ion-overlay-background-color: var(--p-cell);
-}
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme="light"]) {
-		--p-overlay: rgba(44, 44, 46, 0.92);
-		--p-overlay-pressed: rgba(72, 72, 74, 0.92);
-	}
-}
-:root[data-theme="dark"] {
-	--p-overlay: rgba(44, 44, 46, 0.92);
-	--p-overlay-pressed: rgba(72, 72, 74, 0.92);
-}
-ion-action-sheet {
-	--background: var(--p-overlay);
-	--background-selected: var(--p-overlay);
-	--button-background: transparent;
-	--button-background-activated: var(--p-overlay-pressed);
-	--button-background-activated-opacity: 1;
-	--button-background-selected: var(--p-overlay);
-	--button-color: var(--p-tint);
-	--color: var(--p-label-2);
 }
 
 /* The agent's top bar: a chevron-only back button (BackButton compact),
