@@ -4,6 +4,7 @@
  * they stay out of the first route's chunk. See ionic.ts.
  */
 
+import { defineCustomElement as defineIcon } from "@ionic/core/components/ion-icon.js";
 import {
 	defineCustomElement as defineItemOption,
 	IonItemOption as ItemOptionEl,
@@ -22,6 +23,10 @@ import {
 } from "@ionic/core/components/ion-modal.js";
 import { createComponent } from "@stencil/react-output-target/runtime";
 import React from "react";
+
+// IonItem's `detail` chevron is an ion-icon, which IonItem doesn't register
+// (the same module @ionic/react's IonIcon uses, so nothing is bundled twice).
+defineIcon();
 
 export const IonItemSliding = createComponent<
 	InstanceType<typeof ItemSlidingEl>,
