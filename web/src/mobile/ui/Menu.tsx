@@ -58,8 +58,12 @@ export function Menu({
 				onBackdropClick={onClose}
 				className="p-menu"
 				colors={POPOVER}
-				role="menu"
+				// Closed, it stays mounted (scaled to nothing) for its animation:
+				// not a menu then (screen readers, the app update's idle check).
+				role={open ? "menu" : undefined}
 				aria-label={label}
+				aria-hidden={open ? undefined : true}
+				inert={!open}
 				data-testid="menu"
 			>
 				<MenuList>
