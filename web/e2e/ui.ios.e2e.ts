@@ -172,12 +172,14 @@ test.describe("phone UI", () => {
 		// next to 17 pt), centred on the row's label.
 		const group = page.locator('[data-tree-node="m:studio"] .p-row');
 		const badge = group.locator(".ds-needs-badge");
-		const box = (await badge.boundingBox())!;
+		// The badge comes with the rollup, after the row itself paints.
+		await expect(badge).toBeVisible();
 		const size = await group
 			.locator(".p-title")
 			.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-		expect(box.height / size).toBeLessThanOrEqual(1.2);
-		expect(box.height / size).toBeGreaterThanOrEqual(1);
+		const ratio = async () => ((await badge.boundingBox())?.height ?? 0) / size;
+		await expect.poll(ratio).toBeLessThanOrEqual(1.2);
+		await expect.poll(ratio).toBeGreaterThanOrEqual(1);
 		expect(
 			Number(await badge.evaluate((el) => getComputedStyle(el).fontWeight)),
 		).toBeGreaterThanOrEqual(600);
