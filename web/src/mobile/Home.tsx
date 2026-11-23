@@ -1,10 +1,14 @@
 /**
  * Home: needs-you at a glance, pinned, then machines (with their projects) as one
- * inset-grouped, virtualized list that expands in place. Large title that
- * condenses, a search field under it, swipe actions and long-press menus.
- * Everything is live (the event stream): there is no pull to refresh.
+ * inset-grouped, virtualized list that expands in place (the Agents tab).
+ * Large title that condenses (Material's top app bar on Android), one search
+ * field under it for agents and messages, a compact "N need you" row, swipe
+ * actions and long-press menus. Everything is live (the event stream): there
+ * is no pull to refresh. New agent is the header's "+" on iOS and a floating
+ * button on Android (the home.fab slot).
  */
-import { CloudOffIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { Card, Searchbar } from "konsta/react";
+import { BellDotIcon, CloudOffIcon, SquarePenIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { TreeNode } from "../api/types.ts";
 import {
@@ -13,10 +17,12 @@ import {
 	OFFLINE,
 	type Row,
 } from "../components/treeRows.ts";
+import { num } from "../lib/format.ts";
 import { Slot } from "../lib/registry.tsx";
 import { navigate } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import {
+	attention,
 	branches,
 	expanded,
 	filter,
@@ -31,7 +37,7 @@ import {
 	togglePin,
 	treeVersion,
 } from "../lib/store.ts";
-import { canStop, isPinned, messageGroup, openNeeds } from "./nav-actions.ts";
+import { canStop, isPinned, messageGroup } from "./nav-actions.ts";
 
 // Menus and the stop flow load on first use.
 const actions = () => import("./actions.ts");
@@ -41,27 +47,20 @@ const groupMenu = (n: TreeNode) => void actions().then((m) => m.groupMenu(n));
 const confirmStop = (a: import("../api/types.ts").AgentRow) =>
 	void actions().then((m) => m.confirmStop(a));
 
-import {
-	IonButton,
-	IonButtons,
-	IonContent,
-	IonHeader,
-	IonItem,
-	IonSearchbar,
-	IonTitle,
-	IonToolbar,
-} from "./ionic.ts";
+import "./home.css";
+import { IonButton, IonItem } from "./ionic.ts";
 import { type LazyIonic, useIonicLazy } from "./lazyIonic.ts";
 import { useLongPress } from "./longpress.ts";
+import { isMaterial } from "./platform.ts";
 import {
 	AgentRowView,
 	GroupRowView,
-	NeedsRowView,
 	PinRowView,
 	RowShell,
 	statusText,
 } from "./rows.tsx";
 import { SkeletonRows } from "./skeletons.tsx";
+import { PageShell } from "./ui/PageShell.tsx";
 
 export const HOME_TITLE = "Agents";
 
@@ -70,9 +69,7 @@ export const HOME_TITLE = "Agents";
 const inGroup = (r?: Row) => !!r && r.t !== "section";
 
 function sectionLabel(r: Extract<Row, { t: "section" }>) {
-	if (r.key === "s-needs") return "Needs You";
-	if (r.key === "s-all") return "Machines";
-	return r.label;
+	return r.key === "s-all" ? "Machines" : r.label;
 }
 
 function SectionRow({
@@ -82,18 +79,9 @@ function SectionRow({
 	r: Extract<Row, { t: "section" }>;
 	first: boolean;
 }) {
-	const needs = r.key === "s-needs";
 	return (
 		<div className={`p-section${first ? " is-first" : ""}`} role="presentation">
-			<h2>
-				{sectionLabel(r)}
-				{needs && r.count ? <span className="p-count">{r.count}</span> : null}
-			</h2>
-			{needs && r.more && (r.count ?? 0) > 2 && (
-				<button type="button" onClick={r.more}>
-					See All
-				</button>
-			)}
+			<h2>{sectionLabel(r)}</h2>
 		</div>
 	);
 }
@@ -309,34 +297,6 @@ function RowView({
 	switch (row.t) {
 		case "section":
 			return <SectionRow r={row} first={first} />;
-		case "attn":
-			return (
-				<div className="p-cell">
-					<Swipe
-						lz={lz}
-						end={[
-							{
-								label: "Review",
-								color: "warning",
-								run: () => openNeeds(row.item),
-							},
-						]}
-						onFull={() => openNeeds(row.item)}
-					>
-						<IonItem
-							button
-							detail
-							lines={lines}
-							className="p-attn"
-							data-agent={row.item.agent.id}
-							aria-label={`${row.item.kind === "approval" ? "Approval" : row.item.kind === "terminal" ? "Terminal prompt" : "Question"} from ${row.item.agent.name} on ${row.item.agent.machine}`}
-							onClick={() => openNeeds(row.item)}
-						>
-							<NeedsRowView item={row.item} />
-						</IonItem>
-					</Swipe>
-				</div>
-			);
 		case "pin": {
 			const p = row.pin;
 			const n = nodes.get(p.id);
@@ -461,33 +421,108 @@ function RowView({
 
 /* ------------------------------------------------------------ list */
 
+/** Home's tree leaves needs-you to its summary row (NeedsSummary). */
+const treeRows = (rows: Row[]) =>
+	rows.filter((r) => r.t !== "attn" && r.key !== "s-needs");
+
 function HomeListImpl() {
-	const rows = mobileRows.value;
+	const rows = treeRows(mobileRows.value);
 	const lz = useIonicLazy();
+	const q = filter.value;
 	return (
-		<div className="p-list" role="tree" aria-label="Machines">
-			{rows.map((row, i) => {
-				const gf = inGroup(row) && !inGroup(rows[i - 1]);
-				const gl = inGroup(row) && !inGroup(rows[i + 1]);
-				return (
-					<div
-						key={row.key}
-						className={`p-vrow is-${row.t}${gf ? " gf" : ""}${gl ? " gl" : ""}`}
-					>
-						<RowView row={row} first={i === 0} last={gl} lz={lz} />
+		<>
+			<div className="p-list" role="tree" aria-label="Machines">
+				{rows.map((row, i) => {
+					const gf = inGroup(row) && !inGroup(rows[i - 1]);
+					const gl = inGroup(row) && !inGroup(rows[i + 1]);
+					return (
+						<div
+							key={row.key}
+							className={`p-vrow is-${row.t}${gf ? " gf" : ""}${gl ? " gl" : ""}`}
+						>
+							<RowView row={row} first={i === 0} last={gl} lz={lz} />
+						</div>
+					);
+				})}
+				{noMatch(rows, q) && (
+					<div className="p-empty is-search">
+						<h3>No results</h3>
+						<p>No machines, projects or agents match “{q}”.</p>
 					</div>
-				);
-			})}
-			{noMatch(rows, filter.value) && (
-				<div className="p-empty is-search">
-					<h3>No results</h3>
-					<p>No machines, projects or agents match “{filter.value}”.</p>
-				</div>
-			)}
-		</div>
+				)}
+			</div>
+			{q.trim() ? <Slot name="home.search" query={q} /> : <PoolFooter />}
+		</>
 	);
 }
 const HomeList = observer(HomeListImpl);
+
+/** The list's footer: how big the pool is. */
+function PoolFooterImpl() {
+	const top = branches.get("");
+	const agents = (top?.ids ?? []).reduce(
+		(n, id) => n + (nodes.get(id)?.rollup?.agents ?? 0),
+		0,
+	);
+	if (!top?.total) return null;
+	const m = top.total;
+	const shown = top.ids.length >= m;
+	return (
+		<p className="p-pool-foot" data-testid="pool-footer">
+			{shown && agents
+				? `${num(agents)} ${agents === 1 ? "agent" : "agents"} on `
+				: ""}
+			{num(m)} {m === 1 ? "machine" : "machines"}
+		</p>
+	);
+}
+const PoolFooter = observer(PoolFooterImpl);
+
+/* ------------------------------------------------------------ needs */
+
+/** "2 need you ›": the Needs You tab from Agents, so approvals are never only behind a tab. */
+function NeedsSummaryImpl() {
+	const n = attention.value.length;
+	if (!n) return null;
+	const approvals = attention.value.filter((i) => i.kind === "approval").length;
+	return (
+		<div className="p-vrow is-summary gf gl">
+			<div className="p-cell">
+				<IonItem
+					button
+					detail
+					lines="none"
+					className="p-needs-sum"
+					data-testid="needs-summary"
+					aria-label={`${num(n)} ${n === 1 ? "needs" : "need"} you`}
+					onClick={() => navigate({ view: "needs" })}
+				>
+					<RowShell
+						kind="group"
+						lead={
+							<span className="p-icon is-needs" aria-hidden="true">
+								<BellDotIcon />
+							</span>
+						}
+						title={
+							<>
+								<strong>{num(n)}</strong> {n === 1 ? "needs" : "need"} you
+							</>
+						}
+						trail={
+							approvals ? (
+								<span className="p-quiet">
+									{num(approvals)} {approvals === 1 ? "approval" : "approvals"}
+								</span>
+							) : undefined
+						}
+					/>
+				</IonItem>
+			</div>
+		</div>
+	);
+}
+const NeedsSummary = observer(NeedsSummaryImpl);
 
 /* ------------------------------------------------------------ page */
 
@@ -508,7 +543,7 @@ function InstallHint() {
 	});
 	if (hidden) return null;
 	return (
-		<aside className="p-tip" aria-label="Tip">
+		<Card className="p-tip" aria-label="Tip" component="aside">
 			<img src="/icon.svg" alt="" />
 			<div>
 				<strong>Add Pulsar to your Home Screen</strong>
@@ -529,7 +564,7 @@ function InstallHint() {
 			>
 				<XIcon size={18} />
 			</button>
-		</aside>
+		</Card>
 	);
 }
 
@@ -574,6 +609,10 @@ function ConnectionBannerImpl() {
 }
 const ConnectionBanner = observer(ConnectionBannerImpl);
 
+/**
+ * The one search field: filters the tree as you type, and message search
+ * (the home.search slot) lists matching messages under it.
+ */
 function SearchField() {
 	const [text, setText] = useState(filter.peek());
 	useEffect(() => {
@@ -586,15 +625,20 @@ function SearchField() {
 		return () => clearTimeout(t);
 	}, [text]);
 	return (
-		<IonSearchbar
-			className="p-search"
-			placeholder="Search"
-			aria-label="Filter the tree"
-			value={text}
-			showCancelButton="focus"
-			onIonInput={(e) => setText(e.detail.value ?? "")}
-			onIonClear={() => setText("")}
-		/>
+		<div role="search" className="p-home-search" data-testid="home-search">
+			<label htmlFor="p-home-q" className="sr-only">
+				Search agents and messages
+			</label>
+			<Searchbar
+				inputId="p-home-q"
+				placeholder="Search"
+				value={text}
+				onInput={(e: React.FormEvent<HTMLInputElement>) =>
+					setText(e.currentTarget.value)
+				}
+				onClear={() => setText("")}
+			/>
+		</div>
 	);
 }
 
@@ -609,37 +653,36 @@ function HomeImpl() {
 		!top ||
 		(top.loading && top.ids.length === 0);
 	return (
-		<>
-			<IonHeader translucent>
-				<IonToolbar>
-					<IonTitle>{HOME_TITLE}</IonTitle>
-					<IonButtons slot="end">
-						<Slot name="sidebar.header" mobile />
-						<IonButton
-							aria-label="Broadcast…"
-							onClick={() => navigate({ view: "broadcast", selector: "*" })}
-						>
-							<SquarePenIcon />
-						</IonButton>
-					</IonButtons>
-				</IonToolbar>
-			</IonHeader>
-			<IonContent fullscreen className="p-home" onTouchStart={noteInteraction}>
-				<IonHeader collapse="condense">
-					<IonToolbar>
-						<IonTitle size="large">{HOME_TITLE}</IonTitle>
-					</IonToolbar>
-					<IonToolbar>
-						<SearchField />
-					</IonToolbar>
-				</IonHeader>
+		<PageShell
+			title={HOME_TITLE}
+			className="p-home"
+			below={<SearchField />}
+			end={
+				<>
+					<Slot name="sidebar.header" mobile />
+					<IonButton
+						aria-label="Broadcast…"
+						onClick={() => navigate({ view: "broadcast", selector: "*" })}
+					>
+						<SquarePenIcon />
+					</IonButton>
+				</>
+			}
+		>
+			<div className="p-home-body" onTouchStart={noteInteraction}>
 				<div className="p-home-head">
 					<ConnectionBanner />
 					<InstallHint />
 				</div>
+				<NeedsSummary />
 				{loading ? <SkeletonRows count={9} section /> : <HomeList />}
-			</IonContent>
-		</>
+			</div>
+			{isMaterial && (
+				<div slot="fixed" className="p-fab-slot">
+					<Slot name="home.fab" />
+				</div>
+			)}
+		</PageShell>
 	);
 }
 

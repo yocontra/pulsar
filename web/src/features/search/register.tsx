@@ -1,7 +1,7 @@
 /**
  * Message search: Cmd-K's "In messages" group, the find bar in a session
- * (session.header slot), and the phone's search page (`#/search`, opened
- * from Home's header). Metadata and lazy chunks only.
+ * (session.header slot), Home's "In messages" section on the phone
+ * (home.search slot) and its search page (`#/search`, "See all" there). Metadata and lazy chunks only.
  */
 import { SearchIcon } from "lucide-react";
 import { type ComponentType, createElement, lazy, Suspense } from "react";
@@ -61,14 +61,14 @@ const Find: ComponentType<SlotProps["session.header"]> = (props) => (
 );
 registerSlot("session.header", { id: "search.find", component: Find });
 
-// The phone opens search from Home's header; the desktop has Cmd-K.
-const LazyOpen = lazy(() => import("./OpenSearch.tsx"));
-registerSlot("sidebar.header", {
-	id: "search.open",
-	only: "phone",
-	component: () => (
+// The phone searches messages from Home's search field (its "In messages"
+// section); the desktop has Cmd-K.
+const LazyHome = lazy(() => import("./HomeResults.tsx"));
+registerSlot("home.search", {
+	id: "search.messages",
+	component: (props) => (
 		<Suspense fallback={null}>
-			<LazyOpen />
+			<LazyHome {...props} />
 		</Suspense>
 	),
 });

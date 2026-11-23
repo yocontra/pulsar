@@ -1,5 +1,6 @@
 /**
- * New agent (features/launch): the sidebar's and Home's header button,
+ * New agent (features/launch): the sidebar's and Home's header button (on
+ * Android, Home's floating button),
  * Cmd-K, mod+alt+N, a project's "New agent in…", and the draft page
  * `#/new`. Metadata and lazy parts only: this file loads at start.
  */
@@ -17,6 +18,7 @@ import { openDraft } from "./open.ts";
 
 const none = () => <></>;
 const PhoneButton = lazy(() => import("./PhoneButton.tsx"), none);
+const PhoneFab = lazy(() => import("./PhoneFab.tsx"), none);
 
 function NewAgentButtonImpl({ mobile }: { mobile: boolean }) {
 	if (!can("launch")) return null;
@@ -37,6 +39,12 @@ function NewAgentButtonImpl({ mobile }: { mobile: boolean }) {
 registerSlot("sidebar.header", {
 	id: "launch.new",
 	component: observer(NewAgentButtonImpl),
+});
+
+// Android's Home: New agent is a floating button, not the header's "+".
+registerSlot("home.fab", {
+	id: "launch.new",
+	component: observer(() => (can("launch") ? <PhoneFab /> : null)),
 });
 
 registerPage({

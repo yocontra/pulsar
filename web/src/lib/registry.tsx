@@ -82,6 +82,11 @@ export interface SlotProps {
 	"composer.right": ComposerSlotProps;
 	/** Above the composer's text field (attachment tiles, the `@` menu). */
 	"composer.top": ComposerSlotProps;
+	/** Phone Home, under the tree while its search field has a query
+	 * (message search's "In messages" section). */
+	"home.search": { query: string };
+	/** Phone Home on Android: the floating action button (New agent). */
+	"home.fab": object;
 }
 
 export type SlotName = keyof SlotProps;
@@ -98,6 +103,8 @@ const slots: { [K in SlotName]: Registry<SlotEntry<K>> } = {
 	"composer.left": new Registry(),
 	"composer.right": new Registry(),
 	"composer.top": new Registry(),
+	"home.search": new Registry(),
+	"home.fab": new Registry(),
 };
 
 export function registerSlot<K extends SlotName>(

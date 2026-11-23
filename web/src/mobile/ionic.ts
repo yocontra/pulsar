@@ -15,7 +15,6 @@ export {
 	IonHeader,
 	IonItem,
 	IonNav,
-	IonSearchbar,
 	IonTitle,
 	IonToolbar,
 	setupIonicReact,

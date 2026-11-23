@@ -36,6 +36,9 @@ export interface PageShellProps {
 	start?: ReactNode;
 	/** Trailing buttons: a glass capsule on iOS, icon buttons on Android. */
 	end?: ReactNode;
+	/** Under the title (a search field): under the iOS large title, where
+	 * it scrolls away with it; at the top of the content on Android. */
+	below?: ReactNode;
 	/** iOS large title (default on). */
 	large?: boolean;
 	/** The scroll area's class (page styles). */
@@ -52,6 +55,7 @@ export function PageShell({
 	route,
 	start,
 	end,
+	below,
 	large = true,
 	className,
 	footer,
@@ -108,8 +112,10 @@ export function PageShell({
 						<IonToolbar>
 							<IonTitle size="large">{title}</IonTitle>
 						</IonToolbar>
+						{below && <IonToolbar className="p-bar-below">{below}</IonToolbar>}
 					</IonHeader>
 				)}
+				{!condense && below && <div className="p-bar-below">{below}</div>}
 				{children}
 			</IonContent>
 			{footer}

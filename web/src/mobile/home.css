@@ -1,0 +1,134 @@
+/*
+ * The Agents tab (Home.tsx) and the phone's search page: the search field
+ * under the title, the needs summary row, the tree's groups per platform,
+ * the install card, the pool footer and Android's New-agent button.
+ */
+
+/* ------------------------------------------------------------ search
+   Konsta's Searchbar under the large title (iOS) or the top app bar
+   (Android). Konsta sizes Material's for a navbar's subnavbar (negative
+   margins, 100% + 32 px): here it sits in the page's own gutter. */
+ion-toolbar.p-bar-below {
+	--background: transparent;
+	--border-width: 0;
+	--padding-start: 16px;
+	--padding-end: 16px;
+	--padding-top: 2px;
+	--padding-bottom: 6px;
+}
+div.p-bar-below {
+	padding: 8px 16px 4px;
+}
+.p-home-search .k-searchbar {
+	margin: 0;
+	width: 100%;
+	padding-block: 0;
+}
+.p-home-search input {
+	color: var(--p-label);
+}
+html.ios .p-home-search input {
+	background: var(--p-fill);
+}
+html.md .p-home-search input {
+	background: var(--ds-surface-2);
+	font-family: Roboto, system-ui, sans-serif;
+	font-size: 16px;
+}
+
+/* ------------------------------------------------------------ groups
+   iOS 27: Konsta's inset groups (24 pt corners); Material 3: 16 dp
+   corners, 56 dp rows, quieter section titles. */
+html.ios .p-home .p-vrow.gf .p-cell,
+html.ios .p-search-page .p-vrow.gf .p-cell {
+	border-top-left-radius: 24px;
+	border-top-right-radius: 24px;
+}
+html.ios .p-home .p-vrow.gl .p-cell {
+	border-bottom-left-radius: 24px;
+	border-bottom-right-radius: 24px;
+}
+html.md .p-home .p-vrow.gf .p-cell {
+	border-top-left-radius: 16px;
+	border-top-right-radius: 16px;
+}
+html.md .p-home .p-vrow.gl .p-cell {
+	border-bottom-left-radius: 16px;
+	border-bottom-right-radius: 16px;
+}
+html.md .p-home .p-cell ion-item {
+	--min-height: 56px;
+	--padding-start: 16px;
+	font-family: Roboto, system-ui, sans-serif;
+}
+html.md .p-home .p-section h2 {
+	font-family: Roboto, system-ui, sans-serif;
+	font-size: 14px;
+	line-height: 20px;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+	color: var(--p-label-2);
+}
+
+/* ------------------------------------------------------------ needs
+   "2 need you ›": one row, above the tree. */
+.p-vrow.is-summary {
+	margin-block: 8px 4px;
+}
+.p-needs-sum .p-title strong {
+	color: var(--p-needs-text);
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ tip card
+   The install hint: Konsta's Card, dismissible. */
+.p-home .p-tip.k-card {
+	margin: 8px 16px 4px;
+	padding: 14px 44px 14px 14px;
+	position: relative;
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	background: var(--p-cell);
+}
+html.ios .p-home .p-tip.k-card {
+	border-radius: 24px;
+}
+html.md .p-home .p-tip.k-card {
+	border-radius: 12px;
+}
+html.ios .p-home .p-banner {
+	border-radius: 18px;
+}
+
+/* ------------------------------------------------------------ footer */
+.p-pool-foot {
+	margin: 4px 32px 0;
+	text-align: center;
+	font-size: var(--p-foot);
+	color: var(--p-label-3);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ FAB
+   Android: New agent floats above the bottom navigation bar, in the
+   content's fixed layer (it doesn't scroll). */
+.p-fab-slot {
+	position: absolute;
+	right: calc(16px + var(--sar, 0px));
+	bottom: calc(var(--p-tabbar-h) + var(--sab, 0px) + 16px);
+	z-index: 10;
+}
+.p-fab-slot .p-fab {
+	background: var(--ds-primary-soft);
+	color: var(--ds-text);
+}
+.p-fab-slot .p-fab svg {
+	width: 24px;
+	height: 24px;
+}
+/* The last row scrolls clear of the button. */
+html.md .p-home .p-home-body {
+	padding-bottom: 72px;
+}

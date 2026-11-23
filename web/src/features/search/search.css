@@ -162,6 +162,7 @@
 	white-space: nowrap;
 }
 .msr-row .msr-snip {
+	color: var(--ds-text-2);
 	margin-top: 2px;
 	font-size: 0.92em;
 	white-space: normal;
@@ -193,4 +194,41 @@
 	border-radius: 8px;
 	box-shadow: 0 0 0 2px rgba(250, 160, 21, 0.55);
 	transition: box-shadow 150ms ease-out;
+}
+
+/* The phone's results (results.tsx): Konsta list rows, on Home ("In
+   messages", under the tree) and on the search page. */
+.msr-home .k-list,
+.p-search-page .k-list {
+	margin-block: 4px 16px;
+}
+html.ios .msr-home .k-block-title {
+	margin-top: 20px;
+	font-size: 1.176rem;
+	line-height: 1.471rem;
+	font-weight: 700;
+	text-transform: none;
+	color: var(--ds-text);
+}
+html.md .msr-home .k-block-title {
+	margin-top: 16px;
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--ds-text-2);
+}
+.msr-row time {
+	color: var(--ds-text-3);
+	font-size: 0.85em;
+	white-space: nowrap;
+}
+.msr-row .msr-name {
+	font-weight: 600;
+}
+.msr-state.is-row {
+	margin: 0;
+	justify-content: flex-start;
+	text-align: start;
+}
+.msr-all {
+	color: var(--ds-link);
 }

@@ -22,7 +22,7 @@
 /* Konsta's class names, for the components the phone uses only (its own
    theme.css scans every component: ~9 KB gzipped more CSS). Add
    a component here when the phone starts using it. */
-@source "../../../node_modules/konsta/{shared/classes,shared/colors,react/components}/{Actions,ActionsButton,ActionsGroup,ActionsLabel,Badge,Block,BlockFooter,BlockHeader,BlockTitle,Button,Card,Chip,Glass,Icon,Link,List,ListButton,ListGroup,ListItem,MenuList,MenuListItem,Popover,Preloader,Segmented,SegmentedButton,Tabbar,TabbarLink,Toggle,Toolbar,ToolbarPane}{,Classes,Colors}.js";
+@source "../../../node_modules/konsta/{shared/classes,shared/colors,react/components}/{Actions,ActionsButton,ActionsGroup,ActionsLabel,Badge,Block,BlockFooter,BlockHeader,BlockTitle,Button,Card,Chip,Fab,Glass,Icon,Link,List,ListButton,ListGroup,ListItem,MenuList,MenuListItem,Popover,Preloader,Searchbar,Segmented,SegmentedButton,Tabbar,TabbarLink,Toggle,Toolbar,ToolbarPane}{,Classes,Colors}.js";
 
 @theme inline {
 	--color-ios-primary: var(--ds-primary);
