@@ -10,6 +10,7 @@ import {
 	readlinkSync,
 	rmSync,
 	symlinkSync,
+	utimesSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -316,11 +317,19 @@ describe("pulsar setup", () => {
 		expect(existsSync(shim)).toBe(false);
 	}, 60_000);
 
-	test("an upgrade keeps the version agents still run and the copy setup runs from", () => {
+	test("an upgrade keeps the version agents still run, the copy setup runs from, and the newest builds", () => {
 		const home = fakeHome();
 		const install = join(home, ".pulsar-install");
-		for (const v of ["1.0.0", "1.5.0", "1.9.0"])
+		const day = 24 * 60 * 60;
+		const now = Date.now() / 1000;
+		// Twelve old builds a day apart (10 to 21 days old), and the one
+		// `current` points at, older still.
+		const old = Array.from({ length: 12 }, (_, i) => `1.0.${i}`);
+		for (const [i, v] of [...old, "1.5.0"].entries()) {
 			mkdirSync(join(install, v, "dist"), { recursive: true });
+			const at = now - (10 + i) * day;
+			utimesSync(join(install, v), at, at);
+		}
 		symlinkSync("1.5.0", join(install, "current"));
 		// Setup run from an installed copy (a hand-deployed build).
 		const self = join(install, "2.0.0-abc1234");
@@ -334,8 +343,11 @@ describe("pulsar setup", () => {
 		);
 		expect(r.code).toBe(0);
 		const version = readlinkSync(join(install, "current"));
+		// The newest ten: this version, the copy setup ran from, and the
+		// eight newest old builds (the daemon serves their app files to pages
+		// still on them); the four oldest go.
 		expect(readdirSync(install).sort()).toEqual(
-			["1.5.0", "2.0.0-abc1234", version, "current"].sort(),
+			["1.5.0", "2.0.0-abc1234", version, "current", ...old.slice(0, 8)].sort(),
 		);
 		expect(existsSync(join(self, "dist", "cli.js"))).toBe(true);
 		run(home, ["setup", "--uninstall", "--yes"]);

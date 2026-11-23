@@ -2,11 +2,39 @@ import type { ComponentType, JSX } from "react";
 import { useEffect, useState } from "react";
 import { CloseX } from "../components/CloseX.tsx";
 
+declare global {
+	interface Window {
+		/** public/boot.js: reload once a minute for a chunk error; true if reloading. */
+		__pulsarRecover?: (reason: unknown) => boolean;
+		/** public/boot.js: reload past the service worker's cached shell. */
+		__pulsarReload?: () => void;
+	}
+}
+
+/**
+ * A chunk that did not download (an older build's file gone after a
+ * deploy, a network blip): reload into the build the server runs now, once
+ * a minute (public/boot.js). True when a reload is on its way.
+ */
+export function recoverChunk(err: unknown): boolean {
+	try {
+		return window.__pulsarRecover?.(err) ?? false;
+	} catch {
+		return false;
+	}
+}
+
+/** A full reload past the cached shell (browsers may cache a failed import). */
+function reloadApp() {
+	if (window.__pulsarReload) window.__pulsarReload();
+	else location.reload();
+}
+
 /**
  * Code-split a component (React.lazy without a Suspense boundary). A chunk
- * that fails to load shows a Retry (a full reload: browsers may cache a
- * failed dynamic import); the boot guard (public/boot.js) also sees the
- * failure and reloads once on its own.
+ * that fails to load reloads the app once by itself (recoverChunk); only
+ * when that was already spent does the screen show a Retry (a full reload:
+ * browsers may cache a failed dynamic import).
  */
 export function lazy<P extends object>(
 	load: () => Promise<{ default: ComponentType<P> }>,
@@ -40,7 +68,10 @@ export function lazy<P extends object>(
 			let live = true;
 			preload().then(
 				() => live && set((n) => n + 1),
-				(err: unknown) => live && setError(err ?? "failed"),
+				(err: unknown) => {
+					// A reload is coming: keep the loading state until it does.
+					if (live && !recoverChunk(err)) setError(err ?? "failed");
+				},
 			);
 			return () => {
 				live = false;
@@ -94,11 +125,7 @@ function LoadFailed({
 			</span>
 			<p className="st-title">This screen didn't load</p>
 			<p className="st-text">Check your connection, then retry.</p>
-			<button
-				type="button"
-				className="st-btn"
-				onClick={() => location.reload()}
-			>
+			<button type="button" className="st-btn" onClick={reloadApp}>
 				{phone ? "Try Again" : "Retry"}
 			</button>
 			{layer && (

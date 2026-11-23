@@ -13,6 +13,11 @@ import { extname, join, normalize, resolve, sep } from "node:path";
  * - Hashed build assets (`/_app/`) are immutable for a year; everything else
  *   (HTML, sw.js, boot.js, the manifest) is `no-cache` and revalidates.
  * - App routes (no extension) get `index.html`.
+ * - A hashed build asset missing from `root` comes from `previous` (older
+ *   installed builds, newest first) when one has it: a page that still runs
+ *   an older build (an open tab, a shell the service worker served from its
+ *   cache) can still load its own lazy chunks after a deploy. Only `/_app/`
+ *   files: HTML, sw.js and boot.js always come from `root`.
  */
 
 const MIME: Record<string, string> = {
@@ -99,11 +104,40 @@ const text = (status: number, body: string): StaticResponse => ({
 	body,
 });
 
+/** The first older build that has `rel`: [its root, the file]. */
+async function fromPrevious(
+	previous: readonly string[],
+	rel: string,
+): Promise<[string, string] | null> {
+	for (const root of previous) {
+		const base = resolve(root);
+		const file = under(base, rel);
+		if (file?.startsWith(join(base, "_app") + sep) && (await stat(file)))
+			return [base, file];
+	}
+	return null;
+}
+
+/** `rel` (a decoded URL path) under `base`; null when it escapes `base`. */
+function under(base: string, rel: string): string | null {
+	const file = resolve(base, normalize(`.${rel}`));
+	return file === base || file.startsWith(base + sep) ? file : null;
+}
+
+/** A hashed build asset: a file under `/_app/`, never HTML. */
+const isBuildAsset = (rel: string) =>
+	rel.startsWith("/_app/") &&
+	extname(rel) !== "" &&
+	!/\.html?$/i.test(rel) &&
+	!rel.slice("/_app/".length).split("/").includes("..");
+
 /** Serves `path` (the URL path, still percent-encoded) from `root`. */
 export async function serveStatic(
 	root: string,
 	path: string,
 	req: { acceptEncoding?: string; ifNoneMatch?: string } = {},
+	/** Older builds' roots, newest first: see the file comment. */
+	previous: readonly string[] = [],
 ): Promise<StaticResponse> {
 	let rel: string;
 	try {
@@ -112,12 +146,14 @@ export async function serveStatic(
 		return text(400, "bad path");
 	}
 	if (rel.includes("\0")) return text(400, "bad path");
-	const base = resolve(root);
-	let file = resolve(base, normalize(`.${rel}`));
-	if (file !== base && !file.startsWith(base + sep))
-		return text(404, "not found");
+	let base = resolve(root);
+	let file = under(base, rel);
+	if (!file) return text(404, "not found");
 	if (!(await stat(file))) {
-		if (await stat(join(file, "index.html"))) file = join(file, "index.html");
+		const old = isBuildAsset(rel) ? await fromPrevious(previous, rel) : null;
+		if (old) [base, file] = old;
+		else if (await stat(join(file, "index.html")))
+			file = join(file, "index.html");
 		else if (!extname(file)) file = join(base, "index.html");
 		else return text(404, "not found");
 	}

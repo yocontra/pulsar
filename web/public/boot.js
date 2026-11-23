@@ -14,8 +14,12 @@
 	// a failed prefetch is not the app failing, so never reload over it.
 	const quiet = () => booted() && (window.__pulsarPrefetching ?? 0) > 0;
 
-	// Reload with navigations going to the network (not the cached shell).
+	// Reload with navigations going to the network (not the cached shell),
+	// keeping composer text (src/lib/composer-draft.ts).
 	function reload() {
+		try {
+			window.__pulsarKeepDrafts?.();
+		} catch {}
 		const sw = navigator.serviceWorker?.controller;
 		if (!sw) return location.reload();
 		const channel = new MessageChannel();
@@ -34,22 +38,33 @@
 		document.getElementById("boot-retry")?.focus();
 	}
 
-	function fail() {
-		if (failed || quiet()) return;
-		failed = true;
+	// One automatic reload per minute, shared by every path below and by
+	// src/lib/lazy.tsx: true when a reload is on its way.
+	let reloading = false;
+	function retry() {
+		if (reloading) return true;
 		let last = 0;
 		try {
 			last = Number(sessionStorage.getItem(KEY)) || 0;
 		} catch {}
-		// One automatic retry per minute; after that, the error screen. Once
-		// the app runs, a lazy chunk shows its own Retry (src/lib/lazy.tsx)
-		// instead: never cover a working app.
-		if (Date.now() - last > WINDOW_MS) {
-			try {
-				sessionStorage.setItem(KEY, String(Date.now()));
-				return reload();
-			} catch {}
+		if (Date.now() - last <= WINDOW_MS) return false;
+		try {
+			sessionStorage.setItem(KEY, String(Date.now()));
+		} catch {
+			return false;
 		}
+		reloading = true;
+		reload();
+		return true;
+	}
+
+	function fail() {
+		if (failed || quiet()) return;
+		failed = true;
+		// After the automatic retry, the error screen. Once the app runs, a
+		// lazy chunk shows its own Retry (src/lib/lazy.tsx) instead: never
+		// cover a working app.
+		if (retry()) return;
 		if (!booted()) show();
 	}
 
@@ -57,6 +72,17 @@
 		/dynamically imported module|module script failed|Unable to preload|error loading dynamically/i.test(
 			String(reason?.message ?? reason),
 		);
+
+	// For src/lib/lazy.tsx: a screen whose chunk did not download reloads
+	// into the served build by itself (once a minute) before it shows its
+	// Retry, and that Retry reloads past the cached shell too.
+	window.__pulsarRecover = (reason) => chunkError(reason) && retry();
+	window.__pulsarReload = () => {
+		try {
+			sessionStorage.setItem(KEY, String(Date.now()));
+		} catch {}
+		reload();
+	};
 
 	// Capture phase: a <script> or <link> load error does not bubble.
 	addEventListener(
@@ -85,12 +111,9 @@
 	});
 
 	document.addEventListener("DOMContentLoaded", () => {
-		document.getElementById("boot-retry")?.addEventListener("click", () => {
-			try {
-				sessionStorage.setItem(KEY, String(Date.now()));
-			} catch {}
-			reload();
-		});
+		document
+			.getElementById("boot-retry")
+			?.addEventListener("click", () => window.__pulsarReload());
 		// Module scripts run before DOMContentLoaded: an entry that ran
 		// without mounting (no module support, blocked script) shows the
 		// error screen too.

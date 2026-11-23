@@ -1,16 +1,7 @@
-import {
-	cpSync,
-	mkdtempSync,
-	readdirSync,
-	readFileSync,
-	renameSync,
-	rmSync,
-	statSync,
-	writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import type { APIRequestContext, BrowserContext, Page } from "@playwright/test";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import type { BrowserContext, Page } from "@playwright/test";
+import { current, DIST, serve, stageBuild } from "./builds.ts";
 import { expect, test } from "./fixtures.ts";
 
 /**
@@ -19,18 +10,9 @@ import { expect, test } from "./fixtures.ts";
  * through the daemon's src/transport/static.ts).
  */
 
-const DIST = resolve(import.meta.dirname, "../../dist/web");
 const H = { "X-Pulsar": "1" };
 const app = (page: Page) => page.locator('[data-node="m:studio"]');
 const errorScreen = (page: Page) => page.locator("#boot-error");
-
-function current() {
-	const html = readFileSync(join(DIST, "index.html"), "utf8");
-	return {
-		build: /name="pulsar-build" content="([0-9a-f]+)"/.exec(html)![1]!,
-		entry: /<script type="module" src="([^"]+)"/.exec(html)![1]!,
-	};
-}
 
 /** The biggest hashed script in the build (always precompressed). */
 function largestScript() {
@@ -41,73 +23,6 @@ function largestScript() {
 	return `/_app/${name}`;
 }
 
-/** Point the mock at another dist folder and/or hold its HTML responses. */
-async function serve(
-	request: APIRequestContext,
-	body: { root?: string; htmlDelayMs?: number; webBuild?: string } = {},
-) {
-	const res = await request.post("/api/v1/__mock/static", {
-		headers: H,
-		data: body,
-	});
-	expect(res.ok()).toBe(true);
-}
-
-const staged: string[] = [];
-test.afterEach(async ({ request }) => {
-	await serve(request);
-	for (const dir of staged.splice(0))
-		rmSync(dir, { recursive: true, force: true });
-});
-
-/**
- * A copy of dist/web standing in for another build: a new build id and
- * every JS and CSS file under a new name, as a real rebuild would hash them
- * (a file whose content changes must change its name too). `legacySw` swaps
- * in the pulsar-shell-v2 worker that phones still run.
- */
-function stageBuild(opts: { legacySw?: boolean } = {}) {
-	const root = mkdtempSync(join(tmpdir(), "pulsar-build-"));
-	staged.push(root);
-	cpSync(DIST, root, { recursive: true });
-	const list = () => readdirSync(root, { recursive: true, encoding: "utf8" });
-	// The copy serves uncompressed: no sidecar can go stale.
-	for (const f of list()) if (/\.(br|gz)$/.test(f)) rmSync(join(root, f));
-	const { build: old, entry } = current();
-	const build = `${old.slice(0, 6)}${Math.random().toString(16).slice(2, 8)}`;
-	const renamed = new Map<string, string>();
-	for (const f of list()) {
-		const m = /^_app\/([^/]+)\.(js|css)$/.exec(f);
-		if (!m) continue;
-		renamed.set(`${m[1]}.${m[2]}`, `${m[1]}.old.${m[2]}`);
-		renameSync(join(root, f), join(root, "_app", `${m[1]}.old.${m[2]}`));
-	}
-	const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const names = new RegExp(
-		`(?<=[/"'\`])(${[...renamed.keys()].map(escapeRe).join("|")})(?=[?"'\`)])`,
-		"g",
-	);
-	for (const f of list()) {
-		if (!/\.(js|css|html)$/.test(f)) continue;
-		const src = readFileSync(join(root, f), "utf8");
-		const out = src
-			.replace(names, (n) => renamed.get(n)!)
-			.replaceAll(old, build);
-		if (out !== src) writeFileSync(join(root, f), out);
-	}
-	if (opts.legacySw)
-		cpSync(
-			resolve(import.meta.dirname, "fixtures/sw-v2.js"),
-			join(root, "sw.js"),
-		);
-	const oldEntry = entry.replace(/\.js$/, ".old.js");
-	// Nothing in the copy may still point at the current build's files.
-	const html = readFileSync(join(root, "index.html"), "utf8");
-	expect(html).toContain(oldEntry);
-	expect(html).toContain(build);
-	return { root, build, entry: oldEntry };
-}
-
 /** Drop the expected failed-download noise from the console-error check. */
 function allow(errors: string[], re: RegExp) {
 	const keep = errors.filter((e) => !re.test(e));
@@ -115,6 +30,20 @@ function allow(errors: string[], re: RegExp) {
 }
 const DOWNLOAD_ERRORS =
 	/Failed to load resource|dynamically imported module|Unable to preload/;
+
+const usage = (page: Page) => page.getByRole("main", { name: "Usage" });
+const screenFailed = (page: Page) => page.getByText("This screen didn't load");
+/** Opens the usage page: a lazy chunk the first screen never loads. */
+const openUsage = (page: Page) =>
+	page.evaluate(() => {
+		location.hash = "#/usage";
+	});
+/** Counts full page loads (not hash changes) from now on. */
+function countLoads(page: Page) {
+	const n = { loads: 0 };
+	page.on("load", () => n.loads++);
+	return n;
+}
 
 const loadedEntry = (page: Page) =>
 	page.evaluate(() =>
@@ -205,6 +134,42 @@ test.describe("first load", () => {
 		allow(errors, DOWNLOAD_ERRORS);
 	});
 
+	test("a screen whose chunk fails once in a running app recovers by itself", async ({
+		page,
+		errors,
+	}) => {
+		let requests = 0;
+		await page.route(/\/_app\/UsageView\.[^/]+\.js$/, (route) =>
+			requests++ === 0 ? route.abort("failed") : route.continue(),
+		);
+		await page.goto("/");
+		await expect(app(page)).toBeVisible();
+		let failedShown = false;
+		await page.exposeFunction("__sawFailure", () => {
+			failedShown = true;
+		});
+		await page.addInitScript(() => {
+			new MutationObserver(() => {
+				if (document.querySelector(".st-fail"))
+					(window as unknown as { __sawFailure: () => void }).__sawFailure();
+			}).observe(document, { childList: true, subtree: true });
+		});
+		await page.evaluate(() => {
+			new MutationObserver(() => {
+				if (document.querySelector(".st-fail"))
+					(window as unknown as { __sawFailure: () => void }).__sawFailure();
+			}).observe(document, { childList: true, subtree: true });
+		});
+		const n = countLoads(page);
+		await openUsage(page);
+		await expect(usage(page)).toBeVisible();
+		// One reload, into a screen that loads; never the failure screen.
+		expect(n.loads).toBe(1);
+		expect(requests).toBeGreaterThanOrEqual(2);
+		expect(failedShown).toBe(false);
+		allow(errors, DOWNLOAD_ERRORS);
+	});
+
 	test("an app error from a dynamic import does not reload, and a working app is never covered", async ({
 		page,
 	}) => {
@@ -268,6 +233,37 @@ test.describe("first load", () => {
 	});
 });
 
+test.describe("after a deploy", () => {
+	const NO_UPDATE = "none";
+
+	test("an open app on the old build still loads its lazy screens", async ({
+		page,
+		request,
+	}) => {
+		const a = stageBuild();
+		await serve(request, { root: a.root, webBuild: NO_UPDATE });
+		await page.goto("/");
+		await expect(app(page)).toBeVisible();
+		// Deploy: the server runs the current build; build A stays installed
+		// next to it, as \`pulsar setup\` keeps older builds.
+		await serve(request, { previous: [a.root], webBuild: NO_UPDATE });
+		const n = countLoads(page);
+		const fromA: number[] = [];
+		page.on("response", (r) => {
+			if (/\/_app\/UsageView\.[^/]+\.old\.js$/.test(r.url()))
+				fromA.push(r.status());
+		});
+		await openUsage(page);
+		await expect(usage(page)).toBeVisible();
+		// Build A's own chunk, from A's folder: no reload, no failure screen.
+		expect(fromA).toEqual([200]);
+		expect(n.loads).toBe(0);
+		expect(await loadedEntry(page)).toBe(a.entry);
+		await expect(screenFailed(page)).toHaveCount(0);
+		await expect(errorScreen(page)).toBeHidden();
+	});
+});
+
 test.describe("service worker", () => {
 	test.use({ serviceWorkers: "allow" });
 	test.setTimeout(60_000);
@@ -296,7 +292,7 @@ test.describe("service worker", () => {
 		expect(await loadedEntry(page)).toBe(current().entry);
 		await expect
 			.poll(() => cacheNames(page), { timeout: 15_000 })
-			.toEqual([`pulsar-shell-${current().build}`]);
+			.toEqual(["pulsar-shell-v2", `pulsar-shell-${current().build}`]);
 		await page.reload();
 		await expect(app(page)).toBeVisible();
 		expect(await loadedEntry(page)).toBe(current().entry);
@@ -338,7 +334,7 @@ test.describe("service worker", () => {
 			.toBe(current().entry);
 		await expect
 			.poll(() => cacheNames(page), { timeout: 15_000 })
-			.toEqual([`pulsar-shell-${current().build}`]);
+			.toEqual([`pulsar-shell-${a.build}`, `pulsar-shell-${current().build}`]);
 		await expect(errorScreen(page)).toBeHidden();
 		allow(errors, DOWNLOAD_ERRORS);
 	});
@@ -380,6 +376,59 @@ test.describe("service worker", () => {
 		allow(errors, DOWNLOAD_ERRORS);
 	});
 
+	test("a cached shell of an older build loads its lazy screens from the cache", async ({
+		page,
+		request,
+	}) => {
+		const a = stageBuild();
+		await serve(request, { root: a.root, webBuild: NO_UPDATE });
+		await page.goto("/");
+		await expect(app(page)).toBeVisible();
+		await controlled(page);
+		await expect
+			.poll(() => cacheNames(page))
+			.toEqual([`pulsar-shell-${a.build}`]);
+
+		// Deploy with no older builds kept, and the HTML stalls: after 3 s
+		// the worker serves build A's shell, and none of A's files are on
+		// the server any more.
+		await serve(request, { htmlDelayMs: 8_000, webBuild: NO_UPDATE });
+		await page.reload();
+		await expect(app(page)).toBeVisible();
+		expect(await loadedEntry(page)).toBe(a.entry);
+		const n = countLoads(page);
+		await openUsage(page);
+		await expect(usage(page)).toBeVisible();
+
+		// The held HTML arrives and the current build's worker takes over the
+		// page, which still runs build A: A's cache stays for it.
+		await expect
+			.poll(
+				() =>
+					page.evaluate(async (name) => {
+						const reg = await navigator.serviceWorker.getRegistration();
+						// caches.open would create it: look first.
+						const shell =
+							(await caches.has(name)) &&
+							(await (await caches.open(name)).match("/"));
+						return !!shell && !reg?.installing && !reg?.waiting;
+					}, `pulsar-shell-${current().build}`),
+				{ timeout: 20_000 },
+			)
+			.toBe(true);
+		await expect
+			.poll(() => cacheNames(page), { timeout: 20_000 })
+			.toEqual([`pulsar-shell-${a.build}`, `pulsar-shell-${current().build}`]);
+		await page.evaluate(() => {
+			location.hash = "#/diagnostics";
+		});
+		await expect(page.getByRole("main", { name: "Diagnostics" })).toBeVisible();
+		expect(n.loads).toBe(0);
+		expect(await loadedEntry(page)).toBe(a.entry);
+		await expect(screenFailed(page)).toHaveCount(0);
+		await expect(errorScreen(page)).toBeHidden();
+	});
+
 	test("an open app reloads itself into the new build after a daemon restart", async ({
 		page,
 		request,
@@ -407,7 +456,7 @@ test.describe("service worker", () => {
 		await expect(app(page)).toBeVisible();
 		await expect
 			.poll(() => cacheNames(page).catch(() => []), { timeout: 15_000 })
-			.toEqual([`pulsar-shell-${current().build}`]);
+			.toEqual([`pulsar-shell-${a.build}`, `pulsar-shell-${current().build}`]);
 		await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
 		allow(errors, DOWNLOAD_ERRORS);
 	});

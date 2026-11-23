@@ -6,10 +6,13 @@
 // "An agent finished" / "An agent stopped with an error" carry only an
 // opaque token for the agent; tapping one opens that agent.
 // The cache belongs to one build: web/scripts/finish-dist.ts writes the build
-// id and that build's shell (HTML, boot.js, CSS, initial-route JS) below, the
-// install step fills the cache with exactly those files, and activate drops
-// every other cache. A cached shell therefore never points at assets from
-// another build.
+// id and that build's files below (the shell, and every JS and CSS file of
+// the build: a lazy chunk is never a network request away). Install fills
+// the cache with exactly those files and stores the HTML last, so a cached
+// shell means a complete build: a page the worker serves from the cache
+// (a slow or failing network) never needs the server for its own chunks.
+// Activate drops older caches but the one before (an open page may still
+// run that build). A cached shell never points at assets from another build.
 const BUILD = "__PULSAR_BUILD__";
 const PRECACHE = ["__PULSAR_PRECACHE__"];
 const CACHE = `pulsar-shell-${BUILD}`;
@@ -20,21 +23,49 @@ const NAV_TIMEOUT_MS = 3000;
 // build), navigations wait for the network until this time.
 let networkOnlyUntil = 0;
 const BYPASS_MS = 60_000;
+// Parallel downloads while installing.
+const INSTALL_FETCHES = 6;
+
+/** A response worth caching: complete, from this origin. */
+const ok = (res) => res?.ok && res.status === 200 && !res.redirected;
+
+async function fill(cache) {
+	// The HTML first: the server may have moved on to a newer build since
+	// this sw.js was fetched. Never keep another build's HTML: install fails
+	// and the browser tries again with the newer sw.js.
+	const shell = await fetch("/", { cache: "no-cache" });
+	const html = ok(shell) ? await shell.clone().text() : "";
+	if (!html.includes(`content="${BUILD}"`))
+		throw new Error("pulsar: the server's HTML is from another build");
+	const rest = PRECACHE.filter((u) => u !== "/");
+	let next = 0;
+	const worker = async () => {
+		while (next < rest.length) {
+			const url = rest[next++];
+			// Hashed build files never change under one name: reuse an older
+			// build's copy (most chunks survive a deploy), else download.
+			const old = url.startsWith("/_app/") && (await caches.match(url));
+			const res = old || (await fetch(url));
+			if (!ok(res)) throw new Error(`pulsar: could not cache ${url}`);
+			await cache.put(url, res);
+		}
+	};
+	await Promise.all(Array.from({ length: INSTALL_FETCHES }, worker));
+	// Last: the shell marks the cache complete (cachedShell).
+	await cache.put("/", shell);
+}
 
 self.addEventListener("install", (event) => {
 	event.waitUntil(
 		(async () => {
 			const cache = await caches.open(CACHE);
-			// Immutable /_app/ files come from the HTTP cache when the page just
-			// loaded them; the HTML and boot.js revalidate (no-cache).
-			await cache.addAll(PRECACHE);
-			// The server may have moved on to a newer build since this sw.js was
-			// fetched: never keep another build's HTML. Install fails and the
-			// browser tries again with the newer sw.js.
-			const html = await (await cache.match("/"))?.text();
-			if (!html?.includes(`content="${BUILD}"`)) {
-				await caches.delete(CACHE);
-				throw new Error("pulsar: the server's HTML is from another build");
+			try {
+				await fill(cache);
+			} catch (err) {
+				// Never leave an incomplete cache behind (a complete one of the
+				// same build, from an earlier install, has its shell: keep it).
+				if (!(await cache.match("/"))) await caches.delete(CACHE);
+				throw err;
 			}
 			await self.skipWaiting();
 		})(),
@@ -43,14 +74,14 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
 	event.waitUntil(
-		caches
-			.keys()
-			.then((keys) =>
-				Promise.all(
-					keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)),
-				),
-			)
-			.then(() => self.clients.claim()),
+		(async () => {
+			// Cache names keep their creation order: keep this build's and the
+			// newest other one (the build an open page may still run).
+			const others = (await caches.keys()).filter((k) => k !== CACHE);
+			others.pop();
+			await Promise.all(others.map((k) => caches.delete(k)));
+			await self.clients.claim();
+		})(),
 	);
 });
 
@@ -62,6 +93,8 @@ self.addEventListener("message", (event) => {
 	event.ports[0]?.postMessage("ok");
 });
 
+// This build's shell: install stores it after every other file, so it is
+// there only when the whole build is.
 const cachedShell = () => caches.open(CACHE).then((c) => c.match("/"));
 
 async function navigate(req) {
