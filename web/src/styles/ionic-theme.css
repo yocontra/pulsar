@@ -1,35 +1,17 @@
 /*
- * Ionic (iOS mode) theme from the Pulsar tokens. The phone shell imports
- * this after Ionic's core CSS. Every value reads a --ds-* token, so light,
- * dark and forced themes follow tokens.css with no extra rules here.
+ * Ionic theme from the Pulsar tokens: the colors the phone's Ionic
+ * components take (item options, buttons, modal backdrops). The phone shell
+ * imports this after Ionic's core CSS; mobile/theme.css then sets the
+ * surface, text, toolbar and safe-area variables. Every value reads a
+ * --ds-* token, so light, dark and forced themes follow tokens.css.
  */
 :root {
-	--ion-font-family: var(--ds-font-sans);
-	--ion-background-color: var(--ds-bg);
 	--ion-background-color-rgb: 250, 250, 249;
-	--ion-text-color: var(--ds-text);
 	--ion-text-color-rgb: 28, 25, 23;
-	--ion-border-color: var(--ds-border);
-	--ion-item-background: var(--ds-surface);
-	--ion-item-border-color: var(--ds-hairline);
-	--ion-card-background: var(--ds-surface);
-	--ion-toolbar-background: var(--ds-material);
-	--ion-toolbar-border-color: var(--ds-hairline);
-	--ion-tab-bar-background: var(--ds-material);
-	--ion-placeholder-color: var(--ds-text-3);
 	--ion-backdrop-color: #000;
 	--ion-backdrop-opacity: 0.32;
-	--ion-overlay-background-color: var(--ds-surface);
-	/* Through ios.css's --sat/--sab/--sal/--sar, so tests can emulate a notch. */
-	--ion-safe-area-top: var(--sat);
-	--ion-safe-area-bottom: var(--sab);
-	--ion-safe-area-left: var(--sal);
-	--ion-safe-area-right: var(--sar);
 
-	/* Grouped (inset) lists sit on the sunken background, iOS Settings style. */
-	--ion-color-step-50: var(--ds-bg-sunken);
 	--ion-color-step-100: var(--ds-surface-2);
-	--ion-color-step-150: var(--ds-surface-3);
 
 	--ion-color-primary: var(--ds-primary);
 	--ion-color-primary-rgb: 10, 102, 216;
@@ -53,26 +35,8 @@
 	--ion-color-danger-shade: var(--ds-danger-text);
 	--ion-color-danger-tint: var(--ds-danger);
 
-	--ion-color-success: var(--ds-success);
-	--ion-color-success-rgb: 22, 163, 74;
-	--ion-color-success-contrast: #fff;
-	--ion-color-success-contrast-rgb: 255, 255, 255;
-	--ion-color-success-shade: var(--ds-success-text);
-	--ion-color-success-tint: var(--ds-success);
-
+	/* Secondary text in search and limits (search.css, limits.css). */
 	--ion-color-medium: var(--ds-text-3);
-	--ion-color-medium-rgb: 120, 113, 108;
-	--ion-color-medium-contrast: #fff;
-	--ion-color-medium-contrast-rgb: 255, 255, 255;
-	--ion-color-medium-shade: var(--ds-text-2);
-	--ion-color-medium-tint: var(--ds-text-4);
-
-	--ion-color-light: var(--ds-surface-2);
-	--ion-color-light-rgb: 246, 245, 243;
-	--ion-color-light-contrast: var(--ds-text);
-	--ion-color-light-contrast-rgb: 28, 25, 23;
-	--ion-color-light-shade: var(--ds-surface-3);
-	--ion-color-light-tint: var(--ds-surface);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -84,11 +48,6 @@
 		--ion-color-warning-rgb: 255, 154, 60;
 		--ion-color-warning-contrast: #1c1206;
 		--ion-color-danger-rgb: 255, 95, 82;
-		--ion-color-success-rgb: 60, 207, 122;
-		--ion-color-success-contrast: #06180d;
-		--ion-color-medium-rgb: 148, 144, 138;
-		--ion-color-light-rgb: 32, 31, 30;
-		--ion-color-light-contrast-rgb: 242, 241, 239;
 	}
 }
 
@@ -100,9 +59,4 @@
 	--ion-color-warning-rgb: 255, 154, 60;
 	--ion-color-warning-contrast: #1c1206;
 	--ion-color-danger-rgb: 255, 95, 82;
-	--ion-color-success-rgb: 60, 207, 122;
-	--ion-color-success-contrast: #06180d;
-	--ion-color-medium-rgb: 148, 144, 138;
-	--ion-color-light-rgb: 32, 31, 30;
-	--ion-color-light-contrast-rgb: 242, 241, 239;
 }
