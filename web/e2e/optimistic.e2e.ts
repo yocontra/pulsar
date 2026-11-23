@@ -31,7 +31,7 @@ interface Rule {
 
 async function faults(
 	request: APIRequestContext,
-	body: { rules?: Rule[]; echoMs?: number } = {},
+	body: { rules?: Rule[]; echoMs?: number; echoHold?: string } = {},
 ) {
 	const res = await request.post("/api/v1/__mock/faults", {
 		headers: { "X-Pulsar": "1" },
@@ -99,24 +99,32 @@ test.describe("optimistic sends", () => {
 	}) => {
 		const id = await agentId(request, "name=codex@apparish");
 		await openSession(page, id);
+		// The send waits until released, and its echo until released after
+		// it: each state is checked while it holds, with no timing budget.
 		await faults(request, {
-			rules: [{ method: "POST", path: "/send", beforeMs: 2500 }],
-			echoMs: 300,
+			rules: [{ method: "POST", path: "/send", hold: "send" }],
+			echoHold: "echo",
 		});
 		const text = `slow send ${Date.now()}`;
-		const t0 = Date.now();
 		await send(page, text);
-		await expect(bubbles(page, text)).toHaveCount(1, { timeout: 1000 });
-		expect(Date.now() - t0).toBeLessThan(1000);
+		// "At once": the bubble shows while the request surely is pending.
+		await expect(bubbles(page, text)).toHaveCount(1);
 		await expect(page.locator('[data-send-state="sending"]')).toBeVisible();
+		await expect.poll(() => held(request, "send")).toBe(1);
 		// The box is free for the next message at once.
 		await expect(page.locator(".composer-input")).toHaveValue("");
-		await expect(page.locator('[data-send-state="sending"]')).toHaveCount(0, {
-			timeout: 8000,
-		});
+		// The response: Sending… ends; the echo is not in yet.
+		await release(request, "send");
+		await expect(page.locator('[data-send-state="sending"]')).toHaveCount(0);
+		await expect.poll(() => held(request, "echo")).toBe(1);
+		await expect(echoed(page, text)).toHaveCount(0);
+		await expect(bubbles(page, text)).toHaveCount(1);
 		// The echo carries the message id: it takes the bubble's place.
-		await expect(echoed(page, text)).toHaveCount(1, { timeout: 5000 });
-		await page.waitForTimeout(500);
+		await release(request, "echo");
+		await expect(echoed(page, text)).toHaveCount(1);
+		await expect(
+			page.locator(".ds-turn[data-msg-id^='local:']", { hasText: text }),
+		).toHaveCount(0);
 		await expect(bubbles(page, text)).toHaveCount(1);
 		// One state line, under that bubble: the receipts' state now.
 		const note = bubbles(page, text).locator(".ds-delivery");

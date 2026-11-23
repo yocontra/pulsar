@@ -1183,7 +1183,7 @@ function doSendOnce(input: SendInput): DryRun | SendDone {
 	// app's (a peer line). After `echoMs` (faults), so the echo can come late.
 	if (only && wakeOf(only, priority) !== "queued") {
 		const proven = input.proven === true;
-		setTimeout(() => {
+		const echo = () => {
 			const e = proven
 				? appendOperatorTurn(only, message.body, id)
 				: appendLine(only, message.body, "peer", {
@@ -1193,7 +1193,16 @@ function doSendOnce(input: SendInput): DryRun | SendDone {
 			for (const st of streams.values())
 				if (st.push && st.sub.session === only.id)
 					write(st, "transcript", { agent: only.id, events: [e] });
-		}, faults.echoMs);
+		};
+		if (faults.echoHold) {
+			// Held until the test releases it: lands after the response, always.
+			const h = holdFor(faults.echoHold);
+			h.waiting++;
+			void h.gate.then(() => {
+				h.waiting--;
+				echo();
+			});
+		} else setTimeout(echo, faults.echoMs);
 	}
 	const receipts = [...s.receipts.values()];
 	return {
@@ -2441,6 +2450,8 @@ let identityOutage = { left: 0, eventsOnly: false };
  * with no timing budget.
  * `echoMs` delays the echo of a send to one live agent into its
  * transcript (as its harness records the push; at once by default).
+ * `echoHold` (a name) keeps that echo back until the test releases the
+ * name, like `hold`, so the echo surely lands after the send's response.
  * `{}` clears all.
  */
 interface FaultRule {
@@ -2470,7 +2481,7 @@ function holdFor(name: string) {
 	}
 	return h;
 }
-let faults: { rules: FaultRule[]; echoMs: number } = {
+let faults: { rules: FaultRule[]; echoMs: number; echoHold?: string } = {
 	rules: [],
 	echoMs: 0,
 };
@@ -2536,9 +2547,13 @@ async function route(
 	}
 	if (POST && path === "/__mock/faults") {
 		const b = (await jsonBody(req)) as Partial<typeof faults>;
-		faults = { rules: b.rules ?? [], echoMs: b.echoMs ?? 0 };
-		// Clearing the rules lets every held request go.
-		if (!faults.rules.length) {
+		faults = {
+			rules: b.rules ?? [],
+			echoMs: b.echoMs ?? 0,
+			...(b.echoHold ? { echoHold: b.echoHold } : {}),
+		};
+		// Clearing the rules lets every held request and echo go.
+		if (!faults.rules.length && !faults.echoHold) {
 			for (const h of holds.values()) h.release();
 			holds.clear();
 		}
