@@ -5,9 +5,9 @@ import { runInNewContext } from "node:vm";
 
 /**
  * web/public/sw.js push and click handlers, run in a fake service worker
- * scope: finish/fail notices say only that an agent finished or failed,
- * one per agent (tag), quiet unless the setting asks for sound, and a tap
- * opens that agent.
+ * scope: the daemon's text when the payload has it (generic copy from older
+ * daemons), one per agent (tag), quiet unless the setting asks for sound,
+ * and a tap opens the screen it names.
  */
 
 const SOURCE = readFileSync(
@@ -17,7 +17,13 @@ const SOURCE = readFileSync(
 
 interface Shown {
 	title: string;
-	opts: { body: string; tag: string; silent?: boolean; data: unknown };
+	opts: {
+		body: string;
+		tag: string;
+		silent?: boolean;
+		renotify?: boolean;
+		data: unknown;
+	};
 }
 
 function worker(
@@ -131,6 +137,58 @@ describe("sw.js finish and fail notifications", () => {
 	});
 });
 
+describe("sw.js shows the daemon's text", () => {
+	test("title, body, tag and link from the payload; a tap opens that screen without a lookup", async () => {
+		const w = worker();
+		await w.push({
+			kind: "approval",
+			id: "req-1",
+			badge: 1,
+			title: "auth-fix needs approval",
+			body: "Run `bun test auth`? · webshop",
+			tag: "agent:R1",
+			url: "/#/approval/claude%3As1",
+		});
+		await w.push({
+			kind: "finished",
+			ref: "R1",
+			title: "auth-fix finished",
+			body: "Fixed the token refresh race. · webshop · 4 min",
+			tag: "agent:R1",
+			url: "/#/a/claude%3As1",
+		});
+		expect(w.shown.map((n) => [n.title, n.opts.body, n.opts.tag])).toEqual([
+			["auth-fix needs approval", "Run `bun test auth`? · webshop", "agent:R1"],
+			[
+				"auth-fix finished",
+				"Fixed the token refresh race. · webshop · 4 min",
+				"agent:R1",
+			],
+		]);
+		expect(w.shown[1]!.opts).toMatchObject({ renotify: true, silent: true });
+		await w.fire("notificationclick", {
+			notification: { close: () => {}, data: w.shown[0]!.opts.data },
+		});
+		expect(w.fetched).toEqual([]);
+		expect(w.navigated).toEqual(["/#/approval/claude%3As1"]);
+	});
+
+	test("a link to another site is ignored; bad text falls back to the generic copy", async () => {
+		const w = worker();
+		await w.push({
+			kind: "finished",
+			ref: "R2",
+			title: 5,
+			body: "",
+			url: "https://evil.example/",
+		});
+		expect(w.shown[0]!.title).toBe("An agent finished");
+		expect(w.shown[0]!.opts.body).toBe("Open Pulsar to see what it did.");
+		expect(w.shown[0]!.opts.tag).toBe("turn:R2");
+		expect(w.shown[0]!.opts.data).toEqual({ turn: "R2" });
+	});
+});
+
 describe("sw.js usage limit notifications", () => {
 	test("near and reached: plain copy with no names, one notice at a time, a tap opens Usage", async () => {
 		const w = worker();
@@ -139,13 +197,13 @@ describe("sw.js usage limit notifications", () => {
 		await w.push({ kind: "limit" });
 		expect(w.shown.map((n) => [n.title, n.opts.body, n.opts.tag])).toEqual([
 			[
-				"An agent is near its usage limit",
-				"A usage limit passed 95%. Open Pulsar to see which.",
+				"A usage limit passed 95%",
+				"Open Pulsar to see which plan and when it resets.",
 				"limit",
 			],
 			[
-				"An agent hit its usage limit",
-				"Open Pulsar to see when it resets.",
+				"A usage limit was reached",
+				"Agents on that plan pause until it resets. Open Pulsar to see when.",
 				"limit",
 			],
 		]);

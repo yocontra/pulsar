@@ -577,6 +577,21 @@ export interface PushSubscribeRequest {
 /** How an agent's turn ended: on its own, or with an error from the harness. */
 export type TurnKind = "finished" | "failed";
 
+/**
+ * What an ended turn did, read from the end of its log (src/service/turn-summary.ts):
+ * the text of its notification. Text is redacted and at most 200 characters.
+ */
+export interface TurnSummary {
+	/** The agent's last message, plain text. */
+	text?: string;
+	/** When the turn started (the prompt), ms. */
+	startedAt?: number;
+	/** Files the turn edited or wrote. */
+	files?: number;
+	/** The harness's error, plain text (failed turns). */
+	error?: string;
+}
+
 /** Finish and fail notifications on one device: Settings' "Agent activity" select. */
 export type TurnNotifyMode = "off" | "notify" | "sound" | "both";
 
@@ -589,6 +604,8 @@ export interface PushSettingsRequest {
 	endpoint: string;
 	turns?: TurnNotifyMode;
 	inApp?: boolean;
+	/** Notifications show names and text on the lock screen. */
+	previews?: boolean;
 }
 
 export interface PushSettings {
@@ -601,38 +618,57 @@ export interface PushSettings {
 	chosen: boolean;
 	turns: TurnNotifyMode;
 	inApp: boolean;
+	/** Show previews on the lock screen (default on). */
+	previews: boolean;
 }
 
 /**
- * What a push carries: no agent names, tools or arguments (they would pass
- * through Apple's or Google's push service). The app fetches details.
+ * The text a notification shows, built by the daemon (src/service/push-copy.ts).
+ * The payload is encrypted for the browser (RFC 8291), so the push service
+ * sees no text. With previews off it is the generic copy, with no names.
  */
-export type PushPayload =
-	| {
-			kind: "approval";
-			/** The approval's request id (opaque). */
-			id: string;
-			/** A question, plan or dialog rather than a permission prompt. */
-			interaction?: true;
-			/** Agents waiting on the user now (the app badge). */
-			badge: number;
-	  }
-	/** A passkey or enrollment change: the app's settings say what (no details here). */
-	| { kind: "security"; badge: number }
-	/**
-	 * An agent the operator recently acted on finished its turn or stopped
-	 * with an error. `ref`: an opaque token for that agent on this node
-	 * (an agent id can hold a session name); `GET /push/turns/:ref` gives
-	 * the agent's id to open.
-	 */
-	| {
-			kind: "finished" | "failed";
-			ref: string;
-			/** Play the notification's sound ("Notifications with sound"). */
-			sound?: true;
-	  }
-	/** A plan usage limit passed a threshold (`level`, a percent) or was reached. */
-	| { kind: "limit"; level: number; reached?: true };
+export interface PushText {
+	title: string;
+	body: string;
+	/** One notification per tag: a newer one replaces it. */
+	tag: string;
+	/** The app route a tap opens (`/#/…`). */
+	url: string;
+}
+
+/**
+ * What a push carries: the kind and opaque ids the app understood before
+ * (older service workers), and `PushText`. Older daemons send no text: the
+ * service worker then shows generic copy.
+ */
+export type PushPayload = Partial<PushText> &
+	(
+		| {
+				kind: "approval";
+				/** The approval's request id (opaque). */
+				id: string;
+				/** A question, plan or dialog rather than a permission prompt. */
+				interaction?: true;
+				/** Agents waiting on the user now (the app badge). */
+				badge: number;
+		  }
+		/** A passkey or enrollment change. */
+		| { kind: "security"; badge: number }
+		/**
+		 * An agent the operator recently acted on finished its turn or stopped
+		 * with an error. `ref`: an opaque token for that agent on this node
+		 * (an agent id can hold a session name); `GET /push/turns/:ref` gives
+		 * the agent's id to open.
+		 */
+		| {
+				kind: "finished" | "failed";
+				ref: string;
+				/** Play the notification's sound ("Notifications with sound"). */
+				sound?: true;
+		  }
+		/** A plan usage limit passed a threshold (`level`, a percent) or was reached. */
+		| { kind: "limit"; level: number; reached?: true }
+	);
 
 /** `GET /attention` items: who waits on the user, approvals first, newest first. */
 export interface AttentionItem {
@@ -1370,7 +1406,14 @@ export interface ServerEvents {
 	 * An agent the operator recently started, messaged or opened finished
 	 * its turn or stopped with an error (the in-app toast and sound).
 	 */
-	notify: { kind: TurnKind; agentId: string; at: number };
+	notify: {
+		kind: TurnKind;
+		agentId: string;
+		at: number;
+		/** The notification's title and body (absent from older daemons). */
+		title?: string;
+		body?: string;
+	};
 	/** A plan usage limit passed a warning threshold or was reached. */
 	limit: LimitWarning;
 	gap: {

@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { chmod, readFile, writeFile } from "node:fs/promises";
+import { driverFor } from "../harnesses/index.ts";
 import type {
 	PushPayload,
 	PushSettings,
@@ -20,26 +21,36 @@ import type { Store } from "../store.ts";
 import { authorize } from "./authorize.ts";
 import type { Principal } from "./caller.ts";
 import type { EventBus } from "./events.ts";
+import {
+	approvalNotice,
+	generic,
+	limitNotice,
+	securityNotice,
+	turnNotice,
+	whoOf,
+} from "./push-copy.ts";
 import type { Registry } from "./registry.ts";
 
 /**
- * Web Push for approvals, security notices, and finished or failed turns. Each node has its own VAPID key pair (a 0600 file
- * in the state folder) and sends for its own approvals to the subscriptions
- * it knows: those made by app tabs it served. Syncing subscriptions across
- * the pool is a later step.
+ * Web Push for approvals, security notices, finished or failed turns and
+ * usage limits. Each node has its own VAPID key pair (a 0600 file in the
+ * state folder) and sends for its own approvals to the subscriptions it
+ * knows: those made by app tabs it served. Syncing subscriptions across the
+ * pool is a later step.
  *
- * Payloads carry no agent names, tools or arguments, since they pass
- * through Apple's or Google's push service: only the approval's opaque id
- * and the badge count. The app fetches the details.
+ * Each payload carries the notification's text (src/service/push-copy.ts:
+ * redacted, short), encrypted for the browser (RFC 8291), so the push
+ * service sees no names or text. A subscription with "Show previews on the
+ * lock screen" off gets the generic copy instead. The `Topic` header is
+ * plaintext: an agent's opaque token, or the kind.
  *
  * Finished and failed turns (`notify`, src/service/turns.ts) go only to
  * subscriptions whose "Agent activity" setting includes notifications
- * (`turns` notify or both), with the agent's opaque id. Each kind has its
- * own `Topic` (the push service replaces an undelivered message of the same
- * topic), so a finish never replaces a pending approval.
+ * (`turns` notify or both). A prompt and the turn's end share the agent's
+ * tag and topic: a newer one replaces the older one, and never another
+ * agent's.
  *
- * Usage limit warnings (`limit`) go to every subscription, with only the
- * threshold passed.
+ * Usage limit warnings (`limit`) go to every subscription.
  */
 
 export interface PushOptions {
@@ -64,20 +75,26 @@ const MODES = new Set<TurnNotifyMode>(["off", "notify", "sound", "both"]);
 /** Agent tokens remembered for `GET /push/turns/:ref`. */
 const MAX_REFS = 1000;
 
-/** The `Topic` header per payload kind: plaintext to the push service, so never an id. */
-const TOPICS: Record<PushPayload["kind"], string> = {
-	approval: "approval",
-	security: "security",
-	finished: "finished",
-	failed: "failed",
-	limit: "limit",
-};
+/**
+ * The `Topic` header: plaintext to the push service, so never a name or an
+ * id. A prompt or turn uses the agent's opaque token (22 base64url
+ * characters; at most 32 allowed), so a newer push for that agent replaces
+ * an undelivered one and another agent's never does.
+ */
+function topicOf(p: PushPayload): string {
+	if (p.kind === "finished" || p.kind === "failed") return p.ref;
+	if (p.kind === "approval" && p.tag?.startsWith("agent:"))
+		return p.tag.slice("agent:".length);
+	return p.kind;
+}
 
 type Row = Record<string, string | number | null>;
 
 /** One subscription's payload for a push, or null to skip it. */
 type PerSubscription = (sub: {
 	turns: TurnNotifyMode | null;
+	/** "Show previews on the lock screen". */
+	previews: boolean;
 }) => PushPayload | null;
 
 export class Push {
@@ -91,56 +108,95 @@ export class Push {
 		this.now = opts.now ?? Date.now;
 	}
 
-	/** Pushes when a prompt starts waiting. */
+	/** Pushes when a prompt starts waiting, a turn ends, a limit or a security change. */
 	start() {
 		if (this.off) return;
 		const offApproval = this.o.events.on("approval", ({ approval }) => {
-			if (approval.state === "pending")
-				this.send({
-					kind: "approval",
-					id: approval.requestId,
-					// Only whether it asks for an answer (no tool, no text).
-					...((approval.kind ?? "permission") !== "permission"
-						? { interaction: true }
-						: {}),
-					// Pool-wide: remote agents waiting on the user count too.
-					badge:
-						this.o.registry.needingYou().length +
-						this.o.registry
-							.remoteAgents()
-							.filter((a) => this.o.registry.needsYou(a.id) !== null).length,
-				});
+			if (approval.state !== "pending") return;
+			const ask = (approval.kind ?? "permission") !== "permission";
+			const text = approvalNotice(
+				approval,
+				whoOf(this.o.registry, approval.agentId),
+				this.refFor(approval.agentId),
+			);
+			const payload: PushPayload = {
+				kind: "approval",
+				id: approval.requestId,
+				// Older service workers pick their copy from this.
+				...(ask ? { interaction: true } : {}),
+				// Pool-wide: remote agents waiting on the user count too.
+				badge:
+					this.o.registry.needingYou().length +
+					this.o.registry
+						.remoteAgents()
+						.filter((a) => this.o.registry.needsYou(a.id) !== null).length,
+				...text,
+			};
+			this.send(payload, (row) =>
+				row.previews
+					? payload
+					: { ...payload, ...generic(ask ? "question" : "approval", text) },
+			);
 		});
 		// Passkey and enrollment changes reach the phone too (at most one push a minute).
-		const offSecurity = this.o.events.on("security", () => {
+		const offSecurity = this.o.events.on("security", (n) => {
 			const now = this.now();
 			if (now - this.lastSecurityPush < SECURITY_PUSH_MS) return;
 			this.lastSecurityPush = now;
-			this.send({
+			const text = securityNotice(n);
+			const payload: PushPayload = {
 				kind: "security",
 				badge: this.o.registry.needingYou().length,
-			});
+				...text,
+			};
+			this.send(payload, (row) =>
+				row.previews ? payload : { ...payload, ...generic("security", text) },
+			);
 		});
 		// A finished or failed turn the operator cares about (Interest).
-		const offNotify = this.o.events.on("notify", ({ kind, agentId }) => {
-			const ref = this.refFor(agentId);
-			this.send({ kind, ref }, (row) => {
+		const offNotify = this.o.events.on("notify", (n) => {
+			const ref = this.refFor(n.agentId);
+			const built = turnNotice(
+				n.kind,
+				n.agentId,
+				whoOf(this.o.registry, n.agentId),
+				ref,
+				n.summary,
+				n.at,
+			);
+			const text = {
+				...built,
+				...(n.title && n.body ? { title: n.title, body: n.body } : {}),
+			};
+			const payload: PushPayload = { kind: n.kind, ref, ...text };
+			this.send(payload, (row) => {
 				// Not chosen yet (a new subscription): nothing until the app says.
 				const mode = row.turns;
-				if (mode === "notify") return { kind, ref };
-				if (mode === "both") return { kind, ref, sound: true };
-				return null;
+				if (mode !== "notify" && mode !== "both") return null;
+				const p: PushPayload = row.previews
+					? payload
+					: { ...payload, ...generic(n.kind, text) };
+				return mode === "both" ? { ...p, sound: true } : p;
 			});
 		});
-		// A plan usage limit passed a threshold or was reached (src/usage/limits.ts):
-		// every subscription, with no names (the app's Usage page says which).
-		const offLimit = this.o.events.on("limit", (w) =>
-			this.send({
+		// A plan usage limit passed a threshold or was reached (src/usage/limits.ts).
+		const offLimit = this.o.events.on("limit", (w) => {
+			const text = limitNotice(
+				w,
+				driverFor(w.harness)?.label ?? w.harness,
+				null,
+				this.now(),
+			);
+			const payload: PushPayload = {
 				kind: "limit",
 				level: w.level,
 				...(w.reached ? { reached: true as const } : {}),
-			}),
-		);
+				...text,
+			};
+			this.send(payload, (row) =>
+				row.previews ? payload : { ...payload, ...generic("limit", text) },
+			);
+		});
 		this.off = () => {
 			offApproval();
 			offSecurity();
@@ -317,9 +373,13 @@ export class Push {
 			db.prepare(
 				"UPDATE push_subscriptions SET in_app = ? WHERE endpoint = ?",
 			).run(req.inApp ? 1 : 0, req.endpoint);
+		if (typeof req.previews === "boolean")
+			db.prepare(
+				"UPDATE push_subscriptions SET previews = ? WHERE endpoint = ?",
+			).run(req.previews ? 1 : 0, req.endpoint);
 		const r = db
 			.prepare(
-				"SELECT turns, in_app FROM push_subscriptions WHERE endpoint = ?",
+				"SELECT turns, in_app, previews FROM push_subscriptions WHERE endpoint = ?",
 			)
 			.get(req.endpoint) as Row | undefined;
 		if (!r)
@@ -328,6 +388,7 @@ export class Push {
 				chosen: false,
 				turns: turns ?? "notify",
 				inApp: req.inApp ?? true,
+				previews: req.previews ?? true,
 			};
 		const mode = r.turns as TurnNotifyMode | null;
 		return {
@@ -335,6 +396,7 @@ export class Push {
 			chosen: mode !== null && MODES.has(mode),
 			turns: mode !== null && MODES.has(mode) ? mode : "notify",
 			inApp: Number(r.in_app) !== 0,
+			previews: Number(r.previews) !== 0,
 		};
 	}
 
@@ -354,12 +416,20 @@ export class Push {
 		const all = this.o.store.db
 			.prepare("SELECT * FROM push_subscriptions")
 			.all() as Row[];
-		const subs: Array<{ r: Row; body: Buffer }> = [];
+		const subs: Array<{ r: Row; topic: string; body: Buffer }> = [];
 		for (const r of all) {
 			const p = per
-				? per({ turns: (r.turns as TurnNotifyMode | null) ?? null })
+				? per({
+						turns: (r.turns as TurnNotifyMode | null) ?? null,
+						previews: r.previews == null || Number(r.previews) !== 0,
+					})
 				: payload;
-			if (p) subs.push({ r, body: Buffer.from(JSON.stringify(p)) });
+			if (p)
+				subs.push({
+					r,
+					topic: topicOf(p),
+					body: Buffer.from(JSON.stringify(p)),
+				});
 		}
 		if (subs.length === 0) return 0;
 		const keys = await this.vapid();
@@ -375,7 +445,7 @@ export class Push {
 				}));
 		let sent = 0;
 		await Promise.all(
-			subs.map(async ({ r, body }) => {
+			subs.map(async ({ r, topic, body }) => {
 				const endpoint = String(r.endpoint);
 				try {
 					const res = await send(endpoint, {
@@ -392,8 +462,9 @@ export class Push {
 							TTL: "3600",
 							// A finished turn can wait for the device to wake; the rest can't.
 							Urgency: payload.kind === "finished" ? "normal" : "high",
-							// A newer push of the same kind replaces an undelivered one.
-							Topic: TOPICS[payload.kind],
+							// A newer push for the same agent (or of the same kind)
+							// replaces an undelivered one.
+							Topic: topic,
 						},
 						body: encryptPayload(
 							{

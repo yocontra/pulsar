@@ -5,6 +5,7 @@ import type {
 	SecurityNotice,
 	SubagentCounts,
 	TurnKind,
+	TurnSummary,
 } from "../http/wire.ts";
 import type { AgentStatus, Message, PublicAgent } from "../types.ts";
 import type { NeedsYou } from "./registry.ts";
@@ -42,13 +43,26 @@ export interface ServiceEvents {
 	 * (src/service/turns.ts). A local id, or a pool address for an agent on
 	 * another machine.
 	 */
-	"agent:turn": { agentId: string; kind: TurnKind; at: number };
+	"agent:turn": {
+		agentId: string;
+		kind: TurnKind;
+		at: number;
+		summary?: TurnSummary;
+	};
 	/**
 	 * A turn the operator should hear about: `agent:turn` for an agent they
 	 * recently started, messaged or opened (not a `tail` frame). The app's
 	 * stream and Web Push follow it.
 	 */
-	notify: { kind: TurnKind; agentId: string; at: number };
+	notify: {
+		kind: TurnKind;
+		agentId: string;
+		at: number;
+		summary?: TurnSummary;
+		/** The notification's text (src/service/push-copy.ts), shared with the in-app toast. */
+		title?: string;
+		body?: string;
+	};
 	/** A plan usage limit passed a warning threshold or was reached (src/usage/limits.ts). */
 	limit: LimitWarning;
 	/** A launch from the app moved on (src/service/launch.ts; not a `tail` frame). */

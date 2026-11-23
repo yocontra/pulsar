@@ -12,6 +12,7 @@ import {
 	inApp,
 	MODES,
 	type Mode,
+	previews,
 	refresh,
 	shownMode,
 	subscribed,
@@ -21,9 +22,11 @@ import {
 import "./notify.css";
 
 export const HELP =
-	"For agents you started, messaged or opened in the last 6 hours. Notifications say only that an agent finished or stopped; details stay on your machines.";
+	"For agents you started, messaged or opened in the last 6 hours. A notification names the agent and says what it did.";
 export const DENIED =
 	"Allow notifications in your browser or system settings to get these. Sound only still works.";
+export const PREVIEWS_HELP =
+	"Agent names, commands and messages in notifications. Off: notifications say only what kind of thing happened.";
 export const IN_APP_HELP =
 	"A short note in the corner when an agent finishes while Pulsar is open on another screen.";
 
@@ -73,11 +76,20 @@ export function useAgentActivity() {
 			setError("Could not save. Try again.");
 		}
 	};
-	return { error, busy, choose, toggleInApp };
+	const togglePreviews = async (v: boolean) => {
+		setError(null);
+		try {
+			await update({ previews: v });
+		} catch {
+			setError("Could not save. Try again.");
+		}
+	};
+	return { error, busy, choose, toggleInApp, togglePreviews };
 }
 
 function DesktopImpl() {
-	const { error, busy, choose, toggleInApp } = useAgentActivity();
+	const { error, busy, choose, toggleInApp, togglePreviews } =
+		useAgentActivity();
 	return (
 		<ul className="d-card d-set-card" data-section="agent-activity">
 			<li className="d-set-row">
@@ -119,6 +131,25 @@ function DesktopImpl() {
 					onChange={(e) => void toggleInApp(e.currentTarget.checked)}
 				/>
 			</li>
+			{subscribed.value && (
+				<li className="d-set-row">
+					<span className="d-set-text">
+						<span className="d-set-label">
+							Show previews on the lock screen
+						</span>
+						<span className="d-set-help">{PREVIEWS_HELP}</span>
+					</span>
+					<input
+						type="checkbox"
+						role="switch"
+						className="d-switch"
+						aria-label="Show previews on the lock screen"
+						aria-checked={previews.value}
+						checked={previews.value}
+						onChange={(e) => void togglePreviews(e.currentTarget.checked)}
+					/>
+				</li>
+			)}
 		</ul>
 	);
 }

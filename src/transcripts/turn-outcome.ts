@@ -88,3 +88,40 @@ export function piTurnFailed(tail: string): boolean {
 	}
 	return false;
 }
+
+/** The text of a Claude message's content: a string, or its text blocks. */
+function contentText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((c) => (obj(c)?.type === "text" ? String(obj(c)?.text ?? "") : ""))
+		.join(" ");
+}
+
+/**
+ * The error text that ended a failed turn, for its notification: the
+ * newest error record of any of the formats above (Claude's synthetic
+ * `isApiErrorMessage` reply, Codex's `task_complete.error` or `error`
+ * event, pi/omp's `errorMessage`). Call only for a turn that failed.
+ */
+export function turnError(tail: string): string | null {
+	for (const r of newestFirst(tail)) {
+		if (r.isSidechain === true) continue;
+		if (r.type === "assistant" && r.isApiErrorMessage === true)
+			return contentText(obj(r.message)?.content) || null;
+		if (r.type === "event_msg") {
+			const p = obj(r.payload);
+			if (p?.type === "task_complete" && p.error != null)
+				return typeof p.error === "string"
+					? p.error
+					: String(obj(p.error)?.message ?? "") || null;
+			if (p?.type === "error") return String(p.message ?? "") || null;
+		}
+		if (r.type === "message") {
+			const m = obj(r.message);
+			if (m?.role === "assistant" && m.stopReason === "error")
+				return typeof m.errorMessage === "string" ? m.errorMessage : null;
+		}
+	}
+	return null;
+}

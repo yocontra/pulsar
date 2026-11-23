@@ -3,9 +3,11 @@ import { agentId, expect, ready, test } from "./fixtures.ts";
 
 /**
  * Finish and fail notifications in the app: the in-app toast (CircleCheck or
- * CircleAlert, the agent's name, "Open agent", closed once that agent opens)
- * and Settings → "Agent activity" (the select and the in-app switch, kept
- * with this browser's push subscription by `POST /push/settings`). Shared by
+ * CircleAlert, the push's title and body: "<agent> finished" and the first
+ * sentence of its last message, "Open agent", closed once that agent opens)
+ * and Settings → "Agent activity" (the select, the in-app switch and "Show
+ * previews on the lock screen", kept with this browser's push subscription
+ * by `POST /push/settings`). Shared by
  * notify.desktop.e2e.ts and notify.phone.e2e.ts.
  */
 
@@ -69,6 +71,10 @@ export function notifySuite(platform: "desktop" | "phone") {
 			action: "turn",
 			id,
 			kind: "finished",
+			summary: {
+				text: "Fixed the **login** redirect. Then cleaned up.",
+				files: 2,
+			},
 		});
 		// The push carries only a token; tapping it asks which agent to open.
 		const opened = await request.get(`/api/v1/push/turns/${ref}`, {
@@ -77,8 +83,11 @@ export function notifySuite(platform: "desktop" | "phone") {
 		expect(await opened.json()).toEqual({ agentId: id });
 		const card = page.locator("[data-sonner-toast]");
 		await expect(card).toHaveCount(1);
-		await expect(card).toContainText("Agent finished");
-		await expect(card).toContainText("apparish-auth");
+		await expect(card).toContainText("apparish-auth finished");
+		// The same body as the push: first sentence, no markdown, files changed.
+		await expect(card).toContainText("Fixed the login redirect.");
+		await expect(card).toContainText("2 files changed");
+		await expect(card).not.toContainText("cleaned up");
 		await expect(card.locator("svg.lucide-circle-check")).toHaveCount(1);
 		await tap(card.getByRole("button", { name: "Open agent" }));
 		await expect(page).toHaveURL(new RegExp(`#/a/${encodeURIComponent(id)}$`));
@@ -91,9 +100,17 @@ export function notifySuite(platform: "desktop" | "phone") {
 	}) => {
 		await ready(page);
 		const id = await agentId(request, "name=apparish-auth");
-		await mock(request, { action: "turn", id, kind: "failed" });
+		await mock(request, {
+			action: "turn",
+			id,
+			kind: "failed",
+			summary: { error: "API Error: 529 overloaded_error" },
+		});
 		const card = page.locator("[data-sonner-toast]");
-		await expect(card).toContainText("Agent failed");
+		await expect(card).toContainText("apparish-auth stopped with an error");
+		await expect(card).toContainText(
+			"The model service is overloaded. Try again soon.",
+		);
 		await expect(card.locator("svg.lucide-circle-alert")).toHaveCount(1);
 		// Opening it closes the toast.
 		await page.evaluate((id) => {
@@ -163,6 +180,23 @@ export function notifySuite(platform: "desktop" | "phone") {
 			await expect(
 				section.getByRole("checkbox", { name: "In-App Notifications" }),
 			).not.toBeChecked();
+		// Previews on the lock screen: on by default, kept on the daemon.
+		const quiet = page.waitForRequest(
+			(r) =>
+				r.url().endsWith("/api/v1/push/settings") &&
+				r.postDataJSON()?.previews === false,
+		);
+		const previews = phone
+			? section.locator('[data-setting="notification-previews"]')
+			: section.getByRole("switch", {
+					name: "Show previews on the lock screen",
+				});
+		if (!phone) await expect(previews).toBeChecked();
+		await tap(previews);
+		expect((await quiet).postDataJSON()).toMatchObject({
+			endpoint,
+			previews: false,
+		});
 		// The daemon's copy wins after this device forgets its own.
 		await page.evaluate(() => localStorage.clear());
 		await ready(page);
@@ -177,6 +211,16 @@ export function notifySuite(platform: "desktop" | "phone") {
 					name: "When an agent finishes or fails",
 				}),
 			).toHaveValue("both");
+		if (phone)
+			await expect(
+				section.getByRole("checkbox", { name: "Show Previews on Lock Screen" }),
+			).not.toBeChecked();
+		else
+			await expect(
+				section.getByRole("switch", {
+					name: "Show previews on the lock screen",
+				}),
+			).not.toBeChecked();
 		// With in-app off, a finish shows no toast.
 		const id = await agentId(request, "name=apparish-auth");
 		await mock(request, { action: "turn", id, kind: "finished" });

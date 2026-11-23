@@ -2,10 +2,21 @@ import { open } from "node:fs/promises";
 import { driverFor } from "../harnesses/index.ts";
 import type { TurnKind } from "../http/wire.ts";
 import type { ResolvedTranscript } from "../transcripts/tailer.ts";
+import { turnError } from "../transcripts/turn-outcome.ts";
+import { newParseState } from "../transcripts/types.ts";
 import type { Agent } from "../types.ts";
 import type { EventBus } from "./events.ts";
 import type { Interest } from "./interest.ts";
+import {
+	clean,
+	clip,
+	SUMMARY_MAX,
+	type TurnSummary,
+	turnNotice,
+	whoOf,
+} from "./push-copy.ts";
 import type { Registry } from "./registry.ts";
+import { summarizeTurn } from "./turn-summary.ts";
 
 /**
  * Finish and fail notifications, from `agent:status`.
@@ -32,6 +43,8 @@ export interface TurnRecord {
 	kind: TurnKind;
 	/** When the agent went idle (home node's clock, ms). */
 	at: number;
+	/** What the turn did (its notification's text); absent when the log can't say. */
+	summary?: TurnSummary;
 }
 
 /** Idle this long after the settle time before a turn counts as ended. */
@@ -89,10 +102,22 @@ export class Turns {
 				const first = this.seen.values().next().value;
 				if (first !== undefined) this.seen.delete(first);
 			}
+			// The same title and body as the push (src/service/push-copy.ts).
+			const { title, body } = turnNotice(
+				t.kind,
+				t.agentId,
+				whoOf(this.o.registry, t.agentId),
+				"",
+				t.summary,
+				t.at,
+			);
 			this.o.events.emit("notify", {
 				kind: t.kind,
 				agentId: t.agentId,
 				at: t.at,
+				...(t.summary ? { summary: t.summary } : {}),
+				title,
+				body,
 			});
 		});
 		this.off = () => {
@@ -123,24 +148,50 @@ export class Turns {
 	private async settle(agentId: string, at: number) {
 		const agent = this.o.registry.get(agentId);
 		if (!agent || agent.status === "busy" || agent.status === "gone") return;
-		const kind: TurnKind = (await this.failed(agent)) ? "failed" : "finished";
+		const { failed, summary } = await this.outcome(agent);
+		const kind: TurnKind = failed ? "failed" : "finished";
 		// Stopped, busy again or gone while the log was read: not this turn.
 		const now = this.o.registry.get(agentId)?.status;
 		if (!this.off || !now || now === "busy" || now === "gone") return;
-		this.last.set(agentId, { kind, at });
-		this.o.events.emit("agent:turn", { agentId, kind, at });
+		const record: TurnRecord = { kind, at, ...(summary ? { summary } : {}) };
+		this.last.set(agentId, record);
+		this.o.events.emit("agent:turn", { agentId, ...record });
 	}
 
-	/** True when the agent's log says the harness ended the turn with an error. */
-	private async failed(agent: Agent): Promise<boolean> {
+	/**
+	 * How the turn ended, from the end of the agent's log: whether the
+	 * harness ended it with an error, and what it did (src/service/turn-summary.ts).
+	 */
+	private async outcome(
+		agent: Agent,
+	): Promise<{ failed: boolean; summary?: TurnSummary }> {
+		let tail: string;
+		let t: ResolvedTranscript | null;
 		try {
-			const t = await this.o.resolve(agent);
-			const read =
-				t?.turnFailed ?? driverFor(agent.harness)?.transcript?.turnFailed;
-			if (!t || !read || t.source.kind !== "file") return false;
-			return read(await tailOf(t.source.path));
+			t = await this.o.resolve(agent);
+			if (t?.source.kind !== "file") return { failed: false };
+			tail = await tailOf(t.source.path);
 		} catch {
-			return false;
+			return { failed: false };
+		}
+		let failed = false;
+		try {
+			const read =
+				t.turnFailed ?? driverFor(agent.harness)?.transcript?.turnFailed;
+			failed = read ? read(tail) : false;
+		} catch {}
+		try {
+			const events = t.parse(
+				tail,
+				newParseState({ cwd: t.cwd ?? agent.cwd ?? null }),
+			);
+			const summary = summarizeTurn(events, failed);
+			// The log's own error record says it best (the parsers skip it).
+			const error = failed ? turnError(tail) : null;
+			if (error) summary.error = clip(clean(error), SUMMARY_MAX);
+			return Object.keys(summary).length ? { failed, summary } : { failed };
+		} catch {
+			return { failed };
 		}
 	}
 }

@@ -51,6 +51,11 @@ const first = load();
 /** The chosen mode (with notifications even while this browser has no subscription). */
 export const mode = signal<Mode>(first.mode);
 export const inApp = signal<boolean>(first.inApp);
+/**
+ * "Show previews on the lock screen": names and text in this browser's
+ * notifications. Kept by the daemon with the subscription only.
+ */
+export const previews = signal<boolean>(true);
 /** This browser holds a push subscription on the node that served the app. */
 export const subscribed = signal(false);
 
@@ -92,6 +97,7 @@ export async function refresh(): Promise<void> {
 	const r = await api.pushSettings({ endpoint: ep });
 	subscribed.value = r.subscribed;
 	if (!r.subscribed) return;
+	previews.value = r.previews !== false;
 	if (
 		!r.chosen ||
 		(hasSaved() && (r.turns !== mode.value || r.inApp !== inApp.value))
@@ -110,9 +116,14 @@ export async function refresh(): Promise<void> {
 }
 
 /** Saves a change here and, with a subscription, on the daemon. */
-export async function update(change: { mode?: Mode; inApp?: boolean }) {
+export async function update(change: {
+	mode?: Mode;
+	inApp?: boolean;
+	previews?: boolean;
+}) {
 	if (change.mode !== undefined) mode.value = change.mode;
 	if (change.inApp !== undefined) inApp.value = change.inApp;
+	if (change.previews !== undefined) previews.value = change.previews;
 	save();
 	const ep = await endpoint();
 	if (!ep) return;
@@ -120,6 +131,8 @@ export async function update(change: { mode?: Mode; inApp?: boolean }) {
 		endpoint: ep,
 		...(change.mode !== undefined ? { turns: change.mode } : {}),
 		...(change.inApp !== undefined ? { inApp: change.inApp } : {}),
+		...(change.previews !== undefined ? { previews: change.previews } : {}),
 	});
 	subscribed.value = r.subscribed;
+	if (r.subscribed) previews.value = r.previews !== false;
 }

@@ -307,8 +307,8 @@ CREATE TABLE IF NOT EXISTS usage_seen (
 	// 9: finish and fail notifications: what each push subscription wants
 	// (`turns`: off, notify, sound, both; NULL until the browser says, while
 	// subscriptions made before this step get notify; `in_app`), and the
-	// agents the operator recently started, messaged or opened. Additive,
-	// ensure-style.
+	// agents the operator recently started, messaged or opened; `previews`
+	// (names and text in notifications, default on). Additive, ensure-style.
 	{
 		ensure: (db) => {
 			if (!hasColumn(db, "push_subscriptions", "turns")) {
@@ -320,6 +320,11 @@ CREATE TABLE IF NOT EXISTS usage_seen (
 			if (!hasColumn(db, "push_subscriptions", "in_app"))
 				db.exec(
 					"ALTER TABLE push_subscriptions ADD COLUMN in_app INTEGER NOT NULL DEFAULT 1",
+				);
+			// "Show previews on the lock screen": names and text in notifications.
+			if (!hasColumn(db, "push_subscriptions", "previews"))
+				db.exec(
+					"ALTER TABLE push_subscriptions ADD COLUMN previews INTEGER NOT NULL DEFAULT 1",
 				);
 			db.exec(`
 CREATE TABLE IF NOT EXISTS agent_interest (

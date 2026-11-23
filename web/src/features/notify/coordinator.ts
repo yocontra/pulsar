@@ -6,8 +6,10 @@
  *   WebAudio (no file to load). Browsers keep audio locked until the first
  *   tap or key press, so the first gesture unlocks it.
  * - A toast, when "In-app notifications" is on, the window has focus, and
- *   that agent is not the one open: CircleCheck or CircleAlert, the agent's
- *   name, and "Open agent". It closes once that agent opens.
+ *   that agent is not the one open: CircleCheck or CircleAlert, the push's
+ *   title and body ("api-fix finished", its last message), and "Open
+ *   agent". It closes once that agent opens.
+ * - A prompt that is answered elsewhere closes its system notification.
  * - A badge count while the window is in the background: the app badge (the
  *   installed app) and "(n)" in the title, "9+" at most; focus clears it.
  *
@@ -16,7 +18,7 @@
 import { CircleAlertIcon, CircleCheckIcon } from "lucide-react";
 import { createElement } from "react";
 import { api } from "../../api/client.ts";
-import type { AgentRow, ServerEvents } from "../../api/types.ts";
+import type { AgentRow, Approval, ServerEvents } from "../../api/types.ts";
 import { keys } from "../../data/keys.ts";
 import { live, queryClient } from "../../data/runtime.ts";
 import { navigate, route } from "../../lib/router.ts";
@@ -103,6 +105,21 @@ function clearBadge() {
 	showBadge();
 }
 
+// ---------------------------------------------------------- notifications
+
+/**
+ * Closes the system notification of a prompt that was answered, denied or
+ * expired (the push for it can't be taken back: Safari shows every push).
+ */
+export async function closeAnswered(a: Approval) {
+	if (a.state === "pending" || !("serviceWorker" in navigator)) return;
+	try {
+		const reg = await navigator.serviceWorker.getRegistration();
+		for (const n of (await reg?.getNotifications()) ?? [])
+			if ((n.data as { id?: unknown } | null)?.id === a.requestId) n.close();
+	} catch {}
+}
+
 // ------------------------------------------------------------------ toasts
 
 /** Open toasts by agent: one per agent, closed when it opens. */
@@ -110,12 +127,15 @@ const open = new Map<string, ToastId>();
 
 async function showToast(n: Notice) {
 	const failed = n.kind === "failed";
-	const name = await nameOf(n.agentId);
+	// The daemon's text, the same as the push (older daemons: the name only).
+	const title =
+		n.title ??
+		`${await nameOf(n.agentId)} ${failed ? "stopped with an error" : "finished"}`;
 	if (isOpen(n.agentId)) return;
-	const id = await toast(failed ? "Agent failed" : "Agent finished", {
+	const id = await toast(title, {
 		id: `turn:${n.agentId}`,
 		tone: failed ? "error" : "success",
-		description: name,
+		...(n.body ? { description: n.body } : {}),
 		duration: failed ? 10_000 : 6000,
 		icon: createElement(failed ? CircleAlertIcon : CircleCheckIcon, {
 			size: 16,
@@ -146,6 +166,7 @@ export function start() {
 	if (started) return;
 	started = true;
 	live.on("notify", onNotify);
+	live.on("approval", (a) => void closeAnswered(a));
 	for (const ev of ["pointerdown", "keydown"] as const)
 		window.addEventListener(ev, unlock, { capture: true, passive: true });
 	window.addEventListener("focus", clearBadge);
