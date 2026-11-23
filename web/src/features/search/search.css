@@ -204,6 +204,7 @@
 }
 html.ios .msr-home .k-block-title {
 	margin-top: 20px;
+	margin-bottom: 8px;
 	font-size: 1.176rem;
 	line-height: 1.471rem;
 	font-weight: 700;
@@ -212,9 +213,23 @@ html.ios .msr-home .k-block-title {
 }
 html.md .msr-home .k-block-title {
 	margin-top: 16px;
+	margin-bottom: 8px;
 	font-size: 14px;
 	font-weight: 500;
 	color: var(--ds-text-2);
+}
+/* Konsta's text line clamps to two lines; the snippet flows inside it. */
+.k-list .msr-row .msr-snip {
+	display: inline;
+	white-space: normal;
+	margin: 0;
+}
+/* The row is a <button>: its text starts at the edge, not centred. */
+.k-list :is(.msr-row, .msr-all) > button {
+	text-align: start;
+}
+.k-list .msr-avatar {
+	margin: 0;
 }
 .msr-row time {
 	color: var(--ds-text-3);

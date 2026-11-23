@@ -24,6 +24,11 @@ div.p-bar-below {
 	width: 100%;
 	padding-block: 0;
 }
+/* Konsta's searchbar glass on the page: no drop shadow (the toolbar would
+   clip it to a box). */
+.p-home-search .k-glass {
+	box-shadow: none;
+}
 .p-home-search input {
 	color: var(--p-label);
 	border-radius: 999px;
@@ -177,4 +182,12 @@ html.md .p-search-plain svg {
 	width: 20px;
 	height: 20px;
 	opacity: 1;
+}
+
+/* No tree match: a short note, so "In messages" stays in view under it. */
+.p-home .p-empty.is-search {
+	padding: 24px 32px 8px;
+}
+.p-home .p-list:has(.p-empty.is-search) {
+	padding-bottom: 0;
 }
