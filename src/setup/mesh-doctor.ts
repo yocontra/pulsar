@@ -238,7 +238,7 @@ export async function meshChecks(
 	if (addrs === null) note("could not check listeners (no lsof)");
 	else if (addrs.length === 0) {
 		const app = deps.remoteOn ? await deps.app?.().catch(() => null) : null;
-		const waiting = app ? appWaitingLine(app, now) : null;
+		const waiting = app ? appWaitingLine(app, now, { short: true }) : null;
 		if (waiting) out.bad(`nothing listens on port ${deps.port}: ${waiting}`);
 		else if (deps.remoteOn) out.bad(`nothing listens on port ${deps.port}`);
 		else note(`nothing listens on port ${deps.port}`);
@@ -280,17 +280,24 @@ export async function meshChecks(
 /**
  * Why the daemon does not serve the app yet, and that it keeps trying; null
  * unless it is retrying. Tailscale not up yet (at login, after a restart, a
- * logged-out node) is said as such.
+ * logged-out node) is said as such. `short`: without the error and the
+ * count (doctor shows those once, in the daemon group).
  */
 export function appWaitingLine(
 	app: AppStatus,
 	now = Date.now(),
+	opts: { short?: boolean } = {},
 ): string | null {
 	if (app.state !== "retrying") return null;
 	const next = Math.max(0, Math.round((app.retryAt - now) / 1000));
+	const retrying = `the daemon keeps retrying, next try in ${next} s`;
+	if (opts.short)
+		return app.tailscale
+			? `the daemon is waiting for Tailscale (next try in ${next} s)`
+			: `the daemon could not serve the app yet (next try in ${next} s)`;
 	const tries = `${app.attempt} ${app.attempt === 1 ? "try" : "tries"} since ${new Date(app.since).toISOString()}`;
 	const why = app.tailscale
-		? `the app is not served because Tailscale was not ready (${app.error})`
-		: `the app is not served (${app.error})`;
-	return `${why}; the daemon keeps retrying, next try in ${next} s (${tries})`;
+		? `the app is not served because Tailscale was not ready: ${app.error}`
+		: `the app is not served: ${app.error}`;
+	return `${why}; ${retrying} (${tries})`;
 }

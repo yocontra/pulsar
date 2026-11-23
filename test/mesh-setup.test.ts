@@ -38,6 +38,7 @@ import {
 	systemdUnit,
 	unitArgs,
 } from "../src/setup/service.ts";
+import type { AppStatus } from "../src/types.ts";
 
 /** A fake machine: HOME, state and install folders in a temp dir; every command stubbed. */
 function fakeEnv(
@@ -642,6 +643,7 @@ describe("pulsar doctor: mesh checks", () => {
 		certDays?: number;
 		installed?: boolean;
 		otherCli?: boolean;
+		app?: AppStatus;
 	}) {
 		const { run } = fakeTailscale([opts.ts ?? status()]);
 		const { env, root } = fakeEnv("darwin", (cmd, args) => {
@@ -673,6 +675,7 @@ describe("pulsar doctor: mesh checks", () => {
 				remoteOn: opts.remoteOn ?? true,
 				port: 7337,
 				certDir,
+				...(opts.app ? { app: async () => opts.app ?? null } : {}),
 			},
 			{
 				ok: (m) => lines.push(`✓ ${m}`),
@@ -741,6 +744,32 @@ describe("pulsar doctor: mesh checks", () => {
 		expect(missing[0]).toContain("✗ Tailscale is not installed");
 		expect(missing).toContain(
 			"✗ background service not installed: run `pulsar mesh on`",
+		);
+	});
+
+	test("nothing listens while the daemon waits for Tailscale: says so, and that it retries", async () => {
+		const now = Date.now();
+		const lines = await doctor({
+			certDays: 90,
+			lsof: "p1\n",
+			app: {
+				state: "retrying",
+				error:
+					"Tailscale is not running or not logged in (backend state Stopped)",
+				tailscale: true,
+				attempt: 4,
+				since: now - 60_000,
+				retryAt: now + 15_000,
+			},
+		});
+		expect(lines).toContainEqual(
+			expect.stringMatching(
+				/^✗ nothing listens on port 7337: the daemon is waiting for Tailscale \(next try in 1[45] s\)$/,
+			),
+		);
+		// An older daemon (no app state): the plain line.
+		expect(await doctor({ certDays: 90, lsof: "p1\n" })).toContain(
+			"✗ nothing listens on port 7337",
 		);
 	});
 

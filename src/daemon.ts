@@ -237,6 +237,7 @@ export class Daemon {
 			const delay = this.retryMs(this.attempt);
 			const error = (e as Error).message;
 			const { TailscaleNotReady } = await import("./http/start.ts");
+			if (this.stopped) return;
 			const since = this.app.state === "retrying" ? this.app.since : Date.now();
 			this.attempt++;
 			this.app = {

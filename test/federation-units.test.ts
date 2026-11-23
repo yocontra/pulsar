@@ -75,6 +75,18 @@ describe("tailnet status", () => {
 		expect(parseStatus({ ...STATUS, BackendState: "Stopped" })).toBeNull();
 	});
 
+	test("this node's Tailscale addresses (the app listens on them)", () => {
+		const st = parseStatus({
+			...STATUS,
+			Self: {
+				...STATUS.Self,
+				TailscaleIPs: ["100.64.0.1", "fd7a:115c:a1e0::1", "192.168.1.2"],
+			},
+		})!;
+		expect(st.self.ips).toEqual(["100.64.0.1", "fd7a:115c:a1e0::1"]);
+		expect(parseStatus(STATUS)!.self.ips).toBeUndefined();
+	});
+
 	test("status node ids join whois node ids (the shapes the real CLI prints)", () => {
 		// Real `tailscale status --json` has a string `ID` and no `StableID`;
 		// `tailscale whois --json` has a numeric `ID` and `StableID` equal to it.

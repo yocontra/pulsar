@@ -1,5 +1,9 @@
 import { join } from "node:path";
-import { magicDnsSuffix, tailnetRpId } from "../federation/tailnet.ts";
+import {
+	magicDnsSuffix,
+	type Tailnet,
+	tailnetRpId,
+} from "../federation/tailnet.ts";
 import { daemonLog } from "../log.ts";
 import { stateDir } from "../paths.ts";
 import type { PulsarService } from "../service/index.ts";
@@ -148,15 +152,11 @@ export async function startRemote(
 	const { TailscaleTailnet } = await import("../federation/tailnet.ts");
 	// The pool polls `tailscale status`; the same poll tells when this node's
 	// addresses change (a new tailnet, a re-login), so the app listens again.
-	const tailnet = new TailscaleTailnet(transport.port);
-	const status = tailnet.status.bind(tailnet);
-	tailnet.status = async () => {
-		const st = await status();
-		const ips = st?.self.ips;
-		if (ips?.length && !sameAddresses(ips, self.ips))
-			opts.onAddressesChanged?.(ips);
-		return st;
-	};
+	const tailnet = watchAddresses(
+		new TailscaleTailnet(transport.port),
+		self.ips,
+		(ips) => opts.onAddressesChanged?.(ips),
+	);
 	const fed = new Federation(service, {
 		tailnet,
 		owner,
@@ -207,6 +207,25 @@ export async function startRemote(
 			await transport.close();
 		},
 	};
+}
+
+/**
+ * `tailnet`, whose status calls also report (`onChange`) when this node's
+ * addresses are no longer `served`.
+ */
+export function watchAddresses<T extends Tailnet>(
+	tailnet: T,
+	served: string[],
+	onChange: (ips: string[]) => void,
+): T {
+	const status = tailnet.status.bind(tailnet);
+	tailnet.status = async () => {
+		const st = await status();
+		const ips = st?.self.ips;
+		if (ips?.length && !sameAddresses(ips, served)) onChange(ips);
+		return st;
+	};
+	return tailnet;
 }
 
 /** The same set of addresses, in any order. */

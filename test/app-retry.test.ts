@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import type { Tailnet, TailnetStatus } from "../src/federation/tailnet.ts";
 import type { RemoteApp, RemoteOptions } from "../src/http/start.ts";
-import { TailscaleNotReady } from "../src/http/start.ts";
+import { TailscaleNotReady, watchAddresses } from "../src/http/start.ts";
+import { takeOver } from "../src/run-daemon.ts";
 import { appWaitingLine } from "../src/setup/mesh-doctor.ts";
 import type { HttpTransport } from "../src/transport/http.ts";
 import type { AppStatus } from "../src/types.ts";
@@ -187,7 +189,7 @@ describe("doctor: why the app is not served", () => {
 			now,
 		);
 		expect(line).toBe(
-			"the app is not served because Tailscale was not ready (Tailscale is not running or not logged in (backend state Stopped)); the daemon keeps retrying, next try in 5 s (3 tries since 2026-11-23T01:33:45.000Z)",
+			"the app is not served because Tailscale was not ready: Tailscale is not running or not logged in (backend state Stopped); the daemon keeps retrying, next try in 5 s (3 tries since 2026-11-23T01:33:45.000Z)",
 		);
 	});
 
@@ -201,7 +203,7 @@ describe("doctor: why the app is not served", () => {
 			retryAt: 0,
 		});
 		expect(line).toStartWith(
-			"the app is not served (HTTPS certificates are off); the daemon keeps retrying, next try in 0 s (1 try since",
+			"the app is not served: HTTPS certificates are off; the daemon keeps retrying, next try in 0 s (1 try since",
 		);
 	});
 
@@ -210,5 +212,101 @@ describe("doctor: why the app is not served", () => {
 		expect(
 			appWaitingLine({ state: "serving", url: "https://x/", hosts: [] }),
 		).toBeNull();
+	});
+});
+
+describe("the pool's status polls report new addresses", () => {
+	function tailnetWith(ips: string[] | undefined) {
+		const tn = {
+			ips,
+			async status(): Promise<TailnetStatus | null> {
+				if (!tn.ips) return null;
+				return {
+					self: {
+						nodeId: "n1",
+						name: "studio",
+						dnsName: "studio.tail1234.ts.net",
+						userId: "7",
+						login: "me@example.com",
+						tags: [],
+						online: true,
+						ownerLogin: "me@example.com",
+						...(tn.ips.length ? { ips: tn.ips } : {}),
+					},
+					peers: [],
+				};
+			},
+			fetch: () => Promise.reject(new Error("unused")),
+		};
+		return tn;
+	}
+
+	test("only a different set of addresses is a change", async () => {
+		const tn = tailnetWith(["100.64.0.1", "fd7a::1"]);
+		const changes: string[][] = [];
+		const watched: Tailnet = watchAddresses(
+			tn,
+			["fd7a::1", "100.64.0.1"],
+			(ips) => changes.push(ips),
+		);
+		expect((await watched.status())?.self.name).toBe("studio");
+		// Tailscale down, or a status without addresses: no change to act on.
+		tn.ips = undefined;
+		await watched.status();
+		tn.ips = [];
+		await watched.status();
+		expect(changes).toEqual([]);
+		tn.ips = ["100.64.0.9", "fd7a::1"];
+		await watched.status();
+		expect(changes).toEqual([["100.64.0.9", "fd7a::1"]]);
+	});
+});
+
+describe("the service taking the socket over", () => {
+	test("another service keeps it: refused", async () => {
+		const d = await startDaemon({ serviceMode: true });
+		cleanups.push(async () => {
+			await d.daemon.stop();
+			d.cleanup();
+		});
+		expect(
+			await takeOver(
+				async () => false,
+				async () => null,
+				{ timeoutMs: 2000, pollMs: 10 },
+			),
+		).toBe("refused");
+	});
+
+	test("a lock that never lets go: failed (the service exits 1 to be restarted)", async () => {
+		const d = await startDaemon();
+		await d.daemon.stop();
+		cleanups.push(async () => d.cleanup());
+		// Nothing answers on the socket, and the claim never succeeds.
+		let claims = 0;
+		const r = await takeOver(
+			async () => {
+				claims++;
+				return false;
+			},
+			async () => 4242,
+			{ timeoutMs: 300, pollMs: 10 },
+		);
+		expect(r).toBe("failed");
+		expect(claims).toBeGreaterThan(5);
+	});
+
+	test("claims once it lets go", async () => {
+		const d = await startDaemon();
+		await d.daemon.stop();
+		cleanups.push(async () => d.cleanup());
+		let claims = 0;
+		const r = await takeOver(
+			async () => ++claims >= 4,
+			async () => null,
+			{ timeoutMs: 5000, pollMs: 10 },
+		);
+		expect(r).toBe("claimed");
+		expect(claims).toBe(4);
 	});
 });
