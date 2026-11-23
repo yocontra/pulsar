@@ -66,7 +66,7 @@ import {
 } from "./rows.tsx";
 import type { SearchInputProps } from "./SearchField.tsx";
 import { SkeletonRows } from "./skeletons.tsx";
-import { PageShell } from "./ui/PageShell.tsx";
+import { TabShell } from "./ui/PageShell.tsx";
 
 export const HOME_TITLE = "Agents";
 
@@ -690,9 +690,10 @@ function HomeImpl() {
 		!top ||
 		(top.loading && top.ids.length === 0);
 	return (
-		<PageShell
+		<TabShell
 			title={HOME_TITLE}
-			// A tab's root: the tab bar says where you are, so no large title.
+			// A tab's root: the tab bar says where you are, so no large title
+			// (TabShell will ignore `large`: one slim row of search and actions).
 			large={false}
 			className="p-home"
 			below={<SearchField />}
@@ -721,7 +722,7 @@ function HomeImpl() {
 					<Slot name="home.fab" />
 				</div>
 			)}
-		</PageShell>
+		</TabShell>
 	);
 }
 
