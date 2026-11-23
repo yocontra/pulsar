@@ -54,19 +54,22 @@ function insetViolations(page: Page, ins: Insets) {
 			"input,textarea,select,img,svg,ion-icon,ion-toggle,ion-checkbox";
 		const BUTTONS =
 			"button,ion-button,ion-back-button,ion-segment-button,[role=button],[role=tab],[role=radio]";
-		const scrolls = (el: Element) => {
+		// The scroll area that moves `el`, if any (Ionic's is in a shadow root).
+		const scroller = (el: Element): Element | null => {
 			for (let e: Element | null = el; e; e = e.parentElement) {
-				if (e.getAttribute("slot") === "fixed") return false;
-				if (e.tagName === "ION-CONTENT") return true;
+				if (e.getAttribute("slot") === "fixed") return null;
+				if (e.tagName === "ION-CONTENT")
+					return e.shadowRoot?.querySelector(".inner-scroll") ?? e;
 				const oy = getComputedStyle(e).overflowY;
 				if (
 					(oy === "auto" || oy === "scroll") &&
 					e.scrollHeight > e.clientHeight
 				)
-					return true;
+					return e;
 			}
-			return false;
+			return null;
 		};
+		const scrolls = (el: Element) => scroller(el) !== null;
 		const problems = new Set<string>();
 		for (const el of document.body.querySelectorAll<HTMLElement>("*")) {
 			if (el.closest("svg") && el.tagName.toLowerCase() !== "svg") continue;
@@ -122,7 +125,11 @@ function insetViolations(page: Page, ins: Insets) {
 				continue;
 			const name = `${el.tagName.toLowerCase()}${el.className && typeof el.className === "string" ? `.${el.className.trim().split(/\s+/)[0]}` : ""} "${(el.textContent ?? el.getAttribute("aria-label") ?? "").trim().slice(0, 30)}"`;
 			const box = `(${Math.round(r.left)},${Math.round(r.top)})-(${Math.round(r.right)},${Math.round(r.bottom)})`;
-			if (r.top < ins.top - 0.5)
+			// Scrolled content passes under the top bar by design (the bar is
+			// glass); content under the notch while its scroller is at rest is
+			// misplaced. A tall paragraph half under the bar has its centre
+			// below it, so the hit test above does not catch that case.
+			if (r.top < ins.top - 0.5 && !((scroller(el)?.scrollTop ?? 0) > 0))
 				problems.add(`${name} under the top inset ${box}`);
 			if (r.left < ins.left - 0.5)
 				problems.add(`${name} under the left inset ${box}`);
