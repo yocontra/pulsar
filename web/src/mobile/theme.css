@@ -790,6 +790,8 @@ html.ios
 	flex-wrap: wrap;
 	justify-content: center;
 	min-width: 0;
+	/* Its min-content (the whole status) would push it past the title. */
+	max-width: 100%;
 	height: 1lh;
 	overflow: hidden;
 }
