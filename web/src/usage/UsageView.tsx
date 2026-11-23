@@ -1,5 +1,5 @@
 /**
- * The usage page body, shared by the desktop layer and the phone page:
+ * The desktop usage page body (the phone has its own, UsagePhone.tsx):
  * filters (machine, harness), period and Cost/Tokens toggles, the total
  * with its per-harness rows, the chart, totals, cost by type and the
  * Model/Day breakdown. Numbers come from one `GET /usage` report.
@@ -108,7 +108,7 @@ const isTyping = (t: EventTarget | null) =>
 	t instanceof HTMLElement &&
 	(t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
-export function UsageView({ variant }: { variant: "desktop" | "phone" }) {
+export function UsageView() {
 	const [prefs, setPrefs] = useState(loadPrefs);
 	const [filters, setFilters] = useState<Filters>({
 		machine: null,
@@ -126,9 +126,8 @@ export function UsageView({ variant }: { variant: "desktop" | "phone" }) {
 			return next;
 		});
 
-	// Desktop keys: C / T switch the metric, mod+shift+1..4 the period.
+	// Keys: C / T switch the metric, mod+shift+1..4 the period.
 	useEffect(() => {
-		if (variant !== "desktop") return;
 		const onKey = (e: KeyboardEvent) => {
 			if (isTyping(e.target) || model || prices) return;
 			const mod = e.metaKey || e.ctrlKey;
@@ -143,20 +142,18 @@ export function UsageView({ variant }: { variant: "desktop" | "phone" }) {
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [variant, model, prices]);
+	}, [model, prices]);
 
 	const report = q.data;
 	const mod = /Mac|iP/.test(navigator.platform) ? "⌘" : "Ctrl+";
 	return (
-		<div className={`usage usage-${variant}`}>
+		<div className="usage usage-desktop">
 			<header className="usage-head">
 				<nav className="usage-crumbs" aria-label="Usage filters">
-					{variant === "desktop" && <h1 className="usage-title">Usage</h1>}
-					{variant === "desktop" && (
-						<span className="usage-sep" aria-hidden="true">
-							›
-						</span>
-					)}
+					<h1 className="usage-title">Usage</h1>
+					<span className="usage-sep" aria-hidden="true">
+						›
+					</span>
 					<select
 						className="usage-select"
 						aria-label="Machine"
