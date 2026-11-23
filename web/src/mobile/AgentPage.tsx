@@ -7,7 +7,6 @@
  */
 import { EllipsisIcon, ShieldCheckIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { AgentRow, Approval } from "../api/types.ts";
 import { focusPrompt, promptOnScreen } from "../approval/focus.ts";
 import { ChangesButton } from "../changes/ChangesButton.tsx";
@@ -156,18 +155,15 @@ const MoreMenu = observer(function MoreMenu({ a }: { a: AgentRow | null }) {
 			>
 				<EllipsisIcon aria-hidden="true" />
 			</IonButton>
-			{/* Out of the bar: its toolbar clips and stacks what is inside. */}
-			{a &&
-				createPortal(
-					<Menu
-						open={open}
-						onClose={() => setOpen(false)}
-						target={btn}
-						items={items}
-						label={`${a.name} actions`}
-					/>,
-					document.querySelector("ion-app") ?? document.body,
-				)}
+			{a && (
+				<Menu
+					open={open}
+					onClose={() => setOpen(false)}
+					target={btn}
+					items={items}
+					label={`${a.name} actions`}
+				/>
+			)}
 		</>
 	);
 });

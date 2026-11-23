@@ -30,6 +30,15 @@ async function open(page: Page, id: string, width?: number) {
 	await expect(changes(page)).toBeVisible();
 }
 
+/** The title ends before the actions, and the actions end on screen. */
+async function fits(page: Page) {
+	const width = page.viewportSize()!.width;
+	const h1 = (await bar(page).locator("h1").boundingBox())!;
+	const act = (await actions(page).boundingBox())!;
+	expect(h1.x + h1.width).toBeLessThanOrEqual(act.x + 1);
+	expect(act.x + act.width).toBeLessThanOrEqual(width);
+}
+
 /**
  * The shown actions, left to right. By role: Ionic moves an ion-button's
  * aria-label into its shadow button once it upgrades.
@@ -42,8 +51,11 @@ async function shownActions(page: Page): Promise<string[]> {
 		["More", more(page)],
 	] as const;
 	const shown: [string, number][] = [];
-	for (const [name, loc] of all)
-		if (await loc.isVisible()) shown.push([name, (await loc.boundingBox())!.x]);
+	for (const [name, loc] of all) {
+		// A lazy button can swap for its loaded self between two reads.
+		const box = (await loc.isVisible()) ? await loc.boundingBox() : null;
+		if (box) shown.push([name, box.x]);
+	}
 	return shown.sort((a, b) => a[1] - b[1]).map(([n]) => n);
 }
 
@@ -58,8 +70,9 @@ test.describe("agent page bar", () => {
 		await expect(git(page)).toBeVisible();
 		await expect(find(page)).toBeVisible();
 		await expect(more(page)).toBeVisible();
-		const labels = await shownActions(page);
-		expect(labels).toEqual(["Git", "Find", "Changes", "More"]);
+		await expect
+			.poll(() => shownActions(page))
+			.toEqual(["Git", "Find", "Changes", "More"]);
 		if (md) {
 			// Material: the back arrow alone, no previous title, no capsule.
 			const back = bar(page).locator(".p-back");
@@ -85,7 +98,7 @@ test.describe("agent page bar", () => {
 			await expect(more(page)).toBeVisible();
 			await expect(git(page)).toBeHidden();
 			await expect(find(page)).toBeHidden();
-			expect(await shownActions(page)).toEqual(["Changes", "More"]);
+			await expect.poll(() => shownActions(page)).toEqual(["Changes", "More"]);
 			// The title still fits before the actions.
 			const h1 = await bar(page).locator("h1").boundingBox();
 			const act = await actions(page).boundingBox();
@@ -119,6 +132,7 @@ test.describe("agent page bar", () => {
 		await open(page, id, 361);
 		await expect(git(page)).toBeVisible();
 		await expect(find(page)).toBeVisible();
+		await fits(page);
 		await more(page).click();
 		const menu = page.getByRole("menu");
 		await expect(
@@ -129,6 +143,50 @@ test.describe("agent page bar", () => {
 			menu.getByRole("menuitem", { name: "Find in Messages" }),
 		).toHaveCount(0);
 	});
+});
+
+test.describe("agent page bar with a limit warning", () => {
+	test.afterEach(async ({ request }) => {
+		await request.post("/api/v1/__mock/usage", {
+			headers: { "X-Pulsar": "1" },
+			data: { reset: true },
+		});
+	});
+
+	for (const width of [320, 361, 375])
+		test(`the limit chip fits at ${width} px`, async ({ page, request }) => {
+			const id = await agentId(request, "name=codex@apparish");
+			const res = await request.post("/api/v1/__mock/usage", {
+				headers: { "X-Pulsar": "1" },
+				data: {
+					limits: [
+						{
+							machine: "studio",
+							harness: "codex",
+							account: "codex",
+							window: "m10080",
+							label: "Weekly",
+							usedPercent: 88,
+							reached: false,
+							resetsAt: Date.now() + 2 * 86_400_000,
+							at: Date.now() - 60_000,
+							plan: null,
+						},
+					],
+				},
+			});
+			expect(res.ok()).toBe(true);
+			await page.setViewportSize({
+				width,
+				height: page.viewportSize()!.height,
+			});
+			await page.goto(`/#/a/${encodeURIComponent(id)}`);
+			await expect(bar(page).locator("h1")).toHaveText("codex@apparish");
+			const chip = actions(page).getByTestId("limit-chip");
+			await expect(chip).toHaveText("88%");
+			await expect(more(page)).toBeVisible();
+			await fits(page);
+		});
 });
 
 test.describe("composer dock", () => {

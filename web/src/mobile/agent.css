@@ -94,23 +94,23 @@ html.md .p-agent-actions ion-button {
 /* ------------------------------------------------------------ composer dock
    The shared Composer (components/Composer.tsx, .m-composer) floats in a
    rounded dock above the home indicator and rides up with the keyboard
-   (--kb). iOS: Konsta's glass (styles/konsta.css); Android: a Material
+   (--kb). iOS: glass a little denser than Konsta's (text runs under it); Android: a Material
    surface container. Only these pages: broadcast and node sheets keep
    their bar. */
 :root {
-	--p-dock-bg: rgba(255, 255, 255, 0.8);
+	--p-dock-bg: rgba(255, 255, 255, 0.88);
 	--p-dock-ring: rgba(0, 0, 0, 0.08);
 	--p-dock-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
 }
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme="light"]) {
-		--p-dock-bg: rgba(44, 44, 44, 0.72);
+		--p-dock-bg: rgba(44, 44, 44, 0.84);
 		--p-dock-ring: rgba(255, 255, 255, 0.1);
 		--p-dock-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 	}
 }
 :root[data-theme="dark"] {
-	--p-dock-bg: rgba(44, 44, 44, 0.72);
+	--p-dock-bg: rgba(44, 44, 44, 0.84);
 	--p-dock-ring: rgba(255, 255, 255, 0.1);
 	--p-dock-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
@@ -186,4 +186,17 @@ html.ios .p-agent-header .p-bar-bg {
 		color-mix(in srgb, var(--p-plain) 70%, transparent) calc(100% - 16px),
 		transparent
 	);
+}
+/* Under the dock, the home indicator's strip fades the conversation out
+   (as the bar does at the top). */
+html.ios .p-agent .session.mobile:not(.subagent)::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 2;
+	height: calc(var(--sab) + 24px);
+	background: linear-gradient(to bottom, transparent, var(--p-plain) 70%);
+	pointer-events: none;
 }
