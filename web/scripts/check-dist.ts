@@ -35,6 +35,8 @@ const BUDGETS: Record<string, number> = {
 	PhoneApp: 183 * 1024,
 	DesktopApp: 130 * 1024,
 };
+// All of dist/web, uncompressed. Raised from 9 MB at 9.01 MB: the Konsta
+// phone screens (Usage, the Agents tab) added their chunks and styles.
 const PACKAGE_BYTES = 9.5 * 1024 * 1024;
 // The count catches a bundle that fans out (Shiki's full bundle was 300+
 // grammar chunks). What's here now is on-demand and expected: ~36 Mermaid
