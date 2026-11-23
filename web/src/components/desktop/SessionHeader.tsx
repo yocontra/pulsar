@@ -135,10 +135,7 @@ function DesktopSessionHeaderImpl({
 						{agent.machine}
 					</span>
 					{agent.project && (
-						<span
-							title={`Project: ${agent.project}`}
-							className="d-sh-shrink"
-						>
+						<span title={`Project: ${agent.project}`} className="d-sh-shrink">
 							<ExtLink href={repoLink(agent.repoUrl)} className="d-sh-repo">
 								<FolderIcon aria-hidden="true" />
 								<span className="d-sh-project">{agent.project}</span>

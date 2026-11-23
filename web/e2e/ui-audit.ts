@@ -459,7 +459,9 @@ export async function untitledIconControls(page: Page): Promise<string[]> {
 		// A title on the control or on its direct wrapper (a disabled
 		// button's span, say); one further out describes something else.
 		const titleOf = (el: Element) =>
-			(el.getAttribute("title") || el.parentElement?.getAttribute("title"))?.trim();
+			(
+				el.getAttribute("title") || el.parentElement?.getAttribute("title")
+			)?.trim();
 		// Text a sighted user can read inside the control (not sr-only text).
 		const hasText = (el: Element) => {
 			const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);

@@ -82,9 +82,11 @@ test.describe("hover titles", () => {
 			const id = await agentId(request, "name=apparish-auth");
 			await open(page, id);
 			await page.waitForTimeout(300);
-			expect.soft(await untitledIconControls(page), `${name}: icon-only controls`)
+			expect
+				.soft(await untitledIconControls(page), `${name}: icon-only controls`)
 				.toEqual([]);
-			expect.soft(await untitledRelativeTimes(page), `${name}: relative times`)
+			expect
+				.soft(await untitledRelativeTimes(page), `${name}: relative times`)
 				.toEqual([]);
 		});
 });

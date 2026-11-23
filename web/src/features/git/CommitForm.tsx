@@ -196,7 +196,7 @@ export function CommitForm({
 				{detached ? (
 					<span className="g-branch">Detached HEAD</span>
 				) : (
-					<span className="g-branch" title={status.branch}>
+					<span className="g-branch" title={status.branch ?? undefined}>
 						{status.branch}
 					</span>
 				)}
