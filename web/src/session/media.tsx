@@ -247,6 +247,7 @@ export function Lightbox({
 							type="button"
 							className="ds-icon-btn"
 							aria-label="Zoom out"
+							title="Zoom out"
 							disabled={z.scale <= MIN}
 							onClick={() => zoom(1 / 1.5)}
 						>
@@ -256,6 +257,7 @@ export function Lightbox({
 							type="button"
 							className="ds-icon-btn"
 							aria-label="Zoom in"
+							title="Zoom in"
 							disabled={z.scale >= MAX}
 							onClick={() => zoom(1.5)}
 						>
@@ -268,6 +270,7 @@ export function Lightbox({
 								type="button"
 								className="ds-icon-btn ds-lightbox-nav is-prev"
 								aria-label="Previous image"
+								title="Previous image"
 								onClick={() => go(-1)}
 							>
 								<ChevronLeftIcon aria-hidden="true" />
@@ -276,6 +279,7 @@ export function Lightbox({
 								type="button"
 								className="ds-icon-btn ds-lightbox-nav is-next"
 								aria-label="Next image"
+								title="Next image"
 								onClick={() => go(1)}
 							>
 								<ChevronRightIcon aria-hidden="true" />

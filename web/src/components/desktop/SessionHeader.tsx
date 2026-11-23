@@ -14,17 +14,20 @@ import {
 	STATUS_LABEL,
 	StatusBadge,
 } from "../../ds/index.ts";
-import { shortModel, stateLabel, tagValue, timer } from "../../lib/format.ts";
+import {
+	fullDate,
+	shortModel,
+	stateLabel,
+	tagValue,
+	timer,
+} from "../../lib/format.ts";
 import { branchLink, prLink, repoLink } from "../../lib/links.ts";
 import { Slot } from "../../lib/registry.tsx";
 import { observer } from "../../lib/signals.ts";
 import { can, showToast } from "../../lib/store.ts";
 
-const MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
-	? "⌘"
-	: "Ctrl ";
-
 import { ExtLink } from "../ExtLink.tsx";
+import { withKeys } from "../ui/kbd.tsx";
 import { Layer } from "./Layer.tsx";
 import { SessionHeaderSkeleton } from "./skeletons.tsx";
 
@@ -54,7 +57,16 @@ function LiveStatusImpl({ agent }: { agent: AgentRow }) {
 					: stateLabel(STATUS_LABEL.idle, agent.stateSince)
 				: STATUS_LABEL[s];
 	return (
-		<StatusBadge state={s} live={s === "busy"} variant="soft">
+		<StatusBadge
+			state={s}
+			live={s === "busy"}
+			variant="soft"
+			title={
+				agent.stateSince
+					? `${STATUS_LABEL[s]} since ${fullDate(agent.stateSince)}`
+					: undefined
+			}
+		>
 			<span aria-live="polite">{word}</span>
 			{(s === "busy" || s === "needs-you") && (
 				<span className="ds-status-timer">{timer(agent.stateSince)}</span>
@@ -114,16 +126,19 @@ function DesktopSessionHeaderImpl({
 			<AgentAvatar harness={agent.harness} size="md" />
 			<div className="d-sh-id">
 				<div className="d-sh-line1">
-					<h1>{agent.name}</h1>
+					<h1 title={`${agent.name} on ${agent.machine}`}>{agent.name}</h1>
 					<LiveStatus agent={agent} />
 				</div>
 				<p className="d-sh-meta">
-					<span title="Machine">
+					<span title={`Machine: ${agent.machine}`}>
 						<LaptopIcon aria-hidden="true" />
 						{agent.machine}
 					</span>
 					{agent.project && (
-						<span title="Project" className="d-sh-shrink">
+						<span
+							title={`Project: ${agent.project}`}
+							className="d-sh-shrink"
+						>
 							<ExtLink href={repoLink(agent.repoUrl)} className="d-sh-repo">
 								<FolderIcon aria-hidden="true" />
 								<span className="d-sh-project">{agent.project}</span>
@@ -132,7 +147,7 @@ function DesktopSessionHeaderImpl({
 					)}
 					{agent.branch && (
 						<span
-							title={worktree ? `Branch, worktree ${worktree}` : "Branch"}
+							title={`Branch: ${agent.branch}${worktree ? `, worktree ${worktree}` : ""}`}
 							className="d-sh-shrink is-branch"
 						>
 							<ExtLink
@@ -145,7 +160,7 @@ function DesktopSessionHeaderImpl({
 						</span>
 					)}
 					{pr && (
-						<span title="Pull request">
+						<span title={`Pull request #${pr}`}>
 							<ExtLink href={prLink(agent.repoUrl, pr)} className="d-sh-pr">
 								<GitPullRequestIcon aria-hidden="true" />
 								PR #{pr}
@@ -157,7 +172,10 @@ function DesktopSessionHeaderImpl({
 			<div className="d-sh-actions">
 				{extra}
 				<Slot name="session.header" agent={agent} mobile={false} />
-				<span className="d-sh-model" title="Harness and model">
+				<span
+					className="d-sh-model"
+					title={`${harnessName(agent.harness)}${agent.model ? ` · ${agent.model}` : ""}`}
+				>
 					{harnessName(agent.harness)}
 					{model && (
 						<>
@@ -171,7 +189,7 @@ function DesktopSessionHeaderImpl({
 						type="button"
 						className="d-btn sm d-stop"
 						onClick={() => setConfirmStop(true)}
-						title={`Stop the current turn (${MOD}.)`}
+						title={withKeys("Stop the current turn", ["mod", "."])}
 					>
 						<SquareIcon aria-hidden="true" />
 						<span className="d-btn-label">Stop</span>

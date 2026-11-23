@@ -48,7 +48,7 @@ import {
 	PromptInputTools,
 } from "./ai-elements/prompt-input.tsx";
 import { Layer } from "./desktop/Layer.tsx";
-import { Kbd } from "./ui/kbd.tsx";
+import { Kbd, withKeys } from "./ui/kbd.tsx";
 
 /**
  * A paste is the browser's own here. (PromptInput would take a clipboard
@@ -149,6 +149,7 @@ function PriorityMenuImpl({
 				aria-haspopup="menu"
 				aria-expanded={open}
 				aria-label={`Priority: ${current.label}${expectReply ? ", expect reply" : ""}`}
+				title={`Priority: ${current.label}${expectReply ? ", expect reply" : ""}`}
 				onClick={() => setOpen(!open)}
 			>
 				<Icon className="size-[18px]" strokeWidth={2.2} />
@@ -585,7 +586,7 @@ function ComposerImpl({
 						className="send-btn m-send"
 						status={status}
 						aria-label="Send"
-						title={blocked ?? undefined}
+						title={blocked ?? "Send"}
 						disabled={!canSend}
 					>
 						{status === "ready" || status === "error" ? (
@@ -665,7 +666,7 @@ function ComposerImpl({
 								className="send-btn"
 								status={status}
 								aria-label="Send"
-								title={blocked ?? undefined}
+								title={blocked ?? withKeys("Send", ["mod", "enter"])}
 								disabled={!canSend}
 							>
 								{status === "ready" || status === "error" ? (

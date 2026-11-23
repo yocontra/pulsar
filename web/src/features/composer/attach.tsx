@@ -294,6 +294,7 @@ function AttachButtonImpl(p: ComposerSlotProps) {
 				type="button"
 				className="m-prio-btn"
 				aria-label="Attach files"
+				title="Attach files"
 				aria-haspopup="menu"
 				aria-expanded={menu}
 				onClick={() => setMenu(!menu)}
@@ -376,6 +377,7 @@ function ComposerTopImpl(p: ComposerSlotProps) {
 							<button
 								type="button"
 								aria-label={`Remove @${m}`}
+								title={`Remove @${m}`}
 								onClick={() => removeMention(p, m)}
 							>
 								<XIcon aria-hidden="true" />
@@ -406,6 +408,7 @@ function ComposerTopImpl(p: ComposerSlotProps) {
 						type="button"
 						className="att-zoom-x"
 						aria-label="Close preview"
+						title="Close preview"
 						// biome-ignore lint/a11y/noAutofocus: the preview is a dialog
 						autoFocus
 						onClick={() => setZoom(null)}
@@ -480,6 +483,7 @@ function Tile({
 				type="button"
 				className="att-x"
 				aria-label={`Remove ${f.name}`}
+				title={`Remove ${f.name}`}
 				onClick={onRemove}
 			>
 				<XIcon aria-hidden="true" />
