@@ -540,13 +540,19 @@ html.k-ios .diag-phone .diag-health {
 	width: 22px;
 	height: 22px;
 }
+.diag-phone .diag-upgrade,
+.diag-phone .diag-error {
+	font-size: inherit;
+}
 .diag-phone .diag-upgrade {
 	color: var(--ds-needs-text);
 }
 .diag-phone .diag-error {
 	color: var(--ds-text-2);
 }
-.diag-phone .diag-passed-toggle {
+/* On the label, not the row button: the button fades its color on a theme
+   change, and the label should not. */
+.diag-phone .diag-passed-label {
 	color: var(--ds-text);
 }
 .diag-phone .diag-group-name {

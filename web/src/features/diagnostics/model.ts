@@ -213,10 +213,15 @@ export function spans(text: string): { code: boolean; text: string }[] {
 		);
 }
 
+/** Programs doctor's fixes name; a code span starting with one is a command. */
+const PROGRAMS =
+	/^(?:pulsar|npx|bunx|bun|npm|tailscale|headscale|tmux|brew|sudo|systemctl|launchctl|git)\s+\S/;
+
 /**
  * A fix as text and code spans; `command` marks a code span the operator
- * runs ("run `pulsar mesh on`"), which the page offers to copy. Other code
- * spans ("a `client load error` line") stay plain code.
+ * runs ("run `pulsar mesh on`", "e.g. `headscale nodes register`"), which
+ * the page offers to copy. Other code spans ("a `client load error` line")
+ * stay plain code.
  */
 export function fixParts(
 	fix: string,
@@ -224,6 +229,9 @@ export function fixParts(
 	const parts = spans(fix);
 	return parts.map((p, i) => ({
 		...p,
-		command: p.code && i > 0 && /\b(?:re-?)?run\s*$/i.test(parts[i - 1]!.text),
+		command:
+			p.code &&
+			(PROGRAMS.test(p.text) ||
+				(i > 0 && /\b(?:re-?)?run\s*$/i.test(parts[i - 1]!.text))),
 	}));
 }
