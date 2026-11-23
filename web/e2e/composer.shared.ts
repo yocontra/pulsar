@@ -50,7 +50,7 @@ export async function openAgent(
 
 /** The phone composer's + menu, open. */
 export async function plusMenu(page: Page, composer: Locator) {
-	await composer.getByRole("button", { name: /^More options/ }).click();
+	await composer.getByRole("button", { name: /^Message options/ }).click();
 	const menu = page.getByRole("menu", { name: "Message options" });
 	await expect(menu).toBeVisible();
 	return menu;
@@ -251,12 +251,12 @@ export function composerSuite(platform: "desktop" | "phone") {
 			let menu = await plusMenu(page, composer);
 			await menu.getByRole("menuitem", { name: "Don't wake" }).click();
 			await expect(
-				composer.getByRole("button", { name: /^More options: Don't wake/ }),
+				composer.getByRole("button", { name: /^Message options: Don't wake/ }),
 			).toBeVisible();
 			menu = await plusMenu(page, composer);
 			await menu.getByRole("menuitem", { name: "Next turn" }).click();
 			await expect(
-				composer.getByRole("button", { name: "More options", exact: true }),
+				composer.getByRole("button", { name: "Message options", exact: true }),
 			).toBeVisible();
 		});
 }

@@ -956,7 +956,7 @@ const ComposerPlus = lazy(
 			<button
 				type="button"
 				className="m-prio-btn m-plus"
-				aria-label="More options"
+				aria-label="Message options"
 				disabled
 			>
 				<PlusIcon className="size-5" strokeWidth={2.4} />

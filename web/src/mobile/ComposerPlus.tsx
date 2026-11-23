@@ -66,7 +66,7 @@ export default function ComposerPlus({
 	// Not the defaults: say so on the button, so a send isn't a surprise.
 	const marked = priority !== "normal" || expectReply;
 	const current = priorities.find((p) => p.value === priority);
-	const label = `More options${marked ? `: ${current?.label ?? ""}${expectReply ? ", expect reply" : ""}` : ""}`;
+	const label = `Message options${marked ? `: ${current?.label ?? ""}${expectReply ? ", expect reply" : ""}` : ""}`;
 	return (
 		<div className="m-prio">
 			<button

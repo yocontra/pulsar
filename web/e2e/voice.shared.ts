@@ -242,7 +242,7 @@ export function voiceSuite(platform: "desktop" | "phone") {
 		// The composer's toolbar is in (the phone's + replaces Attach).
 		await expect(
 			platform === "phone"
-				? composer.getByRole("button", { name: /^More options/ })
+				? composer.getByRole("button", { name: /^Message options/ })
 				: composer.getByRole("button", { name: "Attach files" }),
 		).toBeEnabled();
 		await expect(composer.getByRole("button", { name: "Dictate" })).toHaveCount(
