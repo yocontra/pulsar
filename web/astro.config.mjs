@@ -213,6 +213,12 @@ export default defineConfig({
 			},
 		],
 		resolve: {
+			// One copy of tailwind-merge for Konsta, streamdown and lib/utils. An
+			// install that keeps a stale nested copy (node_modules/streamdown/
+			// node_modules/tailwind-merge) otherwise bundles it twice, and the
+			// "konsta" chunk group below pulls the second copy into the eager
+			// phone load (+2.2 KB gzipped, a different hash per checkout).
+			dedupe: ["tailwind-merge"],
 			alias: [
 				// Radix scroll lock without an injected <style> (CSP has no
 				// style-src); see src/lib/remove-scroll.tsx.
