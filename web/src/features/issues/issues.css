@@ -166,13 +166,10 @@
 	height: 12px;
 }
 
-/* Phone: the sheet. */
-.i-sheet {
-	display: flex;
-	flex-direction: column;
-	height: 100%;
-	background: var(--ds-bg);
-}
-.i-sheet-body {
-	padding: 4px 16px 24px;
+/* Phone: the sheet (IssuePhone.tsx). iOS: a card on the grouped sheet;
+   Material: flat on the sheet's surface. */
+html.ios .p-sheet .i-card.mobile {
+	padding: 14px 16px;
+	border-radius: 16px;
+	background: var(--ds-surface);
 }

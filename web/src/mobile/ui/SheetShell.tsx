@@ -5,37 +5,75 @@
  * so it stacks over the page that opened it.
  *
  * Mount it while it may be open: it presents on `open`, and calls
- * `onClosed` once it has animated out (swipe, backdrop, Esc or Done).
+ * `onClosed` once it has animated out (swipe, backdrop, Esc, Done, or
+ * `open` turning false). `head={false}` drops the header for a body with
+ * its own; `card` presents an iOS card sheet; `canDismiss` holds a swipe
+ * while an action runs.
  */
 
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, type Ref, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { ArrowLeftIcon } from "lucide-react";
 import { CloseX } from "../../components/CloseX.tsx";
 import { IonContent } from "../ionic.ts";
 import { useIonicLazy } from "../lazyIonic.ts";
 import { isMaterial } from "../platform.ts";
+
+type CanDismiss = boolean | ((data?: unknown, role?: string) => Promise<boolean>);
 
 export function SheetShell({
 	open,
 	onClose,
 	onClosed,
 	title,
+	label,
 	detents = [0, 0.6, 1],
 	initial = 0.6,
+	head = true,
+	card = false,
+	canDismiss,
+	start,
+	onBack,
 	end,
+	footer,
+	className,
+	modalRef,
 	testId,
 	children,
 }: {
 	open: boolean;
 	/** Asks to close (the X); the sheet animates out, then `onClosed`. */
 	onClose: () => void;
+	/** After it animated out, however it closed (X, swipe, backdrop, Esc,
+	 *  or `open` turning false). */
 	onClosed?: () => void;
-	title: string;
+	title: ReactNode;
+	/** The dialog's accessible name (default: the title), when the heading
+	 *  changes from view to view in one sheet. */
+	label?: string;
 	/** Heights as a fraction of the screen (0 lets a swipe dismiss it). */
 	detents?: number[];
 	initial?: number;
+	/** false: no header; the body brings its own (with its close button). */
+	head?: boolean;
+	/** An iOS card sheet over the page (the page recedes behind it), in
+	 *  place of detents. */
+	card?: boolean;
+	/** IonModal's canDismiss: hold a swipe or backdrop tap while busy. */
+	canDismiss?: CanDismiss;
+	/** A leading header control. */
+	start?: ReactNode;
+	/** A Back step inside the sheet: "Back" on iOS, an arrow on Android
+	 *  (in place of `start`). */
+	onBack?: () => void;
 	/** A trailing header control in place of the close button. */
 	end?: ReactNode;
+	/** Pinned under the scrolling body (a confirm bar). */
+	footer?: ReactNode;
+	/** More classes on the modal. */
+	className?: string;
+	/** The modal element (to move it to another detent). */
+	modalRef?: Ref<HTMLIonModalElement>;
 	testId?: string;
 	children: ReactNode;
 }) {
@@ -50,14 +88,34 @@ export function SheetShell({
 		return () => removeEventListener("keydown", onKey);
 	}, [open, onClose]);
 	if (!lz) return null;
+	const present = card
+		? {
+				presentingElement:
+					document.querySelector<HTMLElement>("ion-nav") ?? undefined,
+			}
+		: {
+				breakpoints: detents,
+				initialBreakpoint: initial,
+				handle: isMaterial,
+			};
+	const back = onBack && (
+		<button
+			type="button"
+			className={isMaterial ? "p-sheet-back is-arrow" : "p-sheet-back"}
+			aria-label="Back"
+			onClick={onBack}
+		>
+			{isMaterial ? <ArrowLeftIcon aria-hidden="true" /> : "Back"}
+		</button>
+	);
 	return createPortal(
 		<lz.IonModal
-			className="p-sheet"
+			ref={modalRef}
+			className={className ? `p-sheet ${className}` : "p-sheet"}
 			isOpen={open}
-			aria-label={title}
-			breakpoints={detents}
-			initialBreakpoint={initial}
-			handle={isMaterial}
+			aria-label={label ?? (typeof title === "string" ? title : undefined)}
+			{...present}
+			canDismiss={canDismiss}
 			onIonModalDidDismiss={() => {
 				onClose();
 				onClosed?.();
@@ -67,12 +125,17 @@ export function SheetShell({
 			{/* The header stays put; the body scrolls (a detent shows its top). */}
 			<IonContent className="p-sheet-content" scrollY={false}>
 				<div className="p-sheet-frame">
-					<header className="m-sheet-head">
-						<span />
-						<h2>{title}</h2>
-						{end ?? <CloseX onClick={onClose} />}
-					</header>
+					{head && (
+						<header className="p-sheet-head">
+							<span className="p-sheet-start">{back ?? start}</span>
+							<h2>{title}</h2>
+							<span className="p-sheet-end">
+								{end ?? <CloseX onClick={onClose} />}
+							</span>
+						</header>
+					)}
 					<div className="m-sheet-scroll p-sheet-body">{children}</div>
+					{footer}
 				</div>
 			</IonContent>
 		</lz.IonModal>,

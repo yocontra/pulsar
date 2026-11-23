@@ -227,7 +227,7 @@ const SCREENS: Screen[] = [
 		"files",
 		async (page, { auth }) => {
 			await page.goto(`/#/file/${encodeURIComponent(auth)}`);
-			await page.getByRole("list", { name: "Files" }).last().waitFor();
+			await page.getByRole("group", { name: "Files" }).last().waitFor();
 		},
 	],
 	[
@@ -259,7 +259,7 @@ const SCREENS: Screen[] = [
 			await page.goto(`/#/a/${encodeURIComponent(auth)}`);
 			await page.getByRole("button", { name: /^Git: / }).click();
 			await page
-				.locator("ion-modal.g-modal")
+				.getByTestId("git-sheet")
 				.getByRole("button", { name: /PR #1402/ })
 				.waitFor();
 		},

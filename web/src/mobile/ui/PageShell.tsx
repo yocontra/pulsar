@@ -28,6 +28,8 @@ import { isMaterial } from "../platform.ts";
 export interface PageShellProps {
 	/** The bar's title (and the large title on iOS). */
 	title: string;
+	/** A second line under the bar's title (not the large title). */
+	subtitle?: string;
 	/** This page's route: the back button (none on a tab's root). */
 	route?: Route;
 	/** Leading buttons after the back button. */
@@ -46,6 +48,7 @@ export interface PageShellProps {
 
 export function PageShell({
 	title,
+	subtitle,
 	route,
 	start,
 	end,
@@ -72,7 +75,16 @@ export function PageShell({
 							{start}
 						</IonButtons>
 					)}
-					<IonTitle>{title}</IonTitle>
+					<IonTitle>
+						{subtitle ? (
+							<span className="p-nav-title">
+								<h1>{title}</h1>
+								<span className="p-nav-sub">{subtitle}</span>
+							</span>
+						) : (
+							title
+						)}
+					</IonTitle>
 					{end && (
 						<IonButtons slot="end">
 							{isMaterial ? (

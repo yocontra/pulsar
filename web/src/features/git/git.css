@@ -545,77 +545,33 @@
 	font-size: 12.5px;
 }
 
-/* Phone */
+/* Phone: the git sheet (GitPhone.tsx in mobile/ui/SheetShell), Konsta
+   lists and buttons; the shared forms' mobile buttons follow the platform
+   (mobile/ui/ui.css, .p-sheet .m-btn). */
 
-.g-sheet {
-	display: flex;
-	flex-direction: column;
-	height: 100%;
-	background: var(--ds-bg);
-}
-.g-sheet-body {
-	display: grid;
-	gap: 14px;
-	padding: 4px 16px 24px;
-}
-.g-rows {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-	border-radius: 12px;
-	background: var(--ds-surface);
-	overflow: hidden;
-}
-.g-rows > li {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	min-height: 46px;
-	padding: 0 14px;
-}
-.g-rows > li + li {
-	border-top: 0.5px solid var(--ds-border);
-}
-.g-row-btn {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	width: 100%;
-	min-height: 46px;
-	padding: 0;
-	border: 0;
-	background: none;
-	color: inherit;
-	font: inherit;
-}
-.g-row-label {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	color: var(--ds-text);
-}
-.g-row-label svg {
-	width: 16px;
-	height: 16px;
-}
 .g-row-value {
 	display: inline-flex;
 	align-items: center;
+	justify-content: flex-end;
 	gap: 8px;
 	min-width: 0;
-	color: var(--ds-text-2);
 	font-size: 0.94rem;
 	text-align: right;
 }
-.g-row-value svg {
-	width: 16px;
-	height: 16px;
-	color: var(--ds-text-3);
+.g-row-wrap {
+	display: block;
+	max-width: 62vw;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.g-rows .g-pr-ico {
+	width: 20px;
+	height: 20px;
 }
 .g-sheet-actions {
 	display: grid;
 	gap: 10px;
+	padding-top: 8px;
 }
 .g-sheet-more {
 	display: flex;
@@ -634,14 +590,15 @@
 	justify-content: flex-end;
 	flex-wrap: wrap;
 }
-.g-sheet-foot .m-btn {
-	flex: 1;
-	min-height: 44px;
-	padding: 0 12px;
-	font-size: 0.94rem;
+.g-sheet-foot > * {
+	flex: 1 1 auto;
+	white-space: nowrap;
 }
 .g-commit.mobile .g-files {
 	height: 30vh;
+	border: 0;
+	border-radius: 12px;
+	background: var(--ds-surface);
 }
 .g-commit.mobile .g-file-row {
 	min-height: 40px;
@@ -649,14 +606,22 @@
 .g-commit.mobile .g-textarea,
 .g-ask.mobile .g-textarea,
 .g-commit.mobile .g-input {
-	border: 1px solid var(--ds-border);
-	border-radius: 10px;
+	border: 1px solid transparent;
+	border-radius: 12px;
 	background: var(--ds-surface);
 	color: var(--ds-text);
 	font-size: 16px;
 }
 .g-commit.mobile .g-input {
-	padding: 10px;
+	padding: 10px 12px;
+}
+html.md .g-commit.mobile .g-files,
+html.md .g-commit.mobile .g-textarea,
+html.md .g-ask.mobile .g-textarea,
+html.md .g-commit.mobile .g-input {
+	border: 1px solid var(--ds-border-strong);
+	border-radius: 4px;
+	background: transparent;
 }
 .g-link {
 	display: inline-flex;
@@ -676,22 +641,16 @@
 .g-link:disabled {
 	color: var(--ds-text-4);
 }
-.g-sheet .g-progress {
+.p-sheet .g-progress {
 	justify-content: center;
-	height: 50px;
-	border-radius: 12px;
+	min-height: 50px;
+	border-radius: 999px;
 	font-size: 0.94rem;
 }
+html.md .p-sheet .g-progress {
+	min-height: 40px;
+}
 .g-sheet-confirm {
-	position: absolute;
-	left: 12px;
-	right: 12px;
-	bottom: calc(12px + var(--sab, 0px));
-	display: grid;
-	gap: 8px;
-	padding: 16px;
-	border-radius: 14px;
-	background: var(--ds-surface);
 	box-shadow: var(--ds-shadow-lg);
 }
 .g-sheet-confirm p {
@@ -709,9 +668,4 @@
 .g-commit-layer .d-pop-foot,
 .g-ask-layer .d-pop-foot {
 	margin: 0 -24px;
-}
-.g-sheet-foot .m-btn:disabled,
-.g-sheet-actions .m-btn:disabled {
-	background: var(--m-fill-3);
-	color: var(--m-label-3);
 }

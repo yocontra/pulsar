@@ -472,13 +472,9 @@
 	display: grid;
 	gap: 12px;
 }
+/* Konsta Segmented (ReviewPhone.tsx): the page's width. */
 .prv-seg {
-	justify-self: start;
-}
-.prv-seg .cv-mode {
-	height: 30px;
-	padding: 0 14px;
-	font-size: 14px;
+	width: 100%;
 }
 .prv-phone-file {
 	padding: 10px 0 32px;
@@ -518,7 +514,9 @@
 	padding: 8px;
 }
 .prv-phone .prv-thread-foot .m-btn,
-.prv-phone .prv-box-foot .m-btn {
+.prv-phone .prv-box-foot .m-btn,
+html.md .prv-phone .prv-thread-foot .m-btn,
+html.md .prv-phone .prv-box-foot .m-btn {
 	min-height: 36px;
 }
 .prv-phone .prv-reviews .prv-review,

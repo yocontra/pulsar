@@ -41,13 +41,13 @@ async function sheetFor(
 }
 
 /**
- * The git sheet (one ion-modal, "Git", for every view), once its heading
+ * The git sheet (one SheetShell, "Git", for every view), once its heading
  * says `name`. Its content is slotted light DOM, so tests query from the
  * host element.
  */
 async function sheetNamed(page: Page, name: string) {
 	await expect(page.getByRole("dialog", { name: "Git" })).toBeVisible();
-	const sheet = page.locator("ion-modal.g-modal");
+	const sheet = page.getByTestId("git-sheet");
 	await expect(sheet.getByRole("heading", { level: 2 })).toHaveText(name);
 	return sheet;
 }
@@ -71,7 +71,12 @@ test.describe("git sheet", () => {
 		await expect(rows.getByRole("button", { name: /PR #1402/ })).toContainText(
 			"Open",
 		);
-		expect(await contrastFailures(page, ".g-sheet *")).toEqual([]);
+		expect(
+			await contrastFailures(
+				page,
+				'[data-testid="git-sheet"] .p-sheet-frame *',
+			),
+		).toEqual([]);
 		await sheet.getByRole("button", { name: "Commit & push" }).click();
 		const form = await sheetNamed(page, "Commit changes");
 		const message = form.getByPlaceholder("Describe your changes…");

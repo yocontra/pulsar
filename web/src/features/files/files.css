@@ -101,10 +101,6 @@
 	height: 14px;
 	flex: none;
 }
-.fv-phone .fv-btn {
-	min-height: 36px;
-	font-size: 15px;
-}
 .fv-split {
 	display: flex;
 	flex: 1;
@@ -237,13 +233,40 @@
 .fv-text .ds-code-line.fv-hl {
 	background: var(--ds-surface-active);
 }
+/* Phone (FilesPhone.tsx): Konsta lists, blocks and buttons on the page. */
 .fv-phone .fv-text,
 .fv-phone .fv-image,
 .fv-phone .fv-head {
-	padding-inline: 12px;
+	padding-inline: 16px;
 }
 .fv-phone .fv-head {
-	padding-block: 10px;
+	padding-block: 10px 0;
+	border-bottom: 0;
+}
+/* The path keeps a readable width; the buttons wrap under it. */
+.fv-phone .fv-crumbs {
+	flex: 1 1 12rem;
+}
+.fv-kbtn {
+	gap: 6px;
+}
+.fv-kbtn > svg {
+	width: 16px;
+	height: 16px;
+	flex: none;
+}
+.fv-klist .fv-icon {
+	width: 20px;
+	height: 20px;
+}
+.fv-phone .fv-secret {
+	margin: 16px;
+	border: 0;
+	border-radius: 16px;
+	font-size: 15px;
+}
+.fv-phone .fv-text {
+	padding-top: 12px;
 }
 .fv-image {
 	display: flex;

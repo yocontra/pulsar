@@ -22,7 +22,7 @@ async function ghMode(request: APIRequestContext, mode: string) {
 /** The issue sheet; its content is slotted light DOM (query from the host). */
 async function sheet(page: Page) {
 	await expect(page.getByRole("dialog", { name: "Issue #1378" })).toBeVisible();
-	const s = page.locator("ion-modal.i-modal");
+	const s = page.getByTestId("issue-sheet");
 	await expect(s.getByRole("heading", { level: 2 })).toHaveText("Issue #1378");
 	return s;
 }

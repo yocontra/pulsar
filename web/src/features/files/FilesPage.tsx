@@ -14,7 +14,7 @@ import {
 	FileIcon,
 	FolderIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "../../api/client.ts";
 import type { AgentRow, FileContent, FileEntry } from "../../api/types.ts";
 import { useChangesPeek } from "../../changes/data.ts";
@@ -26,14 +26,6 @@ import type { PageProps } from "../../lib/registry.tsx";
 import { navigate } from "../../lib/router.ts";
 import { findAgent } from "../../lib/store.ts";
 import { toast } from "../../lib/toast.ts";
-import { BackButton } from "../../mobile/BackButton.tsx";
-import {
-	IonButtons,
-	IonContent,
-	IonHeader,
-	IonTitle,
-	IonToolbar,
-} from "../../mobile/ionic.ts";
 import { CodeBlock } from "../../session/CodeBlock.tsx";
 import { langForPath } from "../../session/highlight.tsx";
 import { useGitStatus } from "../git/run.ts";
@@ -64,7 +56,7 @@ function useLiveFiles(agentId: string) {
 	});
 }
 
-const useTree = (agentId: string, path: string, enabled = true) =>
+export const useTree = (agentId: string, path: string, enabled = true) =>
 	useQuery(
 		{
 			queryKey: ["files", "tree", agentId, path],
@@ -93,7 +85,7 @@ const useContent = (agentId: string, path: string, reveal: boolean) =>
 	);
 
 /** What the route names: the agent, the path, and the line to show. */
-function useTarget({ arg, params }: PageProps) {
+export function useTarget({ arg, params }: PageProps) {
 	const agentId = arg;
 	const path = (params.path ?? "").replace(/^\/+|\/+$/g, "");
 	const line = Number(params.line) > 0 ? Number(params.line) : undefined;
@@ -113,16 +105,16 @@ function useTarget({ arg, params }: PageProps) {
 	return { agentId, path, line, agent, content, isDir, reveal };
 }
 
-const nameOf = (p: string) => p.split("/").pop() ?? p;
+export const nameOf = (p: string) => p.split("/").pop() ?? p;
 
-function fullPath(agent: AgentRow | undefined, path: string): string {
+export function fullPath(agent: AgentRow | undefined, path: string): string {
 	const cwd = agent?.cwd?.replace(/\/+$/, "");
 	if (!cwd) return path;
 	return path ? `${cwd}/${path}` : cwd;
 }
 
 /** Copies a path and says so. */
-async function copyPath(path: string): Promise<void> {
+export async function copyPath(path: string): Promise<void> {
 	try {
 		await navigator.clipboard.writeText(path);
 		toast("Path copied", { tone: "success", description: path });
@@ -131,7 +123,7 @@ async function copyPath(path: string): Promise<void> {
 	}
 }
 
-function unavailableText(reason: string | undefined): string {
+export function unavailableText(reason: string | undefined): string {
 	switch (reason) {
 		case "no_cwd":
 			return "This agent has no folder.";
@@ -149,7 +141,7 @@ function unavailableText(reason: string | undefined): string {
 // ------------------------------------------------------------------ pieces
 
 /** The path as links: the agent's folder name, then each folder. */
-function Breadcrumb({
+export function Breadcrumb({
 	agentId,
 	agent,
 	path,
@@ -305,7 +297,7 @@ function FolderList({
 	);
 }
 
-const EntryIcon = ({ e }: { e: FileEntry }) =>
+export const EntryIcon = ({ e }: { e: FileEntry }) =>
 	e.kind === "dir" ? (
 		<FolderIcon aria-hidden="true" className="fv-icon is-dir" />
 	) : (
@@ -355,13 +347,14 @@ function ImageView({ agentId, path }: { agentId: string; path: string }) {
 }
 
 /** The open file: text, image, or what it is. */
-function FileBody({
+export function FileBody({
 	agentId,
 	path,
 	line,
 	content,
 	isError,
 	onReveal,
+	secret,
 }: {
 	agentId: string;
 	path: string;
@@ -369,6 +362,8 @@ function FileBody({
 	content: FileContent | undefined;
 	isError: boolean;
 	onReveal: () => void;
+	/** The phone's own Show gate (Konsta), in place of the desktop's. */
+	secret?: (onReveal: () => void) => ReactNode;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const text = content?.kind === "text" ? (content.text ?? "") : null;
@@ -408,6 +403,7 @@ function FileBody({
 				Binary file ({size}). Not shown.
 			</p>
 		);
+	if (content.kind === "sensitive" && secret) return secret(onReveal);
 	if (content.kind === "sensitive")
 		return (
 			<div className="fv-secret" role="status">
@@ -594,61 +590,6 @@ export function FilesDesktop(props: PageProps) {
 				</section>
 			</div>
 		</main>
-	);
-}
-
-/** The phone: one pushed page per folder or file. */
-export function FilesPhone(props: PageProps) {
-	const { agentId, path, line, agent, content, isDir, reveal } =
-		useTarget(props);
-	const title = path
-		? nameOf(path)
-		: (agent?.cwd?.split("/").filter(Boolean).pop() ?? "Files");
-	return (
-		<>
-			<IonHeader>
-				<IonToolbar>
-					<IonButtons slot="start">
-						<BackButton route={fileRoute(agentId, path)} />
-					</IonButtons>
-					<IonTitle>
-						<span className="p-nav-title">
-							<h1>{title}</h1>
-						</span>
-					</IonTitle>
-				</IonToolbar>
-			</IonHeader>
-			<IonContent className="p-plain">
-				<div className="fv fv-phone">
-					<div className="fv-head">
-						<Breadcrumb
-							agentId={agentId}
-							agent={agent}
-							path={path}
-							replace={false}
-						/>
-						<Actions
-							agentId={agentId}
-							agent={agent}
-							path={path}
-							content={isDir ? undefined : content.data}
-						/>
-					</div>
-					{isDir ? (
-						<FolderList agentId={agentId} path={path} replace={false} />
-					) : (
-						<FileBody
-							agentId={agentId}
-							path={path}
-							line={line}
-							content={content.data}
-							isError={content.isError}
-							onReveal={reveal}
-						/>
-					)}
-				</div>
-			</IonContent>
-		</>
 	);
 }
 
