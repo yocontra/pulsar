@@ -57,10 +57,14 @@ test.describe("PR review (phone)", () => {
 
 	test("tabs, a file's threads, a line comment, resolve, the review sheet", async ({
 		page,
+		browserName,
 		request,
 	}) => {
 		// Linux WebKit (CI) has no WebAuthn at all: Prove Human can't run.
-		test.skip(process.platform === "linux", "no WebAuthn in Linux WebKit");
+		test.skip(
+			process.platform === "linux" && browserName === "webkit",
+			"no WebAuthn in Linux WebKit",
+		);
 		await openReview(page, request);
 		const view = page.locator(".prv-phone");
 		await expect(
@@ -68,6 +72,8 @@ test.describe("PR review (phone)", () => {
 		).toContainText("Two refreshes that start together raced");
 		expect(await contrastFailures(page, ".prv-phone *")).toEqual([]);
 		const tabs = view.getByRole("tablist", { name: "Review" });
+		await tabs.getByRole("tab", { name: "Files" }).click();
+		expect(await contrastFailures(page, ".prv-seg *")).toEqual([]);
 		await tabs.getByRole("tab", { name: "Checks" }).click();
 		await expect(view.locator(".g-check")).toHaveCount(3);
 		await tabs.getByRole("tab", { name: "Files" }).click();
@@ -116,6 +122,12 @@ test.describe("PR review (phone)", () => {
 			"Submit review",
 		);
 		await expect(sheet.getByRole("radio", { name: /Approve/ })).toBeDisabled();
+		expect(
+			await contrastFailures(
+				page,
+				'[data-testid="review-sheet"] .p-sheet-frame *',
+			),
+		).toEqual([]);
 		await sheet.getByLabel("Review summary").fill("Good to go once CI passes.");
 		await sheet.getByRole("button", { name: "Submit review" }).click();
 		await expect(toast(page, "Review submitted")).toBeVisible();

@@ -70,7 +70,12 @@ test.describe("issue sheet", () => {
 			s.locator(".i-body").getByRole("heading", { name: "Steps" }),
 		).toBeVisible();
 		await expect(s.getByRole("link", { name: "Open on GitHub" })).toBeVisible();
-		expect(await contrastFailures(page, ".i-sheet *")).toEqual([]);
+		expect(
+			await contrastFailures(
+				page,
+				'[data-testid="issue-sheet"] .p-sheet-frame *',
+			),
+		).toEqual([]);
 		await s.getByRole("button", { name: "Close" }).click();
 		await expect(page.getByRole("dialog", { name: "Issue #1378" })).toHaveCount(
 			0,

@@ -143,6 +143,11 @@ html.md ion-header.p-bar ion-title {
 html.md ion-header.p-bar {
 	box-shadow: none;
 }
+/* A title with a subtitle (PageShell `subtitle`) sits at the start too. */
+html.md ion-header.p-bar .p-nav-title {
+	align-items: flex-start;
+	text-align: start;
+}
 html.md ion-header.p-bar.header-md::after {
 	display: none;
 }
@@ -340,8 +345,11 @@ html.md :is(.p-sheet, .p-kit) .m-btn:is(.gray, .tinted) {
 	background: color-mix(in srgb, var(--ds-primary) 14%, var(--ds-surface));
 	color: var(--ds-text);
 }
+/* Tinted (Ask to fix): the link color, a step toward the label so it
+   keeps AA on its tint in both themes. */
+:is(.p-sheet, .p-kit) .m-btn.tinted,
 html.md :is(.p-sheet, .p-kit) .m-btn.tinted {
-	color: var(--ds-link);
+	color: color-mix(in srgb, var(--ds-link) 78%, var(--ds-text));
 }
 html.md :is(.p-sheet, .p-kit) .m-btn:disabled {
 	background: color-mix(in srgb, var(--ds-text) 12%, transparent);
