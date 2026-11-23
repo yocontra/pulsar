@@ -283,7 +283,7 @@ function ProveSheetImpl({ mobile }: { mobile: boolean }) {
 		>
 			<div
 				ref={sheet}
-				className="prove-sheet"
+				className="prove-sheet p-kit"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="prove-title"

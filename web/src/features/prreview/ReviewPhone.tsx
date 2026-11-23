@@ -4,25 +4,18 @@
  * with its threads and a comment button on each line. "Review" in the top
  * bar opens the review form in a sheet.
  */
+import { Button, Segmented, SegmentedButton } from "konsta/react";
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import type { AgentRow, GitPrReview } from "../../api/types.ts";
 import { Counts, FileList, StatusMark } from "../../changes/FileList.tsx";
 import { splitPath } from "../../changes/model.ts";
-import { CloseX } from "../../components/CloseX.tsx";
 import type { PageProps } from "../../lib/registry.tsx";
 import { navigate } from "../../lib/router.ts";
 import { observer } from "../../lib/signals.ts";
 import { findAgent } from "../../lib/store.ts";
-import { BackButton } from "../../mobile/BackButton.tsx";
-import {
-	IonButtons,
-	IonContent,
-	IonHeader,
-	IonTitle,
-	IonToolbar,
-} from "../../mobile/ionic.ts";
-import { useIonicLazy } from "../../mobile/lazyIonic.ts";
+import { isMaterial } from "../../mobile/platform.ts";
+import { PageShell } from "../../mobile/ui/PageShell.tsx";
+import { SheetShell } from "../../mobile/ui/SheetShell.tsx";
 import { checksSummary } from "../git/PrCard.tsx";
 import { asChanged, openThreads, useReview } from "./data.ts";
 import {
@@ -57,36 +50,22 @@ function ReviewSheet({
 	open: boolean;
 	onClose: () => void;
 }) {
-	const lz = useIonicLazy();
-	if (!lz) return null;
-	return createPortal(
-		<lz.IonModal
+	return (
+		<SheetShell
+			open={open}
+			onClose={onClose}
+			title="Submit review"
+			detents={[0, 1]}
+			initial={1}
 			className="g-modal"
-			isOpen={open}
-			aria-label="Submit review"
-			breakpoints={[0, 1]}
-			initialBreakpoint={1}
-			handle={false}
-			onIonModalDidDismiss={onClose}
+			testId="review-sheet"
 		>
-			<IonContent className="p-sheet-content" scrollY={false}>
-				<div className="g-sheet">
-					<header className="m-sheet-head">
-						<span />
-						<h2>Submit review</h2>
-						<CloseX onClick={onClose} />
-					</header>
-					<div className="m-sheet-scroll">
-						<div className="g-sheet-body">
-							{open && (
-								<ReviewForm agentId={agent.id} r={r} mobile onDone={onClose} />
-							)}
-						</div>
-					</div>
-				</div>
-			</IonContent>
-		</lz.IonModal>,
-		document.querySelector("ion-app") ?? document.body,
+			<div className="p-sheet-pad">
+				{open && (
+					<ReviewForm agentId={agent.id} r={r} mobile onDone={onClose} />
+				)}
+			</div>
+		</SheetShell>
 	);
 }
 
@@ -109,23 +88,29 @@ function Overview({
 		<div className="prv-phone">
 			<PrHead r={r} />
 			{/* In the page, not the top bar (it has no room for more buttons). */}
-			<button type="button" className="m-btn wide" onClick={onReview}>
+			<Button large rounded onClick={onReview}>
 				Submit review
-			</button>
-			<div className="cv-modes prv-seg" role="tablist" aria-label="Review">
+			</Button>
+			<Segmented
+				strong={!isMaterial}
+				outline={isMaterial}
+				rounded
+				className="prv-seg"
+				role="tablist"
+				aria-label="Review"
+			>
 				{TABS.map((t) => (
-					<button
+					<SegmentedButton
 						key={t}
-						type="button"
+						active={tab === t}
 						role="tab"
 						aria-selected={tab === t}
-						className={`cv-mode${tab === t ? " on" : ""}`}
 						onClick={() => setTab(t)}
 					>
 						{TAB_LABEL[t]}
-					</button>
+					</SegmentedButton>
 				))}
-			</div>
+			</Segmented>
 			<div role="tabpanel" aria-label={TAB_LABEL[tab]} className="prv-panel">
 				{tab === "summary" && <Summary r={r} onFiles={() => setTab("files")} />}
 				{tab === "files" &&
@@ -220,26 +205,20 @@ function ReviewPhoneImpl({ arg, params }: PageProps) {
 	const ready = !!agent && !!r?.pr;
 	return (
 		<>
-			<IonHeader>
-				<IonToolbar>
-					<IonButtons slot="start">
-						<BackButton route={route} />
-					</IonButtons>
-					<IonTitle>
-						<span className="p-nav-title">
-							<h1>
-								{file
-									? splitPath(file).name
-									: r?.pr
-										? `PR #${r.pr.number}`
-										: "Pull request"}
-							</h1>
-							{agent && <span className="p-nav-sub">{agent.name}</span>}
-						</span>
-					</IonTitle>
-				</IonToolbar>
-			</IonHeader>
-			<IonContent className="p-plain">
+			<PageShell
+				title={
+					file
+						? splitPath(file).name
+						: r?.pr
+							? `PR #${r.pr.number}`
+							: "Pull request"
+				}
+				subtitle={agent?.name}
+				route={route}
+				large={false}
+				className="p-kit"
+				testId="pr-page"
+			>
 				{!ready ? (
 					<p className="prv-empty" role="status">
 						{agent ? noPrText(r, q.error) : "This agent is gone."}
@@ -255,7 +234,7 @@ function ReviewPhoneImpl({ arg, params }: PageProps) {
 						onReview={() => setSheet(true)}
 					/>
 				)}
-			</IonContent>
+			</PageShell>
 			{ready && !file && (
 				<ReviewSheet
 					agent={agent!}

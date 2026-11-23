@@ -44,19 +44,19 @@ test.describe("file viewer", () => {
 		await page.goto(`/#/file/${encodeURIComponent(id)}`);
 		let p = top(page);
 		await p
-			.getByRole("list", { name: "Files" })
+			.getByRole("group", { name: "Files" })
 			.getByRole("button", { name: "src" })
 			.click();
 		await expect(page).toHaveURL(/\?path=src$/);
 		p = top(page);
 		await expect(p.locator("ion-title")).toContainText("src");
 		await p
-			.getByRole("list", { name: "Files" })
+			.getByRole("group", { name: "Files" })
 			.getByRole("button", { name: "auth" })
 			.click();
 		p = top(page);
 		await p
-			.getByRole("list", { name: "Files" })
+			.getByRole("group", { name: "Files" })
 			.getByRole("button", { name: "refresh.ts" })
 			.click();
 		p = top(page);
@@ -84,7 +84,7 @@ test.describe("file viewer", () => {
 		);
 		let p = top(page);
 		await p
-			.getByRole("list", { name: "Files" })
+			.getByRole("group", { name: "Files" })
 			.getByRole("button", { name: ".env.local" })
 			.click();
 		p = top(page);

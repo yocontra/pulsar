@@ -5,21 +5,20 @@
  * commit form, the PR card and "Ask {agent} to fix" open in the same
  * sheet; progress shows in place of the buttons.
  */
+
+import { Button, List, ListItem } from "konsta/react";
 import {
-	ChevronRightIcon,
 	GitBranchIcon,
 	GitPullRequestIcon,
 	LoaderCircleIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { AgentRow, GitStatus } from "../../api/types.ts";
 import { useChangesPeek } from "../../changes/data.ts";
-import { CloseX } from "../../components/CloseX.tsx";
 import { observer } from "../../lib/signals.ts";
 import { can } from "../../lib/store.ts";
-import { IonButton, IonContent } from "../../mobile/ionic.ts";
-import { useIonicLazy } from "../../mobile/lazyIonic.ts";
+import { IonButton } from "../../mobile/ionic.ts";
+import { SheetShell } from "../../mobile/ui/SheetShell.tsx";
 import { CommitForm } from "./CommitForm.tsx";
 import {
 	commitReason,
@@ -66,106 +65,118 @@ function Overview({
 		run.start(steps);
 		if (steps[0] === "commit") go("commit");
 	};
+	const remote = !status.remote
+		? "None"
+		: status.upstreamGone
+			? `${status.upstream} is gone: push makes ${status.pushTo}`
+			: !tracking(status)
+				? `Not pushed to ${status.pushTo} yet`
+				: status.ahead || status.behind
+					? `${status.ahead} ahead, ${status.behind} behind ${status.upstream}`
+					: `Up to date with ${status.upstream}`;
 	return (
-		<div className="g-sheet-body">
-			<ul className="g-rows">
-				<li>
-					<span className="g-row-label">Branch</span>
-					<span className="g-row-value">
-						{status.branch ?? "Detached HEAD"}
-						{status.onDefault && <span className="g-chip warn">Default</span>}
-					</span>
-				</li>
-				<li>
-					<span className="g-row-label">Changes</span>
-					<span className="g-row-value">
-						{status.dirty === 0 ? (
-							"Clean"
-						) : (
-							<>
-								{status.dirty} {status.dirty === 1 ? "file" : "files"}
-								{peek?.available && (
-									<span className="g-stat">
-										<span className="g-add">+{peek.added}</span>
-										<span className="g-del">−{peek.removed}</span>
-									</span>
-								)}
-							</>
-						)}
-					</span>
-				</li>
-				<li>
-					<span className="g-row-label">Remote</span>
-					<span className="g-row-value">
-						{!status.remote
-							? "None"
-							: status.upstreamGone
-								? `${status.upstream} is gone: push makes ${status.pushTo}`
-								: !tracking(status)
-									? `Not pushed to ${status.pushTo} yet`
-									: status.ahead || status.behind
-										? `${status.ahead} ahead, ${status.behind} behind ${status.upstream}`
-										: `Up to date with ${status.upstream}`}
-					</span>
-				</li>
+		<>
+			<List
+				strong
+				inset
+				className="g-rows"
+				role="group"
+				aria-label="Git status"
+			>
+				<ListItem
+					title="Branch"
+					after={
+						<span className="g-row-value">
+							{status.branch ?? "Detached HEAD"}
+							{status.onDefault && <span className="g-chip warn">Default</span>}
+						</span>
+					}
+				/>
+				<ListItem
+					title="Changes"
+					after={
+						<span className="g-row-value">
+							{status.dirty === 0 ? (
+								"Clean"
+							) : (
+								<>
+									{status.dirty} {status.dirty === 1 ? "file" : "files"}
+									{peek?.available && (
+										<span className="g-stat">
+											<span className="g-add">+{peek.added}</span>
+											<span className="g-del">−{peek.removed}</span>
+										</span>
+									)}
+								</>
+							)}
+						</span>
+					}
+				/>
+				<ListItem
+					title="Remote"
+					after={<span className="g-row-value g-row-wrap">{remote}</span>}
+				/>
 				{status.pr && (
-					<li>
-						<button
-							type="button"
-							className="g-row-btn"
-							onClick={() => go("pr")}
-						>
-							<span className="g-row-label">
-								<GitPullRequestIcon
-									aria-hidden="true"
-									className={`g-pr-ico ${status.pr.state}`}
-								/>
-								PR #{status.pr.number}
-							</span>
-							<span className="g-row-value">
-								{PR_STATE[status.pr.state]}
-								<ChevronRightIcon aria-hidden="true" />
-							</span>
-						</button>
-					</li>
+					<ListItem
+						link
+						linkComponent="button"
+						linkProps={{ type: "button" }}
+						onClick={() => go("pr")}
+						media={
+							<GitPullRequestIcon
+								aria-hidden="true"
+								className={`g-pr-ico ${status.pr.state}`}
+							/>
+						}
+						title={`PR #${status.pr.number}`}
+						after={PR_STATE[status.pr.state]}
+					/>
 				)}
-			</ul>
+			</List>
 			{run.phase.kind !== "idle" ? (
-				<Progress phase={run.phase} run={run} mobile />
+				<div className="p-sheet-pad">
+					<Progress phase={run.phase} run={run} mobile />
+				</div>
 			) : (
-				<div className="g-sheet-actions">
+				<div className="p-sheet-pad g-sheet-actions">
 					{quick.href ? (
-						<a
-							className="m-btn wide"
-							href={quick.href}
-							target="_blank"
-							rel="noopener noreferrer"
+						<Button
+							large
+							rounded
+							component="a"
+							{...{
+								href: quick.href,
+								target: "_blank",
+								rel: "noopener noreferrer",
+							}}
 						>
 							{quick.label}
-						</a>
+						</Button>
 					) : (
-						<button
-							type="button"
-							className="m-btn wide"
+						<Button
+							large
+							rounded
 							disabled={!!quick.disabled}
 							onClick={() => start(quick.steps)}
 						>
 							{quick.label}
-						</button>
+						</Button>
 					)}
 					{quick.disabled && <p className="g-why">{quick.disabled}</p>}
 					<div className="g-sheet-more">
 						{rows.map((r) =>
 							r.step === "pr" && status.pr && prOpen(status) ? null : (
-								<button
+								<Button
 									key={r.step}
-									type="button"
-									className="m-btn small gray"
+									tonal
+									rounded
+									inline
+									className="p-tonal"
 									disabled={!!r.why}
 									onClick={() => start([r.step])}
 								>
 									{r.label}
-								</button>
+								</Button>
 							),
 						)}
 					</div>
@@ -178,12 +189,11 @@ function Overview({
 						))}
 				</div>
 			)}
-		</div>
+		</>
 	);
 }
 
 function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
-	const lz = useIonicLazy();
 	const status = useGitStatus(agent.id).data;
 	const run = useGitRunner(agent, status);
 	const [open, setOpen] = useState(false);
@@ -239,131 +249,103 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 					<GitBranchIcon aria-hidden="true" />
 				)}
 			</IonButton>
-			{/*
-			 * Portaled to ion-app: Ionic moves the sheet there, out of this
-			 * nav page's portal, and React only sees its events inside the
-			 * portal container they come from.
-			 */}
-			{lz &&
-				mounted &&
-				createPortal(
-					<lz.IonModal
-						ref={modal}
-						className="g-modal"
-						isOpen={open}
-						aria-label="Git"
-						breakpoints={[0, 0.65, 1]}
-						initialBreakpoint={0.65}
-						handle={false}
-						onIonModalDidDismiss={() => {
-							close();
-							setMounted(false);
-						}}
-					>
-						<IonContent className="p-sheet-content" scrollY={false}>
-							<div className="g-sheet">
-								<header className="m-sheet-head">
-									{view === "overview" ? (
-										<span />
-									) : (
-										<button
-											type="button"
-											className="g-link"
-											onClick={() => {
-												if (view === "commit") run.closeCommit();
-												setView(view === "ask" ? "pr" : "overview");
-											}}
-										>
-											Back
-										</button>
-									)}
-									<h2>
-										{view === "ask" ? `Ask ${agent.name} to fix` : TITLE[view]}
-									</h2>
-									<CloseX onClick={close} />
-								</header>
-								<div className="m-sheet-scroll">
-									{view === "overview" && (
-										<Overview
-											agent={agent}
-											status={status}
-											run={run}
-											go={setView}
-										/>
-									)}
-									{view === "commit" && run.commitThen && (
-										<div className="g-sheet-body">
-											<CommitForm
-												agent={agent}
-												status={status}
-												mobile
-												onCommit={(c) => {
-													run.commit(c);
-													setView("overview");
-												}}
-												onCancel={() => {
-													run.closeCommit();
-													setView("overview");
-												}}
-											/>
-										</div>
-									)}
-									{view === "pr" && (
-										<div className="g-sheet-body">
-											<PrCard
-												agent={agent}
-												fallback={status.pr}
-												mobile
-												onAsk={(t) => {
-													setAsk(t);
-													setView("ask");
-												}}
-												onReview={close}
-											/>
-										</div>
-									)}
-									{view === "ask" && (
-										<div className="g-sheet-body">
-											<AskFixForm
-												agent={agent}
-												initial={ask}
-												mobile
-												onDone={() => setView("pr")}
-											/>
-										</div>
-									)}
-								</div>
-								{run.confirm && (
-									<div
-										className="g-sheet-confirm"
-										role="alertdialog"
-										aria-label={run.confirm.title}
+			{mounted && (
+				<SheetShell
+					open={open}
+					onClose={close}
+					onClosed={() => setMounted(false)}
+					title={view === "ask" ? `Ask ${agent.name} to fix` : TITLE[view]}
+					label="Git"
+					detents={[0, 0.65, 1]}
+					initial={0.65}
+					className="g-modal"
+					modalRef={modal}
+					testId="git-sheet"
+					onBack={
+						view === "overview"
+							? undefined
+							: () => {
+									if (view === "commit") run.closeCommit();
+									setView(view === "ask" ? "pr" : "overview");
+								}
+					}
+					footer={
+						run.confirm && (
+							<div
+								className="p-sheet-foot g-sheet-confirm"
+								role="alertdialog"
+								aria-label={run.confirm.title}
+							>
+								<strong>{run.confirm.title}</strong>
+								<p>{run.confirm.body}</p>
+								<div className="g-sheet-foot">
+									<Button
+										large
+										rounded
+										tonal
+										className="p-tonal"
+										onClick={() => run.confirm?.resolve(false)}
 									>
-										<strong>{run.confirm.title}</strong>
-										<p>{run.confirm.body}</p>
-										<div className="g-sheet-foot">
-											<button
-												type="button"
-												className="m-btn gray"
-												onClick={() => run.confirm?.resolve(false)}
-											>
-												Cancel
-											</button>
-											<button
-												type="button"
-												className="m-btn"
-												onClick={() => run.confirm?.resolve(true)}
-											>
-												{run.confirm.ok}
-											</button>
-										</div>
-									</div>
-								)}
+										Cancel
+									</Button>
+									<Button
+										large
+										rounded
+										onClick={() => run.confirm?.resolve(true)}
+									>
+										{run.confirm.ok}
+									</Button>
+								</div>
 							</div>
-						</IonContent>
-					</lz.IonModal>,
-					document.querySelector("ion-app") ?? document.body,
-				)}
+						)
+					}
+				>
+					{view === "overview" && (
+						<Overview agent={agent} status={status} run={run} go={setView} />
+					)}
+					{view === "commit" && run.commitThen && (
+						<div className="p-sheet-pad">
+							<CommitForm
+								agent={agent}
+								status={status}
+								mobile
+								onCommit={(c) => {
+									run.commit(c);
+									setView("overview");
+								}}
+								onCancel={() => {
+									run.closeCommit();
+									setView("overview");
+								}}
+							/>
+						</div>
+					)}
+					{view === "pr" && (
+						<div className="p-sheet-pad">
+							<PrCard
+								agent={agent}
+								fallback={status.pr}
+								mobile
+								onAsk={(t) => {
+									setAsk(t);
+									setView("ask");
+								}}
+								onReview={close}
+							/>
+						</div>
+					)}
+					{view === "ask" && (
+						<div className="p-sheet-pad">
+							<AskFixForm
+								agent={agent}
+								initial={ask}
+								mobile
+								onDone={() => setView("pr")}
+							/>
+						</div>
+					)}
+				</SheetShell>
+			)}
 		</>
 	);
 }

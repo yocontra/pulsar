@@ -33,7 +33,7 @@ async function openReview(page: Page, request: APIRequestContext) {
 	await softAuthenticator(page);
 	await page.goto(`${localhostBase()}/#/a/${encodeURIComponent(id)}`);
 	await page.getByRole("button", { name: /^Git: / }).click();
-	const sheet = page.locator("ion-modal.g-modal");
+	const sheet = page.getByTestId("git-sheet");
 	await sheet.getByRole("button", { name: /PR #1402/ }).click();
 	await expect(sheet.getByRole("heading", { level: 2 })).toHaveText(
 		"Pull request",
@@ -111,7 +111,7 @@ test.describe("PR review (phone)", () => {
 			.locator(".prv-phone:not(.prv-phone-file)")
 			.getByRole("button", { name: "Submit review" })
 			.click();
-		const sheet = page.locator("ion-modal.g-modal");
+		const sheet = page.getByTestId("review-sheet");
 		await expect(sheet.getByRole("heading", { level: 2 })).toHaveText(
 			"Submit review",
 		);

@@ -16,9 +16,7 @@ import {
 import { navigate } from "../../lib/router.ts";
 
 const FilesDesktop = lazy<PageProps>(() => import("./FilesPage.tsx"));
-const FilesPhone = lazy<PageProps>(() =>
-	import("./FilesPage.tsx").then((m) => ({ default: m.FilesPhone })),
-);
+const FilesPhone = lazy<PageProps>(() => import("./FilesPhone.tsx"));
 
 registerPage({ name: "file", desktop: FilesDesktop, phone: FilesPhone });
 
