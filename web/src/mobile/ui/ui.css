@@ -460,6 +460,10 @@ html.md .p-sheet-head h2 {
 html.md .p-sheet-start:empty {
 	display: none;
 }
+.p-sheet-toolbar {
+	flex: none;
+	touch-action: none;
+}
 .p-sheet-body {
 	flex: 1;
 	min-height: 0;
