@@ -54,6 +54,12 @@ export interface GitRunOptions {
 	maxBuffer?: number;
 	/** Extra environment (e.g. GIT_AUTHOR_NAME), on top of the safe one. */
 	env?: Record<string, string>;
+	/**
+	 * The worktree root of `cwd` when the caller already has it (from
+	 * `worktreeRoot` or an earlier result's `root`): skips the lookup, one
+	 * git process fewer. Steps of one operation share it.
+	 */
+	root?: string;
 }
 
 /** Git options for every run: no pager, colors or fsmonitor hook; paths as UTF-8. */
@@ -183,7 +189,7 @@ async function run(
 	opts: GitRunOptions,
 ): Promise<GitResult> {
 	const mode = opts.mode ?? "write";
-	const root = await worktreeRoot(cwd);
+	const root = opts.root ?? (await worktreeRoot(cwd));
 	if (!root)
 		return {
 			ok: false,

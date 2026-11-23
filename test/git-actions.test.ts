@@ -2,7 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
 	appendFileSync,
 	chmodSync,
+	cpSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -46,15 +48,36 @@ process.env.PATH = `${gh.dir}:${PATH}`;
 
 const SLUG = "acme/demo";
 
-/** A repo on `main`, pushed to a bare `origin` that reads as github.com/acme/demo. */
+/** The first project, built with git once; every project() is a copy of it. */
+let template: { d: string; bare: string } | undefined;
+
+/**
+ * A repo on `main`, pushed to a bare `origin` that reads as
+ * github.com/acme/demo. Copied from a template in-process (no git
+ * processes): building each one with git cost ~8 processes per case, which
+ * under machine load pushed cases past bun's 5 s timeout.
+ */
 function project() {
+	template ??= (() => {
+		const bare = tmpFolder();
+		g(bare, "init", "-q", "--bare");
+		const d = gitRepo();
+		g(d, "remote", "add", "origin", `https://github.com/${SLUG}.git`);
+		g(d, "config", "remote.origin.pushurl", bare);
+		g(d, "push", "-q", "-u", "origin", "main");
+		g(d, "remote", "set-head", "origin", "main");
+		return { d, bare };
+	})();
 	const bare = tmpFolder();
-	g(bare, "init", "-q", "--bare");
-	const d = gitRepo();
-	g(d, "remote", "add", "origin", `https://github.com/${SLUG}.git`);
-	g(d, "config", "remote.origin.pushurl", bare);
-	g(d, "push", "-q", "-u", "origin", "main");
-	g(d, "remote", "set-head", "origin", "main");
+	const d = tmpFolder();
+	cpSync(template.bare, bare, { recursive: true });
+	cpSync(template.d, d, { recursive: true });
+	// The copy pushes to its own bare repo, not the template's.
+	const config = join(d, ".git", "config");
+	writeFileSync(
+		config,
+		readFileSync(config, "utf8").replaceAll(template.bare, bare),
+	);
 	return { d, bare };
 }
 

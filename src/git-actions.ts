@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { readChanges } from "./changes/read.ts";
-import { type GitResult, runGh, runGit } from "./git-write.ts";
+import { type GitResult, runGh, runGit, worktreeRoot } from "./git-write.ts";
 import type {
 	GitCheck,
 	GitCommitResult,
@@ -35,10 +35,21 @@ const MAX_COMMENT_CHARS = 4000;
 
 type Read = (args: string[]) => Promise<GitResult>;
 
-export const reader =
-	(cwd: string): Read =>
-	(args) =>
-		runGit(cwd, args, { mode: "read" });
+/**
+ * Reads in the worktree holding `cwd`. The root (`known`, else looked up
+ * once by the first read) is shared by the rest: one git process per read,
+ * not two.
+ */
+export function reader(cwd: string, known?: string): Read {
+	let root: Promise<string | null> | undefined = known
+		? Promise.resolve(known)
+		: undefined;
+	return async (args) => {
+		root ??= worktreeRoot(cwd);
+		const r = await root;
+		return runGit(cwd, args, r ? { mode: "read", root: r } : { mode: "read" });
+	};
+}
 
 function unavailable(
 	agent: string,
@@ -143,11 +154,13 @@ export async function pushRemote(
 				.filter(Boolean)
 		: [];
 	if (remotes.length === 0) return null;
-	const pick = [
-		branch ? await config(read, `branch.${branch}.pushRemote`) : null,
-		await config(read, "remote.pushDefault"),
-		branch ? await config(read, `branch.${branch}.remote`) : null,
-	].find((r) => r && remotes.includes(r));
+	const pick = (
+		await Promise.all([
+			branch ? config(read, `branch.${branch}.pushRemote`) : null,
+			config(read, "remote.pushDefault"),
+			branch ? config(read, `branch.${branch}.remote`) : null,
+		])
+	).find((r) => r && remotes.includes(r));
 	if (pick) return pick;
 	if (remotes.includes("origin")) return "origin";
 	return remotes.length === 1 ? remotes[0]! : null;
@@ -324,7 +337,7 @@ async function lookupPr(
 	const r = await runGh(
 		cwd,
 		["pr", "view", repos.headRef, "--repo", repos.base, "--json", PR_FIELDS],
-		{ mode: "read", timeoutMs: GH_TIMEOUT_MS },
+		{ mode: "read", timeoutMs: GH_TIMEOUT_MS, root },
 	);
 	let out: { gh: GhState; pr: GitPr | null };
 	if (r.ok) {
@@ -494,7 +507,7 @@ export async function prDetails(
 			"--json",
 			`${PR_FIELDS},reviewDecision,statusCheckRollup,reviews`,
 		],
-		{ mode: "read", timeoutMs: GH_TIMEOUT_MS },
+		{ mode: "read", timeoutMs: GH_TIMEOUT_MS, root: head.root },
 	);
 	if (!r.ok) {
 		const f = ghFailure(r);
@@ -555,7 +568,7 @@ export async function prDetails(
 			"-f",
 			"per_page=100",
 		],
-		{ mode: "read", timeoutMs: GH_TIMEOUT_MS },
+		{ mode: "read", timeoutMs: GH_TIMEOUT_MS, root: head.root },
 	);
 	if (inline.ok)
 		try {
@@ -634,6 +647,8 @@ export async function commit(
 	const s = await gitStatus("", cwd, { pr: false });
 	writable(s);
 	const dir = cwd as string;
+	// One operation, one worktree: every step reuses the status's root.
+	const root = s.root as string;
 	if (s.dirty === 0)
 		refuse("Worktree is clean. Make changes before committing.");
 	if (!p.newBranch && !s.branch)
@@ -665,26 +680,25 @@ export async function commit(
 		const ok = await runGit(
 			dir,
 			["check-ref-format", "--branch", p.newBranch],
-			{
-				mode: "read",
-			},
+			{ mode: "read", root },
 		);
 		if (!ok.ok) refuse(`"${p.newBranch}" is not a valid branch name.`);
-		const sw = await runGit(dir, ["switch", "-c", p.newBranch]);
+		const sw = await runGit(dir, ["switch", "-c", p.newBranch], { root });
 		if (!sw.ok) fail(sw, "creating the branch");
 	}
 	// A commit that fails leaves the worktree where it was: on its branch
 	// (or detached HEAD), without the new branch, so a retry can create it.
 	const undoBranch = async () => {
 		if (!p.newBranch) return;
-		const back = await runGit(dir, ["switch", "-q", "-"]);
-		if (back.ok) await runGit(dir, ["branch", "-q", "-D", p.newBranch]);
+		const back = await runGit(dir, ["switch", "-q", "-"], { root });
+		if (back.ok)
+			await runGit(dir, ["branch", "-q", "-D", p.newBranch], { root });
 	};
 	// Stage exactly these paths, then commit only them: what the agent (or
 	// anyone) staged for other files stays staged and out of this commit.
 	// A staged rename's old path is in neither the index nor the worktree
 	// any more: commit it, but don't `add` it (git would not match it).
-	const add = await runGit(dir, ["add", "-A", "--", ...p.files]);
+	const add = await runGit(dir, ["add", "-A", "--", ...p.files], { root });
 	if (!add.ok) {
 		await undoBranch();
 		fail(add, "staging");
@@ -692,17 +706,21 @@ export async function commit(
 	const c = await runGit(
 		dir,
 		["commit", "-q", "--no-edit", "-m", p.message, "--", ...list],
-		{ timeoutMs: COMMIT_TIMEOUT_MS },
+		{ timeoutMs: COMMIT_TIMEOUT_MS, root },
 	);
 	if (!c.ok) {
 		// Put back what was not staged before (a hook said no, a signing failure).
 		const unstaged = list.filter((f) => known.get(f)?.staged === false);
-		if (unstaged.length) await runGit(dir, ["reset", "-q", "--", ...unstaged]);
+		if (unstaged.length)
+			await runGit(dir, ["reset", "-q", "--", ...unstaged], {
+				root,
+			});
 		await undoBranch();
 		fail(c, "commit");
 	}
 	const head = await runGit(dir, ["log", "-1", "--format=%h%x00%s"], {
 		mode: "read",
+		root,
 	});
 	const [sha = "", subject = ""] = head.ok
 		? head.stdout.trim().split("\0")
@@ -752,7 +770,10 @@ export async function push(
 	const args = tracking
 		? ["push", "--porcelain", remote, target]
 		: ["push", "--porcelain", "--set-upstream", remote, target];
-	const r = await runGit(dir, args, { timeoutMs: PUSH_TIMEOUT_MS });
+	const r = await runGit(dir, args, {
+		timeoutMs: PUSH_TIMEOUT_MS,
+		root: s.root as string,
+	});
 	if (!r.ok) {
 		if (r.code !== "failed") fail(r, "push");
 		throw new RpcError("git_failed", pushError(r.stdout, r.stderr, r.message));
@@ -820,9 +841,10 @@ export async function createPr(
 				? "You're on the default branch. Commit on a new branch first."
 				: "No default branch found to open a PR against.",
 		);
-	const repos = await prRepos(reader(dir), s.remote, branch);
+	const root = s.root as string;
+	const repos = await prRepos(reader(dir, root), s.remote, branch);
 	if (!repos) refuse("PRs need a GitHub remote.");
-	const existing = await lookupPr(dir, s.root!, repos, true);
+	const existing = await lookupPr(dir, root, repos, true);
 	if (existing.gh === "missing")
 		refuse("gh is not installed on the agent's machine.");
 	if (existing.gh === "logged_out")
@@ -843,10 +865,10 @@ export async function createPr(
 	if (p.title?.trim()) args.push("--title", p.title, "--body", p.body ?? "");
 	else args.push("--fill");
 	if (p.draft) args.push("--draft");
-	const r = await runGh(dir, args, { timeoutMs: GH_TIMEOUT_MS * 2 });
+	const r = await runGh(dir, args, { timeoutMs: GH_TIMEOUT_MS * 2, root });
 	if (!r.ok) fail(r, "gh pr create");
-	forgetPr(s.root!);
-	const after = await lookupPr(dir, s.root!, repos, true);
+	forgetPr(root);
+	const after = await lookupPr(dir, root, repos, true);
 	if (after.pr) return { pr: after.pr, created: true };
 	// gh printed the URL but the lookup lags: build the PR from the URL.
 	const url = /https:\/\/\S+\/pull\/(\d+)/.exec(r.stdout);
