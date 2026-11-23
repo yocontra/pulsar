@@ -71,9 +71,11 @@ describe("model id matching", () => {
 		expect(price("opencode-go/deepseek-v4.1-flash")?.output).toBe(0.6);
 		expect(price("deepseek-v4.1-flash-1017")?.cacheRead).toBe(0.003);
 		expect(price("deepseek-v4-pro")?.output).toBe(1.98);
-		// Zen's free tier and a retired snapshot from another provider.
+		// Venice's retired snapshot has its own price; Zen's free tier has none.
+		expect(price("deepseek-v4-flash-0731")?.input).toBe(0.13);
+		expect(price("deepseek-v4-flash-0731")?.cacheRead).toBe(0.13);
+		expect(price("deepseek-v4-flash")).toBeNull();
 		expect(price("deepseek-v4.1-flash-free")).toBeNull();
-		expect(price("deepseek-v4-flash-0731")).toBeNull();
 	});
 
 	test("Gemini, Grok and open-weight models", () => {

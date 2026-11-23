@@ -71,7 +71,8 @@ function listed(
  */
 export const DEFAULT_PRICES: Record<string, Price> = {
 	// Anthropic API list prices, November 2026. Checked 2026-11-23 against
-	// the same models on https://opencode.ai/docs/zen, which match.
+	// https://opencode.ai/docs/zen, which lists the same prices for every row
+	// here except the Mythos rows (not on that page, not rechecked).
 	"claude-fable-5-2": anthropic(8, 40, 0.2),
 	"claude-mythos-5-2": anthropic(8, 40, 0.2),
 	"claude-fable-5-1": anthropic(10, 50, 0.25),
@@ -136,6 +137,10 @@ export const DEFAULT_PRICES: Record<string, Price> = {
 	"deepseek-flash": listed(0.15, 0.003, 0.6),
 	"deepseek-v4.1-flash": listed(0.15, 0.003, 0.6),
 	"deepseek-v4-pro": listed(0.66, 0.022, 1.98),
+	// A retired V4 Flash snapshot Venice still serves:
+	// https://docs.venice.ai/overview/pricing, checked 2026-11-23. Venice
+	// lists no cache price, so cache reads and writes bill as input.
+	"deepseek-v4-flash-0731": listed(0.13, null, 0.26),
 
 	// Google Gemini API, Standard tier: https://ai.google.dev/gemini-api/docs/pricing,
 	// checked 2026-11-23. Output includes thinking tokens. Gemini 4 Carbon and
