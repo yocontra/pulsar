@@ -1,35 +1,35 @@
 /**
- * An agent: its conversation, a docked composer, and a bar with the agent's
- * name and live status. A prompt waiting on it shows inline in the
+ * An agent: its conversation, the composer in a floating dock, and a bar
+ * with the agent's name and live status (AgentBar). The bar's actions:
+ * git, Find, Changes and More; at 360 px or less, Changes and More, with
+ * git and Find in More. A prompt waiting on it shows inline in the
  * conversation; the banner brings it into view.
  */
 import { EllipsisIcon, ShieldCheckIcon } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
-import type { Approval } from "../api/types.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type { AgentRow, Approval } from "../api/types.ts";
 import { focusPrompt, promptOnScreen } from "../approval/focus.ts";
 import { ChangesButton } from "../changes/ChangesButton.tsx";
+import { gitOffered, showGit } from "../features/git/open.ts";
+import { openFind } from "../features/search/state.ts";
 import { shortModel } from "../lib/format.ts";
 import { Slot } from "../lib/registry.tsx";
 import { route } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
-import { approvalItem, findAgent, showToast } from "../lib/store.ts";
+import { approvalItem, can, findAgent, showToast } from "../lib/store.ts";
 import { showFinished, subagentsLabel } from "../lib/subagents.ts";
 import SessionView from "../session/SessionView.tsx";
 import type { MessageAction } from "../session/Transcript.tsx";
-import { agentMenu } from "./actions.ts";
-import { BackButton } from "./BackButton.tsx";
+import { AgentBar, useUnderGlass } from "./AgentBar.tsx";
+import { agentButtons } from "./actions.ts";
 import { now } from "./clock.ts";
-import {
-	IonButton,
-	IonButtons,
-	IonContent,
-	IonHeader,
-	IonTitle,
-	IonToolbar,
-} from "./ionic.ts";
+import { IonButton, IonContent, IonToolbar } from "./ionic.ts";
+import { isMaterial } from "./platform.ts";
 import { AgentStatus, harnessName } from "./rows.tsx";
 import { SubagentsSection } from "./SubagentsSection.tsx";
 import { showActions } from "./ui/actions.ts";
+import { Menu, type MenuItem } from "./ui/Menu.tsx";
 
 /**
  * Long-press a message for its actions, as in Messages (no copy row under
@@ -104,8 +104,78 @@ function useMessageMenu() {
 	return { handlers, messageActions };
 }
 
+/** At 360 px or less the bar keeps Changes and More; git and Find move into More. */
+const NARROW = "(max-width: 360px)";
+
+function useNarrow() {
+	const [narrow, setNarrow] = useState(() => matchMedia(NARROW).matches);
+	useEffect(() => {
+		const mq = matchMedia(NARROW);
+		const on = () => setNarrow(mq.matches);
+		mq.addEventListener("change", on);
+		return () => mq.removeEventListener("change", on);
+	}, []);
+	return narrow;
+}
+
+/** The ••• button and its menu (a Konsta popover anchored to it). */
+const MoreMenu = observer(function MoreMenu({ a }: { a: AgentRow | null }) {
+	const [open, setOpen] = useState(false);
+	const btn = useRef<HTMLIonButtonElement | null>(null);
+	const narrow = useNarrow();
+	const items: MenuItem[] = [];
+	if (a && narrow) {
+		if (gitOffered.value.has(a.id))
+			items.push({
+				label: "Git",
+				onSelect: () => showGit(a.id),
+			});
+		items.push({
+			label: "Find in Messages",
+			disabled: !can("search") || !a.hasTranscript,
+			onSelect: () => openFind(a.id),
+		});
+	}
+	if (a)
+		for (const b of agentButtons(a))
+			items.push({
+				label: b.text,
+				destructive: b.role === "destructive",
+				disabled: b.disabled,
+				onSelect: () => b.handler?.(),
+			});
+	return (
+		<>
+			<IonButton
+				ref={btn}
+				aria-label="More"
+				aria-haspopup="menu"
+				aria-expanded={open}
+				disabled={!a}
+				onClick={() => setOpen(true)}
+			>
+				<EllipsisIcon aria-hidden="true" />
+			</IonButton>
+			{/* Out of the bar: its toolbar clips and stacks what is inside. */}
+			{a &&
+				createPortal(
+					<Menu
+						open={open}
+						onClose={() => setOpen(false)}
+						target={btn}
+						items={items}
+						label={`${a.name} actions`}
+					/>,
+					document.querySelector("ion-app") ?? document.body,
+				)}
+		</>
+	);
+});
+
 function AgentPageImpl({ id }: { id: string }) {
 	const { handlers: messageMenu, messageActions } = useMessageMenu();
+	const content = useRef<HTMLIonContentElement | null>(null);
+	useUnderGlass(content);
 	const a = findAgent(id);
 	const att = approvalItem(id);
 	// An expired prompt no longer waits on the app: its card says so, and
@@ -117,65 +187,65 @@ function AgentPageImpl({ id }: { id: string }) {
 	useEffect(() => {
 		if (deep && pending) focusPrompt(id);
 	}, [deep, pending, id]);
+	const banner = pending && att?.approval && promptOnScreen.value !== id && (
+		<IonToolbar className="p-approval-bar">
+			<button
+				type="button"
+				className="p-approval-banner"
+				onClick={() => focusPrompt(id)}
+			>
+				<span className="p-icon is-needs" aria-hidden="true">
+					<ShieldCheckIcon />
+				</span>
+				<span className="p-ab-text">
+					<strong>
+						{att.approval.prompt ? "Answer needed" : "Approval needed"}
+					</strong>
+					<span>{bannerDetail(att.approval)}</span>
+				</span>
+				<span className="p-ab-cta">Review</span>
+			</button>
+		</IonToolbar>
+	);
 	return (
 		<>
-			<IonHeader className="p-agent-header">
-				<IonToolbar>
-					<IonButtons slot="start">
-						<BackButton route={{ view: "agent", id }} compact />
-					</IonButtons>
-					<IonTitle>
-						<span className="p-nav-title">
-							<h1>{a?.name ?? "Agent"}</h1>
-							{a && (
-								<span className="p-nav-sub">
-									<AgentStatus a={a} reason short />
-									<span className="p-nav-sub-more">
-										{a.model
-											? ` · ${shortModel(a.model)}`
-											: ` · ${harnessName(a.harness)}`}
-									</span>
-								</span>
-							)}
-						</span>
-					</IonTitle>
-					<IonButtons slot="end">
+			<AgentBar
+				route={{ view: "agent", id }}
+				name={a?.name ?? "Agent"}
+				sub={
+					a && (
+						<>
+							<AgentStatus a={a} reason short />
+							<span className="p-nav-sub-more">
+								{a.model
+									? ` · ${shortModel(a.model)}`
+									: ` · ${harnessName(a.harness)}`}
+							</span>
+						</>
+					)
+				}
+				end={
+					<>
 						{a && <Slot name="session.header" agent={a} mobile />}
 						<ChangesButton id={id} />
-						<IonButton
-							aria-label="More"
-							disabled={!a}
-							onClick={() => a && void agentMenu(a)}
-						>
-							<EllipsisIcon />
-						</IonButton>
-					</IonButtons>
-				</IonToolbar>
-				{subagentsLabel(a?.subagents, showFinished.value) && (
-					<SubagentsSection agentId={id} />
-				)}
-				{pending && att?.approval && promptOnScreen.value !== id && (
-					<IonToolbar className="p-approval-bar">
-						<button
-							type="button"
-							className="p-approval-banner"
-							onClick={() => focusPrompt(id)}
-						>
-							<span className="p-icon is-needs" aria-hidden="true">
-								<ShieldCheckIcon />
-							</span>
-							<span className="p-ab-text">
-								<strong>
-									{att.approval.prompt ? "Answer needed" : "Approval needed"}
-								</strong>
-								<span>{bannerDetail(att.approval)}</span>
-							</span>
-							<span className="p-ab-cta">Review</span>
-						</button>
-					</IonToolbar>
-				)}
-			</IonHeader>
-			<IonContent scrollY={false} className="p-plain p-agent">
+						<MoreMenu a={a} />
+					</>
+				}
+				below={
+					<>
+						{subagentsLabel(a?.subagents, showFinished.value) && (
+							<SubagentsSection agentId={id} />
+						)}
+						{banner}
+					</>
+				}
+			/>
+			<IonContent
+				ref={content}
+				scrollY={false}
+				fullscreen={!isMaterial}
+				className="p-plain p-agent"
+			>
 				<div className="p-agent-body" {...messageMenu}>
 					<SessionView id={id} mobile bare messageActions={messageActions} />
 				</div>

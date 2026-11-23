@@ -22,6 +22,8 @@ The phone app looks native: iOS on an iPhone, Material on Android. A tab bar at 
 - Back on Android: from an open page, back to its tab; from another tab, back to Agents; from Agents, out of the app. A link or notification that opens an agent goes back to Agents.
 - On Agents, one line says how many agents need you; tap it for Needs You. **New agent** is the + at the top on an iPhone, and the round button above the tab bar on Android.
 
+An agent's page has its name and status at the top, then its actions: the branch button (git), find in messages, Changes and •••. On a narrow phone (360 px wide or less), git and find move into the ••• menu. The composer floats at the bottom, above the keyboard when you type. On an iPhone the conversation scrolls under the top bar and the composer.
+
 ## The pool
 
 The sidebar (the home screen on a phone) lists every agent as a tree: machines, then projects, then agents. A group shows a count only when agents there need you. A machine that can't be reached says why: asleep, daemon down, or an older Pulsar.

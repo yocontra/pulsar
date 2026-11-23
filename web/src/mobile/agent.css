@@ -1,0 +1,189 @@
+/*
+ * The agent and subagent pages (AgentPage, SubagentPage, AgentBar): the
+ * top bar, its actions, and the composer in a floating dock. Loaded with
+ * the agent page's chunk.
+ */
+
+/* ------------------------------------------------------------ top bar
+   PageShell's bar (ui/ui.css .p-bar) over the conversation's background. */
+.p-agent-header .p-bar-bg {
+	inset: 0;
+	background: var(--p-plain);
+}
+html.ios ion-header.p-agent-header {
+	box-shadow: 0 0.5px 0 var(--p-sep);
+}
+html.md ion-header.p-agent-header ion-toolbar {
+	--background: var(--p-plain);
+}
+html.md ion-header.p-agent-header ion-toolbar:first-of-type {
+	--min-height: 64px;
+}
+html.md ion-header.p-agent-header {
+	box-shadow: 0 1px 0 var(--p-sep);
+}
+/* Material: the title row starts after the back arrow (16 dp gap). */
+html.md .p-agent-header ion-title {
+	margin-inline-start: 0;
+	padding-inline: 4px 8px;
+}
+html.md .p-agent-header .p-nav-title h1 {
+	font-family: Roboto, system-ui, sans-serif;
+	font-size: 20px;
+	font-weight: 500;
+}
+
+/* The actions: iOS's glass capsule (40 px targets keep the title room at
+   361 px), Material's 48 dp icon buttons. */
+.p-agent-actions {
+	display: flex;
+	align-items: center;
+}
+/* Konsta's glass shadow has a 25 px halo the toolbar would clip into a
+   band: the rim alone, and a short drop. */
+html.ios .p-agent-actions.k-glass {
+	margin-inline-end: 8px;
+	box-shadow:
+		inset 0 0 0 0.5px var(--p-dock-ring),
+		0 2px 10px rgba(0, 0, 0, 0.08);
+}
+html.ios .p-agent-actions ion-button {
+	min-width: 40px;
+	--padding-start: 8px;
+	--padding-end: 8px;
+}
+html.md .p-agent-actions ion-button {
+	min-width: 48px;
+	min-height: 48px;
+	--padding-start: 12px;
+	--padding-end: 12px;
+	--border-radius: 50%;
+}
+
+/* At 360 px or less only Changes and More stay: git and Find are in More
+   (AgentPage's NARROW). Their components stay mounted (sheets, find bar). */
+@media (max-width: 360px) {
+	.p-agent-actions .g-phone-btn,
+	.p-agent-actions .p-find-btn {
+		display: none;
+	}
+}
+
+/* The Subagents row's chevrons (SubagentsSection). */
+.p-sa-chev {
+	width: 16px;
+	flex: none;
+	transition: transform var(--ds-dur, 0.2s) ease;
+}
+.p-sa-chev.is-open {
+	transform: rotate(90deg);
+}
+.p-sa-row[data-level="1"] {
+	padding-left: 16px;
+}
+.p-sa-row[data-level="2"] {
+	padding-left: 32px;
+}
+.p-sa-row[data-level="3"] {
+	padding-left: 48px;
+}
+.p-sa-row[data-level="4"] {
+	padding-left: 64px;
+}
+
+/* ------------------------------------------------------------ composer dock
+   The shared Composer (components/Composer.tsx, .m-composer) floats in a
+   rounded dock above the home indicator and rides up with the keyboard
+   (--kb). iOS: Konsta's glass (styles/konsta.css); Android: a Material
+   surface container. Only these pages: broadcast and node sheets keep
+   their bar. */
+:root {
+	--p-dock-bg: rgba(255, 255, 255, 0.8);
+	--p-dock-ring: rgba(0, 0, 0, 0.08);
+	--p-dock-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--p-dock-bg: rgba(44, 44, 44, 0.72);
+		--p-dock-ring: rgba(255, 255, 255, 0.1);
+		--p-dock-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+	}
+}
+:root[data-theme="dark"] {
+	--p-dock-bg: rgba(44, 44, 44, 0.72);
+	--p-dock-ring: rgba(255, 255, 255, 0.1);
+	--p-dock-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.p-agent .m-composer {
+	margin: 4px calc(8px + var(--sar))
+		max(calc(var(--sab) + 2px), calc(var(--kb, 0px) + 8px), 8px)
+		calc(8px + var(--sal));
+	padding: 6px 10px;
+	border: 0;
+	border-radius: 26px;
+	background: var(--p-dock-bg);
+	box-shadow:
+		inset 0 0 0 0.5px var(--p-dock-ring),
+		var(--p-dock-shadow);
+	-webkit-backdrop-filter: saturate(180%) blur(20px);
+	backdrop-filter: saturate(180%) blur(20px);
+}
+html.md .p-agent .m-composer {
+	border-radius: 28px;
+	background: var(--ds-surface-2);
+	box-shadow: var(--ds-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.2));
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+.p-agent .m-composer .q-strip {
+	border-radius: 18px;
+}
+@media (prefers-reduced-transparency: reduce) {
+	.p-agent .m-composer {
+		background: var(--ds-surface);
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+	}
+}
+
+/* ------------------------------------------------------------ under glass
+   iOS: the conversation scrolls under the bar and the dock. IonContent is
+   fullscreen (under the header); SessionView's section fills it, and its
+   column, jump pill, find bar and scroll anchoring inset by the heights
+   useUnderGlass (AgentBar.tsx) measures. The bar fades the conversation
+   out under it (iOS's scroll edge) instead of a hairline; the subagent
+   page's note sits over its composer, so its dock stays in the flow. */
+html.ios .p-agent .p-agent-body {
+	position: absolute;
+	inset: 0;
+}
+html.ios .p-agent .session.mobile {
+	--ds-conv-inset-top: var(--p-agent-top, 0px);
+}
+html.ios .p-agent .session.mobile:not(.subagent) {
+	--ds-conv-inset-bottom: calc(
+		var(--p-dock-h, 0px) +
+		4px +
+		max(calc(var(--sab) + 2px), calc(var(--kb, 0px) + 8px), 8px)
+	);
+}
+html.ios .p-agent .session.mobile:not(.subagent) > .m-composer {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 3;
+}
+html.ios ion-header.p-agent-header {
+	box-shadow: none;
+}
+html.ios .p-agent-header .p-bar-bg {
+	inset: 0 0 -24px;
+	background: linear-gradient(
+		to bottom,
+		var(--p-plain) calc(100% - 32px),
+		color-mix(in srgb, var(--p-plain) 70%, transparent) calc(100% - 16px),
+		transparent
+	);
+}

@@ -66,6 +66,7 @@ function FindButtonImpl({
 			ref={(el) => {
 				ref.current = el;
 			}}
+			className="p-find-btn"
 			title={why}
 		>
 			<IonButton

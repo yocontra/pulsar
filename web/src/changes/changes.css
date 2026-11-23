@@ -415,14 +415,8 @@
 .cv-phone .cv-counts {
 	font-size: 13px;
 }
-.cv-phone .cv-mode {
-	height: 30px;
-	font-size: 14px;
-	flex: 1;
-	justify-content: center;
-}
-.cv-phone .cv-modes {
-	display: flex;
+/* The Compare switch: Konsta's segmented control, full width. */
+.cv-phone .cv-seg {
 	width: 100%;
 }
 .cv-phone-file .cv-section-head {

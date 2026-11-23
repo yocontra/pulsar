@@ -3,18 +3,14 @@
  * file's unified diff (`#/changes/<id>?f=<path>`), pushed on the agent's
  * page. Live like the desktop panel.
  */
+
+import { Segmented, SegmentedButton } from "konsta/react";
 import type { ChangesMode } from "../api/types.ts";
 import { navigate } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import { findAgent } from "../lib/store.ts";
-import { BackButton } from "../mobile/BackButton.tsx";
-import {
-	IonButtons,
-	IonContent,
-	IonHeader,
-	IonTitle,
-	IonToolbar,
-} from "../mobile/ionic.ts";
+import { AgentBar } from "../mobile/AgentBar.tsx";
+import { IonContent } from "../mobile/ionic.ts";
 import { useChanges } from "./data.ts";
 import { FileDiff } from "./FileDiff.tsx";
 import { Counts, Dir, FileList, StatusMark } from "./FileList.tsx";
@@ -28,20 +24,25 @@ function ListPage({ id, mode }: { id: string; mode: ChangesMode }) {
 	return (
 		<div className="cv-phone">
 			<div className="cv-head">
-				<div className="cv-modes" role="radiogroup" aria-label="Compare">
+				<Segmented
+					strong
+					rounded
+					className="cv-seg"
+					role="radiogroup"
+					aria-label="Compare"
+				>
 					{(["worktree", "base"] as const).map((m) => (
-						<button
+						<SegmentedButton
 							key={m}
-							type="button"
+							active={mode === m}
 							role="radio"
 							aria-checked={mode === m}
-							className={`cv-mode${mode === m ? " on" : ""}`}
 							onClick={() => setChangesMode(m)}
 						>
 							{MODE_LABEL[m]}
-						</button>
+						</SegmentedButton>
 					))}
-				</div>
+				</Segmented>
 				{s?.repo && (
 					<p className="cv-branch">
 						<span className="cv-repo">{s.repo}</span>
@@ -155,19 +156,13 @@ function ChangesPageImpl({ id, file }: { id: string; file?: string }) {
 	const route = { view: "changes" as const, id, ...(file ? { file } : {}) };
 	return (
 		<>
-			<IonHeader>
-				<IonToolbar>
-					<IonButtons slot="start">
-						<BackButton route={route} />
-					</IonButtons>
-					<IonTitle>
-						<span className="p-nav-title">
-							<h1>{file ? splitPath(file).name : "Changes"}</h1>
-							{!file && a && <span className="p-nav-sub">{a.name}</span>}
-						</span>
-					</IonTitle>
-				</IonToolbar>
-			</IonHeader>
+			<AgentBar
+				route={route}
+				name={file ? splitPath(file).name : "Changes"}
+				sub={!file && a ? a.name : undefined}
+				compactBack={false}
+				className="p-sub-header p-changes-header"
+			/>
 			<IonContent className="p-plain">
 				{file ? (
 					<FilePage id={id} mode={mode} path={file} />

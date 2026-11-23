@@ -186,12 +186,14 @@ test.describe("mobile", () => {
 		await page.getByRole("button", { name: "More" }).last().click();
 		const repo = "https://github.com/acme/apparish";
 		await expect(
-			page.getByRole("button", { name: "Open Branch" }),
+			page.getByRole("menuitem", { name: "Open Branch" }),
 		).toBeVisible();
 		await expect(
-			page.getByRole("button", { name: "Open Repository" }),
+			page.getByRole("menuitem", { name: "Open Repository" }),
 		).toBeVisible();
-		await page.getByRole("button", { name: "Open Pull Request #1402" }).click();
+		await page
+			.getByRole("menuitem", { name: "Open Pull Request #1402" })
+			.click();
 		expect(
 			await page.evaluate(
 				() => (window as unknown as { __opened: unknown[] }).__opened,

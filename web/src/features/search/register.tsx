@@ -31,7 +31,7 @@ const LazyFind = lazy(() => import("./FindBar.tsx"));
 function FindPlaceholder({ mobile }: { mobile: boolean }) {
 	if (mobile)
 		return (
-			<span>
+			<span className="p-find-btn">
 				{createElement(
 					"ion-button",
 					{ "aria-label": "Find in messages", disabled: true },

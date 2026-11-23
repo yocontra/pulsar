@@ -56,7 +56,7 @@ function SubagentsSectionImpl({ agentId }: { agentId: string }) {
 					</span>
 					<ChevronRightIcon
 						aria-hidden="true"
-						style={{ transform: open ? "rotate(90deg)" : undefined, width: 16 }}
+						className={open ? "p-sa-chev is-open" : "p-sa-chev"}
 					/>
 				</button>
 				{open && (
@@ -66,7 +66,7 @@ function SubagentsSectionImpl({ agentId }: { agentId: string }) {
 								type="button"
 								key={sub.id}
 								className={`p-sa-row s-${sub.state}`}
-								style={{ paddingLeft: level * 16 }}
+								data-level={Math.min(level, 4) || undefined}
 								data-subagent={sub.id}
 								onClick={() => navigate({ view: "subagent", id: sub.id })}
 							>
@@ -83,7 +83,7 @@ function SubagentsSectionImpl({ agentId }: { agentId: string }) {
 											.join(" · ")}
 									</span>
 								</span>
-								<ChevronRightIcon aria-hidden="true" style={{ width: 16 }} />
+								<ChevronRightIcon aria-hidden="true" className="p-sa-chev" />
 							</button>
 						))}
 					</div>

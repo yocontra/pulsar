@@ -1318,12 +1318,6 @@ ion-header.header-collapse-condense ion-toolbar {
 	--background: transparent;
 	--border-width: 0;
 }
-.p-agent-header ion-toolbar {
-	--background: var(--p-plain);
-}
-.p-agent-header {
-	box-shadow: 0 0.5px 0 var(--p-sep);
-}
 
 /* Messages: actions live in a long-press menu, not a row under each turn. */
 .p-agent-body {

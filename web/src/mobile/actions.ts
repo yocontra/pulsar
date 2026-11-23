@@ -94,13 +94,30 @@ function linkButtons(a: AgentRow) {
 
 /** Long-press menu for an agent. */
 export async function agentMenu(a: AgentRow) {
+	await showActions({
+		header: a.name,
+		subHeader: [harnessName(a.harness), a.machine, a.project]
+			.filter(Boolean)
+			.join(" · "),
+		buttons: [
+			{
+				text: "Open Conversation",
+				handler: () => navigate({ view: "agent", id: a.id }),
+			},
+			...agentButtons(a),
+			{ text: "Cancel", role: "cancel" as const },
+		],
+	});
+}
+
+/**
+ * An agent's actions after "Open Conversation" (the agent page's ••• menu
+ * lists these): files, links, issue, pin, copy, stop.
+ */
+export function agentButtons(a: AgentRow): ActionButton[] {
 	const node = agentNode(a.id);
 	const pinned = node ? isPinned(node.id) : false;
-	const buttons: ActionButton[] = [
-		{
-			text: "Open Conversation",
-			handler: () => navigate({ view: "agent", id: a.id }),
-		},
+	return [
 		// The file viewer (features/files), for an agent with a folder.
 		...(a.cwd && !a.id.includes("/sub:")
 			? [{ text: "Files", handler: () => navigate(fileRoute(a.id, "")) }]
@@ -127,15 +144,7 @@ export async function agentMenu(a: AgentRow) {
 					},
 				]
 			: []),
-		{ text: "Cancel", role: "cancel" as const },
 	];
-	await showActions({
-		header: a.name,
-		subHeader: [harnessName(a.harness), a.machine, a.project]
-			.filter(Boolean)
-			.join(" · "),
-		buttons,
-	});
 }
 
 /** Long-press menu for a machine or project. */

@@ -29,6 +29,7 @@ import {
 	type Step,
 	tracking,
 } from "./model.ts";
+import { gitAsk, offerGit } from "./open.ts";
 import { AskFixForm, PR_STATE, PrCard } from "./PrCard.tsx";
 import { Progress } from "./Progress.tsx";
 import { type GitRunner, useGitRunner, useGitStatus } from "./run.ts";
@@ -215,8 +216,21 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 			setOpen(true);
 		}
 	}, [run.confirm]);
-	if (!can("git")) return null;
-	if (!status?.available) return null;
+	const offered = can("git") && !!status?.available;
+	// The ••• menu offers "Git" on a narrow phone (the button is hidden).
+	useEffect(() => {
+		offerGit(agent.id, offered);
+		return () => offerGit(agent.id, false);
+	}, [agent.id, offered]);
+	const asked = offered && gitAsk.value === agent.id;
+	useEffect(() => {
+		if (!asked) return;
+		gitAsk.value = null;
+		setView("overview");
+		setMounted(true);
+		setOpen(true);
+	}, [asked]);
+	if (!offered || !status) return null;
 	const running = run.phase.kind === "running";
 	const close = () => {
 		if (view === "commit") run.closeCommit();

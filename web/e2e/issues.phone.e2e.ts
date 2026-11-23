@@ -33,7 +33,7 @@ async function fromMenu(page: Page) {
 		.locator("ion-header.p-agent-header")
 		.getByRole("button", { name: "More" })
 		.click();
-	await page.getByRole("button", { name: "Issue #1378" }).click();
+	await page.getByRole("menuitem", { name: "Issue #1378" }).click();
 }
 
 test.describe("issue sheet", () => {

@@ -80,7 +80,7 @@ test.describe("file viewer", () => {
 		const id = await agentId(request, "name=apparish-auth");
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
 		await top(page).getByRole("button", { name: "More" }).click();
-		await page.getByRole("button", { name: "Files", exact: true }).click();
+		await page.getByRole("menuitem", { name: "Files", exact: true }).click();
 		await expect(page).toHaveURL(
 			new RegExp(`#/file/${encodeURIComponent(id)}$`),
 		);
