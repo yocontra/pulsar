@@ -157,14 +157,16 @@ test.describe("tab pages", () => {
 	test("status screens: offline and the first run", async ({
 		page,
 		errors,
-	}, info) => {
+	}) => {
 		await page.route("**/api/v1/**", (r) => r.abort("internetdisconnected"));
 		await page.goto("/");
 		const f = page.locator("[data-failure=offline]");
+		// No visit before: no machine name yet.
 		await expect(f.getByRole("alert")).toContainText(
-			info.project.name === "android"
-				? "This phone can't reach"
-				: "This iPhone can't reach",
+			"Can't Reach Your Machines",
+		);
+		await expect(f.getByRole("alert")).toContainText(
+			"Check that the Tailscale app is on, then try again.",
 		);
 		await expect(f.getByRole("button", { name: "Try Again" })).toBeVisible();
 		await page.unroute("**/api/v1/**");

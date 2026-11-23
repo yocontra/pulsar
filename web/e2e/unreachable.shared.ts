@@ -20,8 +20,10 @@ async function goOffTailnet(page: Page, chunks: boolean | RegExp = true) {
 			r.abort("failed"),
 		);
 }
+/** The network is back: the app notices at once (`online`). */
 async function backOnTailnet(page: Page) {
 	await page.unrouteAll();
+	await page.evaluate(() => dispatchEvent(new Event("online")));
 }
 
 /** Counts full page loads, and whether a load-failure screen ever showed. */
@@ -125,7 +127,7 @@ export function unreachableSpecs(o: {
 
 			await backOnTailnet(page);
 			// Back into the screen it was on, in the current build: one reload.
-			await expect(o.lazyShown(page)).toBeVisible({ timeout: 20_000 });
+			await expect(o.lazyShown(page)).toBeVisible();
 			expect(seen).toEqual({ loads: 1, failed: false });
 			await expect
 				.poll(async () =>
@@ -157,7 +159,7 @@ export function unreachableSpecs(o: {
 			await expect(screen).toContainText(o.body, { useInnerText: true });
 
 			await backOnTailnet(page);
-			await expect(o.home(page)).toBeVisible({ timeout: 20_000 });
+			await expect(o.home(page)).toBeVisible();
 			// The test's reload, then the one into the app: never the error screen.
 			expect(seen).toEqual({ loads: 2, failed: false });
 			excuseCutRequests(errors);
@@ -171,6 +173,8 @@ export function unreachableSpecs(o: {
 			await page.goto("/");
 			await expect(o.home(page)).toBeVisible();
 			await settled(page);
+			await o.openLazy(page);
+			await expect(o.lazyShown(page)).toBeVisible();
 			const seen = await watch(page);
 
 			await goOffTailnet(page, false);
@@ -182,7 +186,8 @@ export function unreachableSpecs(o: {
 			await expect(page.getByText(o.body).first()).toBeVisible();
 
 			await backOnTailnet(page);
-			await expect(o.home(page)).toBeVisible({ timeout: 20_000 });
+			// Back on the screen it was on.
+			await expect(o.lazyShown(page)).toBeVisible();
 			await expect(page.getByText(o.title, { exact: true })).toHaveCount(0);
 			// In place: no reload, no failure screen.
 			expect(seen).toEqual({ loads: 0, failed: false });
