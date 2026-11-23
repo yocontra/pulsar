@@ -99,6 +99,32 @@ export const openComposers = new Map<
 /** sessionStorage: composer text kept across a reload, by target key. */
 export const KEPT_DRAFTS = "pulsar:kept-drafts";
 
+/**
+ * Keeps every open composer's text across a reload (sessionStorage). False
+ * when storage fails: nothing was kept.
+ */
+export function keepDrafts(): boolean {
+	try {
+		const all = JSON.parse(sessionStorage.getItem(KEPT_DRAFTS) ?? "{}");
+		for (const [key, c] of openComposers) {
+			const text = c.text();
+			if (text.trim()) all[key] = text;
+		}
+		sessionStorage.setItem(KEPT_DRAFTS, JSON.stringify(all));
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+declare global {
+	interface Window {
+		/** For the boot guard's reloads (public/boot.js). */
+		__pulsarKeepDrafts?: () => boolean;
+	}
+}
+if (typeof window !== "undefined") window.__pulsarKeepDrafts = keepDrafts;
+
 /** The text kept for `key` across a reload (once), or null. */
 export function takeKeptDraft(key: string): string | null {
 	try {

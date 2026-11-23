@@ -1,4 +1,4 @@
-import { lstat, mkdir } from "node:fs/promises";
+import { lstat, mkdir, readdir, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { lazyCrypto } from "./lazy.ts";
@@ -114,6 +114,49 @@ export function installRoot(): string {
 			"pulsar",
 		)
 	);
+}
+
+/** An upgrade keeps at least this many of the newest installed builds... */
+export const KEEP_BUILDS = 10;
+/** ...and any installed in the last two days... */
+export const KEEP_BUILD_MS = 2 * 24 * 60 * 60_000;
+/** ...up to this many in all. */
+export const MAX_BUILDS = 30;
+
+/**
+ * The installed builds an upgrade keeps (version folders under `root`,
+ * newest first; see the limits above). The daemon serves these builds'
+ * hashed app files to pages that still run them (src/transport/static.ts),
+ * so a deploy never pulls the chunks from under an open app.
+ */
+export async function retainedBuilds(
+	root = installRoot(),
+	now = Date.now(),
+): Promise<string[]> {
+	let names: string[];
+	try {
+		names = await readdir(root);
+	} catch {
+		return [];
+	}
+	const found = await Promise.all(
+		names
+			.filter((name) => /^\d/.test(name))
+			.map(async (name) => {
+				try {
+					const s = await stat(join(root, name));
+					return s.isDirectory() ? { name, at: s.mtimeMs } : null;
+				} catch {
+					return null;
+				}
+			}),
+	);
+	const builds = found.filter((b) => b !== null);
+	builds.sort((a, b) => b.at - a.at || (a.name < b.name ? 1 : -1));
+	return builds
+		.filter((b, i) => i < KEEP_BUILDS || now - b.at < KEEP_BUILD_MS)
+		.slice(0, MAX_BUILDS)
+		.map((b) => b.name);
 }
 
 /** The installed `current` CLI, when setup has run on this machine. */

@@ -5,10 +5,10 @@
  *    index.html (`<meta name="pulsar-build">`) and sw.js, whose cache is
  *    named after it, so one service worker's cache only ever holds one
  *    build's shell.
- * 2. Precache list in sw.js: the shell ("/", boot.js, manifest, icon), its
- *    stylesheets, and the initial route's JS (entry + static imports + both
- *    layouts + the data layer, which boot() always loads, + both session
- *    views). Other lazy chunks are cached when first used.
+ * 2. Precache list in sw.js: the shell ("/", boot.js, manifest, icon) and
+ *    every JS and CSS file of the build. A page the service worker serves
+ *    from its cache (a slow or failing network, a deploy since) then never
+ *    needs the server for a chunk of its own build: lazy screens included.
  *    index.html gets a modulepreload for each static import of the entry, so
  *    the browser fetches them with the entry instead of one round trip later.
  * 3. Precompression: `.br` and `.gz` next to every text file of 1 KB or
@@ -24,7 +24,6 @@ import {
 	entryScripts,
 	entryStyles,
 	isSidecar,
-	layoutChunks,
 	walk,
 } from "./dist-graph.ts";
 
@@ -75,19 +74,14 @@ writeFileSync(
 		.replace("</head>", `${preloads}</head>`),
 );
 
-// The data layer (web/src/data, a lazy chunk boot() imports right away),
-// and each layout's session view (the phone's agent page, the desktop's
-// session pane): opening a chat is what the app is for, so its chunks come
-// from the cache, not one round trip per chunk on the first open.
-const lazyShell = files.filter((f) =>
-	/_app\/(bridge|AgentPage|SessionDesktop)\.[^/]+\.js$/.test(f),
+// Every script and stylesheet of the build (no fonts, maps or images: the
+// app runs without them). Entry styles first, then the rest by name.
+const appFiles = files.filter((f) =>
+	/^_app\/[^/]+\.(js|css)$/.test(relative(DIST, f)),
 );
-if (lazyShell.length !== 3)
-	throw new Error("expected the bridge, AgentPage and SessionDesktop chunks");
-const shell = [
-	...entryStyles(),
-	...closure([...entries, ...layoutChunks(files), ...lazyShell]),
-];
+if (!entries.every((f) => appFiles.includes(f)))
+	throw new Error("an entry script is not under _app/");
+const shell = [...new Set([...entryStyles(), ...appFiles])];
 const precache = [
 	"/",
 	"/boot.js",
@@ -95,7 +89,7 @@ const precache = [
 	"/preload.js",
 	"/manifest.webmanifest",
 	"/icon.svg",
-	...new Set(shell.map((f) => `/${relative(DIST, f)}`)),
+	...shell.map((f) => `/${relative(DIST, f)}`),
 ];
 writeFileSync(
 	swPath,
@@ -131,6 +125,15 @@ for (const f of walk(DIST)) {
 	count++;
 }
 const kb = (n: number) => `${(n / 1024).toFixed(0)} KB`;
+// What a phone's worker stores and downloads (br) per build.
+const stored = shell.reduce((s, f) => s + statSync(f).size, 0);
+const wire = shell.reduce((s, f) => {
+	try {
+		return s + statSync(`${f}.br`).size;
+	} catch {
+		return s + statSync(f).size;
+	}
+}, 0);
 console.log(
-	`finish-dist: build ${build}; precache ${precache.length} files (${kb(shell.reduce((s, f) => s + statSync(f).size, 0))}); compressed ${count} files ${kb(raw)} -> br ${kb(br)}, gzip ${kb(gz)}`,
+	`finish-dist: build ${build}; precache ${precache.length} files (${kb(stored)}, br ${kb(wire)}); compressed ${count} files ${kb(raw)} -> br ${kb(br)}, gzip ${kb(gz)}`,
 );

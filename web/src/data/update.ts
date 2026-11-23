@@ -13,7 +13,7 @@
  * after it (cached old assets), the toast stays and nothing loops.
  */
 
-import { KEPT_DRAFTS, openComposers } from "../lib/composer-draft.ts";
+import { keepDrafts, openComposers } from "../lib/composer-draft.ts";
 import { inFlight } from "../lib/inflight.ts";
 import { dismissToast, toast } from "../lib/toast.ts";
 import { proveAsk } from "../prove/state.ts";
@@ -144,21 +144,6 @@ function tried(served: string): string | null {
 		return sessionStorage.getItem(TRIED);
 	} catch {
 		return served;
-	}
-}
-
-/** Composer text, by target key, for the composers after the reload. */
-function keepDrafts(): boolean {
-	try {
-		const all = JSON.parse(sessionStorage.getItem(KEPT_DRAFTS) ?? "{}");
-		for (const [key, c] of openComposers) {
-			const text = c.text();
-			if (text.trim()) all[key] = text;
-		}
-		sessionStorage.setItem(KEPT_DRAFTS, JSON.stringify(all));
-		return true;
-	} catch {
-		return false;
 	}
 }
 

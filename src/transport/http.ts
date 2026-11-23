@@ -1,9 +1,9 @@
-import { access, readFile, stat } from "node:fs/promises";
+import { access, readFile, realpath, stat } from "node:fs/promises";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { createSecureServer, Http2ServerRequest } from "node:http2";
 import { createServer as createHttpsServer } from "node:https";
 import type { Socket } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAdaptorServer } from "@hono/node-server";
 import { type Context, Hono } from "hono";
@@ -24,6 +24,7 @@ import {
 } from "../http/identity.ts";
 import type { UserSessionInfo } from "../http/wire.ts";
 import { operatorName } from "../human-tag.ts";
+import { installRoot, retainedBuilds } from "../paths.ts";
 import { RpcError } from "../rpc.ts";
 import { ATTACH_LIMITS } from "../service/attachments.ts";
 import { ACTING_OPS } from "../service/authorize.ts";
@@ -1600,14 +1601,51 @@ export class HttpTransport {
 		}
 	}
 
+	private olderApps: { at: number; roots: Promise<string[]> } | null = null;
+
+	/**
+	 * The app folders of the older builds `pulsar setup` keeps next to this
+	 * one (`<install root>/<version>/dist/web`, newest first), for pages that
+	 * still run one of them (./static.ts). None when this app is not an
+	 * installed build (a checkout, tests). Read again every 30 s.
+	 */
+	private olderWebRoots(root: string): Promise<string[]> {
+		const now = Date.now();
+		if (this.olderApps && now - this.olderApps.at < 30_000)
+			return this.olderApps.roots;
+		const roots = (async () => {
+			try {
+				const own = await realpath(root);
+				const install = await realpath(installRoot());
+				// own = <install>/<version>/dist/web
+				const version = dirname(dirname(own));
+				if (dirname(version) !== install) return [];
+				const self = version.slice(install.length + 1);
+				return (await retainedBuilds(install))
+					.filter((v) => v !== self)
+					.map((v) => join(install, v, "dist", "web"));
+			} catch {
+				return [];
+			}
+		})();
+		this.olderApps = { at: now, roots };
+		return roots;
+	}
+
 	/** The built app (see ./static.ts): precompressed, ETags, immutable `/_app/`. */
 	private async staticFile(c: Context<Env>) {
 		const root = await this.webRoot;
 		if (!root) return c.text("the Pulsar app is not built on this node", 404);
-		const r = await serveStatic(root, c.req.path, {
-			acceptEncoding: c.req.header("accept-encoding"),
-			ifNoneMatch: c.req.header("if-none-match"),
-		});
+		const path = c.req.path;
+		const r = await serveStatic(
+			root,
+			path,
+			{
+				acceptEncoding: c.req.header("accept-encoding"),
+				ifNoneMatch: c.req.header("if-none-match"),
+			},
+			path.startsWith("/_app/") ? await this.olderWebRoots(root) : [],
+		);
 		if (r.body === null) return c.body(null, 304, r.headers);
 		return c.body(r.body, r.status as 200, r.headers);
 	}

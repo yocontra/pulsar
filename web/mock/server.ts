@@ -3166,13 +3166,17 @@ async function route(
 	// hold every HTML response (a slow network), for the service worker tests.
 	// `webBuild` overrides the build /hello reports: "none" for an older
 	// daemon (no build id), omitted for the served index.html's own.
+	// `previous`: older builds' folders, whose app files the daemon still
+	// serves (src/transport/static.ts).
 	if (POST && path === "/__mock/static") {
 		const body = (await jsonBody(req)) as {
 			root?: string;
 			htmlDelayMs?: number;
 			webBuild?: string;
+			previous?: string[];
 		};
 		web.root = body.root ? resolve(body.root) : STATIC;
+		web.previous = (body.previous ?? []).map((p) => resolve(p));
 		web.htmlDelayMs = body.htmlDelayMs ?? 0;
 		web.build = body.webBuild ?? null;
 		return json({ ok: true });
@@ -3332,6 +3336,7 @@ const web = {
 	htmlDelayMs: 0,
 	/** /hello's `webBuild` override; null: the served index.html's own. */
 	build: null as string | null,
+	previous: [] as string[],
 };
 /** The build id /hello reports (src/transport/http.ts `webBuild`). */
 function servedBuild(): string | undefined {
@@ -3344,10 +3349,15 @@ function servedBuild(): string | undefined {
 	}
 }
 async function staticFile(req: Request, url: URL): Promise<Response> {
-	const r = await serveStatic(web.root, url.pathname, {
-		acceptEncoding: req.headers.get("accept-encoding") ?? undefined,
-		ifNoneMatch: req.headers.get("if-none-match") ?? undefined,
-	});
+	const r = await serveStatic(
+		web.root,
+		url.pathname,
+		{
+			acceptEncoding: req.headers.get("accept-encoding") ?? undefined,
+			ifNoneMatch: req.headers.get("if-none-match") ?? undefined,
+		},
+		web.previous,
+	);
 	if (r.status === 404 && !existsSync(join(web.root, "index.html")))
 		return new Response("dist/web is missing: run `bun run build:web`", {
 			status: 500,

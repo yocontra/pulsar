@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { CLIENTS } from "../harnesses/index.ts";
 import { meshIsOn } from "../http/config.ts";
-import { installRoot } from "../paths.ts";
+import { installRoot, retainedBuilds } from "../paths.ts";
 import { VERSION } from "../version.ts";
 import {
 	type Action,
@@ -52,7 +52,7 @@ function packageRoot(): string {
  * Copies this version to a stable folder, so agent configs never depend on an
  * npx cache or a network fetch at session start.
  */
-function installStableCopy(): string {
+async function installStableCopy(): Promise<string> {
 	const root = packageRoot();
 	const dist = join(root, "dist", "cli.js");
 	if (!existsSync(dist))
@@ -83,8 +83,15 @@ function installStableCopy(): string {
 	symlinkSync(VERSION, tmp);
 	renameSync(tmp, current);
 	// Running agents and the service still load code from the folder `current`
-	// pointed to, and this process from its own: keep both, drop the rest.
-	const keep = new Set([VERSION, previous, basename(root)]);
+	// pointed to, and this process from its own: keep both. Keep the newest
+	// builds too: the daemon serves their app files to pages that still run
+	// them (src/paths.ts retainedBuilds). Drop the rest.
+	const keep = new Set([
+		VERSION,
+		previous,
+		basename(root),
+		...(await retainedBuilds()),
+	]);
 	for (const old of readdirSync(installRoot()))
 		if (/^\d/.test(old) && !keep.has(old))
 			rmSync(join(installRoot(), old), { recursive: true, force: true });
@@ -321,7 +328,7 @@ export async function runSetup(argv: string[]): Promise<number> {
 		if (!(await confirm("\nApply these changes?"))) return 1;
 	}
 
-	installStableCopy();
+	await installStableCopy();
 	const previous = loadState();
 	const state: SetupState = { version: VERSION, installDir, undo: [] };
 	let failures = 0;
