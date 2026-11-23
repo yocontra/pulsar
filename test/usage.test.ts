@@ -436,7 +436,7 @@ describe("prices", () => {
 		expect(priceFor("claude-opus-5", table)?.input).toBe(5);
 		expect(priceFor("claude-opus-4-8", table)?.input).toBe(5);
 		expect(priceFor("claude-sonnet-5-5", table)?.cacheRead).toBe(0.1);
-		expect(priceFor("gpt-6.2-sol", table)).toBeNull();
+		expect(priceFor("acme-coder-9", table)).toBeNull();
 		// A prefix only matches at a dash: claude-opus-5 is not claude-opus-50.
 		expect(priceFor("claude-opus-50", table)).toBeNull();
 	});
