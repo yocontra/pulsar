@@ -38,11 +38,26 @@
 		document.getElementById("boot-retry")?.focus();
 	}
 
+	// The page is being left (a link, a typed URL, a reload): the browser
+	// cancels its downloads (WebKit at once), and a chunk that fails then is
+	// not a broken build. Reloading would take the navigation over and load
+	// the page being left again. beforeunload, not pagehide: it comes when
+	// the navigation starts, before the downloads are cancelled.
+	let leaving = false;
+	addEventListener("beforeunload", () => {
+		leaving = true;
+	});
+	// Back from the back/forward cache: here again.
+	addEventListener("pageshow", () => {
+		leaving = false;
+	});
+
 	// One automatic reload per minute, shared by every path below and by
 	// src/lib/lazy.tsx: true when a reload is on its way.
 	let reloading = false;
 	function retry() {
 		if (reloading) return true;
+		if (leaving) return false;
 		let last = 0;
 		try {
 			last = Number(sessionStorage.getItem(KEY)) || 0;
@@ -59,7 +74,7 @@
 	}
 
 	function fail() {
-		if (failed || quiet()) return;
+		if (failed || quiet() || leaving) return;
 		failed = true;
 		// After the automatic retry, the error screen. Once the app runs, a
 		// lazy chunk shows its own Retry (src/lib/lazy.tsx) instead: never

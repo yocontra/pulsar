@@ -277,6 +277,32 @@ test.describe("phone UI", () => {
 		await expect(page.locator("#boot-error")).toBeHidden();
 	});
 
+	test("leaving while a page's chunk downloads goes where asked: no reload of the page left", async ({
+		page,
+		errors,
+	}) => {
+		// The Settings page's code is still on its way when the operator leaves.
+		await page.route(/\/_app\/SettingsPage\.[^/]+\.js$/, () => {});
+		const asked = page.waitForRequest(/\/_app\/SettingsPage\./);
+		await page.goto("/#/settings");
+		await asked;
+		await expect(page.locator("html")).toHaveAttribute("data-booted", "");
+		// Leaving cancels that download. It is not a broken build: the boot
+		// guard must not reload /#/settings over the navigation.
+		await page.goto("/");
+		await expect(page).toHaveURL(/\/(#\/)?$/);
+		await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
+		await expect(page.locator("#boot-error")).toBeHidden();
+		// The cancelled download's own report, from the page that was left.
+		errors.splice(
+			0,
+			errors.length,
+			...errors.filter(
+				(e) => !/module script failed|dynamically imported/i.test(e),
+			),
+		);
+	});
+
 	test("Appearance: System, Light or Dark, saved on this device", async ({
 		page,
 	}) => {
