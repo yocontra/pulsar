@@ -90,9 +90,6 @@ const DIALOGS = [
 	".d-pop",
 	".d-menu",
 	"ion-modal.show-modal",
-	"ion-action-sheet",
-	"ion-alert",
-	"ion-popover",
 ].join(",");
 const TEXT_INPUT = /^(text|search|email|url|tel|password|number)$/;
 

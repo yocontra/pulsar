@@ -4,15 +4,6 @@
  * they stay out of the first route's chunk. See ionic.ts.
  */
 
-import type {
-	ItemSlidingCustomEvent,
-	ModalBreakpointChangeEventDetail,
-	ToggleChangeEventDetail,
-} from "@ionic/core";
-import {
-	defineCustomElement as defineFooter,
-	IonFooter as FooterEl,
-} from "@ionic/core/components/ion-footer.js";
 import {
 	defineCustomElement as defineItemOption,
 	IonItemOption as ItemOptionEl,
@@ -26,41 +17,9 @@ import {
 	IonItemSliding as ItemSlidingEl,
 } from "@ionic/core/components/ion-item-sliding.js";
 import {
-	defineCustomElement as defineLabel,
-	IonLabel as LabelEl,
-} from "@ionic/core/components/ion-label.js";
-import {
-	defineCustomElement as defineList,
-	IonList as ListEl,
-} from "@ionic/core/components/ion-list.js";
-import {
-	defineCustomElement as defineListHeader,
-	IonListHeader as ListHeaderEl,
-} from "@ionic/core/components/ion-list-header.js";
-import {
 	defineCustomElement as defineModal,
 	IonModal as ModalEl,
 } from "@ionic/core/components/ion-modal.js";
-import {
-	defineCustomElement as defineNote,
-	IonNote as NoteEl,
-} from "@ionic/core/components/ion-note.js";
-import {
-	defineCustomElement as defineSearchbar,
-	IonSearchbar as SearchbarEl,
-} from "@ionic/core/components/ion-searchbar.js";
-import {
-	defineCustomElement as defineSpinner,
-	IonSpinner as SpinnerEl,
-} from "@ionic/core/components/ion-spinner.js";
-import {
-	defineCustomElement as defineTextarea,
-	IonTextarea as TextareaEl,
-} from "@ionic/core/components/ion-textarea.js";
-import {
-	defineCustomElement as defineToggle,
-	IonToggle as ToggleEl,
-} from "@ionic/core/components/ion-toggle.js";
 import { createComponent } from "@stencil/react-output-target/runtime";
 import React from "react";
 
@@ -93,16 +52,6 @@ export const IonItemOption = createComponent<InstanceType<typeof ItemOptionEl>>(
 		defineCustomElement: defineItemOption,
 	},
 );
-export const IonToggle = createComponent<
-	InstanceType<typeof ToggleEl>,
-	{ onIonChange: string }
->({
-	tagName: "ion-toggle",
-	elementClass: ToggleEl,
-	react: React,
-	events: { onIonChange: "ionChange" },
-	defineCustomElement: defineToggle,
-});
 export const IonModal = createComponent<
 	InstanceType<typeof ModalEl>,
 	{
@@ -123,98 +72,3 @@ export const IonModal = createComponent<
 	},
 	defineCustomElement: defineModal,
 });
-
-export const IonSearchbar = createComponent<
-	InstanceType<typeof SearchbarEl>,
-	{
-		onIonInput: string;
-		onIonChange: string;
-		onIonClear: string;
-		onIonCancel: string;
-		onIonFocus: string;
-		onIonBlur: string;
-	}
->({
-	tagName: "ion-searchbar",
-	elementClass: SearchbarEl,
-	react: React,
-	events: {
-		onIonInput: "ionInput",
-		onIonChange: "ionChange",
-		onIonClear: "ionClear",
-		onIonCancel: "ionCancel",
-		onIonFocus: "ionFocus",
-		onIonBlur: "ionBlur",
-	},
-	defineCustomElement: defineSearchbar,
-});
-export const IonList = createComponent<InstanceType<typeof ListEl>>({
-	tagName: "ion-list",
-	elementClass: ListEl,
-	react: React,
-	events: {},
-	defineCustomElement: defineList,
-});
-export const IonListHeader = createComponent<InstanceType<typeof ListHeaderEl>>(
-	{
-		tagName: "ion-list-header",
-		elementClass: ListHeaderEl,
-		react: React,
-		events: {},
-		defineCustomElement: defineListHeader,
-	},
-);
-export const IonLabel = createComponent<InstanceType<typeof LabelEl>>({
-	tagName: "ion-label",
-	elementClass: LabelEl,
-	react: React,
-	events: {},
-	defineCustomElement: defineLabel,
-});
-export const IonNote = createComponent<InstanceType<typeof NoteEl>>({
-	tagName: "ion-note",
-	elementClass: NoteEl,
-	react: React,
-	events: {},
-	defineCustomElement: defineNote,
-});
-export const IonFooter = createComponent<InstanceType<typeof FooterEl>>({
-	tagName: "ion-footer",
-	elementClass: FooterEl,
-	react: React,
-	events: {},
-	defineCustomElement: defineFooter,
-});
-export const IonTextarea = createComponent<
-	InstanceType<typeof TextareaEl>,
-	{
-		onIonInput: string;
-		onIonChange: string;
-		onIonFocus: string;
-		onIonBlur: string;
-	}
->({
-	tagName: "ion-textarea",
-	elementClass: TextareaEl,
-	react: React,
-	events: {
-		onIonInput: "ionInput",
-		onIonChange: "ionChange",
-		onIonFocus: "ionFocus",
-		onIonBlur: "ionBlur",
-	},
-	defineCustomElement: defineTextarea,
-});
-export const IonSpinner = createComponent<InstanceType<typeof SpinnerEl>>({
-	tagName: "ion-spinner",
-	elementClass: SpinnerEl,
-	react: React,
-	events: {},
-	defineCustomElement: defineSpinner,
-});
-
-export type {
-	ItemSlidingCustomEvent,
-	ModalBreakpointChangeEventDetail,
-	ToggleChangeEventDetail,
-};
