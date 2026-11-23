@@ -122,6 +122,12 @@ export function composerSuite(platform: "desktop" | "phone") {
 		).toBeVisible();
 		const tiles = composer.getByTestId("attachment");
 		await expect(tiles).toHaveCount(10);
+		// On the phone the toasts slide in over the tiles (bottom-center): a
+		// click during that slide lands on the toast and removes nothing.
+		// Click once they are gone (sonner's 4 s, plus its exit).
+		await expect(page.locator(".p-toast-card")).toHaveCount(0, {
+			timeout: 10_000,
+		});
 		for (let i = 9; i >= 0; i--)
 			await composer.getByRole("button", { name: `Remove f${i}.txt` }).click();
 		await expect(tiles).toHaveCount(0);
