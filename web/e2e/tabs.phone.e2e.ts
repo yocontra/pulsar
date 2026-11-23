@@ -17,6 +17,55 @@ const bar = (page: Page) => page.getByTestId("tabbar");
 const topContent = (page: Page) =>
 	page.locator("ion-nav > .ion-page:last-child ion-content");
 
+/**
+ * A phone's body text and bottom inset: WebKit and Chromium emulation report
+ * no safe area, and macOS WebKit gives -apple-system-body 13px (an iPhone's
+ * is 17px). Android's gesture bar is 24 dp.
+ */
+async function phoneInsets(page: Page, md: boolean) {
+	await page.addInitScript(
+		(sab) => {
+			const apply = () => {
+				const r = document.documentElement?.style;
+				if (!r) return;
+				r.setProperty("font-size", "17px");
+				r.setProperty("--sab", `${sab}px`);
+			};
+			apply();
+			document.addEventListener("DOMContentLoaded", apply);
+		},
+		md ? 24 : 34,
+	);
+}
+
+/** The tab bar's metrics, as drawn. */
+function barMetrics(page: Page) {
+	return page.evaluate(() => {
+		const q = (s: string) => document.querySelector(s) as HTMLElement;
+		// iOS: the glass capsule; Material: the bar's row (its pane is
+		// display: contents).
+		const bar = (
+			q('[data-testid="tabbar"] .k-toolbar-pane') ??
+			q('[data-testid="tabbar"] > div:last-child')
+		).getBoundingClientRect();
+		const links = [
+			...document.querySelectorAll('[data-testid="tabbar"] .k-link'),
+		].map((e) => e.getBoundingClientRect());
+		const icon = q('[data-testid="tab-agents"] svg').getBoundingClientRect();
+		const label = getComputedStyle(
+			q('[data-testid="tab-agents"] .k-tabbar-link-icon + span'),
+		);
+		return {
+			height: bar.height,
+			bottom: innerHeight - bar.bottom,
+			side: bar.left,
+			icon: [icon.width, icon.height],
+			label: Number.parseFloat(label.fontSize),
+			minHit: Math.min(...links.flatMap((l) => [l.width, l.height])),
+		};
+	});
+}
+
 test.describe("tabs", () => {
 	test("the platform look follows the device", async ({ page }, info) => {
 		await ready(page);
@@ -155,10 +204,48 @@ test.describe("tabs", () => {
 				"Needs You",
 			);
 	});
-	for (const hash of ["#/needs", "#/usage", "#/settings"])
+	test("the bar has native metrics that don't grow with the text", async ({
+		page,
+	}, info) => {
+		const md = info.project.name === "android";
+		await phoneInsets(page, md);
+		await ready(page);
+		await expect(bar(page)).toBeInViewport();
+		const m = await barMetrics(page);
+		if (md) {
+			// Material 3: an 80 dp bar over the gesture bar, 24 dp icons,
+			// 12 sp labels.
+			expect(m.height).toBe(80);
+			expect(m.bottom).toBe(24);
+			expect(m.label).toBe(12);
+			expect(m.icon).toEqual([24, 24]);
+		} else {
+			// iOS 26: a 62 pt capsule 25 pt from the sides and the bottom
+			// edge, inside the home indicator's inset; 10 pt labels.
+			expect(m.height).toBeGreaterThanOrEqual(56);
+			expect(m.height).toBeLessThanOrEqual(64);
+			expect(m.bottom).toBeGreaterThanOrEqual(20);
+			expect(m.bottom).toBeLessThanOrEqual(30);
+			expect(m.side).toBeGreaterThanOrEqual(16);
+			expect(m.side).toBeLessThanOrEqual(28);
+			expect(m.label).toBeLessThanOrEqual(11);
+			expect(m.icon[0]).toBeGreaterThanOrEqual(24);
+			expect(m.icon[0]).toBeLessThanOrEqual(28);
+		}
+		// Every tab is at least a 44 pt target.
+		expect(m.minHit).toBeGreaterThanOrEqual(44);
+		// Larger body text (Dynamic Type) leaves the bar as it is.
+		await page.evaluate(() =>
+			document.documentElement.style.setProperty("font-size", "23px"),
+		);
+		expect(await barMetrics(page)).toEqual(m);
+	});
+
+	for (const hash of ["#/", "#/needs", "#/usage", "#/settings"])
 		test(`${hash}: the last row scrolls clear of the tab bar`, async ({
 			page,
-		}) => {
+		}, info) => {
+			await phoneInsets(page, info.project.name === "android");
 			await page.goto(`/${hash}`);
 			await expect(bar(page)).toBeInViewport();
 			await page.waitForTimeout(500);

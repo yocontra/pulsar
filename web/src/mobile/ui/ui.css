@@ -1,10 +1,30 @@
 /*
  * The phone primitives (mobile/ui/): the tab bar and the pages under it.
  */
-:root {
-	/* The tab bar above the bottom inset: iOS's capsule (64) and its gap
-	   (16), Material's navigation bar (80). */
+/* ------------------------------------------------------------ tab bar
+   TabBar.tsx on Konsta's Tabbar, sized in px: a native bar's icons and
+   labels are fixed system metrics, not body text (the phone's root font
+   follows -apple-system-body, so Konsta's rem sizes grow with it).
+
+   iOS 26 Liquid Glass, measured on Apple's iOS 26 press images: a 62 pt
+   capsule, concentric with the screen corners, 25 pt from the sides and
+   the bottom edge (it sits inside the home indicator's inset), 27 pt
+   symbols (lucide's glyph fills 22 of them), 10 pt semibold labels, the
+   selected item on a glass pill inset 4 pt.
+
+   Material 3 navigation bar: 80 dp, a 64x32 active indicator 12 dp from
+   the top, 24 dp icons, 4 dp gap, 12 sp medium labels.
+
+   --p-tabbar-clear is the bar's top above the screen's bottom edge: what a
+   tab root's content and the toasts clear. */
+html.k-ios {
+	--p-tabbar-h: 62px;
+	--p-tabbar-bottom: max(calc(var(--sab) - 9px), 12px);
+	--p-tabbar-clear: calc(var(--p-tabbar-bottom) + var(--p-tabbar-h));
+}
+html.k-material {
 	--p-tabbar-h: 80px;
+	--p-tabbar-clear: calc(var(--p-tabbar-h) + var(--sab));
 }
 
 /* A tab's root page scrolls its last row clear of the tab bar (on top of
@@ -12,8 +32,8 @@
 html.p-tabs ion-nav > .ion-page:last-child > ion-content::part(scroll) {
 	padding-bottom: calc(
 		var(--padding-bottom, 0px) +
-		var(--p-tabbar-h) +
-		var(--sab)
+		var(--p-tabbar-clear) +
+		8px
 	);
 }
 
@@ -31,6 +51,89 @@ html.p-tabs ion-nav > .ion-page:last-child > ion-content::part(scroll) {
 	pointer-events: none;
 }
 
+/* iOS: the capsule. */
+html.k-ios .p-tabbar {
+	padding: 0 calc(25px + var(--sar)) var(--p-tabbar-bottom)
+		calc(25px + var(--sal));
+}
+/* The scroll-edge fade behind the capsule (Konsta's bg and blur). */
+html.k-ios .p-tabbar > div:not(:has(.k-toolbar-pane)) {
+	height: calc(var(--p-tabbar-clear) + 16px);
+}
+html.k-ios .p-tabbar > div:has(> .k-toolbar-pane) {
+	height: var(--p-tabbar-h);
+	gap: 0;
+}
+/* Each item spans the capsule's height: a hit area of at least 62x70. */
+html.k-ios .p-tabbar .k-toolbar-pane > .k-link {
+	padding-inline: 2px;
+	gap: 0;
+}
+html.k-ios .p-tabbar .k-link > span {
+	padding: 0;
+	gap: 2px;
+}
+html.k-ios .p-tabbar .k-tabbar-link-icon {
+	width: 30px;
+	height: 27px;
+}
+html.k-ios .p-tabbar .k-tabbar-link-icon + span {
+	font-size: 10px;
+	line-height: 12px;
+	font-weight: 600;
+	letter-spacing: 0.1px;
+}
+/* The selected item's pill (Konsta's highlight). */
+html.k-ios .p-tabbar .k-toolbar-pane > span > span {
+	inset: 4px;
+}
+
+/* Material 3: the navigation bar. */
+html.k-material .p-tabbar > div:last-child {
+	height: var(--p-tabbar-h);
+}
+html.k-material .p-tabbar .k-link {
+	max-height: none;
+	padding-inline: 0;
+	gap: 0;
+}
+html.k-material .p-tabbar .k-link > span {
+	justify-content: flex-start;
+	padding: 12px 0 0;
+	gap: 4px;
+}
+html.k-material .p-tabbar .k-tabbar-link-icon {
+	width: 64px;
+	height: 32px;
+}
+html.k-material .p-tabbar .k-tabbar-link-icon + span {
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: 500;
+	letter-spacing: 0.5px;
+}
+
+/* The count: a capsule at the icon's top right, sized in px. iOS 26: 18 pt,
+   12 pt semibold. Material 3's large badge: 16 dp, 11 sp. */
+.p-tabbar .k-badge {
+	min-width: 18px;
+	height: 18px;
+	min-height: 0;
+	padding: 0 5px;
+	font-size: 12px;
+	line-height: 1;
+	top: -5px;
+	inset-inline-end: -10px;
+}
+html.k-material .p-tabbar .k-badge {
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	font-size: 11px;
+	top: -4px;
+	inset-inline-end: -8px;
+}
+
 /* ------------------------------------------------------------ toasts
    The one toaster (sonner, styles/toasts.css) on the phone: above the tab
    bar on a tab's root, above the composer on pushed pages, and up with the
@@ -39,7 +142,7 @@ html[data-platform="phone"] {
 	--p-toast-bottom: 88px;
 }
 html[data-platform="phone"].p-tabs {
-	--p-toast-bottom: calc(var(--p-tabbar-h) + var(--sab) + 8px);
+	--p-toast-bottom: calc(var(--p-tabbar-clear) + 8px);
 }
 html[data-platform="phone"] [data-sonner-toaster] {
 	--mobile-offset-bottom: calc(

@@ -1,7 +1,9 @@
 /**
  * The phone's tab bar (tabs.ts): a floating glass capsule on iOS, a
  * Material 3 bottom navigation bar on Android (Konsta's Tabbar follows the
- * theme). It shows on a tab's root page only; pushed pages cover it.
+ * theme). It shows on a tab's root page only; pushed pages cover it. Its
+ * metrics are px (mobile/ui/ui.css), as a native bar's are: they don't
+ * grow with the body text.
  */
 import { Icon, Tabbar, TabbarLink, ToolbarPane } from "konsta/react";
 import {
@@ -23,9 +25,12 @@ const ICONS: Record<TabId, typeof InboxIcon> = {
 	settings: SettingsIcon,
 };
 
-// AA in both themes: the link tint (lighter than the fill in dark), and the
-// needs badge's own text color.
-const LINK = { textActiveIos: "text-[var(--ds-link)]" };
+// AA in both themes: the link tint (lighter than the fill in dark), body
+// text when unselected, and the needs badge's own text color.
+const LINK = {
+	textIos: "text-[var(--ds-text)]",
+	textActiveIos: "text-[var(--ds-link)]",
+};
 const BADGE = {
 	bg: "bg-[var(--ds-needs-badge)]",
 	text: "text-[var(--ds-on-needs)]",
@@ -76,8 +81,8 @@ function TabBarImpl() {
 							}}
 							icon={
 								<Icon
-									ios={<I className="size-7" strokeWidth={1.75} />}
-									material={<I className="size-6" />}
+									ios={<I className="size-[27px]" strokeWidth={1.75} />}
+									material={<I className="size-[24px]" />}
 									badge={badge}
 									badgeColors={BADGE}
 								/>
