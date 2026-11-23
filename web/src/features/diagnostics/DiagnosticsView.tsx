@@ -1,121 +1,76 @@
 /**
- * The Diagnostics page body (desktop pane and phone page): every machine's
- * `pulsar doctor` checks, grouped, with the fix for each problem, the
- * machine's facts, and a note for each machine on an older Pulsar.
+ * The Diagnostics page body on the desktop: a summary of every machine,
+ * then each machine's `pulsar doctor` report with problems and notes
+ * first (each with its fix and a command to copy), the checks that passed
+ * folded into one row, and the machine's facts. The phone's layout is
+ * PhoneView.tsx; both use parts.tsx.
  */
-import {
-	CircleCheckIcon,
-	CircleXIcon,
-	InfoIcon,
-	LoaderCircleIcon,
-	TriangleAlertIcon,
-} from "lucide-react";
-import { useEffect, useState } from "react";
+import { ChevronRightIcon, TriangleAlertIcon } from "lucide-react";
+import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
-import type { DiagCheck, DiagLevel } from "../../api/types.ts";
-import { ago } from "../../ds/index.ts";
 import {
-	certLabel,
+	attention,
 	type Diagnostics,
 	GROUP_LABEL,
 	grouped,
 	health,
 	type MachineRow,
-	spans,
-	TAILSCALE_LABEL,
-	uptime,
+	passed,
 } from "./model.ts";
-import "./diagnostics.css";
+import {
+	CheckBody,
+	CheckStatus,
+	factRows,
+	LevelIcon,
+	machineAnchor,
+	machineLine,
+	passedLabel,
+	StatusIcon,
+	showMachine,
+	skewText,
+	Text,
+	useNow,
+} from "./parts.tsx";
 
-const LEVEL_LABEL: Record<DiagLevel, string> = {
-	ok: "Passed",
-	note: "Note",
-	bad: "Problem",
-};
-
-function Text({ text }: { text: string }) {
+function Summary({ machines }: { machines: MachineRow[] }) {
+	const now = useNow();
+	if (!machines.length) return null;
 	return (
-		<>
-			{spans(text).map((s, i) =>
-				s.code ? <code key={i}>{s.text}</code> : <span key={i}>{s.text}</span>,
-			)}
-		</>
-	);
-}
-
-function LevelIcon({ level }: { level: DiagLevel }) {
-	const Icon =
-		level === "ok" ? CircleCheckIcon : level === "bad" ? CircleXIcon : InfoIcon;
-	return (
-		<span className={`diag-level is-${level}`}>
-			<Icon aria-hidden="true" />
-			<span className="diag-sr">{LEVEL_LABEL[level]}: </span>
-		</span>
-	);
-}
-
-function CheckRow({ c }: { c: DiagCheck }) {
-	return (
-		<li className={`diag-check is-${c.level}`} data-level={c.level}>
-			<LevelIcon level={c.level} />
-			<span className="diag-check-body">
-				<span className="diag-check-text">
-					<Text text={c.text} />
-				</span>
-				{c.fix && (
-					<span className="diag-fix">
-						<span className="diag-fix-label">Fix: </span>
-						<Text text={c.fix} />
-					</span>
-				)}
-			</span>
-		</li>
-	);
-}
-
-function Facts({ m }: { m: MachineRow }) {
-	const r = m.report;
-	if (!r) return null;
-	const ts = r.facts.tailscale;
-	const lag = r.eventLoop;
-	const rows: [string, string][] = [
-		["Pulsar", r.version],
-		["Uptime", uptime(r.uptimeS)],
-		[
-			"Event loop",
-			lag
-				? `p99 ${Math.round(lag.p99)} ms, max ${Math.round(lag.max)} ms${lag.stalls ? `, ${lag.stalls} stall${lag.stalls === 1 ? "" : "s"}` : ""}`
-				: "Not measured",
-		],
-		["Agents", String(r.agents)],
-		[
-			"Tailscale",
-			ts
-				? [TAILSCALE_LABEL[ts.state] ?? ts.state, ts.version]
-						.filter(Boolean)
-						.join(" · ")
-				: "Not checked",
-		],
-	];
-	if (r.facts.certDays !== null)
-		rows.push(["Certificate", certLabel(r.facts.certDays)]);
-	for (const h of r.facts.harnesses)
-		rows.push([h.label, h.version ?? "Version unknown"]);
-	return (
-		<dl className="diag-facts">
-			{rows.map(([k, v]) => (
-				<div key={k} className="diag-fact">
-					<dt>{k}</dt>
-					<dd>{v}</dd>
-				</div>
-			))}
-		</dl>
+		<ul className="d-card diag-summary" aria-label="Machines">
+			{machines.map((m) => {
+				const h = health(m);
+				return (
+					<li key={m.machineId}>
+						<button
+							type="button"
+							className="diag-sum-row"
+							data-summary={m.name}
+							onClick={() => showMachine(m)}
+						>
+							<StatusIcon tone={h.tone} />
+							<span className="diag-sum-text">
+								<span className="diag-sum-name">
+									{m.name}
+									{m.self && <span className="diag-tag">This machine</span>}
+								</span>
+								<span className="diag-sum-line">{machineLine(m, now)}</span>
+							</span>
+							<span className={`diag-sum-state is-${h.tone}`}>{h.label}</span>
+						</button>
+					</li>
+				);
+			})}
+		</ul>
 	);
 }
 
 function Machine({ m }: { m: MachineRow }) {
+	const [open, setOpen] = useState(false);
 	const h = health(m);
-	const id = `diag-m-${m.machineId.replace(/[^A-Za-z0-9_-]/g, "")}`;
+	const id = machineAnchor(m);
+	const todo = m.report ? attention(m.report.checks) : [];
+	const ok = m.report ? passed(m.report.checks) : [];
+	const facts = factRows(m);
 	return (
 		<section
 			className="diag-machine"
@@ -123,17 +78,20 @@ function Machine({ m }: { m: MachineRow }) {
 			data-machine={m.name}
 		>
 			<header className="diag-machine-head">
-				<h2 id={id} className="diag-machine-name">
+				<h2 id={id} className="diag-machine-name" tabIndex={-1}>
 					{m.name}
 					{m.self && <span className="diag-tag">This machine</span>}
 				</h2>
 				{m.checking ? (
 					<span className="diag-health is-checking" role="status">
-						<LoaderCircleIcon className="diag-spin" aria-hidden="true" />
+						<StatusIcon tone="checking" />
 						Checking…
 					</span>
 				) : (
-					<span className={`diag-health is-${h.tone}`}>{h.label}</span>
+					<span className={`diag-health is-${h.tone}`}>
+						<StatusIcon tone={h.tone} />
+						{h.label}
+					</span>
 				)}
 			</header>
 			{m.upgrade && (
@@ -150,100 +108,112 @@ function Machine({ m }: { m: MachineRow }) {
 					{m.error}
 				</p>
 			)}
-			<Facts m={m} />
-			{m.report &&
-				grouped(m.report.checks).map(([group, checks]) => (
-					<div key={group} className="diag-group">
-						<h3 className="diag-group-name">{GROUP_LABEL[group] ?? group}</h3>
-						<ul className="diag-checks">
-							{checks.map((c, i) => (
-								<CheckRow key={i} c={c} />
-							))}
-						</ul>
-					</div>
-				))}
+			{m.report && (
+				<ul className="d-card diag-card">
+					{todo.length > 0 && (
+						<li>
+							<ul className="diag-checks diag-problems">
+								{todo.map((c, i) => (
+									<li
+										key={i}
+										className={`diag-check is-${c.level}`}
+										data-level={c.level}
+									>
+										<LevelIcon level={c.level} />
+										<CheckBody c={c} />
+									</li>
+								))}
+							</ul>
+						</li>
+					)}
+					{ok.length > 0 && (
+						<li>
+							<button
+								type="button"
+								className="diag-passed-toggle"
+								aria-expanded={open}
+								aria-controls={`${id}-passed`}
+								onClick={() => setOpen(!open)}
+							>
+								<LevelIcon level="ok" />
+								<span className="diag-passed-label">
+									{passedLabel(ok.length)}
+								</span>
+								<ChevronRightIcon className="diag-chev" aria-hidden="true" />
+							</button>
+							{open && (
+								<div id={`${id}-passed`} className="diag-passed">
+									{grouped(ok).map(([group, checks]) => (
+										<div key={group} className="diag-group">
+											<h3 className="diag-group-name">
+												{GROUP_LABEL[group] ?? group}
+											</h3>
+											<ul className="diag-checks">
+												{checks.map((c, i) => (
+													<li
+														key={i}
+														className="diag-check is-ok"
+														data-level="ok"
+													>
+														<LevelIcon level="ok" />
+														<CheckBody c={c} detail={false} />
+													</li>
+												))}
+											</ul>
+										</div>
+									))}
+								</div>
+							)}
+						</li>
+					)}
+				</ul>
+			)}
+			{facts.length > 0 && (
+				<dl className="diag-facts">
+					{facts.map(([k, v]) => (
+						<div key={k} className="diag-fact">
+							<dt>{k}</dt>
+							<dd>{v}</dd>
+						</div>
+					))}
+				</dl>
+			)}
 		</section>
 	);
 }
 
-/** The clock, ticking each second while shown. */
-function useNow() {
-	const [now, setNow] = useState(Date.now());
-	useEffect(() => {
-		const t = setInterval(() => setNow(Date.now()), 1000);
-		return () => clearInterval(t);
-	}, []);
-	return now;
-}
-
-/**
- * When this machine was last checked, or the progress while machines are
- * checked. Text only: the page checks again on its own (model.ts).
- */
-export function CheckStatus({ d }: { d: Diagnostics }) {
-	const now = useNow();
-	const checkedAt = d.machines.find((m) => m.self)?.report?.checkedAt;
-	if (d.checking) {
-		const left = d.machines.filter((m) => m.checking).length;
-		const elapsed = Math.max(0, Math.round((now - d.startedAt) / 1000));
-		return (
-			<span className="diag-progress" role="status">
-				<LoaderCircleIcon className="diag-spin" aria-hidden="true" />
-				{left
-					? `Checking ${left} machine${left === 1 ? "" : "s"}…`
-					: "Checking…"}{" "}
-				{elapsed} s
-			</span>
-		);
-	}
-	if (!checkedAt) return null;
-	return (
-		<span className="diag-progress" data-testid="diag-checked">
-			Checked {ago(checkedAt, now)}
-		</span>
-	);
-}
-
-export function DiagnosticsView({
-	variant,
-	d,
-}: {
-	variant: "desktop" | "phone";
-	d: Diagnostics;
-}) {
+export function DiagnosticsView({ d }: { d: Diagnostics }) {
 	const { list, machines } = d;
-	const behind = machines.filter((m) => m.upgrade);
+	const skew = skewText(d);
 	return (
-		<div className={`diag diag-${variant}`}>
-			{variant === "desktop" && (
-				<header className="diag-head">
-					<h1 className="diag-title">Diagnostics</h1>
-					<span className="diag-spacer" />
-					<CheckStatus d={d} />
-				</header>
-			)}
-			{list.isError && !list.data && (
-				<p className="diag-error" role="alert">
-					{list.error instanceof ApiError
-						? list.error.message
-						: "Couldn't load diagnostics."}
-				</p>
-			)}
-			{!list.data && !list.isError && (
-				<p className="diag-muted diag-loading">Finding machines…</p>
-			)}
-			{behind.length > 0 && (
-				<div className="diag-skew" role="note" aria-label="Version skew">
-					<TriangleAlertIcon aria-hidden="true" />
-					<span>
-						Machines run different Pulsar versions (newest {d.newest}).{" "}
-						{behind.map((m) => `Upgrade pulsar on ${m.name}.`).join(" ")}
-					</span>
-				</div>
-			)}
-			{machines.map((m) => (
-				<Machine key={m.machineId} m={m} />
-			))}
+		<div className="diag diag-desktop">
+			<header className="diag-head">
+				<h1 className="diag-title">Diagnostics</h1>
+				<span className="diag-spacer" />
+				<CheckStatus d={d} />
+			</header>
+			<div className="diag-body">
+				{list.isError && !list.data && (
+					<p className="diag-error" role="alert">
+						{list.error instanceof ApiError
+							? list.error.message
+							: "Couldn't load diagnostics."}
+					</p>
+				)}
+				{!list.data && !list.isError && (
+					<p className="diag-muted diag-loading">Finding machines…</p>
+				)}
+				<Summary machines={machines} />
+				{skew && (
+					<div className="diag-skew" role="note" aria-label="Version skew">
+						<TriangleAlertIcon aria-hidden="true" />
+						<span>{skew}</span>
+					</div>
+				)}
+				{machines.map((m) => (
+					<Machine key={m.machineId} m={m} />
+				))}
+			</div>
 		</div>
 	);
 }

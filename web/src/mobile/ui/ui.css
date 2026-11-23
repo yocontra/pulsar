@@ -686,16 +686,6 @@ html.k-material .k-list-item .p-set-icon svg {
 	line-height: var(--p-sub-lh);
 }
 
-/* Diagnostics: machine cards are surfaces on the grouped background. */
-ion-content.diag-phone-page .diag-machine {
-	border: 0;
-	border-radius: 16px;
-}
-html.k-ios ion-content.diag-phone-page .diag-machine {
-	border-radius: 24px;
-	padding: 14px 16px;
-}
-
 /* ------------------------------------------------------------ menus
    ui/Menu.tsx (Konsta Popover + MenuList). Above Ionic's sheets; labels
    take the item's color, not Ionic's link tint. */
