@@ -20,6 +20,7 @@ The phone app looks native: iOS on an iPhone, Material on Android. A tab bar at 
 - Switching tabs keeps your place: each tab returns to where you left its list.
 - Tap the tab you are on to scroll back to the top.
 - Back on Android: from an open page, back to its tab; from another tab, back to Agents; from Agents, out of the app. A link or notification that opens an agent goes back to Agents.
+- On Agents, one line says how many agents need you; tap it for Needs You. **New agent** is the + at the top on an iPhone, and the round button above the tab bar on Android.
 
 ## The pool
 
@@ -218,7 +219,7 @@ Cmd-Shift-B (or Broadcast… on a phone) opens the builder. Pick values in the f
 
 ## Search messages
 
-Cmd-K searches what you and your agents wrote, on every machine: type a word of 3 letters or more and matching messages show under **In messages**, each with the agent, a snippet ("You:" for your own words, "Agent:" for the agent's) and when it was written. On a phone, tap the search button on the Agents screen. Choosing a message opens its session at that message, with the find bar open.
+Cmd-K searches what you and your agents wrote, on every machine: type a word of 3 letters or more and matching messages show under **In messages**, each with the agent, a snippet ("You:" for your own words, "Agent:" for the agent's) and when it was written. On a phone, type in the search field on the Agents tab: it filters the list, and matching messages show under it in **In messages**; **See all** opens them on a page of their own. Choosing a message opens its session at that message, with the find bar open.
 
 In a session, **Find** opens the find bar. It searches all of the session that search covers (below), not only what is on screen. Enter or the **Next match** button goes to the next match, Shift-Enter or **Previous match** to the previous one, and Esc closes it. Older messages load as needed.
 

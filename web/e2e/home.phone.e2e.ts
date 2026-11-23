@@ -4,7 +4,7 @@
  * Android; the one-line needs summary opens Needs You; the search field is
  * Konsta's once it loads; the pool footer counts the machines.
  */
-import { expect, ready, test } from "./fixtures.ts";
+import { agentId, expect, ready, test } from "./fixtures.ts";
 
 test.describe("agents tab", () => {
 	test("New agent: the header's + on iOS, a FAB on Android", async ({
@@ -86,5 +86,31 @@ test.describe("agents tab", () => {
 		await expect(page.getByTestId("pool-footer")).toHaveCount(0);
 		await field.fill("");
 		await expect(page.getByTestId("pool-footer")).toContainText(/machines?$/);
+	});
+
+	test("a message to agents by id lists them, with N agents as the footer", async ({
+		page,
+		request,
+	}) => {
+		const a = await agentId(request, "name=apparish-auth");
+		const b = await agentId(request, "name=codex@apparish");
+		await ready(page);
+		await page.evaluate(
+			(ids) => {
+				location.hash = `#/ids?ids=${ids.map(encodeURIComponent).join(",")}`;
+			},
+			[a, b],
+		);
+		const p = page.getByTestId("ids-page");
+		await expect(
+			page.locator("ion-nav > .ion-page:last-child ion-title").first(),
+		).toHaveText("2 Agents");
+		const list = page.getByRole("region", { name: "Agents" });
+		await expect(list.locator(".p-ids-row")).toHaveCount(2);
+		await expect(page.getByTestId("ids-footer")).toHaveText("2 agents");
+		await expect(p).toBeVisible();
+		await expect(page.getByRole("textbox").last()).toBeVisible();
+		await list.locator(".p-ids-row").first().click();
+		await expect(page).toHaveURL(/#\/a\//);
 	});
 });

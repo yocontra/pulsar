@@ -191,3 +191,20 @@ html.md .p-search-plain svg {
 .p-home .p-list:has(.p-empty.is-search) {
 	padding-bottom: 0;
 }
+
+/* ------------------------------------------------------------ ids
+   IdsPage: the agents as an inset list, the composer docked under it. */
+.p-ids-row .p-row {
+	padding-block: 2px;
+}
+.p-ids-row .p-row,
+.p-ids-row .k-list-item-title,
+.p-ids-row button > div:last-child > div:first-child > div:first-child {
+	width: 100%;
+	min-width: 0;
+}
+.p-ids-dock {
+	padding: 8px calc(12px + var(--sar)) calc(8px + var(--sab))
+		calc(12px + var(--sal));
+	background: var(--ds-bg-sunken);
+}

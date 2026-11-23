@@ -203,6 +203,8 @@ html.ios ion-header.p-bar {
 html.ios ion-header.p-bar ion-toolbar {
 	--background: transparent;
 	--border-width: 0;
+	/* Ionic's `contain: content` clips the capsule's glass shadow to a box. */
+	contain: none;
 }
 html.ios ion-header.p-bar > .header-background {
 	display: none;
