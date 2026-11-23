@@ -3,6 +3,7 @@ import "./features.ts";
 import { createRoot } from "react-dom/client";
 import { api, request, setSessionToken } from "./api/client.ts";
 import { App } from "./components/App.tsx";
+import { reportLoad } from "./lib/load-report.ts";
 import {
 	registerCommand,
 	registerPage,
@@ -55,4 +56,19 @@ if (
 	import.meta.env.PROD &&
 	window.isSecureContext
 )
-	navigator.serviceWorker.register("/sw.js").catch(() => {});
+	navigator.serviceWorker.register("/sw.js").then(
+		(reg) =>
+			// A worker that never installs (sw.js reports why itself; this
+			// adds the page's side: route, controller, caches).
+			reg?.addEventListener("updatefound", () => {
+				const w = reg.installing;
+				w?.addEventListener("statechange", () => {
+					if (w.state === "redundant" && reg.active !== w)
+						void reportLoad("sw-install", {
+							name: "InstallError",
+							message: "the service worker did not install",
+						});
+				});
+			}),
+		(err: unknown) => void reportLoad("sw-register", err),
+	);

@@ -312,6 +312,13 @@
 	outline: 2px solid var(--ds-focus);
 	outline-offset: 3px;
 }
+/* A load report's short code and file (public/boot.js, src/lib/lazy.tsx). */
+.st-load-code {
+	margin-top: 10px;
+	font-family: var(--ds-font-mono);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
 /* Details: a secondary control that opens a quiet panel. */
 .st-more {
 	width: 100%;

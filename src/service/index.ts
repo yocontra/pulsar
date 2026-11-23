@@ -1,5 +1,6 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
+import { ClientErrors } from "../diagnostics/client-errors.ts";
 import {
 	type LocalDiagnosticsDeps,
 	LocalDiagnosticsRunner,
@@ -249,6 +250,8 @@ export class PulsarService {
 	readonly usage: Usage;
 	/** This machine's `pulsar doctor` report for the app (src/diagnostics/). */
 	readonly diagnostics: { local: LocalDiagnosticsRunner };
+	/** App load errors the app reported (`POST /client-errors`; doctor shows them). */
+	readonly clientErrors = new ClientErrors();
 	private readonly usageOpts: ServiceOptions["usage"];
 	/** Full-text search over transcripts (`GET /search/messages`). */
 	readonly messages: MessageSearch;
@@ -1123,6 +1126,8 @@ export class PulsarService {
 					...(registry.pool ? { pool: registry.pool.machines() } : {}),
 					// Claude sessions still on a hook without `--timeout` (doctor).
 					oldHookSessions: this.approvals.oldHookSessions(),
+					// App load errors reported by devices lately (doctor notes them).
+					clientErrors: this.clientErrors.summary(),
 				};
 			case "whoami": {
 				const me = registry.self(caller);

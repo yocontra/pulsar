@@ -226,9 +226,16 @@ export function diagnosticsList(): DiagnosticsReport {
 /** `GET /diagnostics/:id`: one machine's answer (after a held delay). */
 export async function machineDiagnostics(
 	id: string,
+	/** Doctor's checks only the running daemon adds (app load errors). */
+	extra: DiagCheck[] = [],
 ): Promise<MachineDiagnostics | null> {
-	const m = full().machines.find((x) => x.machineId === id);
+	let m = full().machines.find((x) => x.machineId === id);
 	if (!m) return null;
+	if (m.self && m.report && extra.length)
+		m = {
+			...m,
+			report: { ...m.report, checks: [...m.report.checks, ...extra] },
+		};
 	const hold = knobs.hold[id] ?? 0;
 	if (hold) await new Promise((r) => setTimeout(r, hold));
 	if (knobs.timeout.includes(id))

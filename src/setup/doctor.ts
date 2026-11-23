@@ -8,6 +8,10 @@ import {
 	checkLine,
 	type DoctorJson,
 } from "../diagnostics/checks.ts";
+import {
+	type ClientErrorSummary,
+	clientErrorNote,
+} from "../diagnostics/client-errors.ts";
 import { exec } from "../exec.ts";
 import { CLIENTS } from "../harnesses/index.ts";
 import { envPort } from "../http/config.ts";
@@ -35,6 +39,8 @@ interface Status {
 	service?: boolean;
 	/** Whether it serves the app; absent on older daemons. */
 	app?: AppStatus;
+	/** App load errors devices reported lately; absent on older daemons. */
+	clientErrors?: ClientErrorSummary;
 }
 
 async function latestVersion(): Promise<string | null> {
@@ -236,6 +242,8 @@ async function doctorChecks(
 					`garbage collection: ${lag.gc.long} pause(s) of 50 ms or more, longest ${lag.gc.maxMs} ms`,
 				);
 		}
+		const loadErrors = clientErrorNote(s.clientErrors);
+		if (loadErrors) note(loadErrors.text, loadErrors.fix);
 		if (s.version !== VERSION)
 			note(
 				`daemon runs ${s.version}; it switches to ${VERSION} after \`pulsar stop\``,

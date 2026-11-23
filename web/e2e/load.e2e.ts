@@ -1,6 +1,6 @@
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { BrowserContext, Page } from "@playwright/test";
+import type { APIRequestContext, BrowserContext, Page } from "@playwright/test";
 import { current, DIST, serve, stageBuild } from "./builds.ts";
 import { expect, test } from "./fixtures.ts";
 
@@ -162,8 +162,10 @@ test.describe("first load", () => {
 		});
 		const n = countLoads(page);
 		await openUsage(page);
+		// One reload (after the load report is sent), into a screen that
+		// loads; never the failure screen.
+		await expect.poll(() => n.loads).toBe(1);
 		await expect(usage(page)).toBeVisible();
-		// One reload, into a screen that loads; never the failure screen.
 		expect(n.loads).toBe(1);
 		expect(requests).toBeGreaterThanOrEqual(2);
 		expect(failedShown).toBe(false);
@@ -506,4 +508,186 @@ test("static headers: compressed, immutable /_app/, no-cache HTML and sw.js", as
 			"cache-control"
 		],
 	).toBe("no-store");
+});
+
+test.describe("load error reports", () => {
+	interface Received {
+		beacon: boolean;
+		report: {
+			kind: string;
+			build: string;
+			urls: string[];
+			error: { name: string; message: string };
+			sw: {
+				controller: string | null;
+				state: string;
+				caches: string[];
+				failed: string[];
+			};
+			online: boolean;
+			standalone: boolean;
+			ua: string;
+			route: string;
+			reloaded: boolean;
+			at: number;
+		};
+	}
+	/** The reports the mock received (POST /api/v1/client-errors). */
+	const reports = async (request: APIRequestContext) =>
+		(await (
+			await request.get("/api/v1/__mock/client-errors", { headers: H })
+		).json()) as Received[];
+	const clear = async ({ request }: { request: APIRequestContext }) => {
+		await request.post("/api/v1/__mock/client-errors", { headers: H });
+	};
+	test.beforeEach(clear);
+	// Diagnostics on the same mock would show them.
+	test.afterEach(clear);
+
+	test("a screen whose chunk keeps failing reports it, before and after the reload; its screen shows the code and copies the details", async ({
+		page,
+		context,
+		request,
+		errors,
+	}) => {
+		await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+		await page.route(/\/_app\/UsageView\.[^/]+\.js$/, (route) =>
+			route.fulfill({ status: 404, body: "gone" }),
+		);
+		await page.goto("/");
+		await expect(app(page)).toBeVisible();
+		const n = countLoads(page);
+		await openUsage(page);
+		await expect(screenFailed(page)).toBeVisible();
+		expect(n.loads).toBe(1);
+		const code = page.locator(".st-fail .st-load-code");
+		await expect(code).toHaveText(
+			/^CHUNK-(TypeError|LoadError) · UsageView\.[^ ]+\.js$/,
+		);
+
+		// On each page: the failed file (its <link> or <script>) and the
+		// import that needed it. The first page reloads once its first report
+		// is sent (100 ms for a second, 1.5 s at most): the second may not
+		// make it. The page after the reload sends both.
+		const kinds = async () =>
+			(await reports(request))
+				.map((r) => `${r.report.reloaded} ${r.report.error.name}`)
+				.filter((x, i, all) => all.indexOf(x) === i)
+				.sort();
+		await expect
+			.poll(async () => (await kinds()).filter((k) => k.startsWith("true")))
+			.toEqual(["true LoadError", "true TypeError"]);
+		expect((await kinds()).some((k) => k.startsWith("false"))).toBe(true);
+		const got = await reports(request);
+		expect(got.length).toBeLessThanOrEqual(6);
+		for (const { report: r, beacon } of got) {
+			expect(beacon).toBe(false);
+			expect(r.kind).toBe("chunk");
+			expect(r.build).toBe(current().build);
+			expect(r.urls[0]).toMatch(/\/_app\/UsageView\.[^/]+\.js$/);
+			expect(r.error.message).toMatch(
+				/^Failed to fetch dynamically imported module: .*\/_app\/UsagePages\.|\/_app\/UsageView\./,
+			);
+			// After the reload the page opens on the screen it reloaded for.
+			if (r.reloaded) expect(r.route).toBe("/usage");
+			expect(r.online).toBe(true);
+			expect(r.standalone).toBe(false);
+			expect(r.ua).toContain("Chrome");
+			// Service workers are blocked in this project: none registered.
+			expect(r.sw).toEqual({
+				controller: null,
+				state: "none",
+				caches: [],
+				failed: [],
+			});
+		}
+
+		await page.getByRole("button", { name: "Copy details" }).click();
+		await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+		const copied = JSON.parse(
+			await page.evaluate(() => navigator.clipboard.readText()),
+		);
+		expect(copied).toMatchObject({
+			kind: "chunk",
+			build: current().build,
+			route: "/usage",
+			reloaded: true,
+		});
+		allow(errors, DOWNLOAD_ERRORS);
+	});
+
+	test("an entry that keeps failing reports it, and the error screen shows the code", async ({
+		page,
+		request,
+		errors,
+	}) => {
+		await page.route(/\/_app\/index\.astro_[^/]+\.js$/, (route) =>
+			route.fulfill({ status: 503, body: "busy" }),
+		);
+		await page.goto("/");
+		await expect(errorScreen(page)).toBeVisible();
+		await expect(page.locator("#boot-code")).toHaveText(
+			/^BOOT-LoadError · index\.astro_[^ ]+\.js$/,
+		);
+		await expect(page.locator("#boot-copy")).toBeVisible();
+		await expect.poll(async () => (await reports(request)).length).toBe(2);
+		for (const { report: r } of await reports(request)) {
+			expect(r.kind).toBe("boot");
+			expect(r.build).toBe(current().build);
+			expect(r.urls[0]).toMatch(/\/_app\/index\.astro_[^/]+\.js$/);
+		}
+		allow(errors, DOWNLOAD_ERRORS);
+	});
+
+	test.describe("service worker", () => {
+		test.use({ serviceWorkers: "allow" });
+
+		test("a worker that cannot install reports the file it could not cache", async ({
+			page,
+			request,
+			errors,
+		}) => {
+			const a = stageBuild();
+			const gone = readdirSync(join(a.root, "_app")).find((f) =>
+				/^UsageView\.[^/]+\.old\.js$/.test(f),
+			)!;
+			rmSync(join(a.root, "_app", gone));
+			await serve(request, { root: a.root, webBuild: "none" });
+			await page.goto("/");
+			await expect(app(page)).toBeVisible();
+			await expect
+				.poll(async () =>
+					(await reports(request)).filter(
+						(r) => r.report.kind === "sw-install",
+					),
+				)
+				.toEqual(
+					expect.arrayContaining([
+						expect.objectContaining({
+							report: expect.objectContaining({
+								kind: "sw-install",
+								build: a.build,
+								urls: [`/_app/${gone}`],
+								error: {
+									name: "Error",
+									message: `pulsar: could not cache /_app/${gone} (404)`,
+								},
+							}),
+						}),
+					]),
+				);
+			// The page adds its own side: the route and its build.
+			await expect
+				.poll(async () =>
+					(await reports(request)).some(
+						(r) =>
+							r.report.kind === "sw-install" &&
+							r.report.error.name === "InstallError" &&
+							r.report.build === a.build,
+					),
+				)
+				.toBe(true);
+			allow(errors, DOWNLOAD_ERRORS);
+		});
+	});
 });

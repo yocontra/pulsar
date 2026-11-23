@@ -10,6 +10,11 @@ import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { renderSVG } from "uqr";
 import { z } from "zod";
+import { clientErrorLine } from "../diagnostics/client-errors.ts";
+import {
+	CLIENT_ERROR_MAX_BYTES,
+	parseClientError,
+} from "../diagnostics/client-errors-schema.ts";
 import { isOwner } from "../federation/members.ts";
 import { tailnetRpId } from "../federation/tailnet.ts";
 import { compressJson } from "../http/compress.ts";
@@ -24,6 +29,7 @@ import {
 } from "../http/identity.ts";
 import type { UserSessionInfo } from "../http/wire.ts";
 import { operatorName } from "../human-tag.ts";
+import { daemonLog } from "../log.ts";
 import { installRoot, retainedBuilds } from "../paths.ts";
 import { RpcError } from "../rpc.ts";
 import { ATTACH_LIMITS } from "../service/attachments.ts";
@@ -376,6 +382,8 @@ const SubscriptionBody = z
 const AttachmentsBody = z
 	.object({ manifest: z.unknown(), assertion: z.unknown().optional() })
 	.strict();
+/** `POST /api/v1/client-errors`: may come as a beacon, without X-Pulsar. */
+const CLIENT_ERRORS = "/api/v1/client-errors";
 /** `PUT /api/v1/agents/:id/attachments/:upload/:index`: exempt from the 2 MB JSON limit. */
 const ATTACHMENT_PUT = /^\/api\/v1\/agents\/.+\/attachments\/[^/]+\/\d+$/;
 const Decision = z.enum(["allow-once", "allow-session", "deny", "answer"]);
@@ -846,9 +854,13 @@ export class HttpTransport {
 			const path = c.req.path;
 			const sameOrigin = c.req.header("sec-fetch-site") === "same-origin";
 			const exempt =
-				c.req.method === "GET" &&
-				(path === "/api/v1/hello" ||
-					(sameOrigin && (path === "/api/v1/events" || path === "/api/v1/qr")));
+				(c.req.method === "GET" &&
+					(path === "/api/v1/hello" ||
+						(sameOrigin &&
+							(path === "/api/v1/events" || path === "/api/v1/qr")))) ||
+				// An app load error sent by `navigator.sendBeacon`, which can't
+				// add headers; same-origin only (pages can't forge that header).
+				(c.req.method === "POST" && sameOrigin && path === CLIENT_ERRORS);
 			if (c.req.header("x-pulsar") !== "1" && !exempt)
 				return refuse(
 					c,
@@ -1530,6 +1542,27 @@ export class HttpTransport {
 		});
 		// Diagnostics: the pool at once, then each machine's `pulsar doctor`
 		// report, run by its own daemon (read-only; the app asks in parallel).
+		// App load errors the app reports about itself (web/public/boot.js):
+		// one daemon.log line each, the last few for doctor. Rate limited.
+		api.post(
+			"/client-errors",
+			bodyLimit({
+				maxSize: CLIENT_ERROR_MAX_BYTES,
+				onError: (c) =>
+					c.json(
+						{ error: { code: "too_large", message: "the report is too big" } },
+						413,
+					),
+			}),
+			async (c) => {
+				const report = parseClientError(await c.req.text());
+				if (!report) throw new RpcError("bad_request", "not a load report");
+				if (!this.service.clientErrors.add(report))
+					throw new RpcError("rate_limited", "too many load reports");
+				daemonLog(clientErrorLine(report));
+				return c.body(null, 204);
+			},
+		);
 		api.get("/diagnostics", (c) =>
 			c.json(this.service.diagnosticsList(who(c))),
 		);

@@ -18,6 +18,15 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { canonicalJson } from "../../src/canonical.ts";
+import {
+	type ClientErrorReport,
+	ClientErrors,
+	clientErrorNote,
+} from "../../src/diagnostics/client-errors.ts";
+import {
+	CLIENT_ERROR_MAX_BYTES,
+	parseClientError,
+} from "../../src/diagnostics/client-errors-schema.ts";
 import { generateVapidKeys } from "../../src/push/webpush.ts";
 import { RpcError } from "../../src/rpc.ts";
 import {
@@ -2436,6 +2445,10 @@ const RECEIPT_STATES = Object.keys(RECEIPT_ORDER) as ReceiptState[];
 
 let identityOutage = { left: 0, eventsOnly: false };
 
+/** App load reports received, and how (`GET /__mock/client-errors`). */
+let clientErrors = new ClientErrors();
+const clientErrorLog: { report: ClientErrorReport; beacon: boolean }[] = [];
+
 /**
  * Mock only (`POST /__mock/faults`): a slow or failing network for the
  * optimistic-rendering tests. Each rule matches a method and a path prefix
@@ -2517,9 +2530,11 @@ async function route(
 	const path = url.pathname.slice("/api/v1".length);
 	const sameOrigin = req.headers.get("sec-fetch-site") === "same-origin";
 	const exempt =
-		req.method === "GET" &&
-		(path === "/hello" ||
-			(sameOrigin && (path === "/events" || path === "/qr")));
+		(req.method === "GET" &&
+			(path === "/hello" ||
+				(sameOrigin && (path === "/events" || path === "/qr")))) ||
+		// A load report sent as a beacon (as src/transport/http.ts).
+		(req.method === "POST" && sameOrigin && path === "/client-errors");
 	if (req.headers.get("x-pulsar") !== "1" && !exempt)
 		throw new ApiError(
 			403,
@@ -3119,13 +3134,38 @@ async function route(
 		);
 		return json({ ok: true, op: b.op });
 	}
+	// App load reports (as src/transport/http.ts): kept for doctor's note
+	// and for the tests (`GET /__mock/client-errors`, `{reset}` clears).
+	if (POST && path === "/client-errors") {
+		const text = await req.text();
+		const report =
+			text.length <= CLIENT_ERROR_MAX_BYTES ? parseClientError(text) : null;
+		if (!report) throw badRequest("not a load report");
+		if (!clientErrors.add(report))
+			throw new ApiError(429, "rate_limited", "too many load reports");
+		clientErrorLog.push({
+			report,
+			beacon: req.headers.get("x-pulsar") !== "1",
+		});
+		return new Response(null, { status: 204 });
+	}
+	if (GET && path === "/__mock/client-errors") return json(clientErrorLog);
+	if (POST && path === "/__mock/client-errors") {
+		clientErrors = new ClientErrors();
+		clientErrorLog.length = 0;
+		return json({ ok: true });
+	}
 	// Diagnostics: the pool at once, then each machine (web/mock/diagnostics.ts).
 	if (GET && path === "/diagnostics") return json(diagnosticsList());
 	if (GET && seg[0] === "diagnostics" && seg.length === 2) {
 		const refresh = q.get("refresh");
 		if (refresh !== null && refresh !== "0" && refresh !== "1")
 			throw badRequest("refresh: 0 or 1");
-		const m = await machineDiagnostics(seg[1]!);
+		const note = clientErrorNote(clientErrors.summary());
+		const m = await machineDiagnostics(
+			seg[1]!,
+			note ? [{ group: "daemon", level: "note", ...note }] : [],
+		);
 		if (!m) throw notFound("no such machine in the pool");
 		return json(m);
 	}

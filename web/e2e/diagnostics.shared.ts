@@ -32,6 +32,57 @@ export function diagnosticsSuite(platform: "desktop" | "phone") {
 		await knobs(request, { reset: true });
 	});
 
+	test(`app load errors the devices reported show as a note on this machine (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const H = { "X-Pulsar": "1" };
+		await request.post("/api/v1/__mock/client-errors", { headers: H });
+		const report = {
+			kind: "chunk",
+			build: "abc123def456",
+			urls: ["/_app/UsageView.Bx3k.js"],
+			error: {
+				name: "TypeError",
+				message: "Importing a module script failed.",
+			},
+			sw: {
+				controller: "abc123def456",
+				state: "active",
+				caches: [],
+				failed: [],
+			},
+			online: true,
+			standalone: true,
+			ua: "iPhone",
+			route: "/usage",
+			reloaded: false,
+			at: Date.now(),
+		};
+		for (let i = 0; i < 2; i++)
+			expect(
+				(
+					await request.post("/api/v1/client-errors", {
+						headers: H,
+						data: report,
+					})
+				).status(),
+			).toBe(204);
+		try {
+			await ready(page);
+			await page.evaluate(() => {
+				location.hash = "#/diagnostics";
+			});
+			const studio = view(page, phone).locator('[data-machine="studio"]');
+			await expect(studio.locator(".diag-health")).toHaveText("2 notes");
+			await expect(studio).toContainText(
+				"recent app load errors: 2 report(s); by build: abc123def456: 2; by file: /_app/UsageView.Bx3k.js: 2",
+			);
+		} finally {
+			await request.post("/api/v1/__mock/client-errors", { headers: H });
+		}
+	});
+
 	test(`this machine shows at once; each peer as it answers, or why it timed out (${platform})`, async ({
 		page,
 		request,

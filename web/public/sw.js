@@ -25,6 +25,49 @@ let networkOnlyUntil = 0;
 const BYPASS_MS = 60_000;
 // Parallel downloads while installing.
 const INSTALL_FETCHES = 6;
+// Build files this worker failed to fetch lately (`/_app/x.js 404`), for
+// the app's load error reports (web/public/boot.js asks with "info").
+const failed = [];
+function noteFailed(url, why) {
+	failed.push(`${new URL(url, location.origin).pathname} ${why}`);
+	if (failed.length > 5) failed.shift();
+}
+
+/**
+ * Tells the daemon this worker could not install or activate (the page
+ * never hears why): the build, the file, the error. Bounded; never throws.
+ */
+async function report(kind, err) {
+	try {
+		const body = {
+			kind,
+			build: BUILD,
+			urls: err?.url ? [err.url] : [],
+			error: {
+				name: String(err?.name || "Error").slice(0, 80),
+				message: String(err?.message ?? err).slice(0, 500),
+			},
+			sw: {
+				controller: null,
+				state: kind === "sw-install" ? "installing" : "activating",
+				caches: (await caches.keys()).slice(-10),
+				failed: failed.slice(),
+			},
+			online: self.navigator.onLine,
+			standalone: false,
+			ua: self.navigator.userAgent.slice(0, 400),
+			route: "",
+			reloaded: false,
+			at: Date.now(),
+		};
+		await fetch("/api/v1/client-errors", {
+			method: "POST",
+			headers: { "X-Pulsar": "1", "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+			signal: AbortSignal.timeout?.(3000),
+		});
+	} catch {}
+}
 
 /** A response worth caching: complete, from this origin. */
 const ok = (res) => res?.ok && res.status === 200 && !res.redirected;
@@ -45,8 +88,22 @@ async function fill(cache) {
 			// Hashed build files never change under one name: reuse an older
 			// build's copy (most chunks survive a deploy), else download.
 			const old = url.startsWith("/_app/") && (await caches.match(url));
-			const res = old || (await fetch(url));
-			if (!ok(res)) throw new Error(`pulsar: could not cache ${url}`);
+			const res =
+				old ||
+				(await fetch(url).catch((e) => {
+					noteFailed(url, "network");
+					throw Object.assign(
+						new Error(`pulsar: could not fetch ${url}: ${e?.message}`),
+						{ url },
+					);
+				}));
+			if (!ok(res)) {
+				noteFailed(url, String(res?.status));
+				throw Object.assign(
+					new Error(`pulsar: could not cache ${url} (${res?.status})`),
+					{ url },
+				);
+			}
 			await cache.put(url, res);
 		}
 	};
@@ -65,6 +122,7 @@ self.addEventListener("install", (event) => {
 				// Never leave an incomplete cache behind (a complete one of the
 				// same build, from an earlier install, has its shell: keep it).
 				if (!(await cache.match("/"))) await caches.delete(CACHE);
+				await report("sw-install", err);
 				throw err;
 			}
 			await self.skipWaiting();
@@ -77,10 +135,15 @@ self.addEventListener("activate", (event) => {
 		(async () => {
 			// Cache names keep their creation order: keep this build's and the
 			// newest other one (the build an open page may still run).
-			const others = (await caches.keys()).filter((k) => k !== CACHE);
-			others.pop();
-			await Promise.all(others.map((k) => caches.delete(k)));
-			await self.clients.claim();
+			try {
+				const others = (await caches.keys()).filter((k) => k !== CACHE);
+				others.pop();
+				await Promise.all(others.map((k) => caches.delete(k)));
+				await self.clients.claim();
+			} catch (err) {
+				await report("sw-activate", err);
+				throw err;
+			}
 		})(),
 	);
 });
@@ -88,6 +151,12 @@ self.addEventListener("activate", (event) => {
 // The page asks for network-only navigations before it reloads after a
 // failed chunk (web/public/boot.js), and waits for the reply.
 self.addEventListener("message", (event) => {
+	// The page's load error report (web/public/boot.js): this worker's build
+	// and the build files it failed to fetch.
+	if (event.data?.type === "info") {
+		event.ports[0]?.postMessage({ build: BUILD, failed: failed.slice() });
+		return;
+	}
 	if (event.data?.type !== "bypass") return;
 	networkOnlyUntil = Date.now() + BYPASS_MS;
 	event.ports[0]?.postMessage("ok");
@@ -115,7 +184,11 @@ async function navigate(req) {
 async function asset(req) {
 	const hit = await caches.match(req);
 	if (hit) return hit;
-	const res = await fetch(req);
+	const res = await fetch(req).catch((e) => {
+		noteFailed(req.url, "network");
+		throw e;
+	});
+	if (!res.ok) noteFailed(req.url, String(res.status));
 	if (res.ok) {
 		const copy = res.clone();
 		caches.open(CACHE).then((c) => c.put(req, copy));

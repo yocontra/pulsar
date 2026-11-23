@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { recoverChunk } from "../lib/lazy.tsx";
+import { reportLoad } from "../lib/load-report.ts";
 import { prefetch } from "../lib/prefetch.ts";
 import { withLazyIonCss } from "./ionCss.ts";
 
@@ -38,7 +39,10 @@ export function useIonicLazy(): LazyIonic | null {
 		loadIonicLazy().then(
 			(x) => live && setM(x),
 			// Sheets and menus would never open: reload into the served build.
-			(err: unknown) => live && recoverChunk(err),
+			(err: unknown) => {
+				void reportLoad("ionic", err);
+				if (live) recoverChunk(err);
+			},
 		);
 		return () => {
 			live = false;

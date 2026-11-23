@@ -9,6 +9,7 @@
  * A component that connects before its styles arrived logs an error, which
  * fails the e2e run (e2e/fixtures.ts).
  */
+import { reportLoad } from "../lib/load-report.ts";
 import { mode } from "./platform.ts";
 
 type Registry = { default: Record<string, string> };
@@ -37,6 +38,7 @@ export function loadEagerIonCss(): Promise<void> {
 			: import("virtual:ionic-css/ios-eager")
 	).then(add, (err: unknown) => {
 		eager = null;
+		void reportLoad("ionic", err);
 		throw err;
 	});
 	return eager;
@@ -49,6 +51,7 @@ export function loadLazyIonCss(): Promise<void> {
 			: import("virtual:ionic-css/ios-lazy")
 	).then(add, (err: unknown) => {
 		lazy = null;
+		void reportLoad("ionic", err);
 		throw err;
 	});
 	return lazy;

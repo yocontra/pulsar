@@ -1,6 +1,7 @@
 import type { ComponentType, JSX } from "react";
 import { useEffect, useState } from "react";
 import { CloseX } from "../components/CloseX.tsx";
+import { lastLoadReport, reportLoad } from "./load-report.ts";
 
 declare global {
 	interface Window {
@@ -69,6 +70,8 @@ export function lazy<P extends object>(
 			preload().then(
 				() => live && set((n) => n + 1),
 				(err: unknown) => {
+					// Tell the daemon first: a reload waits for the report.
+					void reportLoad("chunk", err);
 					// A reload is coming: keep the loading state until it does.
 					if (live && !recoverChunk(err)) setError(err ?? "failed");
 				},
@@ -114,6 +117,18 @@ function LoadFailed({
 	onClose?: () => void;
 }) {
 	const [closed, setClosed] = useState(false);
+	const [report, setReport] = useState(lastLoadReport);
+	const [copied, setCopied] = useState(false);
+	useEffect(() => {
+		let live = true;
+		// The same report as the failure's (deduped): its code once sent.
+		void reportLoad("chunk", error).then(
+			() => live && setReport(lastLoadReport()),
+		);
+		return () => {
+			live = false;
+		};
+	}, [error]);
 	if (closed) return <span hidden />;
 	const message = error instanceof Error ? error.message : String(error ?? "");
 	// The phone speaks iOS: title-case buttons.
@@ -134,6 +149,23 @@ function LoadFailed({
 					className="st-close"
 					onClick={() => (onClose ? onClose() : setClosed(true))}
 				/>
+			)}
+			{report && (
+				<>
+					<p className="st-note st-load-code">{report.code}</p>
+					<button
+						type="button"
+						className="st-btn is-secondary"
+						onClick={() =>
+							navigator.clipboard?.writeText(report.details).then(
+								() => setCopied(true),
+								() => {},
+							)
+						}
+					>
+						{copied ? "Copied" : phone ? "Copy Details" : "Copy details"}
+					</button>
+				</>
 			)}
 			{message && (
 				<details className="st-more">
