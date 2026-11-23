@@ -35,7 +35,7 @@ test.describe("usage page", () => {
 		const u = usage(page);
 		await expect(u.getByTestId("usage-total")).toHaveText(/^\$[\d,.]+$/);
 		await expect(u.locator(".usage-sub")).toContainText(
-			"24 sessions · API estimate",
+			"35 sessions · API estimate",
 		);
 		const rows = u.getByRole("list", { name: "By harness" }).locator("li");
 		await expect(rows).toHaveCount(3);
@@ -50,6 +50,7 @@ test.describe("usage page", () => {
 		// Codex's model has no price: counted out of the estimate, said so.
 		await u.getByRole("button", { name: "About unpriced usage" }).click();
 		await expect(u.getByRole("note")).toContainText("acme-coder-9");
+		await expect(u.getByRole("note")).not.toContainText("qwen3.8");
 		await expect(u.locator("dl.usage-totals")).toContainText("Cache savings");
 		expect(await contrastFailures(page, ".usage *")).toEqual([]);
 	});
@@ -145,6 +146,24 @@ test.describe("usage page", () => {
 		await expect(sheet).toHaveCount(0);
 		await expect(page).toHaveURL(/#\/usage$/);
 		await expect(row).toContainText(/^acme-coder-9\$[\d,.]+$/);
+	});
+
+	test("a local model reads Local · $0 and has no price form", async ({
+		page,
+	}) => {
+		await page.goto("/#/usage");
+		const u = usage(page);
+		const row = u.locator(".usage-breakdown .usage-row", {
+			hasText: "qwen3.8:27b",
+		});
+		await expect(row).toContainText("Local · $0");
+		await expect(row).not.toContainText("[local]");
+		await row.click();
+		const sheet = page.getByRole("dialog", { name: "qwen3.8:27b" });
+		await expect(sheet).toContainText("Local · $0");
+		await expect(sheet.getByRole("button", { name: "Set price" })).toHaveCount(
+			0,
+		);
 	});
 
 	test("model prices from the machine menu", async ({ page }) => {

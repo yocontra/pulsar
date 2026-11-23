@@ -7,11 +7,19 @@ import { lazyCrypto } from "../lazy.ts";
 import type { Store } from "../store.ts";
 import { answeredKey, mergeLimits, saveLimits } from "./limits.ts";
 import {
+	isLocalProvider,
+	localOnlyModels,
+	type Providers,
+	readProviders,
+	tagLocal,
+} from "./local.ts";
+import {
 	type FileState,
 	parseLine,
 	type UsageHarness,
 	type UsageRecord,
 } from "./parse.ts";
+import { priceFor, priceTable } from "./prices.ts";
 
 /** Where each harness keeps its session files (null: don't scan it). */
 export type UsageRoots = Record<UsageHarness, string | null>;
@@ -42,6 +50,9 @@ const BACKFILL_MS = 8 * DAY;
 const BACKFILL_BYTES = 256 * 1024;
 const BACKFILL_CODEX_BYTES = 8 << 20;
 const BACKFILL_KEY = "usage.limitsBackfilled";
+/** Set once local-model rows stored before tagging have been retagged. */
+const LOCAL_RETAG_KEY = "usage.localRetagged";
+const DEFAULTS = priceTable({});
 
 interface Found {
 	path: string;
@@ -110,6 +121,8 @@ export class UsageScanner {
 	onStored: (() => void) | null = null;
 	/** Files committed by the running scan. */
 	private stored = 0;
+	/** Each harness's configured providers, read at the start of a scan. */
+	private providers: Partial<Record<UsageHarness, Providers>> = {};
 
 	private readonly chunk: number;
 	private readonly commitBytes: number;
@@ -148,6 +161,12 @@ export class UsageScanner {
 		this.stored = 0;
 		const since = now - WINDOW_MS;
 		const roots = this.roots();
+		this.providers = {};
+		for (const h of ["codex", "pi", "omp"] as const) {
+			const root = roots[h];
+			if (root) this.providers[h] = await readProviders(h, root);
+		}
+		this.retagLocal();
 		const found: Found[] = [];
 		for (const h of ["claude", "codex", "pi", "omp"] as const) {
 			const root = roots[h];
@@ -164,6 +183,57 @@ export class UsageScanner {
 		}
 		this.prune(now);
 		this.scannedAt = Date.now();
+	}
+
+	/**
+	 * Once per database: rows pi and omp stored before local models were
+	 * tagged get the tag when the harness config lists their model id only
+	 * under local providers and no default price covers it. Re-reading the files instead would count
+	 * nothing (their message ids are already seen).
+	 */
+	private retagLocal() {
+		if (this.store.metaGet(LOCAL_RETAG_KEY)) return;
+		const db = this.store.db;
+		db.exec("BEGIN IMMEDIATE");
+		try {
+			const copy = db.prepare(`
+INSERT INTO usage_hourly (hour, harness, model, project, session, input, cache_read, cache_write_5m, cache_write_1h, output, records)
+SELECT hour, harness, ?, project, session, input, cache_read, cache_write_5m, cache_write_1h, output, records
+FROM usage_hourly WHERE harness = ? AND model = ?
+ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
+	input = input + excluded.input,
+	cache_read = cache_read + excluded.cache_read,
+	cache_write_5m = cache_write_5m + excluded.cache_write_5m,
+	cache_write_1h = cache_write_1h + excluded.cache_write_1h,
+	output = output + excluded.output,
+	records = records + excluded.records`);
+			const drop = db.prepare(
+				"DELETE FROM usage_hourly WHERE harness = ? AND model = ?",
+			);
+			for (const h of ["pi", "omp"] as const) {
+				const ps = this.providers[h];
+				if (!ps) continue;
+				for (const model of localOnlyModels(ps)) {
+					// An id a hosted API also sells is not retagged on the config's word.
+					if (priceFor(model, DEFAULTS)) continue;
+					copy.run(tagLocal(model), h, model);
+					drop.run(h, model);
+				}
+			}
+			this.store.metaSet(LOCAL_RETAG_KEY, String(Date.now()));
+			db.exec("COMMIT");
+		} catch (e) {
+			db.exec("ROLLBACK");
+			throw e;
+		}
+	}
+
+	/** A record's model id, tagged when a local provider answered it. */
+	private tag(rec: UsageRecord, harness: UsageHarness) {
+		if (!rec.provider || harness === "claude") return;
+		const ps = this.providers[harness] ?? new Map();
+		if (isLocalProvider(rec.provider, rec.model, ps))
+			rec.model = tagLocal(rec.model);
 	}
 
 	/**
@@ -342,7 +412,10 @@ export class UsageScanner {
 					const rec = line
 						? parseLine(f.harness, line, state, batch.onLimit)
 						: null;
-					if (rec && rec.t >= since) batch.add(rec, state, f.harness);
+					if (rec && rec.t >= since) {
+						this.tag(rec, f.harness);
+						batch.add(rec, state, f.harness);
+					}
 				}
 				if (start < bytesRead) {
 					if (carryLen + bytesRead - start <= MAX_LINE)

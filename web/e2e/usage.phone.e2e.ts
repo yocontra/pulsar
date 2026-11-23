@@ -51,6 +51,12 @@ test.describe("usage tab", () => {
 
 		// A model's sheet.
 		await p.getByRole("radio", { name: "Cost" }).click();
+		// A local model's row says why it costs nothing.
+		await expect(
+			p
+				.getByLabel("Breakdown", { exact: true })
+				.locator('[data-model="qwen3.8:27b[local]"]'),
+		).toContainText("Local · $0");
 		await p
 			.getByLabel("Breakdown", { exact: true })
 			.locator('[data-model="claude-opus-5-5"]')

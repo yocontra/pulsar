@@ -26,7 +26,10 @@ import {
 	costByType,
 	type Filters,
 	filterRows,
+	isLocalModel,
+	LOCAL_LABEL,
 	type Metric,
+	modelName,
 	money,
 	percent,
 	processed,
@@ -400,12 +403,14 @@ function Body({
 										className="usage-row"
 										onClick={() => onModel(g.key)}
 									>
-										<span className="usage-row-name">{g.key}</span>
+										<span className="usage-row-name">{modelName(g.key)}</span>
 										<ShareBar share={g.share} />
 										<span className="usage-num">
-											{metric === "cost" && unpriced
-												? "No price"
-												: fmt(value(metric, g.cost, g.tokens))}
+											{metric === "cost" && isLocalModel(g.key)
+												? LOCAL_LABEL
+												: metric === "cost" && unpriced
+													? "No price"
+													: fmt(value(metric, g.cost, g.tokens))}
 										</span>
 									</button>
 								</li>

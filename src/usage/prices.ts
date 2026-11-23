@@ -188,6 +188,31 @@ export const DEFAULT_PRICES: Record<string, Price> = {
 	"qwen3.5-plus": listed(0.2, 0.02, 1.2, 0.25),
 };
 
+/**
+ * Appended to the model id of a record a local model answered (see
+ * src/usage/local.ts), like Claude's `[1m]`. Kept here so the web app
+ * can read it without the scanner's file access.
+ */
+export const LOCAL_TAG = "[local]";
+
+export const isLocalModel = (model: string) => model.endsWith(LOCAL_TAG);
+
+/** The model id without the local tag, for display. */
+export const modelName = (model: string) =>
+	isLocalModel(model) ? model.slice(0, -LOCAL_TAG.length) : model;
+
+export const tagLocal = (model: string) =>
+	isLocalModel(model) ? model : `${model}${LOCAL_TAG}`;
+
+/** What a local model's tokens cost. */
+export const LOCAL_PRICE: Price = {
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite5m: 0,
+	cacheWrite1h: 0,
+};
+
 /** Price fields, for validating an edit. */
 export const PRICE_FIELDS = [
 	"input",
@@ -225,13 +250,14 @@ const VERSION_TAIL = /^\d+(?:[-.]\d+)*$/;
  * (`claude-opus-4` covers `claude-opus-4-8`, `deepseek-v4.1-flash` covers
  * `deepseek-v4.1-flash-1017`). A variant name after the key never matches,
  * so `gpt-5` does not price `gpt-5-mini` or `gpt-5-search-api`. Custom
- * entries win over defaults with the same key. Null when nothing matches
- * (unpriced).
+ * entries win over defaults with the same key. A local model's tokens
+ * cost nothing. Null when nothing matches (unpriced).
  */
 export function priceFor(
 	model: string,
 	table: ReadonlyMap<string, Price>,
 ): Price | null {
+	if (isLocalModel(model)) return LOCAL_PRICE;
 	const m = normalizeModel(model);
 	const exact = table.get(m);
 	if (exact) return exact;
