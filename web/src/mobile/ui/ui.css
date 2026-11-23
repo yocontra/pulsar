@@ -8,7 +8,9 @@
 
    iOS 26 Liquid Glass, measured on Apple's iOS 26 press images: a 62 pt
    capsule, concentric with the screen corners, 25 pt from the sides and
-   the bottom edge (it sits inside the home indicator's inset), 27 pt
+   the bottom edge (it sits inside the home indicator's inset; at least
+   14 pt up, so the 21 pt landscape inset keeps it clear of the indicator,
+   which is 5 pt tall and 8 pt from the edge), 27 pt
    symbols (lucide's glyph fills 22 of them), 10 pt semibold labels, the
    selected item on a glass pill inset 4 pt.
 
@@ -19,7 +21,7 @@
    tab root's content and the toasts clear. */
 html.k-ios {
 	--p-tabbar-h: 62px;
-	--p-tabbar-bottom: max(calc(var(--sab) - 9px), 12px);
+	--p-tabbar-bottom: max(calc(var(--sab) - 9px), 14px);
 	--p-tabbar-clear: calc(var(--p-tabbar-bottom) + var(--p-tabbar-h));
 }
 html.k-material {
@@ -88,7 +90,11 @@ html.k-ios .p-tabbar .k-toolbar-pane > span > span {
 	inset: 4px;
 }
 
-/* Material 3: the navigation bar. */
+/* Material 3: the navigation bar. Full width; in landscape its items stay
+   clear of the display cutout's side. */
+html.k-material .p-tabbar {
+	padding-inline: var(--sal) var(--sar);
+}
 html.k-material .p-tabbar > div:last-child {
 	height: var(--p-tabbar-h);
 }

@@ -29,6 +29,9 @@
 	const pref = get("pulsar.appearance");
 	if (pref !== "light" && pref !== "dark") return;
 	root.setAttribute("data-theme", pref);
+	document
+		.querySelector('meta[name="color-scheme"]')
+		?.setAttribute("content", pref);
 	// The status bar and window chrome: every theme-color meta shows the
 	// forced theme's color for its layout (phone below 1024 px, desktop above).
 	const COLORS = {

@@ -44,6 +44,11 @@ function apply(a: Appearance) {
 		const scheme = a === "system" ? (/dark/.test(media) ? "dark" : "light") : a;
 		m.content = COLORS[scheme][layout];
 	}
+	// The document's declared scheme follows too: the CSS sets color-scheme
+	// on :root, but the browser's own chrome may read the meta instead.
+	document
+		.querySelector<HTMLMetaElement>('meta[name="color-scheme"]')
+		?.setAttribute("content", a === "system" ? "light dark" : a);
 	appearance.value = a;
 }
 

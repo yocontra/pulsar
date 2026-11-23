@@ -533,40 +533,73 @@ const NeedsSummary = observer(NeedsSummaryImpl);
 
 /* ------------------------------------------------------------ page */
 
+type Hint = "install" | "readd" | null;
+
+/** True in the Home Screen app (iOS 27 reports only navigator.standalone). */
+function standalone() {
+	return (
+		matchMedia("(display-mode: standalone)").matches ||
+		(navigator as Navigator & { standalone?: boolean }).standalone === true
+	);
+}
+
+/**
+ * Which tip Home shows. "readd": a Home Screen app added while index.html
+ * still had apple-mobile-web-app-status-bar-style (removed in a8d1db0). iOS
+ * reads that key only when the app is added, so the old install keeps a
+ * separate system status bar: white or black by the phone's setting, not
+ * Pulsar's Appearance, and no safe-area inset at the top. Every iPhone app
+ * without the key reports a top inset in portrait (20 px or more), so 0
+ * there means the old bar.
+ */
+function pickHint(): Hint {
+	try {
+		if (!/iPhone|iPad/.test(navigator.userAgent)) return null;
+		if (!standalone())
+			return localStorage.getItem("pulsar.installHint") ? null : "install";
+		if (localStorage.getItem("pulsar.readdHint")) return null;
+		const portrait = matchMedia("(orientation: portrait)").matches;
+		const sat = Number.parseFloat(
+			getComputedStyle(document.documentElement).getPropertyValue("--sat"),
+		);
+		return portrait && sat === 0 ? "readd" : null;
+	} catch {
+		return null;
+	}
+}
+
+const TIPS = {
+	install: {
+		key: "pulsar.installHint",
+		title: "Add Pulsar to your Home Screen",
+		text: "Tap Share, then Add to Home Screen. Pulsar opens full screen and can notify you about approvals.",
+	},
+	readd: {
+		key: "pulsar.readdHint",
+		title: "Add Pulsar to your Home Screen again",
+		text: "This copy was added before Pulsar could use the area under the status bar, so that bar keeps the phone's colours. Remove Pulsar from the Home Screen, then add it again from Safari.",
+	},
+} as const;
+
 function InstallHint() {
-	const [hidden, setHidden] = useState(() => {
-		try {
-			return (
-				!!localStorage.getItem("pulsar.installHint") ||
-				matchMedia("(display-mode: standalone)").matches ||
-				// iOS 27's Home Screen app reports only navigator.standalone.
-				(navigator as Navigator & { standalone?: boolean }).standalone ===
-					true ||
-				!/iPhone|iPad/.test(navigator.userAgent)
-			);
-		} catch {
-			return true;
-		}
-	});
-	if (hidden) return null;
+	const [hint, setHint] = useState(pickHint);
+	if (!hint) return null;
+	const tip = TIPS[hint];
 	return (
 		<aside className="p-tip is-card" aria-label="Tip">
 			<img src="/icon.svg" alt="" />
 			<div>
-				<strong>Add Pulsar to your Home Screen</strong>
-				<span>
-					Tap Share, then Add to Home Screen. Pulsar opens full screen and can
-					notify you about approvals.
-				</span>
+				<strong>{tip.title}</strong>
+				<span>{tip.text}</span>
 			</div>
 			<button
 				type="button"
 				aria-label="Dismiss tip"
 				onClick={() => {
 					try {
-						localStorage.setItem("pulsar.installHint", "1");
+						localStorage.setItem(tip.key, "1");
 					} catch {}
-					setHidden(true);
+					setHint(null);
 				}}
 			>
 				<XIcon size={18} />

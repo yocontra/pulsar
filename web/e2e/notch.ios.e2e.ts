@@ -349,7 +349,38 @@ test("the installed app hides the Add to Home Screen tip", async ({ page }) => {
 	await page.addInitScript(() =>
 		Object.defineProperty(navigator, "standalone", { get: () => true }),
 	);
+	// A current install: content runs under the status bar (a top inset).
+	await setInsets(page, LAYOUTS[0]![3]);
 	await page.goto("about:blank");
+	await ready(page);
+	await expect(page.getByRole("complementary", { name: "Tip" })).toHaveCount(0);
+});
+
+test("an install with the old status bar asks to be added again", async ({
+	page,
+}) => {
+	await page.addInitScript(() =>
+		Object.defineProperty(navigator, "standalone", { get: () => true }),
+	);
+	const tip = page.getByRole("complementary", { name: "Tip" });
+	// The old key: iOS draws its own bar and reports no top inset.
+	await setInsets(page, { top: 0, bottom: 34, left: 0, right: 0 });
+	await ready(page);
+	await expect(tip).toContainText("Add Pulsar to your Home Screen again");
+	await tip.getByRole("button", { name: "Dismiss tip" }).tap();
+	await expect(tip).toHaveCount(0);
+	await page.reload();
+	await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
+	await expect(tip).toHaveCount(0);
+});
+
+test("a current install under the status bar shows no tip", async ({
+	page,
+}) => {
+	await page.addInitScript(() =>
+		Object.defineProperty(navigator, "standalone", { get: () => true }),
+	);
+	await setInsets(page, LAYOUTS[0]![3]);
 	await ready(page);
 	await expect(page.getByRole("complementary", { name: "Tip" })).toHaveCount(0);
 });
