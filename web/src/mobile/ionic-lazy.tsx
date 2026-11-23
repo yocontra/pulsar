@@ -24,6 +24,13 @@ import {
 import { createComponent } from "@stencil/react-output-target/runtime";
 import React from "react";
 
+// IonNav imports its page transition when a page first animates. Named here
+// so prefetching this module warms it, and the first push doesn't wait on it.
+export {
+	iosTransitionAnimation,
+	mdTransitionAnimation,
+} from "@ionic/core/components";
+
 // IonItem's `detail` chevron is an ion-icon, which IonItem doesn't register
 // (the same module @ionic/react's IonIcon uses, so nothing is bundled twice).
 defineIcon();

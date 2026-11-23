@@ -257,10 +257,13 @@ export default defineConfig({
 				// Ionic's and Konsta's packages don't declare `sideEffects`, so
 				// every component would ship (Konsta's set `displayName` at the
 				// top level). Their component modules and wrappers only define
-				// what is used.
+				// what is used. Ionic's components index only re-exports: as a side
+				// effect it would pull IonNav's page transitions, the menu
+				// controller and the like into the first route (~6 KB gzipped);
+				// IonNav imports its transition when a page first animates.
 				treeshake: {
 					moduleSideEffects: (id) =>
-						!/node_modules\/(@ionic\/core\/components\/ion-[\w-]+\.js|@ionic\/react\/dist\/index\.js|ionicons\/components\/|konsta\/(react|shared)\/)/.test(
+						!/node_modules\/(@ionic\/core\/components\/(ion-[\w-]+|index)\.js|@ionic\/react\/dist\/index\.js|ionicons\/components\/|konsta\/(react|shared)\/)/.test(
 							id,
 						),
 				},

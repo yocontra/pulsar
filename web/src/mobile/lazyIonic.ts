@@ -25,6 +25,13 @@ export function loadIonicLazy(): Promise<LazyIonic> {
 	return loading;
 }
 
+/**
+ * The lazy Ionic module is in. It holds IonNav's page transitions (see
+ * ionic-lazy.tsx): until then a page change doesn't animate, so a failed
+ * transition download can't leave IonNav half-way.
+ */
+export const ionicLazyLoaded = () => mod !== null;
+
 /** Warm the lazy Ionic module in the background; a failure waits for real use. */
 export function prefetchIonicLazy() {
 	prefetch([loadIonicLazy]);

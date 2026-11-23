@@ -13,6 +13,7 @@ import { sessionless } from "../approval/sessionless.ts";
 import { back, hrefFor, motion, type Route, stack } from "../lib/router.ts";
 import { effect } from "../lib/signals.ts";
 import { IonNav } from "./ionic.ts";
+import { ionicLazyLoaded, loadIonicLazy } from "./lazyIonic.ts";
 import { PageFor, preloadPage } from "./pages.tsx";
 import { tabStart } from "./tabs.ts";
 
@@ -64,12 +65,19 @@ export function PhoneNav() {
 			const keys = want.map(hrefFor);
 			let p = 0;
 			while (p < actual.length && p < keys.length && actual[p] === keys[p]) p++;
-			const animated = motion.peek() !== "none" && actual.length > 0;
-			// Push a page whose chunk is in (briefly wait), so it animates in whole.
+			const motionOn = motion.peek() !== "none" && actual.length > 0;
+			// Push a page whose chunk is in (briefly wait), so it animates in whole,
+			// with its transition (lazyIonic.ts) in too.
 			await Promise.race([
-				Promise.all(want.slice(p).map(preloadPage)).catch(() => {}),
+				Promise.all([
+					...want.slice(p).map(preloadPage),
+					...(motionOn ? [loadIonicLazy()] : []),
+				]).catch(() => {}),
 				new Promise((r) => setTimeout(r, 600)),
 			]);
+			// Not animated until the transition is in: a failed download inside
+			// IonNav would leave its pages out of step with history.
+			const animated = motionOn && ionicLazyLoaded();
 			busy = true;
 			try {
 				if (p === actual.length && keys.length === p + 1 && p > 0)
