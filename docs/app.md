@@ -21,12 +21,15 @@ The phone app looks native: iOS on an iPhone, Material on Android. A tab bar at 
 - Tap the tab you are on to scroll back to the top.
 - Back on Android: from an open page, back to its tab; from another tab, back to Agents; from Agents, out of the app. A link or notification that opens an agent goes back to Agents.
 - On Agents, one line says how many agents need you; tap it for Needs You. **New agent** is the + at the top on an iPhone, and the round button above the tab bar on Android.
+- The search field on Agents filters the list and finds messages (see [Search messages](#search-messages)).
+- Everything on the phone is live: agents, Needs You, Usage, git and Diagnostics change as soon as the machines report. There is no pull to refresh and no refresh button.
+- Usage on a phone is one column: Period and Cost or Tokens at the top, then the total, the chart, the Machine and Harness filters, Limits, each harness, Totals and Breakdown.
 
 An agent's page has its name and status at the top, then its actions: the branch button (git), find in messages, Changes and •••. On a narrow phone (360 px wide or less), git and find move into the ••• menu. The composer floats at the bottom, above the keyboard when you type. On an iPhone the conversation scrolls under the top bar and the composer.
 
 ## The pool
 
-The sidebar (the home screen on a phone) lists every agent as a tree: machines, then projects, then agents. A group shows a count only when agents there need you. A machine that can't be reached says why: asleep, daemon down, or an older Pulsar.
+The sidebar (the Agents tab on a phone) lists every agent as a tree: machines, then projects, then agents. A group shows a count only when agents there need you. A machine that can't be reached says why: asleep, daemon down, or an older Pulsar.
 
 - **Needs you** lists agents waiting on you: approvals first, then agents that asked you something, newest first.
 - **Filter** takes plain words (`auth`) or selectors (`project=apparish status=busy`).
@@ -162,7 +165,7 @@ These actions use `gh` on the agent's machine, as that machine's GitHub account.
 
 ## Usage
 
-**Usage** shows how many tokens your agents used and what that would cost at API prices. Open it with the chart button in the sidebar header (on a phone, on Home's top bar), from Cmd-K, or with Cmd-U.
+**Usage** shows how many tokens your agents used and what that would cost at API prices. Open it with the chart button in the sidebar header, from Cmd-K, or with Cmd-U. On a phone it is the Usage tab.
 
 - Pulsar reads the session files Claude Code, Codex, pi and omp write on each machine (including subagents, counted toward their session) and sums every machine in the pool. A machine that is offline or runs an older Pulsar is listed with the reason and left out.
 - Pick a period (24h, 7d, 30d, 90d) and **Cost** or **Tokens**. Narrow the view to one machine or one harness from the line at the top.
