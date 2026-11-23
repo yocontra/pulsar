@@ -80,7 +80,7 @@ Machines signed in as you link on their own. There are no pairing codes. `pulsar
 
 Run `pulsar qr` and scan the code with your phone, then add the page to your home screen. On a computer, run `pulsar ui`.
 
-<p align="center"><img src="docs/assets/screenshots/phone-home.webp" alt="Phone: the Agents home screen with Needs you (a Bash approval and a question) and the machines with their projects" width="300"></p>
+<p align="center"><img src="docs/assets/screenshots/phone-home.webp" alt="Phone: the Agents tab with a search field, a 2 need you row, the machines with their projects, and the floating tab bar (Agents, Needs You, Usage, Settings)" width="300"></p>
 
 - See every machine, project and agent, with a "Needs you" list.
 - Watch each session live: replies, tool calls, diffs, code and images.
