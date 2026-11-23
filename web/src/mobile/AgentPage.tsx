@@ -243,7 +243,7 @@ function AgentPageImpl({ id }: { id: string }) {
 				className="p-plain p-agent"
 			>
 				<div className="p-agent-body" {...messageMenu}>
-					<SessionView id={id} mobile bare messageActions={messageActions} />
+					<SessionView id={id} mobile messageActions={messageActions} />
 				</div>
 			</IonContent>
 		</>
