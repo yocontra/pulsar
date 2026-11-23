@@ -32,6 +32,9 @@ export function loadIonicLazy(): Promise<LazyIonic> {
  */
 export const ionicLazyLoaded = () => mod !== null;
 
+/** The lazy Ionic module, or null before it has loaded. */
+export const ionicLazy = () => mod;
+
 /** Warm the lazy Ionic module in the background; a failure waits for real use. */
 export function prefetchIonicLazy() {
 	prefetch([loadIonicLazy]);

@@ -13,7 +13,7 @@ import { sessionless } from "../approval/sessionless.ts";
 import { back, hrefFor, motion, type Route, stack } from "../lib/router.ts";
 import { effect } from "../lib/signals.ts";
 import { IonNav } from "./ionic.ts";
-import { ionicLazyLoaded, loadIonicLazy } from "./lazyIonic.ts";
+import { ionicLazy, loadIonicLazy } from "./lazyIonic.ts";
 import { PageFor, preloadPage } from "./pages.tsx";
 import { tabStart } from "./tabs.ts";
 
@@ -77,7 +77,15 @@ export function PhoneNav() {
 			]);
 			// Not animated until the transition is in: a failed download inside
 			// IonNav would leave its pages out of step with history.
-			const animated = motionOn && ionicLazyLoaded();
+			const lazy = ionicLazy();
+			// Hand IonNav the transition we hold: without one, it imports its
+			// own when a page animates (or swipes back), and a navigation that
+			// cancels that import throws "Importing a module script failed."
+			if (lazy && !nav.animation)
+				nav.animation = document.documentElement.classList.contains("md")
+					? lazy.mdTransitionAnimation
+					: lazy.iosTransitionAnimation;
+			const animated = motionOn && lazy !== null;
 			busy = true;
 			try {
 				if (p === actual.length && keys.length === p + 1 && p > 0)

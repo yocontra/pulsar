@@ -137,4 +137,36 @@ test.describe("agents tab", () => {
 			page.getByRole("treeitem", { name: /^apparish, project.*expanded/ }),
 		).toBeVisible();
 	});
+
+	test("IonNav animates with the transition we hold, never its own import", async ({
+		page,
+		request,
+	}) => {
+		// Without nav.animation, IonNav imports its transition on each animated
+		// push or swipe; a navigation that cancels that import throws
+		// "Importing a module script failed." The push waits for the lazy
+		// module, so IonNav has its transition from the first push on.
+		const id = await agentId(request, "name=codex@apparish");
+		await page.goto("/");
+		await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
+		await page.evaluate(
+			(h) => {
+				location.hash = h;
+			},
+			`#/a/${encodeURIComponent(id)}`,
+		);
+		await page.locator(".transcript .ev").first().waitFor();
+		await expect
+			.poll(() =>
+				page.evaluate(
+					() =>
+						typeof (
+							document.querySelector("ion-nav") as {
+								animation?: unknown;
+							} | null
+						)?.animation,
+				),
+			)
+			.toBe("function");
+	});
 });
