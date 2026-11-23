@@ -285,6 +285,19 @@ export default defineConfig({
 											// that costs a round trip before "app" loads.
 											/index\.astro\?astro&type=script/.test(id),
 									},
+									// Konsta UI's shared runtime (theme context and hooks, Glass,
+									// cls with tailwind-merge) in one chunk: the tab bar loads it
+									// with the phone, and lazy pages that use Konsta (Usage's
+									// Segmented, Home's Searchbar) would otherwise split it into
+									// several small shared chunks on the first route. Konsta's
+									// components and their classes stay with whoever uses them.
+									{
+										name: "konsta",
+										test: (id) =>
+											/node_modules\/(konsta\/(react\/shared\/|shared\/(cls|filter-colors|touch-ripple-class|use-ios-highlight|use-ios-tabbar-highlight)\.js$|react\/components\/(Glass|NavbarContext|ToolbarContext)\.js$|shared\/(classes|colors)\/Glass)|tailwind-merge\/)/.test(
+												id,
+											),
+									},
 									// DOMPurify (Mermaid's only) under a stable name: the e2e
 									// fixture names it among Mermaid's sources of WebKit CSP
 									// reports (e2e/fixtures.ts). Loaded with Mermaid only.

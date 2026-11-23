@@ -692,6 +692,8 @@ function HomeImpl() {
 	return (
 		<PageShell
 			title={HOME_TITLE}
+			// A tab's root: the tab bar says where you are, so no large title.
+			large={false}
 			className="p-home"
 			below={<SearchField />}
 			end={

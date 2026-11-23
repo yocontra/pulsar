@@ -28,9 +28,10 @@ import {
 /** Initial JS per layout chunk (`_app/<name>.<hash>.js`), gzipped. */
 const BUDGETS: Record<string, number> = {
 	// Raised from 170 for Konsta UI's runtime on the first screen (the tab
-	// bar; tailwind-merge with it, ~15 KB), then lowered from 185 at 181.4:
+	// bar; tailwind-merge with it, ~15 KB), then lowered from 185 at 180.8:
 	// Home's search field is Konsta's, loaded after the first paint, not
-	// Ionic's IonSearchbar (K1). Headroom ~2 KB.
+	// Ionic's IonSearchbar, and Konsta's shared runtime is one chunk
+	// (astro.config.mjs "konsta"), not split by lazy pages. Headroom ~2 KB.
 	PhoneApp: 183 * 1024,
 	DesktopApp: 130 * 1024,
 };
