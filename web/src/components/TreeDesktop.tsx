@@ -10,7 +10,14 @@ import { terminalTitle } from "../approval/terminal.ts";
 import { useNow } from "../data/clock.ts";
 import { AgentAvatar, AgentStatus, NeedsBadge, Skeleton } from "../ds/index.ts";
 import { issueOf } from "../features/issues/open.ts";
-import { age, plural, rollupOf, sentence, stateLabel } from "../lib/format.ts";
+import {
+	age,
+	fullDate,
+	plural,
+	rollupOf,
+	sentence,
+	stateLabel,
+} from "../lib/format.ts";
 import { route } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import {
@@ -129,10 +136,16 @@ function RowViewImpl({ row, focused, onContext }: RowViewProps) {
 					<AgentAvatar harness={a.harness} size="md" />
 					<span className="d-lines">
 						<span className="d-line1">
-							<span className="d-name">{a.name}</span>
-							<span className="d-trail">{age(row.item.createdAt, now)}</span>
+							<span className="d-name" title={`${a.name} on ${a.machine}`}>
+								{a.name}
+							</span>
+							<span className="d-trail" title={fullDate(row.item.createdAt)}>
+								{age(row.item.createdAt, now)}
+							</span>
 						</span>
-						<span className="d-line2 d-needs-line">{needsLine(row.item)}</span>
+						<span className="d-line2 d-needs-line" title={needsLine(row.item)}>
+							{needsLine(row.item)}
+						</span>
 					</span>
 				</button>
 			);
@@ -143,6 +156,12 @@ function RowViewImpl({ row, focused, onContext }: RowViewProps) {
 			const n = nodes.get(row.pin.id);
 			const r = n ? rollupOf(n) : null;
 			const target = row.pin.agentId ?? row.pin.id;
+			const pinLabel =
+				row.pin.kind === "agent"
+					? row.pin.name
+					: row.pin.selector
+							.replace(/machine=|project=/g, "")
+							.replace(" ", " / ");
 			return (
 				<button
 					type="button"
@@ -151,12 +170,8 @@ function RowViewImpl({ row, focused, onContext }: RowViewProps) {
 					onClick={() => openRow(row)}
 				>
 					<PinIcon className="d-ico" />
-					<span className="d-name">
-						{row.pin.kind === "agent"
-							? row.pin.name
-							: row.pin.selector
-									.replace(/machine=|project=/g, "")
-									.replace(" ", " / ")}
+					<span className="d-name" title={pinLabel}>
+						{pinLabel}
 					</span>
 					<span className="d-trail">
 						{r && (
@@ -202,6 +217,7 @@ function RowViewImpl({ row, focused, onContext }: RowViewProps) {
 						className="chev"
 						aria-expanded={row.open}
 						aria-label={`${row.open ? "Collapse" : "Expand"} offline machines`}
+						title={`${row.open ? "Collapse" : "Expand"} offline machines`}
 						onClick={() => openRow(row)}
 						tabIndex={-1}
 					>
@@ -323,7 +339,9 @@ function NodeRowImpl({
 				<AgentAvatar harness={a.harness} size="md" />
 				<span className="d-lines">
 					<span className="d-line1">
-						<span className="d-name">{a.name}</span>
+						<span className="d-name" title={`${a.name} on ${a.machine}`}>
+							{a.name}
+						</span>
 						<span className="d-trail">
 							<AgentStatus
 								state={a.state}
@@ -335,7 +353,7 @@ function NodeRowImpl({
 							/>
 						</span>
 					</span>
-					<span className="d-line2">
+					<span className="d-line2" title={line}>
 						{issue && <span className="d-issue">#{issue}</span>}
 						{line}
 					</span>
@@ -367,6 +385,7 @@ function NodeRowImpl({
 				type="button"
 				className="chev"
 				aria-label={`${open ? "Collapse" : "Expand"} ${n.label}`}
+				title={`${open ? "Collapse" : "Expand"} ${n.label}`}
 				aria-expanded={open}
 				onClick={toggle}
 				tabIndex={-1}
@@ -380,7 +399,9 @@ function NodeRowImpl({
 				onDoubleClick={toggle}
 			>
 				<Icon className="d-ico" />
-				<span className="d-name">{n.label}</span>
+				<span className="d-name" title={n.label}>
+					{n.label}
+				</span>
 				<span className="d-trail">
 					{r.needsYou > 0 ? (
 						<NeedsBadge

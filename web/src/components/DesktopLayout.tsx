@@ -171,6 +171,7 @@ function FilterBoxImpl() {
 					type="button"
 					className="d-filter-clear"
 					aria-label="Clear filter"
+					title="Clear filter"
 					onClick={() => setText("")}
 				>
 					<XIcon />

@@ -3,6 +3,7 @@ import type { SubagentRow } from "../api/types.ts";
 import { useNow } from "../data/clock.ts";
 import { AgentAvatar, AgentMark } from "../ds/index.ts";
 import { agentColor } from "../lib/agent-color.ts";
+import { fullDate } from "../lib/format.ts";
 import { navigate } from "../lib/router.ts";
 import {
 	STATE_WORD,
@@ -82,7 +83,9 @@ export function SubagentTreeRow({
 			<span className="d-lines">
 				<span className="d-line1">
 					<AgentMark color={agentColor(s)} />
-					<span className="d-name">{s.name}</span>
+					<span className="d-name" title={s.name}>
+						{s.name}
+					</span>
 					<span className="d-trail">
 						<SubagentStateWord sub={s} now={now} />
 					</span>
@@ -101,7 +104,14 @@ export function SubagentStateWord({
 	now?: number;
 }) {
 	return (
-		<span className={`d-sub-state s-${sub.state}`}>
+		<span
+			className={`d-sub-state s-${sub.state}`}
+			title={
+				sub.state === "running"
+					? undefined
+					: fullDate(sub.finishedAt ?? sub.updatedAt)
+			}
+		>
 			{subagentStateText(sub, now)}
 		</span>
 	);
