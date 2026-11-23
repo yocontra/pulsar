@@ -478,3 +478,103 @@ describe("summarizeTurn", () => {
 		expect(s).toEqual({ startedAt: 5, error: "API Error: 529 overloaded" });
 	});
 });
+
+describe("redaction runs on every body", () => {
+	const secret = `API_KEY=${TOKEN}`;
+	const q = (question: string) => ({
+		id: "q",
+		question,
+		multiSelect: false,
+		options: [],
+		allowOther: true,
+	});
+	const notices = {
+		command: approvalNotice(
+			approval({ input: { command: `deploy ${secret}` } }),
+			who,
+			REF,
+		),
+		edit: approvalNotice(
+			approval({
+				tool: "Write",
+				input: { file_path: `/w/${TOKEN}.txt`, content: "x" },
+			}),
+			who,
+			REF,
+		),
+		question: approvalNotice(
+			approval({
+				kind: "question",
+				prompt: { kind: "question", questions: [q(`Use ${secret}?`)] },
+			}),
+			who,
+			REF,
+		),
+		plan: approvalNotice(
+			approval({
+				kind: "plan",
+				prompt: { kind: "plan", plan: `Set ${secret} first.`, choices: [] },
+			}),
+			who,
+			REF,
+		),
+		confirm: approvalNotice(
+			approval({
+				kind: "confirm",
+				prompt: { kind: "confirm", title: "t", message: `Send ${secret}?` },
+			}),
+			who,
+			REF,
+		),
+		select: approvalNotice(
+			approval({
+				kind: "select",
+				prompt: { kind: "select", title: `Pick ${secret}`, options: [] },
+			}),
+			who,
+			REF,
+		),
+		input: approvalNotice(
+			approval({
+				kind: "input",
+				prompt: { kind: "input", title: `Paste ${secret}` },
+			}),
+			who,
+			REF,
+		),
+		presence: approvalNotice(
+			approval({
+				requestId: "presence.1",
+				input: { text: `Use ${secret}`, requester: "x" },
+			}),
+			who,
+			REF,
+		),
+		finished: turnNotice("finished", "a", who, REF, {
+			text: `Set ${secret} in prod.`,
+		}),
+		failed: turnNotice("failed", "a", who, REF, { error: `Bad key ${secret}` }),
+		security: securityNotice({
+			kind: "reply-failed",
+			message: `Answer ${secret} lost`,
+			node: "n",
+			at: 0,
+		}),
+		name: turnNotice(
+			"finished",
+			"a",
+			whoOf(
+				{
+					find: () => ({ name: TOKEN, project: TOKEN, machine: "m" }) as never,
+					pool: {},
+				},
+				"a",
+			),
+			REF,
+		),
+	};
+	for (const [kind, n] of Object.entries(notices))
+		test(kind, () => {
+			expect(`${n.title} ${n.body}`).not.toContain("ghp_");
+		});
+});
