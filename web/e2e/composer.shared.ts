@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { agentId, expect, ready, test } from "./fixtures.ts";
 
 /**
@@ -48,6 +48,14 @@ export async function openAgent(
 	return composer;
 }
 
+/** The phone composer's + menu, open. */
+export async function plusMenu(page: Page, composer: Locator) {
+	await composer.getByRole("button", { name: /^More options/ }).click();
+	const menu = page.getByRole("menu", { name: "Message options" });
+	await expect(menu).toBeVisible();
+	return menu;
+}
+
 export function composerSuite(platform: "desktop" | "phone") {
 	const phone = platform === "phone";
 
@@ -57,15 +65,15 @@ export function composerSuite(platform: "desktop" | "phone") {
 	}) => {
 		const composer = await openAgent(page, request, "name=apparish-auth");
 		if (phone) {
-			await composer.getByRole("button", { name: "Attach files" }).click();
-			const menu = page.getByRole("menu", { name: "Attach" });
+			// The + menu: Choose Files opens the system file picker.
+			const menu = await plusMenu(page, composer);
 			await expect(
 				menu.getByRole("menuitem", { name: "Photo Library" }),
 			).toBeVisible();
-			await expect(
-				menu.getByRole("menuitem", { name: "Choose Files" }),
-			).toBeVisible();
-			await page.locator(".m-menu-shade").click();
+			const chooser = page.waitForEvent("filechooser");
+			await menu.getByRole("menuitem", { name: "Choose Files" }).click();
+			expect((await chooser).isMultiple()).toBe(true);
+			await expect(menu).toBeHidden();
 		} else
 			await expect(
 				composer.getByRole("button", { name: "Attach files" }),
@@ -217,4 +225,38 @@ export function composerSuite(platform: "desktop" | "phone") {
 				page.getByRole("alertdialog").getByText("Stop codex@apparish?"),
 			).toBeVisible();
 	});
+	if (phone)
+		test("the row is +, the field and the mic; + holds the rest (phone)", async ({
+			page,
+			request,
+		}) => {
+			const composer = await openAgent(page, request, "name=apparish-auth");
+			const field = composer.locator(".composer-input");
+			const dock = composer.locator(".m-prompt");
+			// No separate attach, commands or priority buttons in the row.
+			await expect(
+				composer.getByRole("button", { name: "Attach files" }),
+			).toHaveCount(0);
+			await expect(
+				composer.getByRole("button", { name: "Commands" }),
+			).toHaveCount(0);
+			const [f, d] = await Promise.all([
+				field.boundingBox(),
+				dock.boundingBox(),
+			]);
+			// The field takes most of the row.
+			expect(f!.width).toBeGreaterThan(d!.width * 0.6);
+			// Priority and expect-reply live in the menu; a non-default choice
+			// marks the + button.
+			let menu = await plusMenu(page, composer);
+			await menu.getByRole("menuitem", { name: "Don't wake" }).click();
+			await expect(
+				composer.getByRole("button", { name: /^More options: Don't wake/ }),
+			).toBeVisible();
+			menu = await plusMenu(page, composer);
+			await menu.getByRole("menuitem", { name: "Next turn" }).click();
+			await expect(
+				composer.getByRole("button", { name: "More options", exact: true }),
+			).toBeVisible();
+		});
 }

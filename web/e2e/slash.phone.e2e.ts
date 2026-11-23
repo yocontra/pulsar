@@ -1,23 +1,27 @@
-import { openAgent } from "./composer.shared.ts";
+import { openAgent, plusMenu } from "./composer.shared.ts";
 import { agentId, expect, test } from "./fixtures.ts";
 import { ran, slashSuite } from "./slash.shared.ts";
 
 slashSuite("phone");
 
-test("⚡ opens the command sheet: search, tap inserts, Run sends (phone)", async ({
+test("+ → Skills & Commands opens the command sheet: search, tap inserts, Run sends (phone)", async ({
 	page,
 	request,
 }) => {
 	const composer = await openAgent(page, request, "name=apparish-auth");
 	const id = await agentId(request, "name=apparish-auth");
-	await composer.getByRole("button", { name: "Commands" }).click();
+	await (await plusMenu(page, composer))
+		.getByRole("menuitem", { name: "Skills & Commands" })
+		.click();
 	const sheet = page.getByTestId("slash-sheet");
 	await expect(page.getByRole("dialog", { name: "Commands" })).toBeVisible();
 	await sheet.getByPlaceholder("Search commands and skills").fill("ship");
 	await sheet.getByRole("button", { name: "/ship", exact: true }).click();
 	await expect(composer.locator(".composer-input")).toHaveValue("/ship ");
 	// A command that takes nothing runs from the sheet in one tap.
-	await composer.getByRole("button", { name: "Commands" }).click();
+	await (await plusMenu(page, composer))
+		.getByRole("menuitem", { name: "Skills & Commands" })
+		.click();
 	await sheet.getByPlaceholder("Search commands and skills").fill("recap");
 	await sheet.getByRole("button", { name: "Run /recap", exact: true }).click();
 	await expect(

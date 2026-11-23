@@ -18,7 +18,13 @@ import {
 	SquareIcon,
 	XIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+	type ReactNode,
+	type RefObject,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
 	ApiError,
@@ -39,6 +45,7 @@ import {
 	type DraftFile,
 	showsStop,
 } from "../../lib/composer-draft.ts";
+import { useComposerAction } from "../../lib/composer-menu.tsx";
 import type { ComposerSlotProps } from "../../lib/registry.tsx";
 import { observer } from "../../lib/signals.ts";
 import { can } from "../../lib/store.ts";
@@ -238,7 +245,6 @@ function AttachButtonImpl(p: ComposerSlotProps) {
 	const agent = agentOf(p);
 	const files = useRef<HTMLInputElement>(null);
 	const photos = useRef<HTMLInputElement>(null);
-	const [menu, setMenu] = useState(false);
 	if (!agent) return null;
 	const pick = (input: HTMLInputElement) => {
 		const list = input.files ? [...input.files] : [];
@@ -283,58 +289,35 @@ function AttachButtonImpl(p: ComposerSlotProps) {
 				{inputs}
 			</>
 		);
-	// Phone: Photo Library or Choose Files, as a pull-down menu.
-	const choose = (input: HTMLInputElement | null) => {
-		setMenu(false);
-		input?.click();
-	};
-	return (
-		<div className="m-prio m-attach">
-			<button
-				type="button"
-				className="m-prio-btn"
-				aria-label="Attach files"
-				title="Attach files"
-				aria-haspopup="menu"
-				aria-expanded={menu}
-				onClick={() => setMenu(!menu)}
-			>
-				<PaperclipIcon className="size-[18px]" strokeWidth={2.2} />
-			</button>
-			{menu && (
-				<>
-					<div
-						className="m-menu-shade"
-						onClick={() => setMenu(false)}
-						aria-hidden="true"
-					/>
-					<div className="m-menu" role="menu" aria-label="Attach">
-						<button
-							type="button"
-							role="menuitem"
-							className="m-menu-item"
-							onClick={() => choose(photos.current)}
-						>
-							<span className="m-menu-check" />
-							<span className="m-menu-text">Photo Library</span>
-							<ImageIcon className="size-[18px]" />
-						</button>
-						<button
-							type="button"
-							role="menuitem"
-							className="m-menu-item"
-							onClick={() => choose(files.current)}
-						>
-							<span className="m-menu-check" />
-							<span className="m-menu-text">Choose Files</span>
-							<FileIcon className="size-[18px]" />
-						</button>
-					</div>
-				</>
-			)}
-			{inputs}
-		</div>
-	);
+	// Phone: Photo Library and Choose Files in the composer's + menu; the
+	// inputs stay here so a pick outlives the menu.
+	return <AttachActions files={files} photos={photos} inputs={inputs} />;
+}
+
+function AttachActions({
+	files,
+	photos,
+	inputs,
+}: {
+	files: RefObject<HTMLInputElement | null>;
+	photos: RefObject<HTMLInputElement | null>;
+	inputs: ReactNode;
+}) {
+	useComposerAction({
+		id: "attach.photos",
+		label: "Photo Library",
+		icon: <ImageIcon className="size-5" aria-hidden="true" />,
+		order: 10,
+		run: () => photos.current?.click(),
+	});
+	useComposerAction({
+		id: "attach.files",
+		label: "Choose Files",
+		icon: <FileIcon className="size-5" aria-hidden="true" />,
+		order: 11,
+		run: () => files.current?.click(),
+	});
+	return <>{inputs}</>;
 }
 export const AttachButton = observer(AttachButtonImpl);
 

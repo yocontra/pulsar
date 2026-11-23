@@ -80,6 +80,8 @@ export interface SlotProps {
 	"composer.left": ComposerSlotProps;
 	/** The composer toolbar's right end, before Send (send / stop). */
 	"composer.right": ComposerSlotProps;
+	/** Phone: after Send, at the row's right end (the mic). */
+	"composer.end": ComposerSlotProps;
 	/** Above the composer's text field (attachment tiles, the `@` menu). */
 	"composer.top": ComposerSlotProps;
 	/** Phone Home, under the tree while its search field has a query
@@ -103,6 +105,7 @@ const slots: { [K in SlotName]: Registry<SlotEntry<K>> } = {
 	"composer.left": new Registry(),
 	"composer.right": new Registry(),
 	"composer.top": new Registry(),
+	"composer.end": new Registry(),
 	"home.search": new Registry(),
 	"home.fab": new Registry(),
 };

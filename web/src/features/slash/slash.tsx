@@ -15,8 +15,8 @@
 import {
 	CheckIcon,
 	ChevronDownIcon,
+	SquareSlashIcon,
 	TerminalIcon,
-	ZapIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -26,6 +26,7 @@ import type {
 	CommandCatalog,
 	CommandEntry,
 } from "../../api/types.ts";
+import { useComposerAction } from "../../lib/composer-menu.tsx";
 import type { ComposerSlotProps } from "../../lib/registry.tsx";
 import { observer } from "../../lib/signals.ts";
 import {
@@ -312,23 +313,24 @@ function SlashButtonImpl(p: ComposerSlotProps) {
 	const agent = agentOf(p);
 	const [open, setOpen] = useState(false);
 	const [mounted, setMounted] = useState(false);
+	// In the composer's + menu; the sheet stays mounted here.
+	useComposerAction(
+		agent
+			? {
+					id: "slash.commands",
+					label: "Skills & Commands",
+					icon: <SquareSlashIcon className="size-5" aria-hidden="true" />,
+					order: 0,
+					run: () => {
+						setMounted(true);
+						setOpen(true);
+					},
+				}
+			: null,
+	);
 	if (!agent) return null;
 	return (
 		<>
-			<div className="m-prio">
-				<button
-					type="button"
-					className="m-prio-btn"
-					aria-label="Commands"
-					title="Commands and skills"
-					onClick={() => {
-						setMounted(true);
-						setOpen(true);
-					}}
-				>
-					<ZapIcon className="size-[18px]" strokeWidth={2.2} />
-				</button>
-			</div>
 			{mounted && (
 				<CommandSheet
 					agent={agent}

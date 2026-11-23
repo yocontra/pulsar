@@ -1,10 +1,4 @@
-import {
-	ArrowUpIcon,
-	CheckIcon,
-	CornerDownRightIcon,
-	MoonIcon,
-	ZapIcon,
-} from "lucide-react";
+import { ArrowUpIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, ProveCancelled } from "../api/client.ts";
 import type {
@@ -25,6 +19,10 @@ import {
 	takeKeptDraft,
 } from "../lib/composer-draft.ts";
 import {
+	ComposerActionsProvider,
+	useComposerActions,
+} from "../lib/composer-menu.tsx";
+import {
 	num,
 	plural,
 	RECEIPT_WORDS,
@@ -33,6 +31,7 @@ import {
 	wakeFor,
 } from "../lib/format.ts";
 import { useInFlight } from "../lib/inflight.ts";
+import { lazy } from "../lib/lazy.tsx";
 import { type ComposerSlotProps, Slot } from "../lib/registry.tsx";
 import { navigate } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
@@ -113,103 +112,6 @@ function PriorityPickerImpl({
 					{p.label}
 				</button>
 			))}
-		</div>
-	);
-}
-
-const PRIORITY_ICON = {
-	urgent: ZapIcon,
-	normal: CornerDownRightIcon,
-	fyi: MoonIcon,
-} as const;
-
-/**
- * Phone: priority and expect-reply behind one round button, as an iOS
- * pull-down menu (the composer row stays one line).
- */
-function PriorityMenuImpl({
-	value,
-	onChange,
-	expectReply,
-	onExpectReply,
-}: {
-	value: Priority;
-	onChange: (p: Priority) => void;
-	expectReply: boolean;
-	onExpectReply: (v: boolean) => void;
-}) {
-	const [open, setOpen] = useState(false);
-	const Icon = PRIORITY_ICON[value];
-	const current = PRIORITIES.find((p) => p.value === value)!;
-	return (
-		<div className="m-prio">
-			<button
-				type="button"
-				className={`m-prio-btn p-${value}`}
-				aria-haspopup="menu"
-				aria-expanded={open}
-				aria-label={`Priority: ${current.label}${expectReply ? ", expect reply" : ""}`}
-				title={`Priority: ${current.label}${expectReply ? ", expect reply" : ""}`}
-				onClick={() => setOpen(!open)}
-			>
-				<Icon className="size-[18px]" strokeWidth={2.2} />
-				{expectReply && <span className="m-prio-dot" aria-hidden="true" />}
-			</button>
-			{open && (
-				<>
-					<div
-						className="m-menu-shade"
-						onClick={() => setOpen(false)}
-						aria-hidden="true"
-					/>
-					<div className="m-menu" role="menu" aria-label="Priority">
-						{PRIORITIES.map((p) => {
-							const I = PRIORITY_ICON[p.value];
-							return (
-								<button
-									type="button"
-									key={p.value}
-									role="menuitemradio"
-									aria-checked={value === p.value}
-									className="m-menu-item"
-									onClick={() => {
-										onChange(p.value);
-										setOpen(false);
-									}}
-								>
-									<span className="m-menu-check">
-										{value === p.value && <CheckIcon className="size-4" />}
-									</span>
-									<span className="m-menu-text">
-										{p.label}
-										<small>{p.hint}</small>
-									</span>
-									<I className="size-[18px]" />
-								</button>
-							);
-						})}
-						<div className="m-menu-sep" />
-						<button
-							type="button"
-							role="menuitemcheckbox"
-							aria-checked={expectReply}
-							className="m-menu-item"
-							onClick={() => {
-								onExpectReply(!expectReply);
-								setOpen(false);
-							}}
-						>
-							<span className="m-menu-check">
-								{expectReply && <CheckIcon className="size-4" />}
-							</span>
-							<span className="m-menu-text">
-								Expect a reply
-								<small>Track who answers</small>
-							</span>
-						</button>
-					</div>
-				</>
-			)}
 		</div>
 	);
 }
@@ -313,6 +215,7 @@ function ComposerImpl({
 	const [hasText, setHasText] = useState(false);
 	const [priority, setPriority] = useState<Priority>(defaultPriority);
 	const [expectReply, setExpectReply] = useState(false);
+	const [actions, actionsApi] = useComposerActions();
 	const [phase, setPhase] = useState<
 		"idle" | "checking" | "confirm" | "sending"
 	>("idle");
@@ -556,18 +459,22 @@ function ComposerImpl({
 		draft,
 	);
 	const form = compact ? (
-		<>
+		<ComposerActionsProvider value={actionsApi}>
 			<Slot name="composer.top" {...slot} />
 			<PromptInput
 				onSubmit={(msg) => void start(msg.text)}
 				className="prompt m-prompt"
 			>
-				<PriorityMenu
-					value={priority}
-					onChange={setPriority}
+				<ComposerPlus
+					actions={actions}
+					priorities={PRIORITIES}
+					priority={priority}
+					onPriority={setPriority}
 					expectReply={expectReply}
 					onExpectReply={setExpectReply}
 				/>
+				{/* Attach and commands: their entries go in the + menu; what
+				    outlives it (file inputs, the sheet) stays mounted here. */}
 				<Slot name="composer.left" {...slot} />
 				<PromptInputBody>
 					<PromptInputTextarea
@@ -594,8 +501,9 @@ function ComposerImpl({
 						) : undefined}
 					</PromptInputSubmit>
 				)}
+				<Slot name="composer.end" {...slot} />
 			</PromptInput>
-		</>
+		</ComposerActionsProvider>
 	) : null;
 
 	return (
@@ -1040,7 +948,22 @@ function ReceiptWordsImpl({ row }: { row?: ReceiptRow }) {
 }
 
 export const PriorityPicker = observer(PriorityPickerImpl);
-const PriorityMenu = observer(PriorityMenuImpl);
+/** The phone's + button and menu (a phone-only chunk: Konsta's Menu). */
+const ComposerPlus = lazy(
+	() => import("../mobile/ComposerPlus.tsx"),
+	() => (
+		<div className="m-prio">
+			<button
+				type="button"
+				className="m-prio-btn m-plus"
+				aria-label="More options"
+				disabled
+			>
+				<PlusIcon className="size-5" strokeWidth={2.4} />
+			</button>
+		</div>
+	),
+);
 export const Composer = observer(ComposerImpl);
 export const WakeSummary = observer(WakeSummaryImpl);
 export const ConfirmDialog = observer(ConfirmDialogImpl);
