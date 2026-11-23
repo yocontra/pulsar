@@ -1337,3 +1337,20 @@ ion-header.header-collapse-condense ion-toolbar {
 .p-empty.is-search h3 {
 	margin-top: 0;
 }
+
+/* Route overlays (Overlays.tsx) in SheetShell: the body (Builder,
+   ScopeView, ApprovalCard) lays out its own header, scroll and dock. */
+.p-overlay .p-sheet-body {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	padding-bottom: 0;
+}
+.p-overlay .p-sheet-body > * {
+	flex: 1;
+	min-height: 0;
+}
+/* Material's grabber sits over the body's own header: room for it. */
+html.md .p-overlay:not(.modal-card) .p-sheet-body {
+	padding-top: 16px;
+}
