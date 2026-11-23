@@ -60,32 +60,14 @@
 		cursor: not-allowed;
 	}
 	/* Ionic hosts: their shadow parts inherit the cursor. */
-	:where(
-		ion-button,
-		ion-back-button,
-		ion-item.ion-activatable,
-		ion-segment-button,
-		ion-toggle,
-		ion-checkbox,
-		ion-radio,
-		ion-select,
-		ion-tab-button,
-		ion-chip,
-		ion-searchbar .searchbar-clear-button
-	) {
+	:where(ion-button, ion-item.ion-activatable) {
 		cursor: pointer;
 	}
-	/* Some draw their control with their own cursor. */
-	:where(ion-segment-button, ion-button, ion-back-button)::part(native),
-	:where(ion-item.ion-activatable)::part(native) {
+	/* They draw their control with their own cursor. */
+	:where(ion-button, ion-item.ion-activatable)::part(native) {
 		cursor: pointer;
 	}
-	:where(
-		ion-button[disabled],
-		ion-item[disabled],
-		ion-segment-button[disabled],
-		ion-toggle[disabled]
-	) {
+	:where(ion-button[disabled], ion-item[disabled]) {
 		cursor: not-allowed;
 	}
 }
