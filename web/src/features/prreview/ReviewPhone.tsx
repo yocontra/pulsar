@@ -13,7 +13,6 @@ import type { PageProps } from "../../lib/registry.tsx";
 import { navigate } from "../../lib/router.ts";
 import { observer } from "../../lib/signals.ts";
 import { findAgent } from "../../lib/store.ts";
-import { isMaterial } from "../../mobile/platform.ts";
 import { PageShell } from "../../mobile/ui/PageShell.tsx";
 import { SheetShell } from "../../mobile/ui/SheetShell.tsx";
 import { checksSummary } from "../git/PrCard.tsx";
@@ -30,6 +29,14 @@ import {
 import "../../changes/changes.css";
 import "../git/git.css";
 import "./prreview.css";
+
+/** Konsta's strong segmented control on Pulsar's tokens (AA in both themes). */
+const SEG = {
+	strongBgIos: "bg-[var(--ds-surface-3)]",
+	strongBgMaterial: "bg-[var(--ds-surface-3)]",
+	strongHighlightBgIos: "bg-[var(--p-seg-on)]",
+	strongHighlightBgMaterial: "bg-[var(--p-seg-on)]",
+};
 
 type Tab = "summary" | "files" | "checks";
 const TABS: Tab[] = ["summary", "files", "checks"];
@@ -91,11 +98,12 @@ function Overview({
 			<Button large rounded onClick={onReview}>
 				Submit review
 			</Button>
+			{/* Same look as Usage's segmented controls (ui.css .p-seg). */}
 			<Segmented
-				strong={!isMaterial}
-				outline={isMaterial}
+				strong
 				rounded
-				className="prv-seg"
+				colors={SEG}
+				className="p-seg prv-seg"
 				role="tablist"
 				aria-label="Review"
 			>
