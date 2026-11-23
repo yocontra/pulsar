@@ -1,4 +1,3 @@
-import type { Page, Route } from "@playwright/test";
 import { expectCleanCopy } from "./copy.ts";
 import { agentId, expect, test } from "./fixtures.ts";
 
@@ -8,20 +7,15 @@ import { agentId, expect, test } from "./fixtures.ts";
  * skeleton that leaves the column where the loaded transcript puts it.
  */
 export function conversationSuite(platform: "desktop" | "phone") {
-	/** Hold requests matching `pattern` until `release()`. */
-	async function hold(page: Page, pattern: RegExp) {
-		const held: Route[] = [];
-		let open = false;
-		await page.route(pattern, (r) => (open ? r.continue() : held.push(r)));
-		return {
-			release: async () => {
-				open = true;
-				for (const r of held.splice(0)) await r.continue();
-			},
-		};
-	}
-
 	test.describe(`conversation (${platform})`, () => {
+		// A failed test leaves no held request behind in the worker's mock.
+		test.afterEach(async ({ request }) => {
+			await request.post("/api/v1/__mock/faults", {
+				headers: { "X-Pulsar": "1" },
+				data: {},
+			});
+		});
+
 		test("reads like a chat: authorship, sans labels, highlighted Bash, clean copy", async ({
 			page,
 			request,
@@ -74,10 +68,33 @@ export function conversationSuite(platform: "desktop" | "phone") {
 			const id = await agentId(request, "name=codex@apparish");
 			await page.goto("/");
 			await expect(page.locator("#app [data-node]").first()).toBeVisible();
-			const t = await hold(page, /\/transcript(\?|$)|\/api\/v1\/events/);
+			// The mock holds the session's transcript until released: the
+			// skeleton shows for as long as that request surely waits. (Only
+			// the transcript: holding the event stream too left the app with no
+			// stream when it reconnected, and the session never opened.)
+			const H = { "X-Pulsar": "1" };
+			const faults = (data: object) =>
+				request.post("/api/v1/__mock/faults", { headers: H, data });
+			expect(
+				(
+					await faults({
+						rules: [
+							{ method: "GET", path: `/agents/${id}/transcript`, hold: "t" },
+						],
+					})
+				).ok(),
+			).toBe(true);
 			await page.goto(`/#/a/${encodeURIComponent(id)}`);
 			const skel = page.locator(".transcript-skel");
 			await expect(skel).toBeVisible();
+			await expect
+				.poll(async () => {
+					const r = await request.get("/api/v1/__mock/held?hold=t", {
+						headers: H,
+					});
+					return ((await r.json()) as { waiting: number }).waiting;
+				})
+				.toBeGreaterThan(0);
 			const box = () =>
 				page
 					.locator(".ds-column")
@@ -87,7 +104,8 @@ export function conversationSuite(platform: "desktop" | "phone") {
 						return { x: Math.round(r.x), w: Math.round(r.width) };
 					});
 			const before = await box();
-			await t.release();
+			// Clearing the rules lets the held request go.
+			expect((await faults({})).ok()).toBe(true);
 			await expect(skel).toHaveCount(0);
 			expect(await box()).toEqual(before);
 		});

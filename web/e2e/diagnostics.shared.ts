@@ -28,6 +28,16 @@ async function knobs(request: APIRequestContext, body: object) {
 export function diagnosticsSuite(platform: "desktop" | "phone") {
 	const phone = platform === "phone";
 
+	// A worker's mock keeps the app load reports earlier tests sent (some
+	// fail a chunk on purpose), and doctor shows them as a note on studio:
+	// start from none.
+	test.beforeEach(async ({ request }) => {
+		const res = await request.post("/api/v1/__mock/client-errors", {
+			headers: { "X-Pulsar": "1" },
+		});
+		expect(res.ok()).toBe(true);
+	});
+
 	test.afterEach(async ({ request }) => {
 		await knobs(request, { reset: true });
 	});
