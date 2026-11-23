@@ -782,12 +782,16 @@ html.ios
 	font-size: inherit;
 }
 /* The agent header's subtitle: the status, then " · model". Too narrow, the
-   model goes first, then the status ends in an ellipsis (an inline-flex
-   badge never takes the parent's ellipsis). */
+   model drops out whole (it wraps to a clipped second line, never "· g"),
+   then the status ends in an ellipsis (an inline-flex badge never takes the
+   parent's ellipsis). */
 .p-nav-title .p-nav-sub:has(.p-nav-sub-more) {
 	display: flex;
+	flex-wrap: wrap;
 	justify-content: center;
 	min-width: 0;
+	height: 1lh;
+	overflow: hidden;
 }
 .p-nav-sub .ds-status {
 	min-width: 0;
@@ -801,7 +805,7 @@ html.ios
 	text-overflow: ellipsis;
 }
 .p-nav-sub-more {
-	flex: 0 1000 auto;
+	flex: 0 0 auto;
 	white-space: pre;
 }
 .p-nav-sub .p-state.is-needs {
