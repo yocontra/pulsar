@@ -79,12 +79,12 @@ const MAX_REFS = 1000;
  * The `Topic` header: plaintext to the push service, so never a name or an
  * id. A prompt or turn uses the agent's opaque token (22 base64url
  * characters; at most 32 allowed), so a newer push for that agent replaces
- * an undelivered one and another agent's never does.
+ * an undelivered one and another agent's never does. A turn that ended
+ * while a prompt still waits has its own (`turn:` tag, `t` topic).
  */
 function topicOf(p: PushPayload): string {
-	if (p.kind === "finished" || p.kind === "failed") return p.ref;
-	if (p.kind === "approval" && p.tag?.startsWith("agent:"))
-		return p.tag.slice("agent:".length);
+	const m = /^(agent|turn):([\w-]{1,30})$/.exec(p.tag ?? "");
+	if (m) return m[1] === "agent" ? m[2]! : `t${m[2]}`;
 	return p.kind;
 }
 
@@ -167,6 +167,8 @@ export class Push {
 			const text = {
 				...built,
 				...(n.title && n.body ? { title: n.title, body: n.body } : {}),
+				// Still waiting on a prompt: the finish must not replace it.
+				...(this.o.registry.needsYou(n.agentId) ? { tag: `turn:${ref}` } : {}),
 			};
 			const payload: PushPayload = { kind: n.kind, ref, ...text };
 			this.send(payload, (row) => {

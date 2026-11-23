@@ -240,6 +240,19 @@ export function approvalNotice(a: Approval, who: Who, ref: string): Notice {
 	const kind = a.kind ?? "permission";
 	const proj = where(who);
 	const base = { tag: agentTag(ref), url: approvalUrl(a.agentId) };
+	// A presence check (src/service/presence.ts): the action to confirm.
+	if (a.requestId.startsWith("presence.")) {
+		const action = clean(String(a.input.text ?? ""));
+		const by = clean(String(a.input.requester ?? ""));
+		return {
+			...base,
+			title: "Confirm it's you",
+			body: body(
+				action ? `${action}?` : clean(p?.kind === "confirm" ? p.title : ""),
+				by ? `Asked by ${by}` : null,
+			),
+		};
+	}
 	if (kind === "permission" || !p) {
 		const room = proj ? BODY_MAX - proj.length - 3 : BODY_MAX;
 		return {
@@ -362,10 +375,10 @@ export function turnNotice(
 
 // ---------------------------------------------------------------- limits
 
-/** "in 2 h 10 min" from now; the daemon's clock zone is not the phone's. */
-function resetsIn(at: number | null, now: number): string | null {
+/** "2 h 10 min" from now; the daemon's clock zone is not the phone's. */
+function untilReset(at: number | null, now: number): string | null {
 	if (at === null || at <= now) return null;
-	return `Resets in ${duration(Math.max(60_000, at - now))}.`;
+	return duration(Math.max(60_000, at - now));
 }
 
 const inline = (label: string) =>
@@ -380,7 +393,7 @@ export function limitNotice(
 ): Notice {
 	const used = Math.round(w.usedPercent ?? w.level);
 	const on = machine ? ` on ${machine}` : "";
-	const resets = resetsIn(w.resetsAt, now);
+	const left = untilReset(w.resetsAt, now);
 	return {
 		title: clip(
 			w.reached
@@ -390,8 +403,10 @@ export function limitNotice(
 		),
 		body: clip(
 			w.reached
-				? `Agents${on} pause until it resets.${resets ? ` ${resets}` : ""}`
-				: `${resets ?? "Plan the rest of the window."} Usage page has the details.`,
+				? left
+					? `Agents${on} pause for ${left}, until the limit resets.`
+					: `Agents${on} pause until the limit resets.`
+				: `${left ? `Resets in ${left}.` : "Plan the rest of the window."} Usage page has the details.`,
 			BODY_MAX,
 		),
 		tag: `limit:${w.harness}:${w.label}`,

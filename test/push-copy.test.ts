@@ -216,6 +216,32 @@ describe("approvals", () => {
 		expect(short.body).toBe("Run `bun test auth`?");
 	});
 
+	test("a presence check names the action and who asked", () => {
+		const n = approvalNotice(
+			approval({
+				requestId: "presence.123",
+				kind: "confirm",
+				tool: "Pulsar",
+				input: { text: "Remove passkey 'Laptop'", requester: "auth-fix" },
+				prompt: {
+					kind: "confirm",
+					title: "Confirm: Remove passkey 'Laptop'",
+					message:
+						"Asked by auth-fix on studio. Confirm only if you started this.",
+				},
+			}),
+			who,
+			REF,
+		);
+		expect(n.title).toBe("Confirm it's you");
+		expect(n.body).toBe("Remove passkey 'Laptop'? · Asked by auth-fix");
+	});
+
+	test("a remote agent's prompt links to its pool address", () => {
+		const n = approvalNotice(approval({ agentId: "m2/claude:s1" }), who, REF);
+		expect(n.url).toBe("/#/approval/m2%2Fclaude%3As1");
+	});
+
 	test("the project is left out when the name already says it", () => {
 		const n = approvalNotice(
 			approval(),
@@ -347,7 +373,7 @@ describe("limits, security, previews off", () => {
 		);
 		expect(reached.title).toBe("Claude Code hit its weekly limit");
 		expect(reached.body).toBe(
-			"Agents pause until it resets. Resets in 2 h 10 min.",
+			"Agents pause for 2 h 10 min, until the limit resets.",
 		);
 		fits(reached);
 	});
