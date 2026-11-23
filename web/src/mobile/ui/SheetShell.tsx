@@ -8,7 +8,10 @@
  * `onClosed` once it has animated out (swipe, backdrop, Esc, Done, or
  * `open` turning false). `head={false}` drops the header for a body with
  * its own; `card` presents an iOS card sheet; `canDismiss` holds a swipe
- * while an action runs.
+ * while an action runs. `toolbar` pins a row (a search field) under the
+ * header; `scrollBody` lets the body scroll at every detent, as an iOS
+ * sheet does (the sheet drags from the header, or from the body only at
+ * its top); `grabber` shows the drag handle on iOS too.
  */
 
 import { ArrowLeftIcon } from "lucide-react";
@@ -38,6 +41,9 @@ export function SheetShell({
 	onBack,
 	end,
 	footer,
+	toolbar,
+	scrollBody = false,
+	grabber = false,
 	className,
 	modalRef,
 	testId,
@@ -72,6 +78,13 @@ export function SheetShell({
 	end?: ReactNode;
 	/** Pinned under the scrolling body (a confirm bar). */
 	footer?: ReactNode;
+	/** Pinned between the header and the scrolling body (a search field). */
+	toolbar?: ReactNode;
+	/** The body scrolls at every detent (Ionic's expandToScroll off): a
+	 *  drag on the body moves the sheet only when the body is at its top. */
+	scrollBody?: boolean;
+	/** The drag handle on iOS too (Android always shows it). */
+	grabber?: boolean;
 	/** More classes on the modal. */
 	className?: string;
 	/** The modal element (to move it to another detent). */
@@ -98,7 +111,8 @@ export function SheetShell({
 		: {
 				breakpoints: detents,
 				initialBreakpoint: initial,
-				handle: isMaterial,
+				handle: isMaterial || grabber,
+				...(scrollBody ? { expandToScroll: false } : {}),
 			};
 	const back = onBack && (
 		<button
@@ -138,7 +152,18 @@ export function SheetShell({
 							</span>
 						</header>
 					)}
-					<div className="m-sheet-scroll p-sheet-body">{children}</div>
+					{toolbar && <div className="p-sheet-toolbar">{toolbar}</div>}
+					{/* ion-content-scroll-host: Ionic's sheet gesture reads this
+					    scroller's position (drag from the body only at its top). */}
+					<div
+						className={
+							scrollBody
+								? "m-sheet-scroll p-sheet-body ion-content-scroll-host"
+								: "m-sheet-scroll p-sheet-body"
+						}
+					>
+						{children}
+					</div>
 					{footer}
 				</div>
 			</IonContent>

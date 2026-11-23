@@ -208,21 +208,46 @@
 	font-size: 11px;
 }
 
-/* The phone's command sheet. */
-.slash-sheet {
-	padding-bottom: 16px;
+/* The phone's command sheet (sheet.tsx). The search field is pinned under
+   the header (SheetShell's toolbar); the list is the one scroller. */
+.slash-search {
+	padding: 12px 16px 8px;
+}
+.slash-search .k-searchbar {
+	width: 100%;
+	margin: 0;
+	padding-block: 0;
+}
+/* Konsta's glass capsule without its drop shadow (the toolbar is flat). */
+.slash-search .k-glass {
+	box-shadow: none;
+}
+/* Konsta's own focus look on the field, not the app's square outline. */
+.slash-search input:focus,
+.slash-search input:focus-visible {
+	outline: none;
+}
+/* The last row clears the home indicator, or the keyboard while typing. */
+.slash-modal .p-sheet-body {
+	padding-bottom: max(calc(16px + var(--sab)), calc(16px + var(--kb, 0px)));
+}
+.slash-sheet > section:first-child > :first-child {
+	margin-top: 8px;
+}
+.slash-sheet > .slash-empty {
+	padding: 8px 16px;
+	font-size: 15px;
+}
+.slash-row {
+	position: relative;
+	-webkit-tap-highlight-color: transparent;
 }
 .slash-row.is-off {
 	opacity: 0.55;
 }
-.slash-run {
-	padding: 4px 12px;
-	border: 0;
-	border-radius: 999px;
-	background: var(--ds-accent-soft);
-	color: var(--ds-accent-text);
-	font-size: 14px;
-	font-weight: 500;
+/* Pressed: the platform's cell highlight. */
+.slash-row:has(.slash-insert:active:not(:disabled)) {
+	background: color-mix(in srgb, var(--ds-text) 8%, transparent);
 }
 .slash-insert {
 	padding: 0;
@@ -240,12 +265,41 @@
 	position: absolute;
 	inset: 0;
 }
-.slash-row {
-	position: relative;
+/* A keyboard focus rings the whole row (the button covers it); a tap
+   shows none. */
+.slash-insert:focus,
+.slash-insert:focus-visible {
+	outline: none;
+}
+.slash-row:has(.slash-insert:focus-visible) {
+	outline: 2px solid var(--ds-focus);
+	outline-offset: -2px;
 }
 .slash-run {
 	position: relative;
 	z-index: 1;
+	min-height: 30px;
+	padding: 4px 12px;
+	border: 0;
+	border-radius: 999px;
+	background: var(--ds-accent-soft);
+	color: var(--ds-accent-text);
+	font-size: 14px;
+	font-weight: 500;
+	-webkit-tap-highlight-color: transparent;
+}
+/* A 44 px tap target around the capsule. */
+.slash-run::before {
+	content: "";
+	position: absolute;
+	inset: -7px -4px;
+}
+.slash-run:focus:not(:focus-visible) {
+	outline: none;
+}
+.slash-run:focus-visible {
+	outline: 2px solid var(--ds-focus);
+	outline-offset: 2px;
 }
 .composer:has(> .mode-menu) {
 	position: relative;
