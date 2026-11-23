@@ -18,12 +18,13 @@ import type {
 	SubagentRow,
 	TreeNode,
 } from "../api/types.ts";
+import { reachable, rememberMachine } from "../lib/reach.ts";
 import { route } from "../lib/router.ts";
 import { effect } from "../lib/signals.ts";
 import * as store from "../lib/store.ts";
 import { putSubagents, subOpen } from "../lib/subagents.ts";
 import { keys } from "./keys.ts";
-import type { ApprovalSeen } from "./live.ts";
+import type { ApprovalSeen, StreamState } from "./live.ts";
 import { type Observed, observeAgents, observeLive } from "./observe.ts";
 import type { ListData } from "./patch.ts";
 import {
@@ -110,6 +111,7 @@ function onCacheEvent(key: readonly unknown[]) {
 	} else if (name === "hello") {
 		if (data) store.hello.value = data as Hello;
 		if (data) checkUpdate();
+		if (data) rememberMachine((data as Hello).machine);
 		if (q?.state.status === "success") store.failure.value = null;
 		else if (q?.state.status === "error") failed(q.state.error);
 	} else if (name === "attention") {
@@ -139,6 +141,29 @@ function onCacheEvent(key: readonly unknown[]) {
 	}
 }
 
+// The stream down for 2 s (not a blip) and the daemon unreachable (off
+// Tailscale): the offline screen, until the daemon answers or the stream
+// is back.
+let streamOffline = false;
+let streamTimer: ReturnType<typeof setTimeout> | undefined;
+function streamChanged(s: StreamState) {
+	clearTimeout(streamTimer);
+	const f = store.failure;
+	if (s === "open") {
+		if (streamOffline && f.peek()?.kind === "offline") f.value = null;
+		streamOffline = false;
+	} else if (s === "retrying")
+		streamTimer = setTimeout(async () => {
+			// Another failure (wrong account, daemon down) keeps its screen.
+			const other = () => f.peek() && f.peek()?.kind !== "offline";
+			if (other() || (await reachable())) return;
+			if (live.state === "open" || other()) return;
+			streamOffline = true;
+			f.value = { kind: "offline" };
+			window.__pulsarWhenBack?.(() => void store.retry());
+		}, 2000);
+}
+
 function failed(err: unknown) {
 	if (err instanceof ApiError) store.handleError(err);
 	else store.failure.value = { kind: "offline" };
@@ -159,6 +184,7 @@ export function startBridge(firstHello?: Promise<Hello>) {
 	live.subscribeState(() => {
 		store.streamState.value = live.state;
 		store.streamId.value = live.streamId;
+		streamChanged(live.state);
 	});
 	live.on("receipts", (v) => store.emitReceipts(v));
 	// A new build of the app (data/update.ts): /hello says which one the

@@ -11,6 +11,7 @@ import { useState } from "react";
 import type { FailureKind } from "../api/client.ts";
 import { Kbd } from "../ds/index.ts";
 import { age, plural, rollupOf } from "../lib/format.ts";
+import { offlineCopy } from "../lib/reach.ts";
 import { observer } from "../lib/signals.ts";
 import { attention, hello, lastKnown, retry } from "../lib/store.ts";
 import { NeedsRow } from "./desktop/Home.tsx";
@@ -28,8 +29,9 @@ const FAILURES: Record<
 	{ title: string; line: string; moreLabel: string; more?: ReactNode }
 > = {
 	offline: {
-		title: "Can't reach your pool",
-		line: "This device can't reach your machines over Tailscale.",
+		// Filled in per render (lib/reach.ts): "Can't reach studio".
+		title: "",
+		line: "",
 		moreLabel: "What to check",
 		more: (
 			<ul>
@@ -74,7 +76,12 @@ function FailureScreenImpl({
 	kind: FailureKind;
 	detail?: string;
 }) {
-	const f = FAILURES[kind];
+	const f =
+		kind === "offline"
+			? (({ title, body }) => ({ ...FAILURES.offline, title, line: body }))(
+					offlineCopy(false),
+				)
+			: FAILURES[kind];
 	const Icon = FAILURE_ICON[kind];
 	const known = lastKnown();
 	const [busy, setBusy] = useState(false);

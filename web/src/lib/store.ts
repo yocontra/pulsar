@@ -22,6 +22,7 @@ import type {
 	Subscription,
 	TreeNode,
 } from "../api/types.ts";
+import { reachable, reloadApp } from "./reach.ts";
 import { effect, signal } from "./signals.ts";
 import {
 	clearSnapshot,
@@ -454,8 +455,23 @@ export async function boot() {
 	b.startBridge(first);
 }
 
+// ------------------------------------------------------------ unreachable
+
+// The daemon unreachable (off Tailscale): a chunk that failed for it
+// (public/boot.js, which reloads once the daemon answers) or a stream that
+// stays down (data/bridge.ts) shows the offline screen, never "didn't load".
+let chunkOffline = false;
+addEventListener("pulsar:offline", () => {
+	chunkOffline = true;
+	if (!failure.peek()) failure.value = { kind: "offline" };
+});
+
 /** Retry from a failure screen. */
 export async function retry() {
+	// Still unreachable: keep the screen (it tries again by itself).
+	if (!(await reachable())) return;
+	// A failed import is cached: reload past the cached shell.
+	if (chunkOffline) return reloadApp();
 	failure.value = null;
 	await refreshAll();
 }

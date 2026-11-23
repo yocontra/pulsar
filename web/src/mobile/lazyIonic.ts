@@ -41,7 +41,7 @@ export function useIonicLazy(): LazyIonic | null {
 			// Sheets and menus would never open: reload into the served build.
 			(err: unknown) => {
 				void reportLoad("ionic", err);
-				if (live) recoverChunk(err);
+				if (live) void recoverChunk(err);
 			},
 		);
 		return () => {

@@ -138,10 +138,9 @@
 			keepalive: true,
 		}).then(
 			(r) => r.status >= 500 && queue(),
-			() => {
-				if (leaving) return;
-				if (!navigator.onLine || !navigator.sendBeacon?.(API, body)) queue();
-			},
+			// Lost (off Tailscale a beacon "succeeds" and is dropped): kept
+			// for the next load.
+			() => leaving || queue(),
 		);
 	}
 
@@ -205,12 +204,79 @@
 	}
 	window.__pulsarReport = report;
 
-	// Reports a lost connection kept from the last page.
+	// Reports a lost connection kept from the last page (the reload once
+	// an unreachable daemon answers again sends them).
 	try {
 		const q = JSON.parse(sessionStorage.getItem(QUEUE) || "[]");
 		sessionStorage.removeItem(QUEUE);
 		for (const body of q) post(body);
 	} catch {}
+
+	// Can this page reach the daemon? Any answer to /api/v1/hello counts
+	// (sw.js never answers /api/ from its cache); a network error, or none
+	// within 4 s, does not: off Tailscale, the shell still loads from cache.
+	const reach = () =>
+		navigator.onLine
+			? fetch("/api/v1/hello", {
+					cache: "no-store",
+					signal: AbortSignal.timeout?.(4000),
+				}).then(
+					() => true,
+					() => false,
+				)
+			: Promise.resolve(false);
+
+	// Unreachable: ask again when the network or the app comes back, and on
+	// a backoff (1 s, doubling to 30 s); `back` runs once the daemon answers.
+	let back = null;
+	let delay = 0;
+	let timer = 0;
+	function check() {
+		reach().then((ok) => {
+			if (!back) return;
+			clearTimeout(timer);
+			if (!ok)
+				return (timer = setTimeout(
+					check,
+					(delay = Math.min(delay * 2 || 1000, 30_000)),
+				));
+			const go = back;
+			back = null;
+			go();
+		});
+	}
+	const again = () => {
+		if (!back) return;
+		delay = 0;
+		check();
+	};
+	addEventListener("online", again);
+	document.addEventListener("visibilitychange", again);
+	window.__pulsarReach = reach;
+	// A reload (a chunk failed) wins over an in-place retry.
+	const home = () => window.__pulsarReload();
+	window.__pulsarWhenBack = (go) => {
+		if (!back) timer = setTimeout(again, 1000);
+		if (back !== home) back = go;
+	};
+
+	// No answer, and not because this page is being left (a reload on its
+	// way cancels the probe too).
+	const down = (ok) => !ok && !reloading && !leaving;
+
+	// "Can't reach studio": the machine of the last /hello (src/lib/reach.ts).
+	function offline() {
+		if (booted()) dispatchEvent(new Event("pulsar:offline"));
+		else {
+			try {
+				document.getElementById("boot-machine").textContent =
+					localStorage.getItem("pulsar.machine") || "your machine";
+			} catch {}
+			document.getElementById("boot-offline").hidden = false;
+		}
+		// Into the served build once it answers (a failed import is cached).
+		window.__pulsarWhenBack(home);
+	}
 
 	// One automatic reload per minute, shared by every path below and by
 	// src/lib/lazy.tsx: true when a reload is on its way.
@@ -245,11 +311,15 @@
 		report(booted() ? "chunk" : "boot", err, urls);
 		if (failed || quiet()) return;
 		failed = true;
-		// After the automatic retry, the error screen. Once the app runs, a
+		// The daemon unreachable: say so and wait for it, no reload. Else,
+		// after the automatic retry, the error screen. Once the app runs, a
 		// lazy chunk shows its own Retry (src/lib/lazy.tsx) instead: never
 		// cover a working app.
-		if (retry()) return;
-		if (!booted()) show();
+		reach().then((ok) => {
+			if (down(ok)) return offline();
+			if (retry()) return;
+			if (!booted()) show();
+		});
 	}
 
 	const chunkError = (reason) =>
@@ -259,8 +329,13 @@
 
 	// For src/lib/lazy.tsx: a screen whose chunk did not download reloads
 	// into the served build by itself (once a minute) before it shows its
-	// Retry, and that Retry reloads past the cached shell too.
-	window.__pulsarRecover = (reason) => chunkError(reason) && retry();
+	// Retry, and that Retry reloads past the cached shell too: true when a
+	// reload is on its way. With the daemon unreachable: "offline", and a
+	// reload once it answers.
+	window.__pulsarRecover = (reason) =>
+		chunkError(reason)
+			? reach().then((ok) => (down(ok) ? (offline(), "offline") : retry()))
+			: Promise.resolve(false);
 	// Before the app mounts the entry's own errors; after, module-load ones.
 	const moduleError = (reason) => {
 		if (chunkError(reason)) report("module", reason);
@@ -304,6 +379,7 @@
 		document
 			.getElementById("boot-retry")
 			?.addEventListener("click", () => window.__pulsarReload());
+		document.getElementById("boot-again")?.addEventListener("click", again);
 		const copy = document.getElementById("boot-copy");
 		copy?.addEventListener("click", () => {
 			navigator.clipboard?.writeText(window.__pulsarLoadDetails()).then(

@@ -86,6 +86,18 @@ import "../styles/desktop.css";
 				</details>
 			</div>
 		</div>
+		<!-- The daemon unreachable before the app started (public/boot.js): it
+		     tries again by itself and reloads once the machine answers. -->
+		<div class="boot-error" id="boot-offline" role="alert" data-failure="offline" hidden>
+			<div class="boot-error-card st">
+				<span class="st-mark is-error" aria-hidden="true">
+					<img src="/icon.svg" alt="" width="64" height="64" />
+				</span>
+				<p class="st-title boot-error-title"><span class="st-l-desk">Can&apos;t reach</span><span class="st-l-phone">Can&apos;t Reach</span> <span id="boot-machine">your machine</span></p>
+				<p class="st-text"><span class="st-l-desk">Check that Tailscale is on, then try again.</span><span class="st-l-phone">Check that the Tailscale app is on, then try again.</span></p>
+				<button type="button" class="st-btn boot-retry" id="boot-again"><span class="st-l-desk">Retry</span><span class="st-l-phone">Try Again</span></button>
+			</div>
+		</div>
 		{
 			/* Dev only: React Fast Refresh needs its preamble, which Astro adds
 			   only for `client:*` islands. The production build has no inline scripts. */

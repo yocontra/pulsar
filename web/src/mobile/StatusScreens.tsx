@@ -17,10 +17,10 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import type { FailureKind } from "../api/client.ts";
+import { offlineCopy } from "../lib/reach.ts";
 import { observer } from "../lib/signals.ts";
 import { failure, hello, lastKnown, retry } from "../lib/store.ts";
 import { IonContent } from "./ionic.ts";
-import { isMaterial } from "./platform.ts";
 import { linkWord } from "./rows.tsx";
 import { GroupedList, ListItem } from "./ui/GroupedList.tsx";
 import { RowIcon, ValueRow } from "./ui/rows.tsx";
@@ -37,8 +37,9 @@ const COPY: Record<
 	{ title: string; body: string; moreLabel?: string; more?: ReactNode }
 > = {
 	offline: {
-		title: "Can't Reach Your Machines",
-		body: `This ${isMaterial ? "phone" : "iPhone"} can't reach your machines over Tailscale.`,
+		// Filled in per render (lib/reach.ts): "Can't Reach studio".
+		title: "",
+		body: "",
 		moreLabel: "What to Check",
 		more: (
 			<ul>
@@ -79,7 +80,10 @@ function Failure() {
 	const f = failure.value;
 	const [busy, setBusy] = useState(false);
 	if (!f) return null;
-	const c = COPY[f.kind];
+	const c =
+		f.kind === "offline"
+			? { ...COPY.offline, ...offlineCopy(true) }
+			: COPY[f.kind];
 	const Icon = ICON[f.kind];
 	const known = lastKnown();
 	const detail = f.kind === "http" ? f.detail : undefined;

@@ -2,34 +2,37 @@ import type { ComponentType, JSX } from "react";
 import { useEffect, useState } from "react";
 import { CloseX } from "../components/CloseX.tsx";
 import { lastLoadReport, reportLoad } from "./load-report.ts";
+import { offlineCopy, reachable, reloadApp } from "./reach.ts";
 
 declare global {
 	interface Window {
-		/** public/boot.js: reload once a minute for a chunk error; true if reloading. */
-		__pulsarRecover?: (reason: unknown) => boolean;
-		/** public/boot.js: reload past the service worker's cached shell. */
-		__pulsarReload?: () => void;
+		/**
+		 * public/boot.js: for a chunk error, true when reloading (once a
+		 * minute), "offline" when the daemon is unreachable (it reloads once
+		 * the daemon answers).
+		 */
+		__pulsarRecover?: (reason: unknown) => Promise<Recovery>;
 	}
 }
+
+type Recovery = boolean | "offline";
 
 /**
  * A chunk that did not download (an older build's file gone after a
  * deploy, a network blip): reload into the build the server runs now, once
- * a minute (public/boot.js). True when a reload is on its way.
+ * a minute (public/boot.js). "offline" when the daemon is unreachable (off
+ * Tailscale): no reload until it answers; false when nothing is coming.
  */
-export function recoverChunk(err: unknown): boolean {
+export async function recoverChunk(err: unknown): Promise<Recovery> {
 	try {
-		return window.__pulsarRecover?.(err) ?? false;
+		return (await window.__pulsarRecover?.(err)) ?? false;
 	} catch {
 		return false;
 	}
 }
 
-/** A full reload past the cached shell (browsers may cache a failed import). */
-function reloadApp() {
-	if (window.__pulsarReload) window.__pulsarReload();
-	else location.reload();
-}
+/** Shown in place of a chunk that failed because the daemon is unreachable. */
+const OFFLINE = new Error();
 
 /**
  * Code-split a component (React.lazy without a Suspense boundary). A chunk
@@ -69,11 +72,14 @@ export function lazy<P extends object>(
 			let live = true;
 			preload().then(
 				() => live && set((n) => n + 1),
-				(err: unknown) => {
-					// Tell the daemon first: a reload waits for the report.
+				async (err: unknown) => {
+					// Tell the daemon first: a reload waits for the report (or
+					// queues it while the daemon is unreachable).
 					void reportLoad("chunk", err);
 					// A reload is coming: keep the loading state until it does.
-					if (live && !recoverChunk(err)) setError(err ?? "failed");
+					const r = await recoverChunk(err);
+					if (live && r !== true)
+						setError(r === "offline" ? OFFLINE : (err ?? "failed"));
 				},
 			);
 			return () => {
@@ -119,7 +125,12 @@ function LoadFailed({
 	const [closed, setClosed] = useState(false);
 	const [report, setReport] = useState(lastLoadReport);
 	const [copied, setCopied] = useState(false);
+	// The daemon unreachable (off Tailscale): say so, not "didn't load".
+	// The app's offline screen shows too when its chunk is at hand
+	// (lib/store.ts); public/boot.js reloads once the daemon answers.
+	const off = error === OFFLINE;
 	useEffect(() => {
+		if (off) return;
 		let live = true;
 		// The same report as the failure's (deduped): its code once sent.
 		void reportLoad("chunk", error).then(
@@ -128,19 +139,31 @@ function LoadFailed({
 		return () => {
 			live = false;
 		};
-	}, [error]);
+	}, [error, off]);
 	if (closed) return <span hidden />;
 	const message = error instanceof Error ? error.message : String(error ?? "");
 	// The phone speaks iOS: title-case buttons.
 	const phone = matchMedia("(max-width: 1023px)").matches;
+	const c = off
+		? offlineCopy(phone)
+		: {
+				title: "This screen didn't load",
+				body: "Check your connection, then retry.",
+			};
 	return (
 		<div className={layer ? "st st-fail is-layer" : "st st-fail"} role="alert">
 			<span className="st-mark is-error" aria-hidden="true">
 				<img src="/icon.svg" alt="" width={44} height={44} />
 			</span>
-			<p className="st-title">This screen didn't load</p>
-			<p className="st-text">Check your connection, then retry.</p>
-			<button type="button" className="st-btn" onClick={reloadApp}>
+			<p className="st-title">{c.title}</p>
+			<p className="st-text">{c.body}</p>
+			<button
+				type="button"
+				className="st-btn"
+				onClick={async () => {
+					if (!off || (await reachable())) reloadApp();
+				}}
+			>
 				{phone ? "Try Again" : "Retry"}
 			</button>
 			{layer && (
@@ -150,7 +173,7 @@ function LoadFailed({
 					onClick={() => (onClose ? onClose() : setClosed(true))}
 				/>
 			)}
-			{report && (
+			{report && !off && (
 				<>
 					<p className="st-note st-load-code">{report.code}</p>
 					<button
