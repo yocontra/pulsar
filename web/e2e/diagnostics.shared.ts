@@ -156,6 +156,8 @@ export function diagnosticsSuite(platform: "desktop" | "phone") {
 		await expect(studio.locator(".diag-facts")).toContainText(
 			"Claude Code2.1.328",
 		);
+		// The checks that passed fold into one row; open it to see them.
+		await studio.getByRole("button", { name: "10 checks passed" }).click();
 		await expect(studio.getByRole("heading", { level: 3 })).toHaveText([
 			"Daemon",
 			"Harnesses",
@@ -173,10 +175,11 @@ export function diagnosticsSuite(platform: "desktop" | "phone") {
 		const bad = mbp.locator('.diag-check[data-level="bad"]');
 		await expect(bad).toHaveCount(1);
 		await expect(bad).toContainText("Problem: background service not loaded");
-		await expect(bad.locator(".diag-fix")).toHaveText(
-			"Fix: run pulsar mesh on",
-		);
+		await expect(bad.locator(".diag-fix")).toContainText("Fix: run");
 		await expect(bad.locator(".diag-fix code")).toHaveText("pulsar mesh on");
+		await expect(
+			bad.getByRole("button", { name: "Copy pulsar mesh on" }),
+		).toBeVisible();
 		await expect(mbp.locator(".diag-facts")).toContainText(
 			"Event loopp99 240 ms, max 1900 ms, 3 stalls",
 		);
@@ -236,4 +239,156 @@ export function diagnosticsSuite(platform: "desktop" | "phone") {
 		await expect(page).toHaveURL(/#\/diagnostics$/);
 		await expect(view(page, phone).locator(".diag-machine")).toHaveCount(4);
 	});
+
+	test(`a summary row per machine: its state, version and last check (${platform})`, async ({
+		page,
+	}) => {
+		await ready(page);
+		await page.evaluate(() => {
+			location.hash = "#/diagnostics";
+		});
+		const v = view(page, phone);
+		const rows = v.locator("[data-summary]");
+		await expect(rows).toHaveCount(4);
+		const studio = v.locator('[data-summary="studio"]');
+		await expect(studio).toContainText("This machine");
+		await expect(studio).toContainText("1 note");
+		await expect(studio).toContainText(
+			/Pulsar 2\.1\.0 · checked (now|\d+s ago)/,
+		);
+		await expect(v.locator('[data-summary="mbp-a"]')).toContainText(
+			"1 problem",
+		);
+		await expect(v.locator('[data-summary="desk"]')).toContainText("No report");
+		// A tap takes focus to that machine's section.
+		await v.locator('[data-summary="desk"]').click();
+		await expect(v.locator('[data-machine="desk"] h2')).toBeFocused();
+		await expect(v.locator('[data-machine="desk"] h2')).toBeInViewport();
+	});
+
+	test(`problems first, then notes; passed checks fold into one row (${platform})`, async ({
+		page,
+	}) => {
+		await ready(page);
+		await page.evaluate(() => {
+			location.hash = "#/diagnostics";
+		});
+		const v = view(page, phone);
+		const mbp = v.locator('[data-machine="mbp-a"]');
+		await expect(mbp.locator(".diag-health")).toHaveText("1 problem");
+		// Doctor's order is note, note, bad, note: the problem comes first.
+		await expect(mbp.locator(".diag-check")).toHaveCount(4);
+		expect(
+			await mbp
+				.locator(".diag-check")
+				.evaluateAll((els) => els.map((e) => e.getAttribute("data-level"))),
+		).toEqual(["bad", "note", "note", "note"]);
+		await expect(mbp.locator(".diag-check").first()).toContainText(
+			"background service not loaded",
+		);
+		await expect(mbp.locator(".diag-check").nth(1)).toContainText(
+			"event loop: p99 240 ms",
+		);
+		// Each problem names its group.
+		await expect(mbp.locator(".diag-check").first()).toContainText(
+			"Agent mesh",
+		);
+
+		// The passed check is folded: collapsed until opened, then shown last.
+		const fold = mbp.getByRole("button", { name: "1 check passed" });
+		await expect(fold).toHaveAttribute("aria-expanded", "false");
+		await expect(mbp.locator('.diag-check[data-level="ok"]')).toHaveCount(0);
+		await fold.click();
+		await expect(fold).toHaveAttribute("aria-expanded", "true");
+		const ok = mbp.locator('.diag-check[data-level="ok"]');
+		await expect(ok).toHaveCount(1);
+		await expect(ok).toContainText("daemon 2.0.3 running");
+		await expect(mbp.locator(".diag-check").last()).toHaveAttribute(
+			"data-level",
+			"ok",
+		);
+		await fold.click();
+		await expect(ok).toHaveCount(0);
+
+		// Open, every row still meets contrast in this theme.
+		await v
+			.locator('[data-machine="studio"]')
+			.getByRole("button", { name: "10 checks passed" })
+			.click();
+		await fold.click();
+		expect(await contrastFailures(page, ".diag *")).toEqual([]);
+	});
+
+	test(`a fix's command copies with one tap (${platform})`, async ({
+		page,
+	}) => {
+		await page.addInitScript(() => {
+			const w = window as unknown as { __copied: string[] };
+			w.__copied = [];
+			Object.defineProperty(navigator, "clipboard", {
+				configurable: true,
+				value: {
+					writeText: async (t: string) => {
+						w.__copied.push(t);
+					},
+				},
+			});
+		});
+		await ready(page);
+		await page.evaluate(() => {
+			location.hash = "#/diagnostics";
+		});
+		const v = view(page, phone);
+		const mbp = v.locator('[data-machine="mbp-a"]');
+		const pi = mbp.locator(".diag-check", { hasText: "pi: found" });
+		await expect(pi.locator(".diag-cmd code")).toHaveText(
+			"pulsar setup --client pi",
+		);
+		const copy = pi.getByRole("button", {
+			name: "Copy pulsar setup --client pi",
+		});
+		await copy.click();
+		await expect(copy).toContainText("Copied");
+		expect(
+			await page.evaluate(
+				() => (window as unknown as { __copied: string[] }).__copied,
+			),
+		).toEqual(["pulsar setup --client pi"]);
+		// Only commands get a Copy button: a check with no fix has none.
+		await expect(
+			mbp
+				.locator(".diag-check", { hasText: "node certificate" })
+				.getByRole("button"),
+		).toHaveCount(0);
+	});
+
+	if (phone)
+		test("nothing overflows a 320 px screen, passed checks open", async ({
+			page,
+		}) => {
+			await page.setViewportSize({ width: 320, height: 640 });
+			await ready(page);
+			await page.evaluate(() => {
+				location.hash = "#/diagnostics";
+			});
+			const v = view(page, phone);
+			await expect(v.locator(".diag-machine")).toHaveCount(4);
+			await expect(
+				v.locator('[data-machine="studio"] .diag-health'),
+			).toHaveText("1 note");
+			for (const name of ["10 checks passed", "1 check passed"])
+				await v.getByRole("button", { name }).click();
+			await expect(v.locator('.diag-check[data-level="ok"]')).toHaveCount(11);
+			const wide = await v.evaluate((root) => {
+				const out: string[] = [];
+				for (const e of root.querySelectorAll<HTMLElement>(".diag *")) {
+					if (e.closest(".diag-sr")) continue;
+					const r = e.getBoundingClientRect();
+					if (r.width && (r.left < -0.5 || r.right > innerWidth + 0.5))
+						out.push(`${e.className || e.tagName}: ${r.left}–${r.right}`);
+				}
+				return out;
+			});
+			expect(wide).toEqual([]);
+		});
 }

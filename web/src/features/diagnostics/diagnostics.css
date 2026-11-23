@@ -1,6 +1,6 @@
-/* Diagnostics: desktop pane (diag-desktop) and phone page (diag-phone).
-   Colors come from the design tokens, so both themes follow. Status is a
-   shape and a word as well as a color. */
+/* Diagnostics: desktop pane (diag-desktop) and phone page (diag-phone,
+   Konsta lists). Colors come from the design tokens, so both themes follow.
+   Status is a shape and a word as well as a color. */
 
 .diag-page {
 	display: flex;
@@ -15,13 +15,7 @@
 .diag {
 	display: flex;
 	flex-direction: column;
-	gap: var(--ds-space-4);
-	padding: 0 var(--ds-space-4) var(--ds-space-6);
 	color: var(--ds-text);
-}
-.diag-phone {
-	padding: 0 16px 24px;
-	gap: var(--ds-space-3);
 }
 .diag-sr {
 	position: absolute;
@@ -39,58 +33,12 @@
 	margin: var(--ds-space-4) 0;
 }
 .diag code {
-	padding: 0 4px;
-	border-radius: 4px;
+	padding: 1px 5px;
+	border-radius: 5px;
 	background: var(--ds-code-inline-bg);
 	font-family: var(--ds-font-mono, ui-monospace, monospace);
-	font-size: 0.92em;
+	font-size: 0.9em;
 	overflow-wrap: anywhere;
-}
-
-/* ------------------------------------------------------------------ header */
-.diag-head {
-	position: sticky;
-	top: 0;
-	z-index: 1;
-	display: flex;
-	align-items: center;
-	gap: var(--ds-space-3);
-	min-height: 48px;
-	margin: 0 calc(-1 * var(--ds-space-4));
-	padding: var(--ds-space-2) var(--ds-space-4);
-	border-bottom: 1px solid var(--ds-border);
-	background: var(--ds-bg);
-}
-.diag-title {
-	margin: 0;
-	font-size: var(--ds-text-headline);
-	font-weight: var(--ds-weight-semibold);
-}
-.diag-spacer {
-	flex: 1;
-}
-.diag-phone-bar {
-	display: flex;
-	justify-content: flex-end;
-	padding: 8px 16px 0;
-}
-.diag-progress {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	min-height: var(--ds-hit, 32px);
-	padding: 0 10px;
-	border-radius: var(--ds-radius-sm, 6px);
-	font-size: var(--ds-text-secondary);
-	white-space: nowrap;
-}
-.diag-progress {
-	color: var(--ds-text-2);
-	font-variant-numeric: tabular-nums;
-}
-.diag-progress svg {
-	width: 15px;
-	height: 15px;
 }
 .diag-spin {
 	animation: diag-spin 1s linear infinite;
@@ -106,180 +54,519 @@
 	}
 }
 
-/* ---------------------------------------------------------------- notices */
-.diag-skew,
-.diag-upgrade {
-	display: flex;
-	align-items: flex-start;
-	gap: var(--ds-space-2);
-	margin: 0;
-	padding: var(--ds-space-2) var(--ds-space-3);
-	border-radius: var(--ds-radius-md, 8px);
+/* ----------------------------------------------------------- status marks */
+.diag-status {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 999px;
+	background: var(--ds-surface-2);
+	color: var(--ds-text-3);
+}
+.diag-status svg {
+	width: 18px;
+	height: 18px;
+}
+.diag-status.is-ok {
+	background: var(--ds-success-soft);
+	color: var(--ds-success-text);
+}
+.diag-status.is-notes {
 	background: var(--ds-needs-soft);
 	color: var(--ds-needs-text);
-	font-size: var(--ds-text-secondary);
 }
-.diag-skew {
-	margin-top: var(--ds-space-3);
-}
-.diag-skew svg,
-.diag-upgrade svg {
-	flex: none;
-	width: 16px;
-	height: 16px;
-	margin-top: 2px;
-}
-.diag-error {
-	margin: 0;
-	padding: var(--ds-space-2) var(--ds-space-3);
-	border-radius: var(--ds-radius-md, 8px);
+.diag-status.is-problems {
 	background: var(--ds-danger-soft);
 	color: var(--ds-danger-text);
+}
+.diag-level {
+	display: inline-flex;
+	flex: none;
+	color: var(--ds-text-3);
+}
+.diag-level svg {
+	width: 18px;
+	height: 18px;
+}
+.diag-level.is-ok {
+	color: var(--ds-success-text);
+}
+.diag-level.is-note {
+	color: var(--ds-needs-text);
+}
+.diag-level.is-bad {
+	color: var(--ds-danger-text);
+}
+.diag-health {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 	font-size: var(--ds-text-secondary);
+	font-weight: var(--ds-weight-semibold, 600);
+	color: var(--ds-text-2);
+	white-space: nowrap;
 }
-
-/* ---------------------------------------------------------------- machine */
-.diag-machine {
-	display: flex;
-	flex-direction: column;
-	gap: var(--ds-space-3);
-	padding: var(--ds-space-3) var(--ds-space-4);
-	border: 1px solid var(--ds-border);
-	border-radius: var(--ds-radius-lg, 10px);
-	background: var(--ds-surface);
+.diag-health .diag-status {
+	width: auto;
+	height: auto;
+	background: none;
 }
-.diag-desktop .diag-machine:first-of-type {
-	margin-top: var(--ds-space-2);
+.diag-health .diag-status svg {
+	width: 16px;
+	height: 16px;
 }
-.diag-phone .diag-machine {
-	padding: 12px;
+.diag-health.is-ok,
+.diag-sum-state.is-ok {
+	color: var(--ds-success-text);
 }
-.diag-machine-head {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: var(--ds-space-2);
+.diag-health.is-notes,
+.diag-sum-state.is-notes {
+	color: var(--ds-needs-text);
 }
-.diag-machine-name {
-	display: flex;
-	align-items: center;
-	gap: var(--ds-space-2);
-	flex: 1;
-	min-width: 0;
-	margin: 0;
-	font-size: var(--ds-text-body, 15px);
-	font-weight: var(--ds-weight-semibold);
-	overflow-wrap: anywhere;
+.diag-health.is-problems,
+.diag-sum-state.is-problems {
+	color: var(--ds-danger-text);
 }
 .diag-tag {
-	padding: 1px 6px;
+	flex: none;
+	padding: 1px 7px;
 	border-radius: 999px;
 	background: var(--ds-surface-2);
 	color: var(--ds-text-2);
 	font-size: 11px;
 	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
 }
-.diag-health {
+
+/* ----------------------------------------------------------- check rows */
+.diag-check-body {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.diag-check-text {
+	color: var(--ds-text);
+}
+.diag-check.is-bad .diag-check-text {
+	font-weight: var(--ds-weight-semibold, 600);
+}
+.diag-check-detail {
+	color: var(--ds-text-3);
+	font-size: 0.86em;
+}
+.diag-fix {
+	margin-top: 4px;
+	color: var(--ds-text-2);
+	font-size: 0.93em;
+	line-height: 1.9;
+}
+.diag-fix-label {
+	font-weight: var(--ds-weight-semibold, 600);
+}
+.diag-cmd {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	max-width: 100%;
+	padding: 2px 2px 2px 8px;
+	border: 1px solid var(--ds-border);
+	border-radius: 8px;
+	background: var(--ds-code-inline-bg);
+	vertical-align: middle;
+	line-height: 1.4;
+}
+.diag .diag-cmd code {
+	padding: 0;
+	background: none;
+	color: var(--ds-text);
+	min-width: 0;
+}
+.diag-copy {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 4px;
+	min-height: 28px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--ds-accent-text, var(--ds-text-2));
+	font: inherit;
+	font-size: 12px;
+	font-weight: var(--ds-weight-semibold, 600);
+	cursor: pointer;
+}
+.diag-copy:hover {
+	background: var(--ds-surface-2);
+}
+.diag-copy:focus-visible {
+	outline: 2px solid var(--ds-focus, var(--ds-accent));
+	outline-offset: 1px;
+}
+.diag-copy svg {
+	width: 14px;
+	height: 14px;
+}
+.diag-chev {
+	width: 16px;
+	height: 16px;
+	color: var(--ds-text-3);
+	transition: transform 0.15s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+	.diag-chev {
+		transition: none;
+	}
+}
+
+/* ---------------------------------------------------------------- notices */
+.diag-skew,
+.diag-upgrade,
+.diag-error {
+	margin: 0;
 	font-size: var(--ds-text-secondary);
-	font-weight: 550;
+	overflow-wrap: anywhere;
 }
-.diag-health.is-problems {
+.diag-skew,
+.diag-desktop .diag-upgrade {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--ds-space-2);
+	padding: var(--ds-space-2) var(--ds-space-3);
+	border-radius: var(--ds-radius-md, 8px);
+	background: var(--ds-needs-soft);
+	color: var(--ds-needs-text);
+}
+.diag-skew svg,
+.diag-desktop .diag-upgrade svg {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	margin-top: 2px;
+}
+/* No report (asleep, too old) is a fact, not a failure: neutral. */
+.diag-desktop .diag-error {
+	padding: var(--ds-space-2) var(--ds-space-3);
+	border-radius: var(--ds-radius-md, 8px);
+	background: var(--ds-surface-2);
+	color: var(--ds-text-2);
+}
+.diag-desktop .diag-error[role="alert"] {
+	background: var(--ds-danger-soft);
 	color: var(--ds-danger-text);
 }
-.diag-health.is-ok {
-	color: var(--ds-success-text);
+
+/* ---------------------------------------------------------------- desktop */
+.diag-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: var(--ds-space-3);
+	min-height: 48px;
+	padding: var(--ds-space-2) var(--ds-space-4);
+	border-bottom: 1px solid var(--ds-border);
+	background: var(--ds-bg);
 }
-.diag-health.is-checking {
+.diag-title {
+	margin: 0;
+	font-size: var(--ds-text-headline);
+	font-weight: var(--ds-weight-semibold);
+}
+.diag-spacer {
+	flex: 1;
+}
+.diag-progress {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
 	color: var(--ds-text-2);
+	font-size: var(--ds-text-secondary);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
 }
-.diag-health.is-checking svg {
-	width: 14px;
-	height: 14px;
+.diag-progress svg {
+	width: 15px;
+	height: 15px;
 }
-.diag-health.is-notes,
-.diag-health.is-unknown {
+.diag-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--ds-space-4);
+	width: 100%;
+	max-width: 880px;
+	margin: 0 auto;
+	padding: var(--ds-space-5, 20px) var(--ds-space-4) var(--ds-space-6);
+	box-sizing: border-box;
+}
+.diag-desktop .diag-summary > li + li,
+.diag-desktop .diag-card > li + li {
+	border-top: 1px solid var(--d-line, var(--ds-border));
+}
+.diag-desktop .diag-sum-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-height: 56px;
+	padding: 10px 12px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.diag-desktop .diag-sum-row:hover {
+	background: var(--d-hover, var(--ds-surface-2));
+}
+.diag-sum-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.diag-sum-name {
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	min-width: 0;
+	font-weight: var(--ds-weight-semibold, 600);
+	overflow-wrap: anywhere;
+}
+.diag-sum-line {
 	color: var(--ds-text-3);
+	font-size: var(--ds-text-secondary);
+	font-variant-numeric: tabular-nums;
+}
+.diag-sum-state {
+	flex: none;
+	color: var(--ds-text-2);
+	font-size: var(--ds-text-secondary);
+	font-weight: var(--ds-weight-semibold, 600);
 }
 
-.diag-facts {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-	gap: var(--ds-space-2) var(--ds-space-4);
+.diag-machine {
+	display: flex;
+	flex-direction: column;
+	gap: var(--ds-space-3);
+	scroll-margin-top: 64px;
+}
+.diag-desktop .diag-machine {
+	margin-top: var(--ds-space-3);
+}
+.diag-machine-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--ds-space-2) var(--ds-space-3);
+}
+.diag-machine-name {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--ds-space-2);
+	flex: 1;
+	min-width: 0;
 	margin: 0;
+	font-size: var(--ds-text-headline, 16px);
+	font-weight: var(--ds-weight-semibold);
+	overflow-wrap: anywhere;
+	scroll-margin-top: 64px;
+}
+.diag-machine-name:focus {
+	outline: none;
+}
+.diag-machine-name:focus-visible {
+	outline: 2px solid var(--ds-focus, var(--ds-accent));
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+.diag-desktop .diag-checks {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.diag-desktop .diag-check {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 10px 12px;
+	font-size: 13.5px;
+	line-height: 1.45;
+}
+.diag-desktop .diag-check .diag-level {
+	margin-top: 1px;
+}
+.diag-desktop .diag-problems > .diag-check + .diag-check {
+	border-top: 1px solid var(--d-line, var(--ds-border));
+}
+.diag-desktop .diag-passed-toggle {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-height: 44px;
+	padding: 8px 12px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--ds-text-2);
+	font: inherit;
+	font-size: 13.5px;
+	text-align: left;
+	cursor: pointer;
+}
+.diag-desktop .diag-passed-toggle:hover {
+	background: var(--d-hover, var(--ds-surface-2));
+}
+.diag-passed-label {
+	flex: 1;
+}
+.diag-desktop .diag-passed-toggle .diag-chev {
+	flex: none;
+}
+.diag-desktop [aria-expanded="true"] .diag-chev {
+	transform: rotate(90deg);
+}
+.diag-phone [aria-expanded="true"] .diag-chev {
+	transform: rotate(180deg);
+}
+.diag-desktop .diag-passed {
+	display: flex;
+	flex-direction: column;
+	gap: var(--ds-space-2);
+	padding: 0 0 var(--ds-space-2) 30px;
+}
+.diag-desktop .diag-passed .diag-check {
+	padding-block: 5px;
+}
+.diag-desktop .diag-group-name {
+	margin: var(--ds-space-2) 0 0 12px;
+	color: var(--ds-text-3);
+	font-size: 11px;
+	font-weight: var(--ds-weight-semibold);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+.diag-desktop .diag-facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+	gap: var(--ds-space-3) var(--ds-space-4);
+	margin: 0;
+	padding: var(--ds-space-1) 4px 0;
 }
 .diag-fact {
 	min-width: 0;
 }
-.diag-fact dt {
+.diag-desktop .diag-fact dt {
 	color: var(--ds-text-3);
 	font-size: 11px;
+	letter-spacing: 0.04em;
 	text-transform: uppercase;
-	letter-spacing: 0.03em;
 }
-.diag-fact dd {
-	margin: 0;
+.diag-desktop .diag-fact dd {
+	margin: 2px 0 0;
 	font-size: var(--ds-text-secondary);
 	font-variant-numeric: tabular-nums;
 	overflow-wrap: anywhere;
 }
 
-.diag-group-name {
-	margin: 0 0 var(--ds-space-1);
-	color: var(--ds-text-2);
-	font-size: var(--ds-text-secondary);
-	font-weight: var(--ds-weight-semibold);
+/* ------------------------------------------------------- phone (Konsta) */
+.diag-phone {
+	padding-bottom: 32px;
 }
-.diag-checks {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	margin: 0;
-	padding: 0;
-	list-style: none;
+.diag-inset {
+	margin: 16px 16px 0;
 }
-.diag-check {
-	display: flex;
-	align-items: flex-start;
-	gap: var(--ds-space-2);
-	padding: 4px 0;
-	font-size: var(--ds-text-secondary);
-	line-height: 1.45;
+.diag-phone .diag-skew {
+	margin-top: 8px;
+	border-radius: 12px;
 }
-.diag-check-body {
+.diag-phone .diag-status {
+	width: 30px;
+	height: 30px;
+}
+.diag-phone .diag-sum-state {
+	font-size: 15px;
+}
+.diag-phone .diag-machine {
+	gap: 0;
+}
+.diag-phone .diag-machine-head {
 	display: flex;
-	flex-direction: column;
-	gap: 2px;
+	justify-content: space-between;
+}
+.diag-phone .diag-machine-name {
+	font-size: inherit;
+	font-weight: inherit;
+	/* Clear the page's bar, which the content scrolls under. */
+	scroll-margin-top: 72px;
+}
+.diag-phone .diag-health {
+	font-size: inherit;
+	font-weight: inherit;
+}
+html.k-ios .diag-phone .diag-health {
+	text-transform: none;
+}
+/* Doctor's text wraps in the row: no clamping, no overflow. */
+.diag-phone .diag-card div,
+.diag-phone .diag-facts div {
 	min-width: 0;
-	overflow-wrap: anywhere;
 }
-.diag-level {
-	display: inline-flex;
-	flex: none;
-	margin-top: 2px;
+.diag-phone .diag-check-body {
+	line-height: 1.35;
 }
-.diag-level svg {
-	width: 15px;
-	height: 15px;
+.diag-phone .diag-check .diag-level,
+.diag-phone .diag-passed-toggle .diag-level {
+	width: 30px;
+	justify-content: center;
 }
-.diag-level.is-ok {
-	color: var(--ds-success);
+.diag-phone .diag-level svg {
+	width: 22px;
+	height: 22px;
 }
-.diag-level.is-bad {
-	color: var(--ds-danger);
+.diag-phone .diag-upgrade {
+	color: var(--ds-needs-text);
 }
-.diag-level.is-note {
-	color: var(--ds-text-3);
-}
-.diag-check.is-bad .diag-check-text {
-	color: var(--ds-text);
-	font-weight: 550;
-}
-.diag-fix {
+.diag-phone .diag-error {
 	color: var(--ds-text-2);
 }
-.diag-fix-label {
-	font-weight: 550;
+.diag-phone .diag-passed-toggle {
+	color: var(--ds-text);
+}
+.diag-phone .diag-group-name {
+	margin: 0;
+	font: inherit;
+}
+.diag-fact-wrap > :last-child {
+	flex-shrink: 1;
+	min-width: 0;
+	padding-inline-start: 12px;
+	text-align: end;
+	overflow-wrap: anywhere;
+	font-variant-numeric: tabular-nums;
+}
+.diag-fact-wrap > :first-child {
+	flex: none;
+}
+/* Material rows end at the content edge (no chevron): keep a gutter. */
+html.k-material .diag-phone .diag-sum-state,
+html.k-material .diag-phone .diag-chev,
+html.k-material .diag-phone .diag-fact-wrap > :last-child {
+	margin-inline-end: 8px;
 }

@@ -3,7 +3,11 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { versionSkew } from "../../../../src/diagnostics/checks.ts";
 import { ApiError, api } from "../../api/client.ts";
-import type { DiagCheck, MachineDiagnostics } from "../../api/types.ts";
+import type {
+	DiagCheck,
+	DiagLevel,
+	MachineDiagnostics,
+} from "../../api/types.ts";
 import { queryClient, useLiveEvent } from "../../data/hooks.ts";
 import { route } from "../../lib/router.ts";
 
@@ -141,6 +145,20 @@ export function grouped(checks: DiagCheck[]): [string, DiagCheck[]][] {
 	return [...by].sort((a, b) => rank(a[0]) - rank(b[0]));
 }
 
+const RANK: Record<DiagLevel, number> = { bad: 0, note: 1, ok: 2 };
+
+/** The checks to act on: problems, then notes, each in doctor's order. */
+export function attention(checks: DiagCheck[]): DiagCheck[] {
+	return checks
+		.filter((c) => c.level !== "ok")
+		.sort((a, b) => RANK[a.level] - RANK[b.level]);
+}
+
+/** The checks that passed, in doctor's order. */
+export function passed(checks: DiagCheck[]): DiagCheck[] {
+	return checks.filter((c) => c.level === "ok");
+}
+
 export type Health = "problems" | "notes" | "ok" | "unknown" | "checking";
 
 /** A machine's overall state and its short summary. */
@@ -193,4 +211,19 @@ export function spans(text: string): { code: boolean; text: string }[] {
 				? { code: true, text: t.slice(1, -1) }
 				: { code: false, text: t },
 		);
+}
+
+/**
+ * A fix as text and code spans; `command` marks a code span the operator
+ * runs ("run `pulsar mesh on`"), which the page offers to copy. Other code
+ * spans ("a `client load error` line") stay plain code.
+ */
+export function fixParts(
+	fix: string,
+): { code: boolean; command: boolean; text: string }[] {
+	const parts = spans(fix);
+	return parts.map((p, i) => ({
+		...p,
+		command: p.code && i > 0 && /\b(?:re-?)?run\s*$/i.test(parts[i - 1]!.text),
+	}));
 }
