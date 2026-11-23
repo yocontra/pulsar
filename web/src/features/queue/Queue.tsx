@@ -204,7 +204,17 @@ function Row({ item }: { item: QueueItem }) {
 						{item.priority === "urgent" ? "Urgent" : "Don't wake"}
 					</span>
 				)}
-				<span className="q-age">{ago(item.createdAt, now)}</span>
+				<span
+					className="q-age"
+					// fullDate's format, inline: importing it from here would add
+					// an export to the phone's first-load chunk (at its budget).
+					title={new Date(item.createdAt).toLocaleString(undefined, {
+						dateStyle: "medium",
+						timeStyle: "short",
+					})}
+				>
+					{ago(item.createdAt, now)}
+				</span>
 			</div>
 			{draft === null ? (
 				<p className="q-body">{item.body}</p>
