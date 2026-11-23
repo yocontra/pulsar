@@ -126,12 +126,12 @@ export function limitsSuite(platform: "desktop" | "phone") {
 			u.getByRole("meter", { name: "Codex weekly limit used" }),
 		).toHaveAttribute("aria-valuenow", "88");
 		await expect(u.locator(".limits-note")).toContainText(
-			"OpenCode, pi and omp show here only when a limit is reached",
+			"pi and omp show here only when a limit is reached",
 		);
 		expect(await contrastFailures(page, ".limits *")).toEqual([]);
 	});
 
-	test(`Claude Code's cached /usage percentages and an OpenCode Go stop show on Usage (${platform})`, async ({
+	test(`Claude Code's cached /usage percentages and OpenCode Go's meters and stop show on Usage (${platform})`, async ({
 		page,
 		request,
 	}) => {
@@ -166,6 +166,17 @@ export function limitsSuite(platform: "desktop" | "phone") {
 					...reading({
 						machine: "studio",
 						harness: "opencode",
+						window: "rolling",
+						label: "Rolling",
+						used: 57,
+					}),
+					account: "opencode-go",
+					plan: "Go",
+				},
+				{
+					...reading({
+						machine: "studio",
+						harness: "opencode",
 						window: "weekly",
 						label: "Weekly",
 						used: 100,
@@ -178,7 +189,11 @@ export function limitsSuite(platform: "desktop" | "phone") {
 		await openUsage(page);
 		const u = view(page, phone);
 		const rows = u.getByTestId("limit-row");
-		await expect(rows).toHaveCount(3);
+		await expect(rows).toHaveCount(4);
+		const rolling = rows.filter({ hasText: "OpenCode · Rolling" });
+		await expect(rolling).toContainText("(Go)");
+		await expect(rolling).toContainText("57% used");
+		await expect(rolling).toHaveAttribute("data-level", "ok");
 		const five = rows.filter({ hasText: "Claude Code · 5-hour" });
 		await expect(five).toContainText("(Test Plan)");
 		await expect(five).toContainText("41% used");

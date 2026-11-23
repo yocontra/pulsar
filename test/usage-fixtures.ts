@@ -156,6 +156,7 @@ export function rootsIn(dir: string): UsageRoots {
 		omp: join(dir, "omp", "sessions"),
 		claudeState: join(dir, "claude", ".claude.json"),
 		opencodeDb: join(dir, "opencode", "opencode.db"),
+		opencodeUsage: null,
 	};
 }
 

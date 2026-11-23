@@ -6,8 +6,11 @@ import type { LimitState } from "../http/wire.ts";
 import { lazyCrypto } from "../lazy.ts";
 import type { Store } from "../store.ts";
 import {
+	askOpencodeUsage,
 	claudeStatePath,
+	type OpencodeUsageAnswer,
 	opencodeDbPath,
+	opencodeGoLimits,
 	readClaudeCached,
 	readOpencodeLimits,
 } from "./limit-sources.ts";
@@ -36,6 +39,8 @@ export type UsageRoots = Record<UsageHarness, string | null> & {
 	claudeState: string | null;
 	/** OpenCode's database (OpenCode Go hard stops). */
 	opencodeDb: string | null;
+	/** Asks OpenCode's server for OpenCode Go's meters (null: never ask). */
+	opencodeUsage: (() => Promise<OpencodeUsageAnswer>) | null;
 };
 
 /** The harnesses' own folders, read at call time (tests point HOME elsewhere). */
@@ -48,6 +53,7 @@ export function defaultRoots(): UsageRoots {
 		omp: join(home, ".omp", "agent", "sessions"),
 		claudeState: claudeStatePath(),
 		opencodeDb: opencodeDbPath(),
+		opencodeUsage: askOpencodeUsage,
 	};
 }
 
@@ -71,6 +77,10 @@ const LOCAL_RETAG_KEY = "usage.localRetagged";
 const DEFAULTS = priceTable({});
 /** The last OpenCode `session_message` rowid read for limits. */
 const OPENCODE_CURSOR_KEY = "usage.opencodeLimitCursor";
+/** OpenCode's server is asked for usage limits at most this often… */
+const OPENCODE_ASK_MS = 5 * 60_000;
+/** …and after failures, twice as long each time up to this. */
+const OPENCODE_ASK_MAX_MS = 60 * 60_000;
 
 interface Found {
 	path: string;
@@ -143,6 +153,9 @@ export class UsageScanner {
 	private providers: Partial<Record<UsageHarness, Providers>> = {};
 	/** The mtime of Claude Code's state file when last read. */
 	private claudeStateMtime: number | null = null;
+	/** When OpenCode's server may be asked again, and the wait after a failure. */
+	private opencodeAskAt = 0;
+	private opencodeWait = OPENCODE_ASK_MS;
 
 	private readonly chunk: number;
 	private readonly commitBytes: number;
@@ -349,6 +362,24 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 				if (t > (batch.answered.get(k) ?? 0)) batch.answered.set(k, t);
 			cursor = r.cursor;
 			moved = cursor !== null && cursor !== from;
+		}
+		if (roots.opencodeUsage && now >= this.opencodeAskAt) {
+			const a = await roots
+				.opencodeUsage()
+				.catch((): OpencodeUsageAnswer => ({ running: true, ok: false }));
+			if (!a.running) {
+				// Asked again on the next scan, when it may run.
+			} else if (a.ok) {
+				this.opencodeWait = OPENCODE_ASK_MS;
+				this.opencodeAskAt = now + OPENCODE_ASK_MS;
+				for (const l of opencodeGoLimits(a.data, now)) batch.onLimit(l);
+			} else {
+				this.opencodeAskAt = now + this.opencodeWait;
+				this.opencodeWait = Math.min(
+					this.opencodeWait * 2,
+					OPENCODE_ASK_MAX_MS,
+				);
+			}
 		}
 		if (!batch.limits.size && !batch.answered.size && !moved) return;
 		const db = this.store.db;

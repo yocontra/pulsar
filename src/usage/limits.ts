@@ -9,8 +9,8 @@
  *   `apiError: "usage_limit_reached"` and `quotaLimits` (`status:
  *   "rejected"`, `resetsAt`, `rateLimitType`). Percentages come from its
  *   cached `/usage` answer (src/usage/limit-sources.ts).
- * - OpenCode: only the OpenCode Go hard stop, from its database
- *   (src/usage/limit-sources.ts).
+ * - OpenCode: the OpenCode Go hard stop from its database, and OpenCode
+ *   Go's percentages from its local server (src/usage/limit-sources.ts).
  * - pi and omp: only the hard stop, as an assistant error with status 429,
  *   "usage limit" in the message and `retry-after-ms`. The message text
  *   (it can hold an account URL) is never kept.
