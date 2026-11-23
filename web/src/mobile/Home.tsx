@@ -25,7 +25,7 @@ import {
 import { num } from "../lib/format.ts";
 import { Slot } from "../lib/registry.tsx";
 import { navigate } from "../lib/router.ts";
-import { observer } from "../lib/signals.ts";
+import { observer, signal } from "../lib/signals.ts";
 import {
 	attention,
 	branches,
@@ -646,11 +646,21 @@ function PlainSearch({ id, placeholder, value, onText }: SearchInputProps) {
 }
 
 /**
+ * What the search field holds, before it becomes the filter (250 ms later).
+ * Outside the component: Home can remount the field right after the first
+ * paint, and text typed before that was lost.
+ */
+const searchText = signal(filter.peek());
+const setSearchText = (v: string) => {
+	searchText.value = v;
+};
+
+/**
  * The one search field: filters the tree as you type, and message search
  * (the home.search slot) lists matching messages under it.
  */
-function SearchField() {
-	const [text, setText] = useState(filter.peek());
+function SearchFieldImpl() {
+	const text = searchText.value;
 	useEffect(() => {
 		const t = setTimeout(() => {
 			if (text !== filter.peek()) {
@@ -664,7 +674,7 @@ function SearchField() {
 		id: "p-home-q",
 		placeholder: "Search",
 		value: text,
-		onText: setText,
+		onText: setSearchText,
 		focused: () => plainFocus,
 	};
 	return (
@@ -678,6 +688,7 @@ function SearchField() {
 		</div>
 	);
 }
+const SearchField = observer(SearchFieldImpl);
 
 function HomeImpl() {
 	// branches is a plain Map: read the tree version so tree changes re-render

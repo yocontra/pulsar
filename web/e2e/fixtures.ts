@@ -173,6 +173,10 @@ export async function agentId(
 export async function ready(page: Page) {
 	await page.goto("/");
 	await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
+	// The phone's Home search paints as a plain input and swaps in Konsta's
+	// once its chunk loads: text typed during that swap goes to the input
+	// that is removed. Wait for the swap (no plain input on the desktop).
+	await expect(page.locator(".p-search-plain")).toHaveCount(0);
 }
 
 export const SHOTS = new URL("../screenshots/", import.meta.url).pathname;
