@@ -401,15 +401,21 @@ export async function restartService(env: ServiceEnv): Promise<boolean> {
 	return true;
 }
 
-/** Starts the service if it is not running (what a client does instead of spawning a daemon). */
-export async function startService(env: ServiceEnv): Promise<boolean> {
+/**
+ * Starts the service if it is not running (what a client does instead of
+ * spawning a daemon). `why` is the service manager's error when it refused.
+ */
+export async function startService(
+	env: ServiceEnv,
+): Promise<{ ok: boolean; why: string }> {
 	const rec = await readServiceRecordAsync(env.stateDir);
-	if (!rec) return false;
+	if (!rec) return { ok: false, why: "no service installed" };
 	const r =
 		rec.kind === "launchd"
 			? await env.run("launchctl", ["kickstart", launchdTarget(env)])
 			: await env.run("systemctl", ["--user", "start", SYSTEMD_UNIT]);
-	return r.ok;
+	const why = (r.stderr || r.stdout).trim().split("\n")[0]?.slice(0, 200);
+	return { ok: r.ok, why: r.ok ? "" : why || "failed" };
 }
 
 /** Stops and removes the service this state folder recorded. Returns the removed file, or null. */

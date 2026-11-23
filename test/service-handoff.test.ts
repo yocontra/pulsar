@@ -13,6 +13,7 @@ import {
 	readFileSync,
 	writeFileSync,
 } from "node:fs";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { builtCli } from "./helpers.ts";
@@ -113,6 +114,50 @@ function writeRecord(s: ReturnType<typeof sandbox>) {
 	return file;
 }
 
+function socketAnswers(path: string): Promise<boolean> {
+	return new Promise((resolve) => {
+		const c = connect(path);
+		c.once("connect", () => {
+			c.destroy();
+			resolve(true);
+		});
+		c.once("error", () => resolve(false));
+	});
+}
+
+function alive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Clients that start an on-demand daemon the moment the socket stops
+ * answering, as busy agents do while the service restarts. Returns the
+ * daemons it started and a stop function.
+ */
+function eagerClients(s: ReturnType<typeof sandbox>) {
+	const sock = join(s.state, "bus.sock");
+	const started: ChildProcess[] = [];
+	let checking = false;
+	const timer = setInterval(async () => {
+		if (checking) return;
+		checking = true;
+		try {
+			if (await socketAnswers(sock)) return;
+			const d = spawn(node, [cli, "daemon"], { env: s.env, stdio: "ignore" });
+			children.push(d);
+			started.push(d);
+		} finally {
+			checking = false;
+		}
+	}, 25);
+	return { started, stop: () => clearInterval(timer) };
+}
+
 describe("service hand-off", () => {
 	test("the service takes the socket from an on-demand daemon; stop is refused", async () => {
 		const s = sandbox();
@@ -138,6 +183,82 @@ describe("service hand-off", () => {
 		expect(stop.out).toContain("runs as a service");
 		expect(daemonPid(s.env)).toBe(service.pid!);
 	}, 30_000);
+
+	test("a service restart while clients keep starting on-demand daemons ends with the service serving", async () => {
+		// The service manager refuses `kickstart` from the clients (as the
+		// operator's log showed), so each client start runs on demand.
+		const s = sandbox(1);
+		writeRecord(s);
+		const first = spawn(node, [cli, "daemon"], { env: s.env, stdio: "ignore" });
+		children.push(first);
+		expect(await until(() => daemonPid(s.env))).toBe(first.pid!);
+		const clients = eagerClients(s);
+		try {
+			const service = spawn(node, [cli, "daemon", "--service"], {
+				env: s.env,
+				stdio: "ignore",
+			});
+			children.push(service);
+			await until(
+				() => (daemonPid(s.env) === service.pid ? true : null),
+				30_000,
+			);
+			// Past the old 10 s give-up: the service is still the one serving.
+			await new Promise((r) => setTimeout(r, 12_000));
+			expect(service.exitCode).toBeNull();
+			expect(daemonPid(s.env)).toBe(service.pid!);
+			const status = JSON.parse(cliRun(s.env, ["status"]).out) as {
+				service?: boolean;
+			};
+			expect(status.service).toBe(true);
+			// Every on-demand daemon has exited: one daemon serves.
+			expect(alive(first.pid!)).toBe(false);
+			for (const d of clients.started) expect(alive(d.pid!)).toBe(false);
+		} finally {
+			clients.stop();
+		}
+	}, 60_000);
+
+	for (const service of [true, false]) {
+		test(`${service ? "the service" : "an on-demand daemon"} keeps running and retrying while Tailscale is down`, async () => {
+			const s = sandbox();
+			// A `tailscale` CLI that cannot reach tailscaled, first on PATH.
+			writeFileSync(
+				join(s.dir, "bin", "tailscale"),
+				'#!/bin/sh\necho "failed to connect to local Tailscale service" >&2\nexit 1\n',
+			);
+			chmodSync(join(s.dir, "bin", "tailscale"), 0o755);
+			const env = { ...s.env, PULSAR_REMOTE: "1", PULSAR_HTTP_PORT: "47337" };
+			const d = spawn(
+				node,
+				[cli, "daemon", ...(service ? ["--service"] : [])],
+				{ env, stdio: "ignore" },
+			);
+			children.push(d);
+			const status = await until(() => {
+				const r = cliRun(env, ["status"]);
+				try {
+					const st = JSON.parse(r.out) as {
+						pid: number;
+						service: boolean;
+						app: { state: string; tailscale?: boolean; error?: string };
+					};
+					return st.app.state === "retrying" ? st : null;
+				} catch {
+					return null;
+				}
+			});
+			expect(status.pid).toBe(d.pid!);
+			expect(status.service).toBe(service);
+			expect(status.app.tailscale).toBe(true);
+			expect(status.app.error).toContain(
+				"failed to connect to local Tailscale service",
+			);
+			const log = readFileSync(join(s.state, "daemon.log"), "utf8");
+			expect(log).toContain("(retrying in 5 s)");
+			expect(d.exitCode).toBeNull();
+		}, 30_000);
+	}
 
 	test("an on-demand start defers to the installed service", () => {
 		const s = sandbox();

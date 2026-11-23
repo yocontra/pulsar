@@ -109,6 +109,15 @@ export class DaemonLock {
 	}
 }
 
+/**
+ * The background service's claim on a socket (`<socket>.service.lock`),
+ * held while it runs. An on-demand start that finds it held by a live
+ * process steps aside: the service is starting and would only stop it.
+ */
+export function serviceClaim(socketPath: string): DaemonLock {
+	return new DaemonLock(`${socketPath}.service`);
+}
+
 /** The inode of a path, or null when it's gone. */
 export async function inodeOf(path: string): Promise<number | null> {
 	try {

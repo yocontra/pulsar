@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { access, stat, writeFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
-import { DaemonLock } from "./daemon-lock.ts";
+import { DaemonLock, serviceClaim } from "./daemon-lock.ts";
 import { daemonRuntimeFlags } from "./lazy.ts";
 import { checkedSocketPath, currentCli } from "./paths.ts";
 import { type Frame, RpcError, readFrames, writeFrame } from "./rpc.ts";
@@ -58,7 +58,7 @@ let lastSpawn = 0;
 /**
  * Whether this client should start a daemon now. Not when a live daemon
  * holds the lock (it is starting, or too busy to accept: another one would
- * only pile on), nor within SPAWN_GAP_MS of this or any other client's last
+ * only pile on) or the service's claim, nor within SPAWN_GAP_MS of this or any other client's last
  * start (a stamp file next to the socket).
  */
 export async function maySpawn(
@@ -70,6 +70,9 @@ export async function maySpawn(
 	deciding = true;
 	try {
 		if (await new DaemonLock(path).heldByLive()) return false;
+		// The background service is starting (it claims the machine first):
+		// wait for it rather than start an on-demand daemon it must stop.
+		if (await serviceClaim(path).heldByLive()) return false;
 		const stamp = `${path}.spawn`;
 		try {
 			if (now - (await stat(stamp)).mtimeMs < SPAWN_GAP_MS) return false;

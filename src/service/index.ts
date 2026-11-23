@@ -37,6 +37,7 @@ import type { ResolvedTranscript } from "../transcripts/tailer.ts";
 import {
 	type Agent,
 	type AgentStatus,
+	type AppStatus,
 	PROTOCOL_VERSION,
 	type Priority,
 	type PublicAgent,
@@ -132,6 +133,8 @@ export interface ServiceOptions {
 	search?: { off?: boolean; engine?: "fts5" | "memory"; backfillMs?: number };
 	/** Owned by launchd/systemd: the `shutdown` RPC is refused. */
 	serviceMode?: boolean;
+	/** Whether the daemon serves the app, for `status` (doctor). */
+	appStatus?: () => AppStatus;
 	/** A fixed machine name; otherwise detected (Tailscale, else the host name). */
 	machine?: string;
 	/** Called after a successful `shutdown` reply; exits the process by default. */
@@ -267,6 +270,7 @@ export class PulsarService {
 	/** Set by federation: the pool's members or owner changed. */
 	onPoolChange: () => void = () => {};
 	readonly serviceMode: boolean;
+	private readonly appStatus: () => AppStatus;
 	private readonly scan: boolean;
 	private readonly searchBackfillMs: number;
 	/** Relays prompts kept on harness servers (OpenCode); null when off. */
@@ -289,6 +293,7 @@ export class PulsarService {
 		this.scan = opts.scan ?? true;
 		this.searchBackfillMs = opts.search?.backfillMs ?? BACKFILL_MS;
 		this.serviceMode = opts.serviceMode ?? false;
+		this.appStatus = opts.appStatus ?? (() => ({ state: "off" }));
 		this.onShutdown =
 			opts.onShutdown ?? (() => setTimeout(() => process.exit(0), 50).unref());
 		this.fixedMachine = Boolean(opts.machine);
@@ -1092,6 +1097,10 @@ export class PulsarService {
 					version: VERSION,
 					protocol: PROTOCOL_VERSION,
 					pid: process.pid,
+					// Run by launchd/systemd, or started on demand by a client.
+					service: this.serviceMode,
+					// Whether the app is served, or why not and when the next try is.
+					app: this.appStatus(),
 					agents: registry.live().length,
 					connections: this.sessions.size,
 					// Whether anything blocks the daemon (doctor warns on stalls).

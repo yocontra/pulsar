@@ -1,5 +1,9 @@
 import { getPublicSuffix } from "tldts";
-import { runTailscale, type TailscaleRunner } from "../http/identity.ts";
+import {
+	isTailscaleAddr,
+	runTailscale,
+	type TailscaleRunner,
+} from "../http/identity.ts";
 
 /** A node on the tailnet, as `tailscale status --json` lists it. */
 export interface TailnetNode {
@@ -20,6 +24,8 @@ export interface TailnetNode {
 	online: boolean;
 	/** The port its pulsar serves on, once a probe found it. */
 	port?: number;
+	/** Its Tailscale addresses (`TailscaleIPs`), when status listed them. */
+	ips?: string[];
 }
 
 export interface TailnetStatus {
@@ -141,6 +147,11 @@ function node(
 		userId && users && typeof users === "object"
 			? str(users[userId]?.LoginName)
 			: null;
+	const ips = Array.isArray(n.TailscaleIPs)
+		? (n.TailscaleIPs as unknown[])
+				.filter((ip): ip is string => typeof ip === "string")
+				.filter(isTailscaleAddr)
+		: [];
 	return {
 		nodeId,
 		name: dns.split(".")[0]!,
@@ -150,6 +161,7 @@ function node(
 		login: tags.length > 0 ? TAGGED_LOGIN : login,
 		tags,
 		online: n.Online === true,
+		...(ips.length ? { ips } : {}),
 	};
 }
 

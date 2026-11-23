@@ -14,12 +14,13 @@ import { envPort } from "../http/config.ts";
 import type { DiagFacts, DiagHarness } from "../http/wire.ts";
 import type { LagStats } from "../service/jobs.ts";
 import type { PoolMachine } from "../service/pool.ts";
+import type { AppStatus } from "../types.ts";
 import { PROTOCOL_VERSION } from "../types.ts";
 import { newer } from "../util.ts";
 import { VERSION } from "../version.ts";
 import { which } from "./files.ts";
 import { loadJsonc } from "./jsonc.ts";
-import type { MeshFacts } from "./mesh-doctor.ts";
+import { appWaitingLine, type MeshFacts } from "./mesh-doctor.ts";
 
 interface Status {
 	version: string;
@@ -30,6 +31,10 @@ interface Status {
 	eventLoop?: LagStats;
 	/** Claude sessions on a hook without `--timeout`; absent on older daemons. */
 	oldHookSessions?: { name: string; pid: number | null }[];
+	/** Run by launchd/systemd; absent on older daemons. */
+	service?: boolean;
+	/** Whether it serves the app; absent on older daemons. */
+	app?: AppStatus;
 }
 
 async function latestVersion(): Promise<string | null> {
@@ -194,7 +199,23 @@ async function doctorChecks(
 		});
 		const s = await client.call<Status>("status");
 		oldHooks = s.oldHookSessions ?? [];
-		ok(`daemon ${s.version} running (pid ${s.pid}), ${s.agents} live agent(s)`);
+		const mode =
+			s.service === undefined
+				? ""
+				: s.service
+					? ", background service"
+					: ", on demand";
+		ok(
+			`daemon ${s.version} running (pid ${s.pid}${mode}), ${s.agents} live agent(s)`,
+		);
+		const waiting = s.app ? appWaitingLine(s.app) : null;
+		if (waiting)
+			bad(
+				`app: ${waiting}`,
+				s.app?.state === "retrying" && s.app.tailscale
+					? "check `tailscale status`; the app comes up on the next try once Tailscale is up"
+					: undefined,
+			);
 		const lag = s.eventLoop;
 		if (lag) {
 			const line = `event loop: p99 ${lag.p99} ms, max ${lag.max} ms`;
@@ -439,6 +460,19 @@ async function runMeshChecks(checks: CheckList): Promise<MeshFacts | null> {
 					await client.connect(false);
 					const s = await client.call<{ pool?: PoolMachine[] }>("status", {});
 					return s.pool ?? null;
+				} catch {
+					return null;
+				} finally {
+					client.close?.();
+				}
+			},
+			app: async () => {
+				const { DaemonClient } = await import("../client.ts");
+				const client = new DaemonClient();
+				try {
+					await client.connect(false);
+					const s = await client.call<{ app?: AppStatus }>("status", {});
+					return s.app ?? null;
 				} catch {
 					return null;
 				} finally {

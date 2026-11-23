@@ -14,7 +14,7 @@ import {
 	runTailscale,
 	StaticIdentity,
 	TailscaleIdentity,
-	tailscaleSelf,
+	tailscaleSelfOrWhy,
 } from "./identity.ts";
 import { inspectCert, trustCa, watchTlsFiles } from "./tls.ts";
 
@@ -31,10 +31,33 @@ const RENEW_MS = 24 * 3600_000;
  * missing, the node has no owner (a tagged node), or there is no usable
  * certificate.
  */
+/**
+ * Tailscale is not up yet (not running, logged out, its CLI unreachable):
+ * the daemon keeps retrying, and doctor says it is waiting for Tailscale.
+ */
+export class TailscaleNotReady extends Error {}
+
+/** The app's HTTP transport, as `startRemote` returns it. */
+export interface RemoteApp {
+	transport: HttpTransport;
+	/** The addresses it listens on (Tailscale's, or 127.0.0.1 in dev mode). */
+	hosts: string[];
+	close: () => Promise<void>;
+}
+
+export interface RemoteOptions {
+	/**
+	 * Tailscale now reports other addresses for this node than the ones the
+	 * app listens on (seen on the pool's status polls). The daemon listens again.
+	 */
+	onAddressesChanged?: (ips: string[]) => void;
+}
+
 export async function startRemote(
 	service: PulsarService,
 	cfg: Exclude<RemoteConfig, { mode: "off" }>,
-): Promise<{ transport: HttpTransport; close: () => Promise<void> }> {
+	opts: RemoteOptions = {},
+): Promise<RemoteApp> {
 	if (cfg.mode === "dev") {
 		const transport = new HttpTransport(service, {
 			identity: new StaticIdentity(cfg.login, "localhost"),
@@ -44,12 +67,21 @@ export async function startRemote(
 		});
 		await transport.listen();
 		daemonLog(`app (dev, ${cfg.login}) at ${transport.url}`);
-		return { transport, close: () => transport.close() };
+		return {
+			transport,
+			hosts: ["127.0.0.1"],
+			close: () => transport.close(),
+		};
 	}
 	// A busy machine can take seconds to answer; a short timeout here reads as
 	// "Tailscale is off" and the app stays down until the next retry.
-	const self = await tailscaleSelf((args) => runTailscale(args, 15_000));
-	if (!self) throw new Error("Tailscale is not running or not logged in");
+	const { self, why } = await tailscaleSelfOrWhy((args) =>
+		runTailscale(args, 15_000),
+	);
+	if (!self)
+		throw new TailscaleNotReady(
+			`Tailscale is not running or not logged in (${why})`,
+		);
 	// A tagged node has no user of its own: the pool owner comes from
 	// `pulsar mesh owner <login>` (kept in the store).
 	const userOwner =
@@ -114,8 +146,19 @@ export async function startRemote(
 	// The pool: every other pulsar node of this user.
 	const { Federation } = await import("../federation/index.ts");
 	const { TailscaleTailnet } = await import("../federation/tailnet.ts");
+	// The pool polls `tailscale status`; the same poll tells when this node's
+	// addresses change (a new tailnet, a re-login), so the app listens again.
+	const tailnet = new TailscaleTailnet(transport.port);
+	const status = tailnet.status.bind(tailnet);
+	tailnet.status = async () => {
+		const st = await status();
+		const ips = st?.self.ips;
+		if (ips?.length && !sameAddresses(ips, self.ips))
+			opts.onAddressesChanged?.(ips);
+		return st;
+	};
 	const fed = new Federation(service, {
-		tailnet: new TailscaleTailnet(transport.port),
+		tailnet,
 		owner,
 		...(ownerId ? { ownerId } : {}),
 		port: transport.port,
@@ -157,10 +200,17 @@ export async function startRemote(
 	}
 	return {
 		transport,
+		hosts: self.ips,
 		close: async () => {
 			stopRenew();
 			fed.stop();
 			await transport.close();
 		},
 	};
+}
+
+/** The same set of addresses, in any order. */
+export function sameAddresses(a: string[], b: string[]): boolean {
+	const set = new Set(a);
+	return set.size === new Set(b).size && b.every((x) => set.has(x));
 }

@@ -17,6 +17,30 @@ export type Priority = "urgent" | "normal" | "fyi";
 /** How a message can reach the agent without it asking. */
 type Reach = "push" | "pull";
 
+/**
+ * The app's HTTP transport as the daemon reports it (`status`; doctor
+ * shows it). Absent from older daemons.
+ */
+export type AppStatus =
+	/** The agent mesh is off on this machine. */
+	| { state: "off" }
+	/** The first try (or a try after the addresses changed) is running. */
+	| { state: "starting" }
+	| { state: "serving"; url: string; hosts: string[] }
+	| {
+			state: "retrying";
+			/** Why the last try failed. */
+			error: string;
+			/** Tailscale was not up yet (not running, logged out or unreachable). */
+			tailscale: boolean;
+			/** Failed tries so far. */
+			attempt: number;
+			/** When the first of these failures was (ms since the epoch). */
+			since: number;
+			/** When the next try runs (ms since the epoch). */
+			retryAt: number;
+	  };
+
 export interface Agent {
 	/** Stable id: `<harness>:<session id>` when known, else `<harness>:pid:<pid>`. */
 	id: string;

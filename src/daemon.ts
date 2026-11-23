@@ -9,12 +9,13 @@ import {
 
 export { DaemonLock };
 
+import type { RemoteApp, RemoteOptions } from "./http/start.ts";
 import { daemonLog, flushLog } from "./log.ts";
 import { checkedSocketPath, dbPath, ensureDir, socketPath } from "./paths.ts";
 import { PulsarService, type ServiceOptions } from "./service/index.ts";
 import { Store } from "./store.ts";
 import { SocketTransport } from "./transport/socket.ts";
-import type { Agent } from "./types.ts";
+import type { Agent, AppStatus } from "./types.ts";
 
 export { LIMITS } from "./service/limits.ts";
 
@@ -41,6 +42,22 @@ export interface DaemonOptions {
 	presence?: ServiceOptions["presence"];
 	/** Poll harness servers for prompts (OpenCode); defaults to `scan`. */
 	serverInteractions?: boolean;
+	/** Starts the app's HTTP transport (tests fake Tailscale with it). */
+	startRemote?: (
+		service: PulsarService,
+		cfg: Exclude<RemoteConfig, { mode: "off" }>,
+		opts: RemoteOptions,
+	) => Promise<RemoteApp>;
+	/** The wait before retry `attempt` (0 first) to serve the app; tests shorten it. */
+	appRetryMs?: (attempt: number) => number;
+}
+
+/**
+ * Waits between tries to serve the app: every 5 s six times (a slow
+ * tailscaled at login, a restart), then 15 s doubling to 5 min.
+ */
+export function appRetryMs(attempt: number): number {
+	return attempt < 6 ? 5_000 : Math.min(15_000 * 2 ** (attempt - 6), 300_000);
 }
 
 /**
@@ -55,8 +72,14 @@ export class Daemon {
 	/** Read in `start` (the settings file) unless given. */
 	private remote: RemoteConfig;
 	private readonly remoteGiven: boolean;
-	private http: { close: () => Promise<void> } | null = null;
+	private http: RemoteApp | null = null;
+	/** The one try to serve the app in flight (tries never overlap on the port). */
 	private httpStarting: Promise<void> | null = null;
+	private readonly startRemoteFn: NonNullable<DaemonOptions["startRemote"]>;
+	private readonly retryMs: (attempt: number) => number;
+	/** Failed tries since the app was last served. */
+	private attempt = 0;
+	private app: AppStatus = { state: "off" };
 	private stopped = false;
 	/** One daemon per socket (see DaemonLock). */
 	private readonly lock: DaemonLock;
@@ -84,6 +107,8 @@ export class Daemon {
 				off: /^(1|true|yes)$/i.test(process.env.PULSAR_NO_SEARCH ?? ""),
 			},
 			serviceMode: opts.serviceMode ?? false,
+			// Doctor shows whether the app is served, or why not and when the next try is.
+			appStatus: () => this.appStatus(),
 			// `pulsar stop`: close the socket and drop the lock before exiting.
 			onShutdown: () =>
 				setTimeout(
@@ -115,6 +140,11 @@ export class Daemon {
 		this.remote = opts.remote ?? { mode: "off" };
 		this.remoteGiven = opts.remote !== undefined;
 		this.serviceMode = opts.serviceMode ?? false;
+		this.startRemoteFn =
+			opts.startRemote ??
+			(async (service, cfg, o) =>
+				(await import("./http/start.ts")).startRemote(service, cfg, o));
+		this.retryMs = opts.appRetryMs ?? appRetryMs;
 	}
 
 	/** Binds the socket. Resolves false when another live daemon already owns it. */
@@ -156,36 +186,96 @@ export class Daemon {
 		this.watch.unref();
 		this.started = true;
 		this.service.start();
-		if (this.remote.mode !== "off") this.httpStarting = this.startHttp();
+		if (this.remote.mode !== "off") this.serveApp();
 		return true;
 	}
 
+	/** Whether the app is served, or why not and when the next try is. */
+	appStatus(): AppStatus {
+		return this.app;
+	}
+
 	/**
-	 * The app transport never takes the daemon down: failures are logged and
-	 * it stays off. A service retries (at login it often starts before
-	 * Tailscale is up): every 5 s six times, then every 15 s growing to 5 min.
+	 * Tries to serve the app unless it is served or a try is in flight. A
+	 * failure never takes the daemon down: it is logged and tried again
+	 * (`appRetryMs`), in every mode. At login, after a restart or with
+	 * Tailscale logged out, the daemon often starts before Tailscale is up.
 	 */
-	private async startHttp(attempt = 0): Promise<void> {
+	private serveApp(): void {
+		if (this.stopped || this.remote.mode === "off") return;
+		if (this.http || this.httpStarting) return;
+		if (this.retryTimer) clearTimeout(this.retryTimer);
+		this.retryTimer = null;
+		this.httpStarting = this.tryServe().finally(() => {
+			this.httpStarting = null;
+		});
+	}
+
+	private async tryServe(): Promise<void> {
 		const cfg = this.remote;
-		if (cfg.mode === "off" || this.stopped) return;
+		if (cfg.mode === "off") return;
+		if (this.app.state !== "retrying") this.app = { state: "starting" };
 		try {
-			const { startRemote } = await import("./http/start.ts");
-			const http = await startRemote(this.service, cfg);
-			if (this.stopped) await http.close();
-			else this.http = http;
+			const http = await this.startRemoteFn(this.service, cfg, {
+				onAddressesChanged: (ips) => void this.listenAgain(ips),
+			});
+			if (this.stopped) {
+				await http.close();
+				return;
+			}
+			if (this.attempt > 0)
+				daemonLog(`app served after ${this.attempt} failed tries`);
+			this.http = http;
+			this.attempt = 0;
+			this.app = {
+				state: "serving",
+				url: http.transport.url,
+				hosts: http.hosts,
+			};
 		} catch (e) {
-			const retry = this.serviceMode && !this.stopped;
-			// Quick retries first (a slow tailscaled at start, a restart), then back off.
-			const delay =
-				attempt < 6 ? 5_000 : Math.min(15_000 * 2 ** (attempt - 6), 300_000);
+			if (this.stopped) return;
+			const delay = this.retryMs(this.attempt);
+			const error = (e as Error).message;
+			const { TailscaleNotReady } = await import("./http/start.ts");
+			const since = this.app.state === "retrying" ? this.app.since : Date.now();
+			this.attempt++;
+			this.app = {
+				state: "retrying",
+				error,
+				tailscale: e instanceof TailscaleNotReady,
+				attempt: this.attempt,
+				since,
+				retryAt: Date.now() + delay,
+			};
 			daemonLog(
-				`app not served: ${(e as Error).message}${retry ? ` (retrying in ${delay / 1000} s)` : ""}`,
+				`app not served: ${error} (retrying in ${Math.round(delay / 1000)} s)`,
 			);
-			if (retry)
-				this.retryTimer = setTimeout(() => {
-					this.httpStarting = this.startHttp(attempt + 1);
-				}, delay);
+			this.retryTimer = setTimeout(() => {
+				this.retryTimer = null;
+				this.serveApp();
+			}, delay);
 		}
+	}
+
+	/** Tailscale moved this node to other addresses: listen on the new ones. */
+	private async listenAgain(ips: string[]): Promise<void> {
+		// Off the caller's stack (the pool's status poll, which closing stops).
+		await Promise.resolve();
+		const http = this.http;
+		if (this.stopped || !http || this.httpStarting) return;
+		daemonLog(
+			`app: Tailscale addresses changed (${http.hosts.join(", ")} to ${ips.join(", ")}); listening again`,
+		);
+		this.http = null;
+		this.app = { state: "starting" };
+		// Hold off other tries until the old listener is closed.
+		this.httpStarting = http
+			.close()
+			.catch((e) => daemonLog(`app: close failed: ${(e as Error).message}`))
+			.finally(() => {
+				this.httpStarting = null;
+				this.serveApp();
+			});
 	}
 
 	/** `orphaned`: another daemon owns the socket now; leave its files alone. */
@@ -204,10 +294,13 @@ export class Daemon {
 		this.store.close();
 	}
 
-	/** True once nothing has used the daemon for a while (never while serving the app); the CLI exits then. */
+	/**
+	 * True once nothing has used the daemon for a while; the CLI exits then.
+	 * Never while the app is on (served, or waiting for Tailscale): the app
+	 * may be open on a phone with no local connection at all.
+	 */
 	idleTooLong(now = Date.now()) {
-		// The app may be open on a phone with no local connection at all.
-		if (this.http) return false;
+		if (this.remote.mode !== "off") return false;
 		return this.service.idleTooLong(now);
 	}
 

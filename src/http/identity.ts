@@ -581,8 +581,30 @@ export class TailscaleIdentity implements IdentityProvider {
 export async function tailscaleSelf(
 	run: TailscaleRunner = runTailscale,
 ): Promise<TailscaleSelf | null> {
+	return (await tailscaleSelfOrWhy(run)).self;
+}
+
+/**
+ * `tailscaleSelf`, and when there is no self node, why: the CLI's error
+ * (missing, refused, timed out) or the backend state it reported.
+ */
+export async function tailscaleSelfOrWhy(
+	run: TailscaleRunner = runTailscale,
+): Promise<{ self: TailscaleSelf | null; why: string }> {
 	const r = await run(["status", "--json"]);
-	return r.ok ? parseStatusSelf(parseJson(r.stdout)) : null;
+	if (!r.ok) {
+		const err = (r.stderr || r.stdout).trim().split("\n")[0]?.slice(0, 200);
+		return { self: null, why: err || "tailscale status failed" };
+	}
+	const json = parseJson(r.stdout);
+	const self = parseStatusSelf(json);
+	if (self) return { self, why: "" };
+	const state = (json as { BackendState?: unknown } | null)?.BackendState;
+	return {
+		self: null,
+		why:
+			typeof state === "string" ? `backend state ${state}` : "no node status",
+	};
 }
 
 /** Where pulsar keeps the node certificate for `domain`. */

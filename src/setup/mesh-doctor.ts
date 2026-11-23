@@ -10,6 +10,7 @@ import {
 } from "../http/identity.ts";
 import { inspectCert, type TlsFiles } from "../http/tls.ts";
 import type { PoolMachine } from "../service/pool.ts";
+import type { AppStatus } from "../types.ts";
 import {
 	ADMIN_DNS_URL,
 	certOk,
@@ -39,6 +40,8 @@ export interface MeshDoctorDeps {
 	now?: number;
 	/** The running daemon's pool (its federation's links), when it runs. */
 	pool?: () => Promise<PoolMachine[] | null>;
+	/** Whether the running daemon serves the app (absent from older daemons). */
+	app?: () => Promise<AppStatus | null>;
 	/** Tagged nodes `pulsar mesh allow` let in. */
 	allowed?: string[];
 	/** The operator's own certificate (the `tls` setting), when set. */
@@ -234,7 +237,10 @@ export async function meshChecks(
 	const addrs = await listening(deps.run, deps.port);
 	if (addrs === null) note("could not check listeners (no lsof)");
 	else if (addrs.length === 0) {
-		if (deps.remoteOn) out.bad(`nothing listens on port ${deps.port}`);
+		const app = deps.remoteOn ? await deps.app?.().catch(() => null) : null;
+		const waiting = app ? appWaitingLine(app, now) : null;
+		if (waiting) out.bad(`nothing listens on port ${deps.port}: ${waiting}`);
+		else if (deps.remoteOn) out.bad(`nothing listens on port ${deps.port}`);
 		else note(`nothing listens on port ${deps.port}`);
 	} else {
 		const outside = addrs.filter((a) => !isTailscaleAddr(normalizeAddr(a)));
@@ -269,4 +275,22 @@ export async function meshChecks(
 		}
 	}
 	return facts;
+}
+
+/**
+ * Why the daemon does not serve the app yet, and that it keeps trying; null
+ * unless it is retrying. Tailscale not up yet (at login, after a restart, a
+ * logged-out node) is said as such.
+ */
+export function appWaitingLine(
+	app: AppStatus,
+	now = Date.now(),
+): string | null {
+	if (app.state !== "retrying") return null;
+	const next = Math.max(0, Math.round((app.retryAt - now) / 1000));
+	const tries = `${app.attempt} ${app.attempt === 1 ? "try" : "tries"} since ${new Date(app.since).toISOString()}`;
+	const why = app.tailscale
+		? `the app is not served because Tailscale was not ready (${app.error})`
+		: `the app is not served (${app.error})`;
+	return `${why}; the daemon keeps retrying, next try in ${next} s (${tries})`;
 }
