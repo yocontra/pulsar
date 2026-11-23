@@ -10,5 +10,5 @@ test("a revisit paints the last screen before the network answers (phone) @real"
 	page,
 	request,
 }) => {
-	await revisitPaintsFromSnapshot(page, request);
+	await revisitPaintsFromSnapshot(page, request, { phone: true });
 });

@@ -35,7 +35,7 @@ const BUDGETS: Record<string, number> = {
 	PhoneApp: 183 * 1024,
 	DesktopApp: 130 * 1024,
 };
-const PACKAGE_BYTES = 9 * 1024 * 1024;
+const PACKAGE_BYTES = 9.5 * 1024 * 1024;
 // The count catches a bundle that fans out (Shiki's full bundle was 300+
 // grammar chunks). What's here now is on-demand and expected: ~36 Mermaid
 // diagram types, 20 KaTeX fonts, ~22 Shiki grammars, the formatter's

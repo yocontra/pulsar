@@ -24,11 +24,15 @@ async function holdApi(page: Page) {
 /**
  * Visit, then revisit with every API request held: the last screen
  * (src/lib/snapshot.ts) paints at once, and the live answers replace it,
- * dropping a row that is no longer there.
+ * dropping a row that is no longer there. Needs-you paints from the
+ * snapshot too: the desktop's card row for the agent that asked
+ * (docs-writer), the phone's one-line summary ("N need you") with the
+ * snapshot's count.
  */
 export async function revisitPaintsFromSnapshot(
 	page: Page,
 	request: APIRequestContext,
+	{ phone = false }: { phone?: boolean } = {},
 ) {
 	const h = (await (
 		await request.get("/api/v1/hello", { headers: H })
@@ -55,17 +59,32 @@ export async function revisitPaintsFromSnapshot(
 		s.branches[""].ids.push("m:gone");
 		localStorage.setItem("pulsar.snapshot", JSON.stringify(s));
 	});
+	const asked = await page.evaluate(
+		() =>
+			(
+				JSON.parse(localStorage.getItem("pulsar.snapshot")!) as {
+					attention: { agent: { name: string } }[];
+				}
+			).attention,
+	);
+	expect(asked.map((a) => a.agent.name)).toContain("docs-writer");
 	const api = await holdApi(page);
 	await page.reload();
 	// Rows paint from the snapshot while every API request is held.
 	await expect(machine).toBeVisible();
 	await expect(page.locator('[data-node="m:gone"]')).toBeVisible();
-	await expect(
-		page
-			.locator("[data-agent], .d-card-row")
-			.filter({ hasText: "docs-writer" })
-			.first(),
-	).toBeVisible();
+	if (phone) {
+		const n = asked.length;
+		await expect(
+			page.getByTestId("needs-summary").locator(".p-title"),
+		).toHaveText(`${n} ${n === 1 ? "needs" : "need"} you`);
+	} else
+		await expect(
+			page
+				.locator("[data-agent], .d-card-row")
+				.filter({ hasText: "docs-writer" })
+				.first(),
+		).toBeVisible();
 	expect(api.count()).toBeGreaterThan(0);
 	// The network answers: live rows replace the snapshot's.
 	await api.release();
