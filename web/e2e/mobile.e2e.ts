@@ -61,9 +61,12 @@ test.describe("mobile", () => {
 		await ready(page);
 		await expect(page.getByLabel("Search agents and messages")).toBeVisible();
 		// The top app bar's title (Material: no large title).
+		// No title on a tab's root: the tab bar says where you are.
+		const top = page.locator("ion-nav > .ion-page:last-child");
+		await expect(top.locator("ion-title")).toHaveCount(0);
 		await expect(
-			page.locator("ion-nav > .ion-page:last-child ion-title").first(),
-		).toHaveText("Agents");
+			top.getByRole("heading", { level: 1, name: "Agents" }),
+		).toBeAttached();
 		// Machines and projects show no rollup counts: only a needs-you badge.
 		const studio = node(page, "m:studio");
 		await expect(studio).toHaveAttribute("data-expanded", "true");

@@ -9,6 +9,8 @@
  *   the trailing buttons in a glass capsule.
  * - Android: Material's top app bar (back arrow, title, icon buttons).
  *
+ * A tab's root (TabShell) shows no title: see there.
+ *
  * Safe areas come from Ionic (the header and content pad for --sat/--sab):
  * nothing inside adds Konsta's pt-safe/pb-safe on top.
  */
@@ -128,7 +130,75 @@ export function PageShell({
 	);
 }
 
-/** A tab's root page (tabs.ts): no back button; the tab bar switches. */
-export function TabShell(props: Omit<PageShellProps, "route">) {
-	return <PageShell {...props} />;
+/** A tab root's props: `below` is the row's main control (a search field),
+ * filling the row with the end buttons beside it. */
+export type TabShellProps = Omit<PageShellProps, "route">;
+
+/**
+ * A tab's root page (tabs.ts): no title on screen, as the tab bar already
+ * says where you are. Its controls (`below`, `start`, `end`) sit in one slim
+ * row under the status bar; with none, there is no bar and the content
+ * starts under the status bar, over a scrim of the page color (= theme
+ * color). `title` names the page for screen readers; `large` and
+ * `subtitle` are ignored.
+ */
+export function TabShell({
+	title,
+	start,
+	end,
+	below,
+	scrollY = true,
+	className,
+	footer,
+	testId,
+	children,
+}: TabShellProps) {
+	const row = !!(below || start || end);
+	const cls = ["p-page", "p-tab-root", row ? "" : "p-tab-bare", className]
+		.filter(Boolean)
+		.join(" ");
+	return (
+		<>
+			{row && (
+				<IonHeader translucent={!isMaterial} className="p-bar p-tab-bar">
+					{!isMaterial && (
+						<div
+							aria-hidden="true"
+							className="p-bar-bg bg-gradient-to-b from-ios-light-surface to-transparent dark:from-ios-dark-surface/50 backdrop-blur-[2px] mask-b-from-50% mask-b-to-100%"
+						/>
+					)}
+					<IonToolbar>
+						<div className="p-tab-row">
+							{start}
+							<div className="p-tab-row-main">{below}</div>
+							{end && (
+								<IonButtons className="p-tab-row-end">
+									{isMaterial ? (
+										end
+									) : (
+										<Glass highlight={false} className="p-bar-glass">
+											{end}
+										</Glass>
+									)}
+								</IonButtons>
+							)}
+						</div>
+					</IonToolbar>
+				</IonHeader>
+			)}
+			<IonContent
+				fullscreen
+				scrollY={scrollY}
+				className={cls}
+				data-testid={testId}
+			>
+				{!row && (
+					<div slot="fixed" aria-hidden="true" className="p-sat-scrim" />
+				)}
+				<h1 className="p-tab-title">{title}</h1>
+				{children}
+			</IonContent>
+			{footer}
+		</>
+	);
 }

@@ -1,7 +1,7 @@
 /**
  * The collapsed large title (on Android, Material's bar title): scrolled down, the page's small title in the top
- * bar never sits under a toolbar button ("+" over "Agents"), on Home and on
- * every other page whose large title condenses. At 320, 375 and 430 px, at
+ * bar never sits under a toolbar button, on every page whose large title
+ * condenses. Tab roots show no title (TabShell; tabs.phone.e2e.ts). At 320, 375 and 430 px, at
  * the default text size and at larger iOS text sizes (the phone root follows
  * -apple-system-body: 17 px, larger with Dynamic Type), with the buttons the
  * page has, with more end buttons than it has today, and with a long title
@@ -29,30 +29,6 @@ type Screen = {
 };
 
 const SCREENS: Screen[] = [
-	{
-		name: "home",
-		title: "Agents",
-		open: async (page) => {
-			await page.goto("/");
-			await page.locator('[data-node="m:studio"]').waitFor();
-		},
-	},
-	{
-		name: "settings",
-		title: "Settings",
-		open: async (page) => {
-			await page.goto("/#/settings");
-			await page.locator("ion-content.p-settings").waitFor();
-		},
-	},
-	{
-		name: "needs",
-		title: "Needs You",
-		open: async (page) => {
-			await page.goto("/#/needs");
-			await page.locator("ion-content.p-needs").waitFor();
-		},
-	},
 	{
 		name: "search",
 		title: "Search",
@@ -284,7 +260,7 @@ for (const w of [320, 375, 430])
 			}
 		});
 
-test("before and after shot of Home's collapsed bar", async ({
+test("before and after shot of a collapsed bar", async ({
 	page,
 	errors,
 }, info) => {
@@ -299,7 +275,7 @@ test("before and after shot of Home's collapsed bar", async ({
 	const box = (await page.locator(BAR).first().boundingBox())!;
 	const before = errors.length;
 	await page.screenshot({
-		path: `${dir}/home-collapsed-375-${info.project.name}.png`,
+		path: `${dir}/search-collapsed-375-${info.project.name}.png`,
 		clip: { x: 0, y: 0, width: box.width, height: box.y + box.height },
 		caret: "initial",
 	});

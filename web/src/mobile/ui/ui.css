@@ -134,6 +134,60 @@ html.k-material .p-tabbar .k-badge {
 	inset-inline-end: -8px;
 }
 
+/* ------------------------------------------------------------ tab roots
+   TabShell: no title (the tab bar says where you are). Controls sit in one
+   slim row under the status bar; with none, the content starts under the
+   status bar, behind a scrim of the page color (= theme-color, so the
+   status bar shows no seam). */
+ion-header.p-tab-bar ion-toolbar {
+	--padding-start: 0;
+	--padding-end: 0;
+}
+html.ios ion-header.p-tab-bar ion-toolbar {
+	--min-height: 52px;
+}
+/* Ionic's toolbar container clips (overflow: hidden): the capsule's glass
+   shadow would end in a box. */
+ion-header.p-tab-bar ion-toolbar::part(container) {
+	overflow: visible;
+	contain: none;
+}
+.p-tab-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding-inline: calc(16px + var(--sal)) calc(16px + var(--sar));
+}
+.p-tab-row-main {
+	flex: 1;
+	min-width: 0;
+}
+.p-tab-row-end {
+	flex: none;
+}
+ion-content.p-tab-bare::part(scroll) {
+	padding-top: calc(var(--padding-top, 0px) + var(--sat));
+}
+/* The tab root's name, for screen readers only (no negative margin: it
+   stays inside the page's box). */
+.p-tab-title {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+.p-sat-scrim {
+	position: absolute;
+	inset: 0 0 auto;
+	height: var(--sat);
+	z-index: 10;
+	background: var(--ds-bg-sunken);
+	pointer-events: none;
+}
+
 /* ------------------------------------------------------------ toasts
    The one toaster (sonner, styles/toasts.css) on the phone: above the tab
    bar on a tab's root, above the composer on pushed pages, and up with the
