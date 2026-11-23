@@ -183,6 +183,8 @@ describe("listing", () => {
 			state: "done",
 			callId: "toolu_a1",
 			hasTranscript: true,
+			// A task has no color of its own: the app hashes its name.
+			color: null,
 		});
 		expect(a1.messaging.mode).toBe("parent");
 		expect(a1.messaging.note).toContain("Claude Code subagents can't receive");
@@ -277,6 +279,7 @@ describe("dead subagents", () => {
 				description: "Wait for work",
 				taskKind: "in_process_teammate",
 				teamName: "team2",
+				color: "orange",
 			},
 			{
 				mtime: now - 5 * 60_000,
@@ -329,6 +332,10 @@ describe("dead subagents", () => {
 			"m1",
 			"new1",
 		]);
+		// A teammate's row carries the color Claude gave it.
+		expect(list.items.find((i) => i.id.endsWith("/sub:m1"))?.color).toBe(
+			"orange",
+		);
 		// Its transcript card still opens it.
 		const old = (await (
 			await api(`/api/v1/subagents/${enc(`${lead2.id}/sub:old1`)}`)

@@ -63,14 +63,41 @@ export function agentColor(o: {
 	return n ? hashedColor(n) : null;
 }
 
+/** A subagent list row, as far as its color goes. */
+export interface ColorRow {
+	name: string;
+	color?: string | null;
+	callId?: string | null;
+	state?: string;
+	startedAt?: number;
+}
+
+/**
+ * The row a name means: a name spawned again has several, and Claude may
+ * color each spawn differently. The live one, else the newest.
+ */
+function rowNamed(
+	rows: ReadonlyArray<ColorRow> | undefined,
+	key: string,
+): ColorRow | undefined {
+	let best: ColorRow | undefined;
+	const rank = (r: ColorRow) => (r.state && r.state !== "done" ? 1 : 0);
+	for (const r of rows ?? []) {
+		if (nameKey(r.name) !== key) continue;
+		if (
+			!best ||
+			rank(r) > rank(best) ||
+			(rank(r) === rank(best) && (r.startedAt ?? 0) > (best.startedAt ?? 0))
+		)
+			best = r;
+	}
+	return best;
+}
+
 /** What a parent knows about its subagents' colors. */
 export interface ColorSources {
 	/** Its subagent list (name, the harness's color, the call that started it). */
-	rows?: ReadonlyArray<{
-		name: string;
-		color?: string | null;
-		callId?: string | null;
-	}>;
+	rows?: ReadonlyArray<ColorRow>;
 	/** Colors teammate messages in its transcript carried, by `nameKey`. */
 	senders?: ReadonlyMap<string, AgentColor>;
 }
@@ -88,9 +115,7 @@ export function resolveColor(
 		? src.rows?.find((r) => r.callId === q.callId)
 		: undefined;
 	const key = q.name ? nameKey(q.name) : "";
-	const row =
-		byCall ??
-		(key ? src.rows?.find((r) => nameKey(r.name) === key) : undefined);
+	const row = byCall ?? (key ? rowNamed(src.rows, key) : undefined);
 	const name = row?.name ?? q.name;
 	if (!name?.trim()) return null;
 	return agentColor({

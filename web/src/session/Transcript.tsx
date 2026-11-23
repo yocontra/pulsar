@@ -107,6 +107,11 @@ export interface TranscriptProps {
 	messageActions?: (msg: MessageAction) => ReactNode;
 	/** A prompt card shown right after the tool call that raised it. */
 	promptAt?: { callId: string; node: ReactNode } | null;
+	/**
+	 * The agent whose subagent list colors the subagent names here, when it
+	 * is not `agent` (a subagent's page: its parent, for its siblings).
+	 */
+	subagentsOf?: string | null;
 }
 
 /** What a message action gets: the turn, who wrote it, its exact text. */
@@ -143,6 +148,7 @@ export const Transcript = memo(function Transcript({
 	className,
 	messageActions,
 	promptAt,
+	subagentsOf,
 }: TranscriptProps) {
 	const messages = useMemo(() => toMessages(buildItems(events)), [events]);
 	const lastSentId = useMemo(() => {
@@ -196,10 +202,10 @@ export const Transcript = memo(function Transcript({
 	const senders = useMemo(() => sendersOf(events), [events]);
 	const colors = useMemo(
 		() => ({
-			agentId: agent?.id && agent.subagents ? agent.id : null,
+			agentId: subagentsOf ?? (agent?.id && agent.subagents ? agent.id : null),
 			senders,
 		}),
-		[agent?.id, !!agent?.subagents, senders],
+		[subagentsOf, agent?.id, !!agent?.subagents, senders],
 	);
 	return (
 		<C.Provider value={ctx}>

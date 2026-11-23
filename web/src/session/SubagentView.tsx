@@ -109,6 +109,8 @@ export function SubagentView({
 							: null
 					}
 					working={sub?.state === "running" && windowed.at(-1)?.role === "user"}
+					// Its siblings' names here take their colors from the parent's list.
+					subagentsOf={parentId}
 				/>
 			</ConversationView>
 			{sub && (

@@ -3,6 +3,7 @@ import type { TranscriptEvent } from "../api/types.ts";
 import { AgentMark } from "../ds/index.ts";
 import {
 	type AgentColor,
+	type ColorRow,
 	isAgentColor,
 	nameKey,
 	resolveColor,
@@ -76,11 +77,7 @@ export function SubagentDot(p: DotProps) {
 export function pickColor(
 	p: DotProps,
 	scope: SubagentColorScope,
-	rows?: ReadonlyArray<{
-		name: string;
-		color?: string | null;
-		callId?: string | null;
-	}>,
+	rows?: ReadonlyArray<ColorRow>,
 ): AgentColor | null {
 	if (p.knownOnly) {
 		const key = p.name ? nameKey(p.name) : "";

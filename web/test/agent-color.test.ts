@@ -80,6 +80,21 @@ describe("resolveColor", () => {
 		);
 	});
 
+	test("a name spawned again means the live spawn, else the newest", () => {
+		const again = [
+			{ name: "mate", color: "red", state: "done", startedAt: 1 },
+			{ name: "mate", color: "cyan", state: "idle", startedAt: 2 },
+			{ name: "mate", color: "pink", state: "done", startedAt: 3 },
+		];
+		expect(resolveColor({ rows: again }, { name: "mate" })).toBe("cyan");
+		expect(
+			resolveColor(
+				{ rows: again.filter((r) => r.state === "done") },
+				{ name: "mate" },
+			),
+		).toBe("pink");
+	});
+
 	test("a teammate message's color fills in for a row with none", () => {
 		const senders = new Map([["old-mate", "pink" as const]]);
 		expect(resolveColor({ rows, senders }, { name: "old-mate" })).toBe("pink");
