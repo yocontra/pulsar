@@ -600,9 +600,19 @@ html.k-material .k-list-item .p-set-icon svg {
 }
 
 /* Needs You: Home's needs row fills the title; the chevron follows. */
+.p-attn-wrap {
+	align-items: flex-start;
+}
 .p-attn-wrap > :first-child {
 	flex: 1;
 	min-width: 0;
+}
+/* Mail style: the time ends the title's line, the chevron right after it
+   on the same line (not centred on the two-line row). Konsta's chevron is
+   14 px tall. */
+.p-attn-wrap > svg {
+	align-self: flex-start;
+	margin-top: calc((var(--p-body-lh) - 14px) / 2);
 }
 /* Konsta's row gives the vertical padding (the row's own is for IonItem). */
 .p-attn .p-row.is-needs {

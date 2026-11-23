@@ -5,6 +5,7 @@
  * (Chromium, Material).
  */
 import { expect, ready, test } from "./fixtures.ts";
+import { baselineY, midY } from "./ui-audit.ts";
 
 /** Chromium logs each request the test aborts on purpose. */
 function dropNetErrors(errors: string[]) {
@@ -36,6 +37,52 @@ test.describe("tab pages", () => {
 		await expect(page).toHaveURL(
 			new RegExp(`#/(a|approval)/${encodeURIComponent(id!)}$`),
 		);
+	});
+
+	test("Needs You: the time ends the name's line, the chevron after it", async ({
+		page,
+	}) => {
+		for (const [width, font] of [
+			[320, 17],
+			[375, 17],
+			[430, 17],
+			[320, 23],
+			[430, 23],
+		] as const) {
+			await page.setViewportSize({ width, height: 800 });
+			await page.goto("/#/needs");
+			await page.evaluate(
+				(px) =>
+					document.documentElement.style.setProperty("font-size", `${px}px`),
+				font,
+			);
+			const rows = page.getByTestId("needs").locator(".p-attn");
+			await expect(rows.first()).toBeVisible();
+			for (const i of [0, 1, 2]) {
+				const row = rows.nth(i);
+				const title = row.locator(".p-title");
+				const time = row.locator(".p-trail .p-quiet");
+				const chevron = row.locator(".p-attn-wrap > svg");
+				const where = `${width} px, ${font} px text, row ${i}`;
+				// Same line and baseline as the agent's name.
+				expect(
+					Math.abs((await baselineY(time)) - (await baselineY(title))),
+					where,
+				).toBeLessThanOrEqual(1);
+				// Right-aligned, ending before the chevron, on one line.
+				const t = (await time.boundingBox())!;
+				const c = (await chevron.boundingBox())!;
+				const line = (await row.locator(".p-line1").boundingBox())!;
+				expect(t.x + t.width, where).toBeLessThanOrEqual(c.x);
+				expect(c.x - (t.x + t.width), where).toBeLessThan(24);
+				expect(t.height, where).toBeLessThan(line.height + 1);
+				// The chevron sits on that line, not centred on the row.
+				expect(
+					Math.abs((await midY(chevron)) - (line.y + line.height / 2)),
+					where,
+				).toBeLessThanOrEqual(2);
+			}
+		}
 	});
 
 	test("Needs You: nothing waiting", async ({ page, errors }) => {
