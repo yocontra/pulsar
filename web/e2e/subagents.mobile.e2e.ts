@@ -26,11 +26,13 @@ test.describe("subagents (phone)", () => {
 		).toHaveCount(0);
 
 		await page.goto("/#/settings");
+		// A Konsta switch row: a tap on the row flips its checkbox.
 		const sw = page.locator('[data-setting="show-finished-subagents"]');
+		const box = sw.getByRole("checkbox", { name: "Show Finished Subagents" });
 		await expect(sw).toBeVisible();
-		await expect(sw).toHaveJSProperty("checked", false);
+		await expect(box).not.toBeChecked();
 		await sw.click();
-		await expect(sw).toHaveJSProperty("checked", true);
+		await expect(box).toBeChecked();
 
 		await page.goto(`/#/a/${encodeURIComponent(auth)}`);
 		const section2 = page.locator(`[data-subs-section="${auth}"]`).last();
@@ -58,7 +60,9 @@ test.describe("subagents (phone)", () => {
 		await page.goto("/#/settings");
 		const sw = page.locator('[data-setting="show-finished-subagents"]');
 		await sw.click();
-		await expect(sw).toHaveJSProperty("checked", true);
+		await expect(
+			sw.getByRole("checkbox", { name: "Show Finished Subagents" }),
+		).toBeChecked();
 		await page.goto(`/#/a/${encodeURIComponent(lead)}`);
 		await expect(
 			page
