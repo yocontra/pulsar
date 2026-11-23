@@ -224,6 +224,11 @@ html.ios .p-bar-bg {
 		transparent 100%
 	);
 }
+/* The capsule keeps iOS's 16 pt margin from the screen edge (the
+   toolbar's own end padding is 4). */
+html.ios ion-header.p-bar ion-buttons[slot="end"] {
+	margin-inline-end: 12px;
+}
 .p-bar-glass {
 	display: flex;
 	align-items: center;

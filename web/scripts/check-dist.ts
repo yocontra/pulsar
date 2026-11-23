@@ -27,11 +27,11 @@ import {
 
 /** Initial JS per layout chunk (`_app/<name>.<hash>.js`), gzipped. */
 const BUDGETS: Record<string, number> = {
-	// Raised from 170: Konsta UI's runtime is on the first screen now (the
-	// tab bar), tailwind-merge (its cls()) included, ~15 KB. K1 brings it
-	// back toward 175 by replacing Home's IonSearchbar (~14 KB) with
-	// Konsta's Searchbar.
-	PhoneApp: 185 * 1024,
+	// Raised from 170 for Konsta UI's runtime on the first screen (the tab
+	// bar; tailwind-merge with it, ~15 KB), then lowered from 185 at 181.4:
+	// Home's search field is Konsta's, loaded after the first paint, not
+	// Ionic's IonSearchbar (K1). Headroom ~2 KB.
+	PhoneApp: 183 * 1024,
 	DesktopApp: 130 * 1024,
 };
 const PACKAGE_BYTES = 9 * 1024 * 1024;

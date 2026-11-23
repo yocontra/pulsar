@@ -232,3 +232,43 @@ html.md .msr-home .k-block-title {
 .msr-all {
 	color: var(--ds-link);
 }
+
+/* The find bar on the phone: a Liquid Glass capsule under the iOS bar; a
+   Material 3 search bar (full-round surface container) on Android. */
+html.ios .msr-find.is-phone {
+	min-height: 44px;
+	padding-inline: 14px 4px;
+	border: 0;
+	border-radius: 999px;
+	background: var(--ds-material);
+	-webkit-backdrop-filter: var(--ds-material-filter);
+	backdrop-filter: var(--ds-material-filter);
+	box-shadow: var(--ds-shadow-md);
+}
+html.ios .msr-find.is-phone input {
+	font-size: 17px;
+}
+html.md .msr-find.is-phone {
+	min-height: 56px;
+	padding-inline: 16px 4px;
+	border: 0;
+	border-radius: 28px;
+	background: var(--ds-surface-2);
+	box-shadow: var(--ds-shadow-md);
+	font-family: Roboto, system-ui, sans-serif;
+}
+html.md .msr-find.is-phone input {
+	font-size: 16px;
+}
+html[data-platform="phone"] .msr-find.is-phone .msr-btn {
+	min-width: 44px;
+	height: 44px;
+	border-radius: 999px;
+}
+html[data-platform="phone"] .msr-find.is-phone .msr-btn svg {
+	width: 20px;
+	height: 20px;
+}
+html[data-platform="phone"] .msr-find.is-phone .msr-count {
+	font-size: 13px;
+}

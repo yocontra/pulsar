@@ -288,7 +288,7 @@ test.describe("ios gestures", () => {
 		page,
 	}) => {
 		await home(page);
-		await page.getByRole("button", { name: "See All" }).tap();
+		await page.getByTestId("needs-summary").tap();
 		await page
 			.locator(".p-needs ion-item.p-attn", { hasText: "apparish-auth" })
 			.first()
@@ -350,7 +350,7 @@ test.describe("skeletons", () => {
 		};
 		await expect(page.locator("[data-sk=row]").first()).toBeVisible();
 		// The lazy search field and segmented control are in.
-		await expect(page.locator("ion-searchbar")).toBeVisible();
+		await expect(page.getByTestId("home-search")).toBeVisible();
 		await page.waitForTimeout(300);
 		const sk = {
 			head: await box("[data-sk=section] h2"),

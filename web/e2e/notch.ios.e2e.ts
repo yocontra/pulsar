@@ -212,12 +212,12 @@ const SCREENS: Screen[] = [
 		"search",
 		async (page) => {
 			await ready(page);
-			await page.getByRole("button", { name: "Search messages" }).click();
+			await page.evaluate(() => {
+				location.hash = "#/search";
+			});
+			await page.locator("#p-search-q").fill("fake timers");
 			await page
-				.locator(".p-search-page ion-searchbar input")
-				.fill("fake timers");
-			await page
-				.getByRole("list", { name: "Messages" })
+				.getByRole("region", { name: "Messages" })
 				.locator(".msr-row")
 				.first()
 				.waitFor();

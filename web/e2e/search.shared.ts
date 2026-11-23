@@ -37,15 +37,15 @@ export function searchSuite(platform: "desktop" | "phone") {
 	}) => {
 		await ready(page);
 		if (phone) {
-			await page.getByRole("button", { name: "Search messages" }).click();
-			const box = page.locator(".p-search-page ion-searchbar input");
+			// Home's one search field: it filters the tree and lists matching
+			// messages under it ("In messages").
+			const box = page.getByLabel("Search agents and messages");
 			await box.fill("fa");
-			// One short word: nothing is searched yet.
-			await expect(
-				page.getByText("Type a word of 3 letters or more."),
-			).toBeVisible();
+			// One short word: no message search yet.
+			await page.waitForTimeout(600);
+			await expect(page.getByTestId("home-messages")).toHaveCount(0);
 			await box.fill("fake timers");
-			const list = page.getByRole("list", { name: "Messages" });
+			const list = page.getByRole("region", { name: "In messages" });
 			const first = list.locator(".msr-row").first();
 			await expect(first).toBeVisible();
 			await expect(first.locator(".msr-who")).toHaveText("Agent:");
@@ -82,6 +82,31 @@ export function searchSuite(platform: "desktop" | "phone") {
 		await findBar(page).getByRole("button", { name: "Close find" }).click();
 		await expect(findBar(page)).toBeHidden();
 	});
+
+	if (phone)
+		test("Home's In messages opens the search page with the query (phone)", async ({
+			page,
+		}) => {
+			await ready(page);
+			await page.getByLabel("Search agents and messages").fill("fake timers");
+			const section = page.getByRole("region", { name: "In messages" });
+			await expect(section.locator(".msr-row").first()).toBeVisible();
+			await section.locator(".msr-all").click();
+			await expect(page).toHaveURL(/#\/search\?q=fake(\+|%20)timers$/);
+			const box = page.getByLabel("Search messages");
+			await expect(box).toHaveValue("fake timers");
+			await expect(
+				page
+					.getByRole("region", { name: "Messages" })
+					.locator(".msr-row")
+					.first(),
+			).toBeVisible();
+			// One short word: nothing is searched yet.
+			await box.fill("fa");
+			await expect(
+				page.getByText("Type a word of 3 letters or more."),
+			).toBeVisible();
+		});
 
 	test(`the find bar steps to an older match that needs earlier pages (${platform})`, async ({
 		page,
@@ -232,6 +257,12 @@ export function searchSuite(platform: "desktop" | "phone") {
 		await expect(
 			page.getByRole("button", { name: "Search messages" }),
 		).toHaveCount(0);
+		if (phone) {
+			// Home's search field filters the tree only: no "In messages".
+			await page.getByLabel("Search agents and messages").fill("fake timers");
+			await page.waitForTimeout(800);
+			await expect(page.getByTestId("home-messages")).toHaveCount(0);
+		}
 		await page.evaluate((id) => {
 			location.hash = `#/a/${encodeURIComponent(id)}`;
 		}, id);

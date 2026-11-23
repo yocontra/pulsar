@@ -197,7 +197,7 @@ test.describe("phone screens", () => {
 
 	test("search", async ({ page }) => {
 		await home(page);
-		await page.locator("ion-searchbar input").first().fill("apparish");
+		await page.locator("#p-home-q").fill("apparish");
 		await page.waitForTimeout(1200);
 		await shot(page, "02-search");
 	});
@@ -219,7 +219,7 @@ test.describe("phone screens", () => {
 
 	test("needs you", async ({ page }) => {
 		await home(page);
-		await page.getByRole("button", { name: "See All" }).tap();
+		await page.getByTestId("needs-summary").tap();
 		await page.waitForTimeout(900);
 		await shot(page, "04-needs-you");
 	});
@@ -462,7 +462,7 @@ test.describe("phone screens", () => {
 
 	test("search, empty", async ({ page }) => {
 		await home(page);
-		await page.locator("ion-searchbar input").first().fill("zzzz-nothing");
+		await page.locator("#p-home-q").fill("zzzz-nothing");
 		await page.waitForTimeout(1200);
 		await shot(page, "02b-search-empty");
 	});

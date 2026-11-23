@@ -21,7 +21,9 @@ export async function expectIonicStyledUnderCsp(page: Page) {
 			: "block",
 	}));
 	expect(r.styleTags, "inline <style> tags").toBe(0);
-	expect(r.adopted, "adopted stylesheets").toBeGreaterThan(5);
+	// One per scoped (non-shadow) component on Home: 5 since its search
+	// field is Konsta's, not Ionic's.
+	expect(r.adopted, "adopted stylesheets").toBeGreaterThanOrEqual(5);
 	expect(r.header).toBe("block");
 	expect(r.sliding).toBe("block");
 	expect(r.tabbar).toBe("fixed");

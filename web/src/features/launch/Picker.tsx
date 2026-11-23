@@ -1,6 +1,12 @@
-import { CheckIcon, ChevronDownIcon, ChevronLeftIcon } from "lucide-react";
+import {
+	ArrowLeftIcon,
+	CheckIcon,
+	ChevronDownIcon,
+	ChevronLeftIcon,
+} from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { isMaterial } from "../../mobile/platform.ts";
 
 export interface PickerOption {
 	value: string;
@@ -209,7 +215,11 @@ export function Picker({
 						<div className="lp-page" role="dialog" aria-label={label}>
 							<header className="lp-page-head">
 								<button type="button" className="lp-back" onClick={close}>
-									<ChevronLeftIcon aria-hidden="true" />
+									{isMaterial ? (
+										<ArrowLeftIcon aria-hidden="true" />
+									) : (
+										<ChevronLeftIcon aria-hidden="true" />
+									)}
 									Back
 								</button>
 								<h2>{label}</h2>

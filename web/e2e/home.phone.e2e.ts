@@ -1,0 +1,90 @@
+/**
+ * The Agents tab (mobile/Home.tsx) on iOS and Android: New agent is the
+ * header's "+" on iOS and a floating button above the bottom navigation on
+ * Android; the one-line needs summary opens Needs You; the search field is
+ * Konsta's once it loads; the pool footer counts the machines.
+ */
+import { expect, ready, test } from "./fixtures.ts";
+
+test.describe("agents tab", () => {
+	test("New agent: the header's + on iOS, a FAB on Android", async ({
+		page,
+	}, info) => {
+		await ready(page);
+		const md = info.project.name === "android";
+		const add = page.getByRole("button", { name: "New agent" });
+		await expect(add).toHaveCount(1);
+		await expect(add).toBeVisible();
+		// The match can be the native button in ion-button's shadow root.
+		const inHeader = await add.evaluate((el) => {
+			const host = (el.getRootNode() as ShadowRoot).host ?? el;
+			return !!host.closest("ion-header");
+		});
+		expect(inHeader).toBe(!md);
+		if (md) {
+			// Above the bottom navigation, clear of it, at the right edge.
+			const [fab, bar] = await Promise.all([
+				add.boundingBox(),
+				page.getByTestId("tabbar").boundingBox(),
+			]);
+			expect(fab!.y + fab!.height).toBeLessThanOrEqual(bar!.y - 8);
+			const vw = page.viewportSize()!.width;
+			expect(vw - (fab!.x + fab!.width)).toBeGreaterThanOrEqual(12);
+			expect(fab!.width).toBeGreaterThanOrEqual(48);
+			// It stays put while the list scrolls.
+			const y = fab!.y;
+			await page
+				.locator("ion-nav > .ion-page:last-child ion-content")
+				.evaluate(async (c) => {
+					const el = await (
+						c as unknown as { getScrollElement(): Promise<HTMLElement> }
+					).getScrollElement();
+					el.scrollTop = 400;
+				});
+			await expect.poll(async () => (await add.boundingBox())!.y).toBe(y);
+		}
+		await add.click();
+		await expect(page).toHaveURL(/#\/new$/);
+	});
+
+	test("the needs summary opens Needs You; it hides while searching", async ({
+		page,
+	}) => {
+		await ready(page);
+		const sum = page.getByTestId("needs-summary");
+		await expect(sum).toBeVisible();
+		await expect(sum).toHaveAccessibleName(/^\d+ (needs|need) you$/);
+		// One row, not the list of approvals.
+		await expect(page.locator(".p-home ion-item.p-attn")).toHaveCount(0);
+		const field = page.getByLabel("Search agents and messages");
+		await field.fill("studio");
+		await expect(sum).toHaveCount(0);
+		await field.fill("");
+		await expect(sum).toBeVisible();
+		await sum.click();
+		await expect(page).toHaveURL(/#\/needs$/);
+		await expect(page.getByTestId("tab-needs")).toHaveAttribute(
+			"aria-current",
+			"page",
+		);
+	});
+
+	test("the search field becomes Konsta's and keeps the text typed before", async ({
+		page,
+	}) => {
+		await ready(page);
+		await expect(page.locator(".p-home-search .k-searchbar input")).toHaveId(
+			"p-home-q",
+		);
+		await expect(page.locator(".p-search-plain")).toHaveCount(0);
+		const field = page.getByLabel("Search agents and messages");
+		await field.fill("apparish");
+		await expect(
+			page.locator('[data-node="m:studio/p:apparish"]'),
+		).toBeVisible();
+		// The pool footer gives way to the results while searching.
+		await expect(page.getByTestId("pool-footer")).toHaveCount(0);
+		await field.fill("");
+		await expect(page.getByTestId("pool-footer")).toContainText(/machines?$/);
+	});
+});

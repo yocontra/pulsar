@@ -41,6 +41,9 @@ export interface PageShellProps {
 	below?: ReactNode;
 	/** iOS large title (default on). */
 	large?: boolean;
+	/** The content scrolls (default); off for a page that lays out its own
+	 * scroller (a draft with its composer at the bottom). */
+	scrollY?: boolean;
 	/** The scroll area's class (page styles). */
 	className?: string;
 	/** A fixed footer under the content (a composer dock). */
@@ -57,6 +60,7 @@ export function PageShell({
 	end,
 	below,
 	large = true,
+	scrollY = true,
 	className,
 	footer,
 	testId,
@@ -104,6 +108,7 @@ export function PageShell({
 			</IonHeader>
 			<IonContent
 				fullscreen
+				scrollY={scrollY}
 				className={className ? `p-page ${className}` : "p-page"}
 				data-testid={testId}
 			>

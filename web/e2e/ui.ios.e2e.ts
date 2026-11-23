@@ -144,7 +144,8 @@ test.describe("phone UI", () => {
 		});
 
 	test("agent rows and needs badges line up", async ({ page }) => {
-		await home(page);
+		// Needs rows are on Needs You (Home has a one-line summary).
+		await page.goto("/#/needs");
 		// Each pair is measured until the list stops moving: rows that just
 		// loaded can still shift between two measurements.
 		const near = (gap: () => Promise<number>, max: number) =>
@@ -166,6 +167,7 @@ test.describe("phone UI", () => {
 				),
 			1,
 		);
+		await home(page);
 		// The needs badge: bold, about as tall as the label's type size (18 pt
 		// next to 17 pt), centred on the row's label.
 		const group = page.locator('[data-tree-node="m:studio"] .p-row');

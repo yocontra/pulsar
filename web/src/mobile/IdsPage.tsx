@@ -1,29 +1,20 @@
+/**
+ * A message to an explicit list of agents (`#/ids`, "message non-repliers"):
+ * the scope's preview and composer under the platform's top bar.
+ */
 import { IdsView } from "../components/chrome.tsx";
-import { BackButton } from "./BackButton.tsx";
-import {
-	IonButtons,
-	IonContent,
-	IonHeader,
-	IonTitle,
-	IonToolbar,
-} from "./ionic.ts";
+import { PageShell } from "./ui/PageShell.tsx";
 
 export default function IdsPage({ ids }: { ids: string[] }) {
 	return (
-		<>
-			<IonHeader translucent>
-				<IonToolbar>
-					<IonButtons slot="start">
-						<BackButton route={{ view: "ids", ids }} />
-					</IonButtons>
-					<IonTitle>
-						{ids.length === 1 ? "1 Agent" : `${ids.length} Agents`}
-					</IonTitle>
-				</IonToolbar>
-			</IonHeader>
-			<IonContent scrollY={false} className="p-plain">
-				<IdsView ids={ids} mobile />
-			</IonContent>
-		</>
+		<PageShell
+			title={ids.length === 1 ? "1 Agent" : `${ids.length} Agents`}
+			route={{ view: "ids", ids }}
+			large={false}
+			scrollY={false}
+			className="p-plain"
+		>
+			<IdsView ids={ids} mobile />
+		</PageShell>
 	);
 }

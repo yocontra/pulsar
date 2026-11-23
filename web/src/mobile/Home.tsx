@@ -7,9 +7,14 @@
  * is no pull to refresh. New agent is the header's "+" on iOS and a floating
  * button on Android (the home.fab slot).
  */
-import { Card, Searchbar } from "konsta/react";
-import { BellDotIcon, CloudOffIcon, SquarePenIcon, XIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+	BellDotIcon,
+	CloudOffIcon,
+	SearchIcon,
+	SquarePenIcon,
+	XIcon,
+} from "lucide-react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { TreeNode } from "../api/types.ts";
 import {
 	mobileRows,
@@ -59,6 +64,7 @@ import {
 	RowShell,
 	statusText,
 } from "./rows.tsx";
+import type { SearchInputProps } from "./SearchField.tsx";
 import { SkeletonRows } from "./skeletons.tsx";
 import { PageShell } from "./ui/PageShell.tsx";
 
@@ -483,7 +489,8 @@ const PoolFooter = observer(PoolFooterImpl);
 /** "2 need you ›": the Needs You tab from Agents, so approvals are never only behind a tab. */
 function NeedsSummaryImpl() {
 	const n = attention.value.length;
-	if (!n) return null;
+	// While searching, the list is the results.
+	if (!n || filter.value.trim()) return null;
 	const approvals = attention.value.filter((i) => i.kind === "approval").length;
 	return (
 		<div className="p-vrow is-summary gf gl">
@@ -543,7 +550,7 @@ function InstallHint() {
 	});
 	if (hidden) return null;
 	return (
-		<Card className="p-tip" aria-label="Tip" component="aside">
+		<aside className="p-tip is-card" aria-label="Tip">
 			<img src="/icon.svg" alt="" />
 			<div>
 				<strong>Add Pulsar to your Home Screen</strong>
@@ -564,7 +571,7 @@ function InstallHint() {
 			>
 				<XIcon size={18} />
 			</button>
-		</Card>
+		</aside>
 	);
 }
 
@@ -609,6 +616,35 @@ function ConnectionBannerImpl() {
 }
 const ConnectionBanner = observer(ConnectionBannerImpl);
 
+// Konsta's Searchbar is ~3 KB: it loads after the first paint, over a
+// plain input of the same size.
+const loadSearch = () => import("./SearchField.tsx");
+const KonstaSearch = lazy(loadSearch);
+
+let plainFocus = false;
+
+function PlainSearch({ id, placeholder, value, onText }: SearchInputProps) {
+	return (
+		<div className="k-searchbar p-search-plain">
+			<SearchIcon aria-hidden="true" />
+			<input
+				id={id}
+				type="text"
+				name="search"
+				placeholder={placeholder}
+				value={value}
+				onChange={(e) => onText(e.currentTarget.value)}
+				onFocus={() => {
+					plainFocus = true;
+				}}
+				onBlur={() => {
+					plainFocus = false;
+				}}
+			/>
+		</div>
+	);
+}
+
 /**
  * The one search field: filters the tree as you type, and message search
  * (the home.search slot) lists matching messages under it.
@@ -624,20 +660,21 @@ function SearchField() {
 		}, 250);
 		return () => clearTimeout(t);
 	}, [text]);
+	const input = {
+		id: "p-home-q",
+		placeholder: "Search",
+		value: text,
+		onText: setText,
+		focused: () => plainFocus,
+	};
 	return (
 		<div role="search" className="p-home-search" data-testid="home-search">
 			<label htmlFor="p-home-q" className="sr-only">
 				Search agents and messages
 			</label>
-			<Searchbar
-				inputId="p-home-q"
-				placeholder="Search"
-				value={text}
-				onInput={(e: React.FormEvent<HTMLInputElement>) =>
-					setText(e.currentTarget.value)
-				}
-				onClear={() => setText("")}
-			/>
+			<Suspense fallback={<PlainSearch {...input} />}>
+				<KonstaSearch {...input} />
+			</Suspense>
 		</div>
 	);
 }

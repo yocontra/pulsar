@@ -59,10 +59,11 @@ test.describe("mobile", () => {
 		page,
 	}) => {
 		await ready(page);
-		await expect(page.getByLabel("Filter the tree")).toBeVisible();
-		await expect(page.locator("ion-title.title-large").first()).toHaveText(
-			"Agents",
-		);
+		await expect(page.getByLabel("Search agents and messages")).toBeVisible();
+		// The top app bar's title (Material: no large title).
+		await expect(
+			page.locator("ion-nav > .ion-page:last-child ion-title").first(),
+		).toHaveText("Agents");
 		// Machines and projects show no rollup counts: only a needs-you badge.
 		const studio = node(page, "m:studio");
 		await expect(studio).toHaveAttribute("data-expanded", "true");
@@ -102,7 +103,7 @@ test.describe("mobile", () => {
 	test("copy is clean on every phone screen", async ({ page }) => {
 		await ready(page);
 		await expectCleanCopy(page, "Home", "ion-app");
-		await page.getByRole("button", { name: "See All" }).click();
+		await page.getByTestId("needs-summary").click();
 		await expect(page.locator(".p-needs ion-item").first()).toBeVisible();
 		await expectCleanCopy(page, "Needs You", ".p-needs");
 		await page.goto("/#/settings");
@@ -204,7 +205,7 @@ test.describe("mobile", () => {
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
 		await ready(page);
-		await page.getByRole("button", { name: "See All" }).click();
+		await page.getByTestId("needs-summary").click();
 		await page
 			.locator(".p-needs ion-item.p-attn", { hasText: "apparish-auth" })
 			.first()
