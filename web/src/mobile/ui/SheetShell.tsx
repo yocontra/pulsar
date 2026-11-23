@@ -11,15 +11,17 @@
  * while an action runs.
  */
 
+import { ArrowLeftIcon } from "lucide-react";
 import { type ReactNode, type Ref, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeftIcon } from "lucide-react";
 import { CloseX } from "../../components/CloseX.tsx";
 import { IonContent } from "../ionic.ts";
 import { useIonicLazy } from "../lazyIonic.ts";
 import { isMaterial } from "../platform.ts";
 
-type CanDismiss = boolean | ((data?: unknown, role?: string) => Promise<boolean>);
+type CanDismiss =
+	| boolean
+	| ((data?: unknown, role?: string) => Promise<boolean>);
 
 export function SheetShell({
 	open,
@@ -115,7 +117,9 @@ export function SheetShell({
 			isOpen={open}
 			aria-label={label ?? (typeof title === "string" ? title : undefined)}
 			{...present}
-			canDismiss={canDismiss}
+			// Ionic's default is `true`: an explicit undefined would block every
+			// dismiss, so pass it only when given.
+			{...(canDismiss === undefined ? {} : { canDismiss })}
 			onIonModalDidDismiss={() => {
 				onClose();
 				onClosed?.();
