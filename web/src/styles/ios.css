@@ -36,7 +36,6 @@
 		--m-label-3: rgb(60 60 67 / 30%);
 		--m-sep: rgb(60 60 67 / 29%);
 		--m-fill: rgb(120 120 128 / 20%);
-		--m-fill-2: rgb(120 120 128 / 16%);
 		--m-fill-3: rgb(118 118 128 / 12%);
 		--m-tint: #0068da;
 		--m-tint-fill: #0068da;
@@ -49,25 +48,17 @@
 		--m-red-soft: rgb(255 59 48 / 12%);
 		--m-green: #248a3d;
 		--m-green-fill: #34c759;
-		--m-green-soft: rgb(52 199 89 / 15%);
 		--m-blue: #007aff;
 		--m-purple: #8944ab;
-		--m-purple-soft: rgb(175 82 222 / 10%);
 		--m-indigo: #5856d6;
 		--m-gray: #8e8e93;
-		--m-gray-2: #aeaeb2;
 		--m-bar: rgb(249 249 249 / 92%);
 		--m-bar-solid: #f9f9f9;
 		--m-thumb: #fff;
 		--m-shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 4px 16px rgb(0 0 0 / 6%);
-		--m-pressed: rgb(0 0 0 / 8%);
-		--m-dim: rgb(0 0 0 / 40%);
-		--m-clear-x: var(--m-cell);
 		--m-ease: cubic-bezier(0.32, 0.72, 0, 1);
 		--m-nav: calc(var(--sat) + 44px);
-		--m-toolbar: calc(var(--sab) + 49px);
 		--m-gutter: 16px;
-		--m-code-bg: #f2f2f7;
 
 		/* The shared palette, in iOS colors, for shared components on the phone. */
 		--bg: var(--m-bg);
@@ -101,7 +92,6 @@
 		--m-label-3: rgb(235 235 245 / 30%);
 		--m-sep: rgb(84 84 88 / 65%);
 		--m-fill: rgb(120 120 128 / 36%);
-		--m-fill-2: rgb(120 120 128 / 32%);
 		--m-fill-3: rgb(118 118 128 / 24%);
 		--m-tint: #0a84ff;
 		--m-tint-fill: #0a72e8;
@@ -114,19 +104,13 @@
 		--m-red-soft: rgb(255 69 58 / 16%);
 		--m-green: #30d158;
 		--m-green-fill: #30d158;
-		--m-green-soft: rgb(48 209 88 / 18%);
 		--m-blue: #0a84ff;
 		--m-purple: #bf5af2;
-		--m-purple-soft: rgb(191 90 242 / 14%);
 		--m-indigo: #5e5ce6;
-		--m-gray-2: #636366;
 		--m-bar: rgb(22 22 24 / 92%);
 		--m-bar-solid: #161618;
 		--m-thumb: #636366;
 		--m-shadow: none;
-		--m-pressed: rgb(255 255 255 / 10%);
-		--m-dim: rgb(0 0 0 / 55%);
-		--m-code-bg: #1c1c1e;
 	}
 }
 @media (max-width: 1023px) {
@@ -140,7 +124,6 @@
 		--m-label-3: rgb(235 235 245 / 30%);
 		--m-sep: rgb(84 84 88 / 65%);
 		--m-fill: rgb(120 120 128 / 36%);
-		--m-fill-2: rgb(120 120 128 / 32%);
 		--m-fill-3: rgb(118 118 128 / 24%);
 		--m-tint: #0a84ff;
 		--m-tint-fill: #0a72e8;
@@ -153,19 +136,13 @@
 		--m-red-soft: rgb(255 69 58 / 16%);
 		--m-green: #30d158;
 		--m-green-fill: #30d158;
-		--m-green-soft: rgb(48 209 88 / 18%);
 		--m-blue: #0a84ff;
 		--m-purple: #bf5af2;
-		--m-purple-soft: rgb(191 90 242 / 14%);
 		--m-indigo: #5e5ce6;
-		--m-gray-2: #636366;
 		--m-bar: rgb(22 22 24 / 92%);
 		--m-bar-solid: #161618;
 		--m-thumb: #636366;
 		--m-shadow: none;
-		--m-pressed: rgb(255 255 255 / 10%);
-		--m-dim: rgb(0 0 0 / 55%);
-		--m-code-bg: #1c1c1e;
 	}
 }
 
@@ -238,37 +215,10 @@
 
 /* -------------------------------------------------------- stack and layers */
 
-.m-app {
-	position: fixed;
-	inset: 0;
-	overflow: hidden;
-	background: var(--m-bg);
-}
-
 @keyframes m-push-in {
 	from {
 		transform: translate3d(100%, 0, 0);
 	}
-}
-
-@keyframes m-push-out {
-	to {
-		transform: translate3d(100%, 0, 0);
-	}
-}
-
-/* Edge swipe: the strip that starts a swipe-back on pushed screens. */
-
-/* ---------------------------------------------------------------- screens */
-
-.m-scroll {
-	flex: 1;
-	min-height: 0;
-	overflow-y: auto;
-	overscroll-behavior-y: contain;
-	-webkit-overflow-scrolling: touch;
-	padding-top: var(--m-nav);
-	scroll-padding-top: var(--m-nav);
 }
 
 /* ---------------------------------------------------------------- nav bar */
@@ -296,150 +246,7 @@
 	color: var(--m-label-3);
 }
 
-/* ------------------------------------------------------------ large title */
-
 /* ------------------------------------------------------------ controls */
-
-.m-search,
-.mobile-home .search-box {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	height: 36px;
-	margin: 6px calc(var(--m-gutter) + var(--sar)) 10px
-		calc(var(--m-gutter) + var(--sal));
-	padding: 0 8px;
-	border: 0;
-	border-radius: 10px;
-	background: var(--m-fill-3);
-	color: var(--m-label-2);
-	flex: 1;
-	min-width: 0;
-}
-
-.m-search input,
-.mobile-home .search-box input {
-	flex: 1;
-	min-width: 0;
-	border: 0;
-	outline: none;
-	background: transparent;
-	font-size: 1rem;
-	color: var(--m-label);
-	padding: 0;
-	height: 100%;
-	-webkit-appearance: none;
-	appearance: none;
-}
-
-.m-search input::placeholder,
-.mobile-home .search-box input::placeholder {
-	color: var(--m-label-2);
-}
-
-.m-search input::-webkit-search-cancel-button,
-.mobile-home .search-box input::-webkit-search-cancel-button {
-	display: none;
-}
-
-.m-clear {
-	display: inline-flex;
-	border: 0;
-	background: none;
-	padding: 4px;
-	margin-right: -4px;
-	color: var(--m-gray-2);
-}
-
-.m-search-row {
-	display: flex;
-	align-items: center;
-}
-
-.m-search-row .search-box {
-	margin-right: 8px;
-}
-
-.m-cancel {
-	flex: none;
-	border: 0;
-	background: none;
-	color: var(--m-tint);
-	font-size: 1rem;
-	height: 36px;
-	padding: 0 calc(var(--m-gutter) + var(--sar)) 0 0;
-	margin-bottom: 4px;
-	animation: m-fade-in 0.2s ease;
-}
-
-@keyframes m-fade-in {
-	from {
-		opacity: 0;
-	}
-}
-
-/* Segmented control with a sliding thumb. */
-.mobile-home .seg {
-	position: relative;
-	display: grid;
-	grid-auto-flow: column;
-	grid-auto-columns: 1fr;
-	height: 32px;
-	padding: 2px;
-	border: 0;
-	border-radius: 9px;
-	background: var(--m-fill-3);
-	overflow: visible;
-	isolation: isolate;
-}
-
-.mobile-home .seg {
-	margin: 0 calc(var(--m-gutter) + var(--sar)) 4px
-		calc(var(--m-gutter) + var(--sal));
-}
-
-.mobile-home .seg::before {
-	content: "";
-	position: absolute;
-	top: 2px;
-	bottom: 2px;
-	left: 2px;
-	width: calc((100% - 4px) / var(--n, 2));
-	transform: translateX(calc(100% * var(--i, 0)));
-	border-radius: 7px;
-	background: var(--m-thumb);
-	box-shadow:
-		0 3px 8px rgb(0 0 0 / 12%),
-		0 3px 1px rgb(0 0 0 / 4%);
-	transition: transform 0.3s var(--m-ease);
-	z-index: -1;
-}
-
-.mobile-home .seg button {
-	border: 0;
-	background: none;
-	min-height: 0;
-	padding: 0 6px;
-	font-size: 0.765rem;
-	font-weight: 500;
-	color: var(--m-label);
-	border-radius: 7px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.mobile-home .seg button + button {
-	border-left: 0;
-}
-
-.mobile-home .seg button.on {
-	background: none;
-	color: var(--m-label);
-	font-weight: 600;
-}
-
-/* Switch: 51 × 31. */
 
 /* Buttons: filled, tinted, plain, destructive. */
 .m-btn {
@@ -501,205 +308,7 @@
 	width: 100%;
 }
 
-/* ---------------------------------------------------------- grouped lists */
-
-/* ---------------------------------------------------------------- skeleton */
-
-.sk {
-	display: block;
-	border-radius: 6px;
-	background:
-		linear-gradient(
-			90deg,
-			transparent 0,
-			rgb(255 255 255 / 45%) 50%,
-			transparent 100%
-		)
-		0 0 / 200% 100% no-repeat,
-		var(--m-fill-3);
-	animation: m-shimmer 1.4s ease-in-out infinite;
-}
-
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme="light"]) .sk {
-		background-image: linear-gradient(
-			90deg,
-			transparent 0,
-			rgb(255 255 255 / 6%) 50%,
-			transparent 100%
-		);
-	}
-}
-
-:root[data-theme="dark"] .sk {
-	background-image: linear-gradient(
-		90deg,
-		transparent 0,
-		rgb(255 255 255 / 6%) 50%,
-		transparent 100%
-	);
-}
-
-.sk-1 {
-	height: 14px;
-	width: 46%;
-}
-
-.sk-2 {
-	height: 11px;
-	width: 68%;
-	margin-top: 7px;
-}
-
-@keyframes m-shimmer {
-	from {
-		background-position: 150% 0;
-	}
-	to {
-		background-position: -50% 0;
-	}
-}
-
-/* ------------------------------------------------------------------ home */
-
-.mobile-home .tree {
-	padding-top: var(--m-nav);
-	padding-bottom: calc(var(--m-toolbar) + 16px);
-	font-size: 1rem;
-	contain: strict;
-}
-
-.mobile-home .vrow {
-	padding: 0 calc(var(--m-gutter) + var(--sar)) 0
-		calc(var(--m-gutter) + var(--sal));
-}
-
-/* A grouped row: a slice of a rounded section. */
-
-/* Separators start where the text starts. */
-
-.tree-mobile .row-main {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	flex: 1;
-	min-width: 0;
-	height: 100%;
-	padding: 0;
-	border: 0;
-	background: none;
-	color: inherit;
-	font: inherit;
-	text-align: left;
-}
-
-.tree-mobile .bcast {
-	flex: none;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 40px;
-	height: 40px;
-	border: 0;
-	border-radius: 20px;
-	background: none;
-	/* Quiet on every row; swipe and long-press carry the same action. */
-	color: var(--m-gray);
-}
-
-.tree-mobile .bcast:active {
-	background: var(--m-tint-soft);
-}
-
-.tree-mobile .pin,
-.tree-mobile .offline-group {
-	gap: 12px;
-}
-
-/* Agent rows. */
-
-.tree-mobile .more {
-	justify-content: center;
-	padding: 0;
-	color: var(--m-tint);
-}
-
-/* Prominent section headers (Title 3) with a trailing See All. */
-.tree-mobile .m-head {
-	display: flex;
-	align-items: flex-end;
-	gap: 8px;
-	height: 100%;
-	padding: 0 4px 8px;
-	border: 0;
-	background: none;
-	font-size: 1.176rem;
-}
-
-.tree-mobile .m-head .section-more {
-	margin-left: auto;
-	padding: 0;
-	border: 0;
-	background: none;
-	font-size: 1rem;
-	color: var(--m-tint);
-	line-height: 1.3;
-}
-
-/* Needs-you cards. */
-
-/* Install tip (TipKit style). */
-
-/* ---------------------------------------------------------------- toolbar */
-
-/* ------------------------------------------------------- pull to refresh */
-
 /* --------------------------------------------------------------- sheets */
-
-.m-sheet {
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	display: flex;
-	flex-direction: column;
-	max-height: calc(100% - var(--sat) - 10px);
-	margin-bottom: var(--kb, 0px);
-	border-radius: 12px 12px 0 0;
-	background: var(--m-bg);
-	box-shadow: 0 -1px 20px rgb(0 0 0 / 12%);
-	overflow: hidden;
-	outline: none;
-	animation: m-sheet-in 0.5s var(--m-ease) both;
-	transition: transform 0.35s var(--m-ease);
-	will-change: transform;
-}
-
-.m-sheet.dragging {
-	transition: none;
-}
-
-.m-sheet.dismissing {
-	transition: transform 0.3s var(--m-ease);
-}
-
-@keyframes m-sheet-in {
-	from {
-		transform: translate3d(0, 100%, 0);
-	}
-}
-
-@keyframes m-sheet-out {
-	to {
-		transform: translate3d(0, 100%, 0);
-	}
-}
-
-@keyframes m-fade-out {
-	to {
-		opacity: 0;
-	}
-}
 
 .m-sheet-scroll {
 	flex: 1;
@@ -727,24 +336,6 @@
 	margin: 0;
 	font-size: 1rem;
 	font-weight: 600;
-}
-
-/* ----------------------------------------------------------- reduced motion */
-
-@media (prefers-reduced-motion: reduce) {
-	.m-sheet,
-	.mobile-home .seg::before {
-		transition-duration: 0.01s !important;
-	}
-
-	.m-sheet {
-		animation-name: m-fade-in !important;
-		animation-duration: 0.2s !important;
-	}
-
-	.sk {
-		animation: none;
-	}
 }
 
 /* --------------------------------------------------------------- session */
@@ -779,8 +370,6 @@
 	}
 }
 
-/* Transcript: a chat, not a log. */
-
 .session.mobile .text-sm {
 	font-size: 1rem;
 	line-height: 1.412;
@@ -789,16 +378,6 @@
 .session.mobile .text-xs {
 	font-size: 0.765rem;
 }
-
-/* Outgoing bubbles (your messages). */
-
-/* Peer messages: a received bubble with a violet edge. */
-
-/* Assistant text: full width, no bubble. */
-
-/* Tool calls: compact rows that expand. */
-
-/* Thinking: quiet and collapsed. */
 
 /* Code blocks: readable on 375px; scroll sideways, never wrap. */
 .session.mobile pre,
@@ -829,68 +408,6 @@
 .session.mobile .banner.error {
 	background: var(--m-red-soft);
 }
-
-.session.mobile .banner.approval-banner {
-	flex: none;
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	width: auto;
-	margin: 0 calc(10px + var(--sar)) 8px calc(10px + var(--sal));
-	padding: 10px 12px;
-	border-radius: 14px;
-	background: var(--m-cell);
-	box-shadow: 0 4px 20px rgb(0 0 0 / 14%);
-	text-align: left;
-	color: var(--m-label);
-}
-
-.session.mobile .approval-banner:active {
-	transform: scale(0.98);
-}
-
-.m-ab-icon {
-	flex: none;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 32px;
-	height: 32px;
-	border-radius: 9px;
-	background: linear-gradient(180deg, #ffb340, #ff9500);
-	color: #fff;
-	font-weight: 800;
-}
-
-.m-ab-text {
-	flex: 1;
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	font-size: 0.882rem;
-}
-
-.m-ab-text strong {
-	font-size: 1rem;
-	font-weight: 600;
-}
-
-.m-ab-text .mono {
-	font-size: 0.765rem;
-	color: var(--m-label-2);
-}
-
-.m-ab-cta {
-	flex: none;
-	padding: 6px 14px;
-	border-radius: 15px;
-	background: var(--m-tint-fill);
-	color: #fff;
-	font-size: 0.882rem;
-	font-weight: 600;
-}
-
-/* Jump to latest. */
 
 /* --------------------------------------------------------------- composer */
 
@@ -1127,8 +644,6 @@
 	font-weight: 600;
 }
 
-/* ----------------------------------------------------------- action sheet */
-
 /* -------------------------------------------------------------- approval */
 
 .m-approval {
@@ -1265,10 +780,6 @@
 	font-weight: 600;
 	color: var(--m-label);
 	text-align: center;
-}
-
-.m-sheet.bare {
-	background: var(--m-bg);
 }
 
 .m-approval > .m-sheet-head {
@@ -1449,51 +960,6 @@
 	padding-right: 16px;
 }
 
-.m-builder .prow {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	height: 44px !important;
-	padding: 0 16px;
-	font-size: 0.941rem;
-	border-bottom: var(--hair) solid var(--m-sep);
-}
-
-.m-builder .prow .name {
-	flex: 1;
-	min-width: 0;
-	border: 0;
-	background: none;
-	padding: 0;
-	text-align: left;
-	color: var(--m-label);
-	font-size: inherit;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.m-builder .prow .muted {
-	font-size: 0.824rem;
-	color: var(--m-label-2);
-}
-
-.m-builder .wake {
-	order: 9;
-	min-width: 0;
-	padding: 2px 8px;
-	border-radius: 10px;
-	font-size: 0.706rem;
-	font-weight: 600;
-	background: var(--m-fill-3);
-	color: var(--m-label-2);
-}
-
-.m-builder .wake.w-wakes {
-	background: rgb(52 199 89 / 15%);
-	color: var(--m-green);
-}
-
 .m-builder .advanced {
 	display: flex;
 	flex-direction: column;
@@ -1530,8 +996,6 @@
 .m-builder .validity.bad {
 	color: var(--m-red);
 }
-
-/* Compose dock. */
 
 /* iOS segmented control for the shared priority picker on the phone. */
 @media (max-width: 1023px) {
@@ -1847,50 +1311,6 @@
 		color: var(--m-label);
 	}
 
-	/* Confirm dialog as an iOS alert. */
-	.modal-backdrop:has(.confirm-dialog) {
-		align-items: center;
-		justify-content: center;
-		background: var(--m-dim);
-		padding: 24px;
-	}
-
-	.modal.confirm-dialog {
-		width: 300px;
-		max-width: 100%;
-		padding: 18px 16px 0;
-		border: 0;
-		border-radius: 14px;
-		background: var(--m-bar-solid);
-		box-shadow: none;
-		text-align: center;
-		animation: m-alert-in 0.3s var(--m-ease) both;
-	}
-
-	.modal.confirm-dialog h2 {
-		margin: 0 0 6px;
-		font-size: 1rem;
-		font-weight: 600;
-	}
-
-	.modal.confirm-dialog .warn,
-	.modal.confirm-dialog .wake-summary {
-		font-size: 0.765rem;
-		color: var(--m-label-2);
-	}
-
-	.modal.confirm-dialog .breakdown {
-		width: 100%;
-		margin: 10px 0;
-		font-size: 0.824rem;
-		text-align: left;
-	}
-
-	.modal.confirm-dialog .breakdown td {
-		padding: 4px 0;
-		border-bottom: var(--hair) solid var(--m-sep);
-	}
-
 	.confirm-inline {
 		display: flex;
 		flex-wrap: wrap;
@@ -1919,18 +1339,9 @@
 	}
 }
 
-@keyframes m-alert-in {
-	from {
-		opacity: 0;
-		transform: scale(1.15);
-	}
-}
-
 /* ------------------------------------------- needs you, empty, failure */
 
 @media (max-width: 1023px) {
-	/* Empty states: a symbol, a Title 2, one calm sentence. */
-
 	/* Failure and first-run: full screen, centered, calm. */
 	.failure,
 	.first-run {
@@ -1943,94 +1354,6 @@
 		color: var(--m-label);
 		overflow-y: auto;
 	}
-
-	/* Steps: an inset-grouped list with numbered circles. */
-
-	.last-known {
-		width: 100%;
-		max-width: 420px;
-		margin-top: 32px;
-	}
-
-	.last-known h2 {
-		margin: 0;
-		padding: 0 16px 6px;
-		font-size: 0.765rem;
-		font-weight: 400;
-		color: var(--m-label-2);
-	}
-
-	.last-known ul {
-		border-radius: 12px;
-		background: var(--m-cell);
-		overflow: hidden;
-	}
-
-	.last-known li {
-		position: relative;
-		min-height: 44px;
-		padding: 10px 16px;
-		border: 0;
-		font-size: 1rem;
-	}
-
-	.last-known li + li::before {
-		content: "";
-		position: absolute;
-		top: 0;
-		right: 0;
-		left: 40px;
-		border-top: var(--hair) solid var(--m-sep);
-	}
-
-	.last-known .muted {
-		font-size: 0.882rem;
-		color: var(--m-label-2);
-	}
-}
-
-@media (max-width: 1023px) {
-	/* Settings: desktop list rules must not reach the grouped cells. */
-}
-
-/* --------------------------------------------------------------- gestures */
-
-@media (max-width: 1023px) {
-	/* Swipe-back: the finger drives the layers; release springs them. */
-
-	/* Rows: no callout or selection on long-press. */
-	.tree-mobile [data-swipe] {
-		-webkit-touch-callout: none;
-		-webkit-user-select: none;
-		user-select: none;
-	}
-
-	/* Long-press feedback before the menu opens. */
-
-	/* Swipe actions: revealed behind the row from the trailing edge. */
-
-	/* Past the full-swipe point the primary action takes the whole width. */
-
-	/* Context menu: blurred backdrop, lifted row, a rounded menu. */
-
-	/* Pull to refresh: the list follows the finger; the spinner fills in. */
-}
-
-@keyframes m-lift {
-	from {
-		transform: scale(0.97);
-		box-shadow: none;
-	}
-	50% {
-		transform: scale(1.03);
-	}
-}
-
-@keyframes m-menu-in {
-	from {
-		opacity: 0;
-		transform: scale(0.6);
-	}
 }
 
 @keyframes m-spin {
@@ -2039,7 +1362,7 @@
 	}
 }
 
-/* -------------------------------------------- scope sheet, Ask, first run */
+/* ------------------------------------------------------------ scope sheet */
 
 @media (max-width: 1023px) {
 	.m-scope {
@@ -2214,10 +1537,6 @@
 		position: sticky;
 		bottom: 0;
 	}
-
-	/* Ask: answers as an inset-grouped list with iOS selection circles. */
-
-	/* First-run steps: text flows; the number sits in the margin. */
 }
 
 /* ----------------------------------------- state screens (app.css .st) */
@@ -2329,15 +1648,6 @@
 		opacity: 0.7;
 	}
 
-	/* iOS gray button: the system fill, tinted label. */
-	.st-btn.is-secondary,
-	.st-btn.is-secondary:hover {
-		margin-top: 8px;
-		border: 0;
-		background: var(--m-fill-3);
-		color: var(--m-tint);
-	}
-
 	.st-fail.is-layer {
 		height: auto;
 		background: color-mix(in srgb, var(--m-bg) 82%, transparent);
@@ -2412,15 +1722,6 @@
 	}
 }
 
-/* ------------------------------------------------ floating controls' lanes */
-
-@media (max-width: 1023px) {
-	/* Jump to latest: a lane at the trailing edge, above the composer, and
-	   room under the last message so nothing sits beneath it at the end. */
-	/* "Jump to latest" sits left of the round arrow when both show. */
-	/* Mermaid: the zoom stack gets its own lane at the left edge. */
-}
-
 /* Bars without backdrop blur (older engines, Low Power, some WebViews):
    near-opaque, so content under them never reads through. */
 @supports not (
@@ -2443,9 +1744,4 @@
 			--m-bar: rgb(22 22 24 / 96%);
 		}
 	}
-}
-
-@media (max-width: 1023px) {
-	/* Transcript widgets (Mermaid zoom and actions, code toolbars) use z-index
-	   10; contain them so they never paint over the nav bar or composer. */
 }
