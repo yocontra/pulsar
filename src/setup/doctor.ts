@@ -271,20 +271,29 @@ async function doctorChecks(
 				`${c.label}: found, not configured`,
 				`run \`pulsar setup --client ${c.id}\``,
 			);
-		if (opts.json)
-			found.push(
-				harnessVersion(
-					paths?.bins.get(c.id) ?? which(c.id, paths?.path ?? undefined),
-					paths?.path ?? null,
-				).then((version) => ({
-					id: c.id,
-					label: c.label,
-					version,
-					configured,
-				})),
-			);
+		found.push(
+			harnessVersion(
+				paths?.bins.get(c.id) ?? which(c.id, paths?.path ?? undefined),
+				paths?.path ?? null,
+			).then((version) => ({
+				id: c.id,
+				label: c.label,
+				version,
+				configured,
+			})),
+		);
 	}
 	facts.harnesses = await Promise.all(found);
+	// The `/` menu's built-in commands are a static list per CLI version.
+	const { builtinsFor } = await import("../harnesses/builtins.ts");
+	for (const h of facts.harnesses) {
+		const list = builtinsFor(h.id, h.version);
+		if (list?.stale)
+			note(
+				`${h.label} ${h.version}: the app's list of its built-in commands was read from ${list.listVersion}; new commands are missing from the \`/\` menu (they still run when typed)`,
+				"update pulsar",
+			);
+	}
 
 	if (CLIENTS.some((c) => c.id === "opencode" && c.detect())) {
 		// The daemon runs `opencode api`; its PATH may find an old OpenCode first.

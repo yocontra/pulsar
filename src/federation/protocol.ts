@@ -274,6 +274,8 @@ export type FedAction =
 			data: string;
 	  }
 	| { op: "files.search"; agent: string; q: string }
+	/** An agent's modes or its `/` menu (src/service/controls.ts). */
+	| { op: "controls.read"; agent: string; what: "modes" | "commands" }
 	/** The file viewer: one folder, one file, or an image file's bytes (base64). */
 	| { op: "files.tree"; agent: string; path: string }
 	| {

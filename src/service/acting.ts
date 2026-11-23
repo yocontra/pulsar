@@ -40,6 +40,8 @@ export const ACTING_SCOPE: Record<ActingOp, "agent" | "machine"> = {
 	"git.review": "agent",
 	"queue.withdraw": "agent",
 	"queue.promote": "agent",
+	"agents.mode": "agent",
+	"agents.command": "agent",
 };
 
 /** The operator, verified: a passkey session here, or an assertion the home node checked. */

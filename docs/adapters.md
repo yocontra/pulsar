@@ -68,6 +68,23 @@ Stop interrupts an agent's current turn; the session keeps running. Use the app 
 | pi, omp | The Pulsar extension aborts the run |
 | Cursor, Gemini CLI | Not supported |
 
+## Modes and slash commands
+
+The app can switch an agent's mode and run slash commands and skills in its session (type `/` in the composer). Both need Prove Human. A command never travels as a message: Pulsar types it into the agent's terminal or calls the harness's API, once. When Pulsar types into a terminal, it first reads the screen. It stops if it sees a dialog, a menu, or text that someone has not sent yet.
+
+| Harness | Modes | How the mode changes | How commands run |
+| --- | --- | --- | --- |
+| Claude Code | Manual, Accept edits, Plan, Auto, Bypass permissions | Shift+Tab in its tmux pane, one press at a time, footer read back | Typed into its tmux pane |
+| Codex | Default, Plan | Shift+Tab in its tmux pane (the TUI applies its own effort per mode); else `thread/settings/update` on Codex's app-server daemon (the TUI follows; the thread keeps its effort) | Typed into its tmux pane (skills as `$name`) |
+| OpenCode | Build, Plan | Shift+Tab in its pane (only an agent Pulsar started in tmux: OpenCode reports no pid); else the service's `/agent` API (the terminal may not follow) | Server commands and skills through the service; the TUI's own commands typed into its pane |
+| pi | None | — | The Pulsar extension (extension commands, prompt templates, `/skill:name`), when idle |
+| omp | Default, Plan | The Pulsar extension (`sessionModes`) | Not supported (omp runs commands only when typed) |
+| Cursor, Gemini CLI | Not supported | — | — |
+
+Pulsar types only into the agent's own pane: the pane's process must be up the agent's process tree with no other agent between them, so a session started inside another agent's tool call is never typed into. The phone's one-tap Run is offered only for commands that take nothing and keep the session (not `/exit`, `/clear`, `/restart` and the like).
+
+Built-in commands in the `/` menu come from a list kept per CLI version (src/harnesses/builtins.ts). `pulsar doctor` says when the installed CLI is newer than the list. Custom commands and skills are read from where each harness keeps them.
+
 ## Setup options
 
 `pulsar setup` copies Pulsar to `~/.local/share/pulsar/<version>` and puts a `pulsar` command in `~/.local/bin`. It also sets Claude Code's `crossSessionInbound` and Codex's tool approval, which plugin installs can't.

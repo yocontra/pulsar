@@ -30,6 +30,8 @@ export const OPS = [
 	"lookup",
 	/** An extension answering a `interrupt` push. */
 	"interrupt_result",
+	/** An extension answering a `control` push (mode, command, command list). */
+	"control_result",
 	"shutdown",
 	/** A harness hook asks the user about a permission prompt (blocks until decided). */
 	"approval.request",
@@ -69,6 +71,10 @@ export const ACTING_OPS = [
 	/** The queue strip: withdraw or send now someone else's waiting message. */
 	"queue.withdraw",
 	"queue.promote",
+	/** Switch an agent's mode (src/service/controls.ts). */
+	"agents.mode",
+	/** Run a slash command in an agent's session: typed into its terminal, or its harness's API. */
+	"agents.command",
 ] as const;
 
 /**
@@ -139,6 +145,7 @@ const AGENT_ONLY: ReadonlySet<Op> = new Set<Op>([
 	"resume_key",
 	"harness_name",
 	"interrupt_result",
+	"control_result",
 ]);
 
 /**

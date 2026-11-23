@@ -62,7 +62,9 @@ import {
 	OPERATOR_ID,
 	type Principal,
 } from "./caller.ts";
+import type { CatalogPorts } from "./catalog.ts";
 import { Changes } from "./changes.ts";
+import { type ControlPorts, Controls } from "./controls.ts";
 import { Deliveries, type DeliveryConfig } from "./delivery.ts";
 import { EnrollGate } from "./enroll.ts";
 import { EventBus, type ServiceEvents } from "./events.ts";
@@ -149,6 +151,8 @@ export interface ServiceOptions {
 	};
 	/** Attachments: the folder they are saved in (tests use a temp folder). */
 	attachments?: { dir?: () => string };
+	/** Modes and slash commands: tmux, harness APIs and config folders (tests pass fakes). */
+	controls?: { ports?: Partial<ControlPorts>; catalog?: Partial<CatalogPorts> };
 	/** Issue detection: ask gh which issue an agent's PR closes (default: `scan`). */
 	issues?: { prLookup?: boolean };
 	/** Worktree changes: poll and debounce timers (tests shorten them). */
@@ -225,6 +229,7 @@ export class PulsarService {
 	readonly attachments: Attachments;
 	/** The composer's `@` file list (git ls-files in the agent's folder). */
 	readonly files: Files;
+	readonly controls: Controls;
 	/** Starting agents from the app (`agents.launch`). */
 	readonly launches: Launches;
 	/** Git actions on agents' worktrees: status, PR, and the git.* acting ops. */
@@ -541,6 +546,12 @@ export class PulsarService {
 		});
 		this.acting.register("attachments.upload", this.attachments.handler);
 		this.files = new Files(localAgent);
+		this.controls = new Controls({
+			lookup: localAgent,
+			sessions: this.sessions,
+			acting: this.acting,
+			...opts.controls,
+		});
 		this.ask = new Lookup({
 			views: this.app.views,
 			transcripts: this.transcripts,
@@ -718,6 +729,7 @@ export class PulsarService {
 		this.changes.remote = pool?.changes ?? null;
 		this.attachments.remote = pool?.attachments ?? null;
 		this.files.remote = pool?.attachments ?? null;
+		this.controls.remote = pool?.controls ?? null;
 		this.approvals.remote = pool?.approvals ?? null;
 		this.events.emit("pool", { machineId: null });
 	}
@@ -1300,6 +1312,8 @@ export class PulsarService {
 				);
 			case "interrupt_result":
 				return this.interrupts.answer(registry.self(caller).id, p);
+			case "control_result":
+				return this.controls.answer(registry.self(caller).id, p);
 			case "shutdown":
 				if (this.serviceMode)
 					throw new RpcError(

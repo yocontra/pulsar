@@ -1905,3 +1905,91 @@ export interface QueueActResult {
 	/** The recipient's receipt afterwards. */
 	receipt: Receipt | null;
 }
+
+/**
+ * Agent modes (src/service/controls.ts): Claude Code's permission modes, or
+ * plan vs regular for the other harnesses. Ids are the harness's own
+ * (`default`, `acceptEdits`, `plan`, `auto`, `bypassPermissions`; `build`
+ * for OpenCode).
+ */
+export interface ModeOption {
+	id: string;
+	label: string;
+	/** One line on what the mode does. */
+	hint?: string;
+}
+
+/** `GET /agents/:id/modes`. */
+export interface AgentModes {
+	agentId: string;
+	/** The modes this harness has; empty when it has none. */
+	modes: ModeOption[];
+	/** The mode now, or the last one seen (`live: false`); null when unknown. */
+	current: string | null;
+	/** Read from the agent's own screen or API now; false: the last mode its log recorded. */
+	live: boolean;
+	/** Pulsar can switch this agent's mode now. */
+	canSwitch: boolean;
+	/** Why it can't (`canSwitch: false`), in words for the operator. */
+	reason?: string;
+	/** A caveat about switching, e.g. that the terminal may not show the change. */
+	note?: string;
+}
+
+/** What happened to a mode switch or a command (`POST /agents/:id/mode`, `/command`). */
+export type ControlOutcome =
+	/** Done (a mode switch was read back from the agent). */
+	| "ok"
+	/** This agent has no way to do it from outside (not in tmux, no API). */
+	| "unsupported"
+	/** Not now: the agent runs a turn, or someone has unsent text in its terminal. */
+	| "busy"
+	/** The terminal shows something Pulsar does not recognise (a dialog, a menu). */
+	| "blocked"
+	/** Tried and failed; `detail` says why. */
+	| "failed";
+
+export interface ControlResult {
+	agentId: string;
+	result: ControlOutcome;
+	/** How: `tmux`, `codex-app-server`, `opencode-api`, `extension`. */
+	via: string;
+	detail?: string;
+	/** After a mode switch: the mode the agent shows now. */
+	mode?: string | null;
+}
+
+/** Where a `/` menu entry comes from. */
+export type CommandSource = "builtin" | "project" | "user" | "plugin";
+
+/** One entry of the composer's `/` menu. */
+export interface CommandEntry {
+	/** Typed after the `/`, e.g. `compact`, `review-pr`, `gh:review`. */
+	name: string;
+	description: string;
+	source: CommandSource;
+	/** A skill (model instructions) rather than a command. */
+	skill?: boolean;
+	/** What goes after the name, e.g. `<pr number>`. */
+	args?: string;
+	/**
+	 * Run with no arguments it opens a picker or dialog in the terminal,
+	 * which only someone at the terminal can answer.
+	 */
+	dialog?: boolean;
+	/** The plugin it belongs to (`source: "plugin"`). */
+	plugin?: string;
+}
+
+/** `GET /agents/:id/commands`: the `/` menu for one agent. */
+export interface CommandCatalog {
+	agentId: string;
+	harness: string;
+	commands: CommandEntry[];
+	/** Pulsar can run commands for this agent now (in tmux, or through its API). */
+	runnable: boolean;
+	/** Why it can't, in words for the operator. */
+	reason?: string;
+	/** The installed CLI is newer than Pulsar's list of its built-in commands. */
+	stale?: boolean;
+}

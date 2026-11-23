@@ -1331,6 +1331,41 @@ export class HttpTransport {
 			this.service.authorize(who(c), "transcript.read", id);
 			return c.json(await this.service.git.pr(id, who(c)));
 		});
+		// Modes and slash commands (src/service/controls.ts): reads follow the
+		// transcript's rule; switching and running are acting ops.
+		api.get("/agents/:id/modes", async (c) => {
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			return c.json(await this.service.controls.modes(id, who(c)));
+		});
+		api.get("/agents/:id/commands", async (c) => {
+			const id = c.req.param("id");
+			this.service.authorize(who(c), "transcript.read", id);
+			return c.json(await this.service.controls.commands(id, who(c)));
+		});
+		for (const [path, op, key] of [
+			["mode", "agents.mode", "mode"],
+			["command", "agents.command", "line"],
+		] as const)
+			api.post(`/agents/:id/${path}`, async (c) => {
+				const raw = await jsonBody(c);
+				if (!raw || typeof raw !== "object" || Array.isArray(raw))
+					throw new RpcError("bad_request", "the body must be an object");
+				const { assertion, ...rest } = raw as Record<string, unknown>;
+				const value = rest[key];
+				if (typeof value !== "string" || value.length > 4000)
+					throw new RpcError("bad_request", `${key} must be a string`);
+				// Only the one field goes on: a remote proof covers exactly it.
+				return c.json(
+					await this.service.acting.run(
+						who(c),
+						op,
+						{ agent: c.req.param("id") },
+						{ [key]: value },
+						assertion,
+					),
+				);
+			});
 		// The GitHub issue the agent works on (src/service/issues.ts), read-only.
 		api.get("/agents/:id/issue", async (c) => {
 			const id = c.req.param("id");

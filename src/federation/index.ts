@@ -34,6 +34,7 @@ import { USAGE_PERIODS } from "../usage/index.ts";
 import { VERSION } from "../version.ts";
 import { RemoteAttachmentsRelay } from "./attachments.ts";
 import { RemoteChangesReader } from "./changes.ts";
+import { RemoteControlsRelay } from "./controls.ts";
 import { RemoteDiagnostics } from "./diagnostics.ts";
 import { LocalFeed } from "./local.ts";
 import { isOwner, type PoolMembers } from "./members.ts";
@@ -233,6 +234,7 @@ export class Federation implements PoolView {
 	readonly usage: RemoteUsage;
 	readonly diagnostics: RemoteDiagnostics;
 	readonly attachments: RemoteAttachmentsRelay;
+	readonly controls: RemoteControlsRelay;
 	/** Prompts of remote agents: shared in their records, decided by their home node. */
 	readonly approvals: RemoteApprovals = {
 		approval: (id) => this.state.approval(id),
@@ -342,6 +344,7 @@ export class Federation implements PoolView {
 		this.usage = new RemoteUsage(this);
 		this.diagnostics = new RemoteDiagnostics(this);
 		this.attachments = new RemoteAttachmentsRelay(this);
+		this.controls = new RemoteControlsRelay(this);
 		this.state.selfProtocol = this.protocol;
 		this.state.onApproval = (approval) =>
 			this.service.events.emit("approval", { approval });
@@ -2486,6 +2489,15 @@ export class Federation implements PoolView {
 					String(action.q ?? "").slice(0, 200),
 				);
 				return { ok: true, files };
+			}
+			case "controls.read": {
+				const agent = String(action.agent);
+				authorize(user, "transcript.read", agent);
+				if (!this.service.registry.get(agent))
+					return fail("not_found", `no agent ${agent}`);
+				return action.what === "commands"
+					? { ok: true, commands: await this.service.controls.commands(agent) }
+					: { ok: true, modes: await this.service.controls.modes(agent) };
 			}
 			case "files.tree":
 			case "files.read": {

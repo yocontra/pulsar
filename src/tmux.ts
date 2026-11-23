@@ -46,11 +46,51 @@ function tmux(args: string[], opts: TmuxOptions = {}) {
  * The pane an agent runs in, or null: `agent.meta.tmux`, else what its
  * harness knows (Claude Code's session record).
  */
-export async function paneOf(agent: Agent): Promise<string | null> {
+export async function paneOf(
+	agent: Agent,
+	opts: TmuxOptions = {},
+): Promise<string | null> {
 	if (isPane(agent.meta.tmux)) return agent.meta.tmux;
 	const { driverFor } = await import("./harnesses/index.ts");
 	const pane = await driverFor(agent.harness)?.tmuxPane?.(agent);
-	return isPane(pane) ? pane : null;
+	if (isPane(pane)) return pane;
+	if (!agent.pid) return null;
+	const { processSnapshot } = await import("./processes.ts");
+	const table = await processSnapshot(2000, "user");
+	return paneOfPid(agent.pid, (p) => table.get(p)?.ppid, opts);
+}
+
+/** Hops up the process tree `paneOfPid` takes (harness, wrapper, shell...). */
+const PANE_HOPS = 6;
+
+/**
+ * The pane whose process is `pid` or one of its near ancestors (a harness
+ * started from the pane's shell), or null. Ownership comes from the tree:
+ * a pane only counts when its own process is up the agent's chain, so a
+ * pane that merely shows the same folder never matches.
+ */
+export async function paneOfPid(
+	pid: number,
+	parentOf: (pid: number) => number | undefined,
+	opts: TmuxOptions = {},
+): Promise<string | null> {
+	const r = await tmux(
+		["list-panes", "-a", "-F", "#{pane_id} #{pane_pid}"],
+		opts,
+	);
+	if (!r.ok) return null;
+	const byPid = new Map<number, string>();
+	for (const line of r.stdout.split("\n")) {
+		const [id, p] = line.trim().split(" ");
+		if (isPane(id) && Number(p) > 0) byPid.set(Number(p), id);
+	}
+	let p: number | undefined = pid;
+	for (let hops = 0; p && p > 1 && hops < PANE_HOPS; hops++) {
+		const pane = byPid.get(p);
+		if (pane) return pane;
+		p = parentOf(p);
+	}
+	return null;
 }
 
 /** The pid of the process tmux started in the pane (the shell or the harness), or null. */
@@ -108,12 +148,22 @@ export async function sendKeys(
  */
 export async function capture(
 	pane: string,
-	opts: TmuxOptions & { lines?: number } = {},
+	opts: TmuxOptions & { lines?: number; ansi?: boolean } = {},
 ): Promise<string | null> {
 	if (!isPane(pane)) return null;
 	const back = Math.max(0, Math.min(10_000, Math.floor(opts.lines ?? 0)));
 	const r = await tmux(
-		["capture-pane", "-p", "-J", "-t", pane, "-S", `-${back}`],
+		[
+			"capture-pane",
+			"-p",
+			"-J",
+			// With colours: a dim placeholder tells an empty input from a draft.
+			...(opts.ansi ? ["-e"] : []),
+			"-t",
+			pane,
+			"-S",
+			`-${back}`,
+		],
 		opts,
 	);
 	return r.ok ? r.stdout : null;

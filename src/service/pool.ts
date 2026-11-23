@@ -27,6 +27,7 @@ import type { Agent, Message, Receipt } from "../types.ts";
 import type { PoolUsage } from "../usage/index.ts";
 import type { ActingRelay } from "./acting.ts";
 import type { Principal } from "./caller.ts";
+import type { RemoteControls } from "./controls.ts";
 import type { LaunchRead } from "./launch.ts";
 import type { TranscriptPageResult } from "./transcripts.ts";
 
@@ -131,6 +132,8 @@ export interface PoolView extends ActingRelay {
 	readonly changes?: RemoteChanges;
 	/** Attachment bytes and the `@` file list of remote agents, through their home node. */
 	readonly attachments?: RemoteAttachments;
+	/** Modes and the `/` menu of remote agents, read on their home node. */
+	readonly controls?: RemoteControls;
 	/** A remote agent's git status or PR, read on its home node (src/service/git.ts). */
 	gitRead?(
 		address: string,

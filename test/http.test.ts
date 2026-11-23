@@ -41,6 +41,7 @@ let http: HttpTransport;
 let base: string;
 const pushes: Array<{ text: string }> = [];
 const interrupts: Array<{ requestId: string }> = [];
+const controls: Array<{ kind: string; line?: string }> = [];
 let extCaller: Caller;
 let extAgent: Agent;
 let n = 0;
@@ -273,6 +274,28 @@ beforeAll(async () => {
 		emit: (event, data) => {
 			if (event === "push") pushes.push(data as { text: string });
 			if (event === "interrupt") interrupts.push(data as { requestId: string });
+			// The extension's side of modes and slash commands (src/extension.ts).
+			if (event === "control") {
+				const req = data as { requestId: string; kind: string; line?: string };
+				controls.push(req);
+				queueMicrotask(() =>
+					service.controls.answer(extAgent.id, {
+						requestId: req.requestId,
+						result: "ok",
+						...(req.kind === "commands"
+							? {
+									commands: [
+										{
+											name: "deploy",
+											description: "Ship it",
+											source: "extension",
+										},
+									],
+								}
+							: {}),
+					}),
+				);
+			}
 		},
 	};
 	extCaller = ext;
@@ -1172,6 +1195,56 @@ describe("app contract", () => {
 			junk: 1,
 		});
 		expect(extra.status).toBe(400);
+	});
+
+	test("modes and slash commands: reads, then acting ops with Prove Human", async () => {
+		const id = encodeURIComponent(extAgent.id);
+		// pi has no modes.
+		const modes = await json<{ modes: unknown[]; canSwitch: boolean }>(
+			`/api/v1/agents/${id}/modes`,
+		);
+		expect(modes.status).toBe(200);
+		expect(modes.body).toMatchObject({ modes: [], canSwitch: false });
+		const cat = await json<{
+			runnable: boolean;
+			commands: Array<{ name: string; source: string }>;
+		}>(`/api/v1/agents/${id}/commands`);
+		expect(cat.status).toBe(200);
+		expect(cat.body.runnable).toBe(true);
+		expect(cat.body.commands).toContainEqual(
+			expect.objectContaining({ name: "compact", source: "builtin" }),
+		);
+		expect(cat.body.commands).toContainEqual(
+			expect.objectContaining({ name: "deploy", source: "user" }),
+		);
+		// Running one needs a passkey session; without one nothing reaches the agent.
+		controls.length = 0;
+		const unverified = await post(`/api/v1/agents/${id}/command`, {
+			line: "/deploy now",
+		});
+		expect(unverified.status).toBe(401);
+		expect(controls.filter((c) => c.kind === "command")).toEqual([]);
+		const ran = await postAs(`/api/v1/agents/${id}/command`, {
+			line: "/deploy now",
+		});
+		expect(ran.status).toBe(200);
+		expect(ran.body).toMatchObject({ result: "ok", via: "extension" });
+		expect(controls.filter((c) => c.kind === "command")).toEqual([
+			expect.objectContaining({ kind: "command", line: "/deploy now" }),
+		]);
+		expect(store.auditLog(1)[0]).toMatchObject({
+			op: "agents.command",
+			target: extAgent.id,
+			ok: true,
+		});
+		// One line, a command name; nothing else is passed on.
+		for (const line of ["/deploy\nrm -rf ~", "deploy", 42])
+			expect(
+				(await postAs(`/api/v1/agents/${id}/command`, { line })).status,
+			).toBe(400);
+		const mode = await postAs(`/api/v1/agents/${id}/mode`, { mode: "plan" });
+		expect(mode.status).toBe(200);
+		expect(mode.body).toMatchObject({ result: "unsupported" });
 	});
 
 	test("approvals check their body", async () => {

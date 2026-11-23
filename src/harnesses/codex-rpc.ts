@@ -111,7 +111,7 @@ export function takeFrames(buf: Buffer): { texts: string[]; rest: Buffer } {
  */
 export async function codexRpc(
 	calls: Array<[method: string, params: unknown]>,
-	opts: { socket?: string; timeoutMs?: number } = {},
+	opts: { socket?: string; timeoutMs?: number; experimental?: boolean } = {},
 ): Promise<unknown[]> {
 	const path = opts.socket ?? codexControlSocket();
 	const sock: Socket = connect(path);
@@ -176,6 +176,8 @@ export async function codexRpc(
 		await Promise.race([failed, opened]);
 		await ask(0, "initialize", {
 			clientInfo: { name: "pulsar", version: "1" },
+			// Experimental methods (thread/settings/update) need the opt-in.
+			...(opts.experimental && { capabilities: { experimentalApi: true } }),
 		});
 		send({ jsonrpc: "2.0", method: "initialized" });
 		const out: unknown[] = [];
