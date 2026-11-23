@@ -8,7 +8,7 @@ import { contrastFailures } from "./ui-audit.ts";
  * `GET /diagnostics/:id` as they arrive (web/mock/diagnostics.ts), grouped, with
  * fixes, machine facts and version skew; opened from Settings and Cmd-K.
  * It checks again on its own (live.shared.ts covers that). Shared by
- * diagnostics.desktop.e2e.ts and diagnostics.ios.e2e.ts.
+ * diagnostics.desktop.e2e.ts and diagnostics.phone.e2e.ts.
  */
 
 /** The visible page: the phone's top Ionic page, or the desktop's main area. */

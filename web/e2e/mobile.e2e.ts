@@ -104,7 +104,7 @@ test.describe("mobile", () => {
 		await ready(page);
 		await expectCleanCopy(page, "Home", "ion-app");
 		await page.getByTestId("needs-summary").click();
-		await expect(page.locator(".p-needs ion-item").first()).toBeVisible();
+		await expect(page.locator(".p-needs .p-attn").first()).toBeVisible();
 		await expectCleanCopy(page, "Needs You", ".p-needs");
 		await page.goto("/#/settings");
 		await expect(page.locator(".p-settings")).toBeVisible();
@@ -207,7 +207,7 @@ test.describe("mobile", () => {
 		await ready(page);
 		await page.getByTestId("needs-summary").click();
 		await page
-			.locator(".p-needs ion-item.p-attn", { hasText: "apparish-auth" })
+			.locator(".p-needs .p-attn", { hasText: "apparish-auth" })
 			.first()
 			.click();
 		await expect(page).toHaveURL(

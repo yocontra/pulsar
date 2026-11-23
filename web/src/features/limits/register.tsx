@@ -22,7 +22,7 @@ const Desktop = lazy<object>(
 	none,
 );
 const Phone = lazy<object>(
-	() => import("./Section.tsx").then((m) => ({ default: m.PhoneSection })),
+	() => import("./PhoneSection.tsx").then((m) => ({ default: m.PhoneSection })),
 	none,
 );
 

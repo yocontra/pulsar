@@ -19,11 +19,7 @@ const Desktop = lazy<PageProps>(() =>
 		default: m.DiagnosticsDesktop,
 	})),
 );
-const Phone = lazy<PageProps>(() =>
-	import("./DiagnosticsPages.tsx").then((m) => ({
-		default: m.DiagnosticsPhone,
-	})),
-);
+const Phone = lazy<PageProps>(() => import("./PhonePage.tsx"));
 const DesktopSection = lazy<{ close: () => void }>(
 	() => import("./Section.tsx"),
 	none,

@@ -1,16 +1,12 @@
 /**
  * Settings → "Usage limits": warn when a plan usage limit passes one of the
  * thresholds or is reached. Kept on the node (every device on it shares
- * them). Desktop: rows in the settings card; phone: IonItems.
+ * them). Desktop: rows in the settings card; phone: PhoneSection.tsx.
  */
-import { BellRingIcon, GaugeIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client.ts";
 import type { LimitSettings } from "../../api/types.ts";
 import { queryClient } from "../../data/hooks.ts";
-import { IonItem } from "../../mobile/ionic.ts";
-import { IonLabel, IonNote } from "../../mobile/ionic-lazy.tsx";
-import { useIonicLazy } from "../../mobile/lazyIonic.ts";
 import {
 	DEFAULT_SETTINGS,
 	limitsKey,
@@ -18,18 +14,17 @@ import {
 	useLimits,
 } from "./model.ts";
 import "./limits.css";
-import { showActions } from "../../mobile/ui/actions.ts";
 
 export const HELP =
 	"A notification when a limit passes a threshold or is reached, once per limit window. Codex reports percentages; Claude Code, pi and omp only report a reached limit.";
-const THRESHOLD_HELP = "Up to 3 values from 1 to 99, like 80, 95.";
+export const THRESHOLD_HELP = "Up to 3 values from 1 to 99, like 80, 95.";
 
-const show = (t: number[]) => t.map((n) => `${n}%`).join(", ");
+export const show = (t: number[]) => t.map((n) => `${n}%`).join(", ");
 
 /** The phone's choices (a computer can set any). */
-const PRESETS = [[80, 95], [50, 80, 95], [70, 90], [90]];
+export const PRESETS = [[80, 95], [50, 80, 95], [70, 90], [90]];
 
-function useSettings() {
+export function useSettings() {
 	const q = useLimits();
 	const settings = q.data?.settings ?? DEFAULT_SETTINGS;
 	const [error, setError] = useState<string | null>(null);
@@ -105,66 +100,5 @@ export function DesktopSection() {
 				/>
 			</li>
 		</ul>
-	);
-}
-
-export function PhoneSection() {
-	const lz = useIonicLazy();
-	const { settings, loaded, error, save } = useSettings();
-	const edit = async () => {
-		const now = settings.thresholds.join();
-		await showActions({
-			header: "Warn at",
-			subHeader: "Other percentages can be set in Settings on a computer.",
-			buttons: [
-				...PRESETS.map((t) => ({
-					text: t.join() === now ? `${show(t)} ✓` : show(t),
-					handler: () => void save({ thresholds: t }),
-				})),
-				{ text: "Cancel", role: "cancel" },
-			],
-		});
-	};
-	return (
-		<>
-			<IonItem lines="none" data-setting="usage-limits">
-				<span className="p-set-icon is-red" slot="start" aria-hidden="true">
-					<BellRingIcon />
-				</span>
-				{lz ? (
-					<lz.IonToggle
-						checked={settings.enabled}
-						disabled={!loaded}
-						onIonChange={(e) => void save({ enabled: e.detail.checked })}
-						aria-label="Usage limit warnings"
-					>
-						Usage Limit Warnings
-					</lz.IonToggle>
-				) : (
-					<IonLabel>Usage limit warnings</IonLabel>
-				)}
-			</IonItem>
-			<IonItem
-				button
-				detail
-				disabled={!loaded || !settings.enabled}
-				onClick={() => void edit()}
-				data-setting="usage-limit-thresholds"
-			>
-				<span className="p-set-icon is-blue" slot="start" aria-hidden="true">
-					<GaugeIcon />
-				</span>
-				<IonLabel>Warn At</IonLabel>
-				<IonNote slot="end">{show(settings.thresholds)}</IonNote>
-			</IonItem>
-			<IonItem lines="none">
-				<IonLabel
-					className={error ? "p-limits-error" : "p-limits-help"}
-					role={error ? "alert" : undefined}
-				>
-					{error ?? HELP}
-				</IonLabel>
-			</IonItem>
-		</>
 	);
 }

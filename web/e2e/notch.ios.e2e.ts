@@ -190,7 +190,7 @@ const SCREENS: Screen[] = [
 		"needs you",
 		async (page) => {
 			await page.goto("/#/needs");
-			await page.locator("ion-item.p-attn").first().waitFor();
+			await page.locator(".p-attn").first().waitFor();
 		},
 	],
 	[

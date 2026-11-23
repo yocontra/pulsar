@@ -1,6 +1,8 @@
 /**
- * Settings, iOS style: appearance, notifications, passkeys, signed-in browsers,
- * machines and about, as inset grouped lists with footers.
+ * The Settings tab: Prove Human, appearance, subagents, notifications,
+ * proven devices, signed-in browsers, machines, the sections features
+ * registered (agent activity, usage limits, diagnostics) and about, as
+ * inset grouped lists (Konsta, mobile/ui/GroupedList.tsx and rows.tsx).
  */
 
 import {
@@ -12,7 +14,6 @@ import {
 	MonitorIcon,
 	WorkflowIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { ApiError, setSessionToken } from "../api/client.ts";
 import type { PasskeyInfo, UserSessionInfo } from "../api/types.ts";
 import {
@@ -27,52 +28,14 @@ import { observer } from "../lib/signals.ts";
 import { branches, can, hello, nodes, showToast } from "../lib/store.ts";
 import { setShowFinished, showFinished } from "../lib/subagents.ts";
 import { APPEARANCES, appearance, setAppearance } from "../lib/theme.ts";
-import { ProvePhoneRow } from "../prove/ProveNav.tsx";
+import { ProvePhoneRow } from "../prove/ProvePhoneRow.tsx";
 import { PUSH_TEXT, useSettings } from "../settings/Settings.tsx";
-import { BackButton } from "./BackButton.tsx";
-import {
-	IonButtons,
-	IonContent,
-	IonHeader,
-	IonItem,
-	IonTitle,
-	IonToolbar,
-} from "./ionic.ts";
-import { IonLabel, IonList, IonNote } from "./ionic-lazy.tsx";
-import { useIonicLazy } from "./lazyIonic.ts";
+import { isMaterial } from "./platform.ts";
 import { Bar, linkWord } from "./rows.tsx";
 import { showActions } from "./ui/actions.ts";
-
-/** A titled inset list (registered sections render IonItems inside one). */
-export function Group({
-	title,
-	foot,
-	children,
-	label,
-}: {
-	title: string;
-	foot?: ReactNode;
-	children: ReactNode;
-	label?: string;
-}) {
-	return (
-		<section className="p-set-group" aria-label={label ?? title}>
-			<h3 className="p-set-head">{title}</h3>
-			<IonList inset className="p-set-list">
-				{children}
-			</IonList>
-			{foot && <p className="p-set-foot">{foot}</p>}
-		</section>
-	);
-}
-
-function Icon({ tone, children }: { tone: string; children: ReactNode }) {
-	return (
-		<span className={`p-set-icon is-${tone}`} slot="start" aria-hidden="true">
-			{children}
-		</span>
-	);
-}
+import { GroupedList, ListItem } from "./ui/GroupedList.tsx";
+import { TabShell } from "./ui/PageShell.tsx";
+import { LinkRow, RowIcon, ToggleRow, ValueRow } from "./ui/rows.tsx";
 
 async function confirm(
 	header: string,
@@ -92,21 +55,15 @@ async function confirm(
 
 function SkeletonItem() {
 	return (
-		<IonItem lines="none" className="p-sk-item">
-			<IonLabel>
-				<span className="p-set-title" data-sk="title">
-					<Bar w={46} />
-				</span>
-				<span className="p-set-sub" data-sk="sub">
-					<Bar w={64} />
-				</span>
-			</IonLabel>
-		</IonItem>
+		<ListItem
+			className="p-sk-item"
+			title={<Bar w={46} />}
+			text={<Bar w={64} />}
+		/>
 	);
 }
 
 function SettingsPageImpl() {
-	const lz = useIonicLazy();
 	// Live: passkeys and sessions come from the data layer (stream + poll).
 	const { push, busy, node, togglePush } = useSettings();
 	const passkeys = usePasskeys();
@@ -146,273 +103,230 @@ function SettingsPageImpl() {
 			() => void revoke(x),
 		);
 	return (
-		<>
-			<IonHeader translucent>
-				<IonToolbar>
-					<IonButtons slot="start">
-						<BackButton route={{ view: "settings" }} />
-					</IonButtons>
-					<IonTitle>Settings</IonTitle>
-				</IonToolbar>
-			</IonHeader>
-			<IonContent fullscreen className="p-settings">
-				<IonHeader collapse="condense">
-					<IonToolbar>
-						<IonTitle size="large">Settings</IonTitle>
-					</IonToolbar>
-				</IonHeader>
+		<TabShell title="Settings" className="p-settings" testId="settings">
+			{/* Prove Human leads Settings: who you are on this device. */}
+			<GroupedList label="Prove Human">
+				<ProvePhoneRow />
+			</GroupedList>
 
-				{/* Prove Human leads Settings: who you are on this device. */}
-				<section className="p-set-group p-set-prove" aria-label="Prove Human">
-					<ProvePhoneRow />
-				</section>
+			<GroupedList
+				title="Appearance"
+				role="radiogroup"
+				footer={`System follows your ${isMaterial ? "phone" : "iPhone"}'s light or dark setting. Saved on this device.`}
+			>
+				{APPEARANCES.map(([value, label]) => {
+					const on = appearance.value === value;
+					return (
+						<LinkRow
+							key={value}
+							title={label}
+							role="radio"
+							checked={on}
+							chevron={false}
+							after={
+								on ? (
+									<CheckIcon className="p-set-check" aria-hidden="true" />
+								) : undefined
+							}
+							onClick={() => setAppearance(value)}
+						/>
+					);
+				})}
+			</GroupedList>
 
-				<section className="p-set-group" aria-label="Appearance">
-					<h3 className="p-set-head">Appearance</h3>
-					<IonList
-						inset
-						className="p-set-list"
-						role="radiogroup"
-						aria-label="Appearance"
-					>
-						{APPEARANCES.map(([value, label], i) => {
-							const on = appearance.value === value;
-							return (
-								<IonItem
-									key={value}
-									button
-									detail={false}
-									lines={i === APPEARANCES.length - 1 ? "none" : "inset"}
-									role="radio"
-									aria-checked={on ? "true" : "false"}
-									className="p-set-choice"
-									onClick={() => setAppearance(value)}
-								>
-									<IonLabel>{label}</IonLabel>
-									{on && (
-										<CheckIcon
-											slot="end"
-											className="p-set-check"
-											aria-hidden="true"
-										/>
-									)}
-								</IonItem>
-							);
-						})}
-					</IonList>
-					<p className="p-set-foot">
-						System follows your iPhone's light or dark setting. Saved on this
-						device.
-					</p>
-				</section>
-
-				<Group
-					title="Subagents"
-					foot="Finished subagents stay reachable from their card in the parent's conversation. Saved on this device."
-				>
-					<IonItem lines="none">
-						<Icon tone="gray">
+			<GroupedList
+				title="Subagents"
+				footer="Finished subagents stay reachable from their card in the parent's conversation. Saved on this device."
+			>
+				<ToggleRow
+					icon={
+						<RowIcon tone="gray">
 							<WorkflowIcon />
-						</Icon>
-						{lz ? (
-							<lz.IonToggle
-								checked={showFinished.value}
-								onIonChange={(e) => setShowFinished(e.detail.checked)}
-								aria-label="Show finished subagents"
-								data-setting="show-finished-subagents"
-							>
-								Show Finished Subagents
-							</lz.IonToggle>
-						) : (
-							<IonLabel>Show finished subagents</IonLabel>
-						)}
-					</IonItem>
-				</Group>
+						</RowIcon>
+					}
+					title="Show Finished Subagents"
+					checked={showFinished.value}
+					onChange={setShowFinished}
+					setting="show-finished-subagents"
+				/>
+			</GroupedList>
 
-				{can("push") && (
-					<Group title="Notifications" foot={push ? PUSH_TEXT[push] : " "}>
-						<IonItem lines="none">
-							<Icon tone="red">
+			{can("push") && (
+				<GroupedList
+					title="Notifications"
+					footer={push ? PUSH_TEXT[push] : undefined}
+				>
+					<ToggleRow
+						icon={
+							<RowIcon tone="red">
 								<BellIcon />
-							</Icon>
-							{lz ? (
-								<lz.IonToggle
-									checked={push === "on"}
-									disabled={busy || (push !== "on" && push !== "off")}
-									onIonChange={() => void togglePush()}
-									aria-label="Approval alerts"
-								>
-									Approval Alerts
-								</lz.IonToggle>
-							) : (
-								<IonLabel>Approval alerts</IonLabel>
-							)}
-						</IonItem>
-					</Group>
-				)}
-
-				{can("approvals") && (
-					<Group
-						title="Proven devices"
-						foot={
-							<>
-								Each device that proved you're human on {node} has a passkey
-								here (Face ID or Touch ID). To add one, open Prove Human on that
-								device.
-							</>
+							</RowIcon>
 						}
-					>
-						{keys === null ? (
-							<SkeletonItem />
-						) : keys.length === 0 ? (
-							<IonItem lines="none">
-								<Icon tone="green">
+						title="Approval Alerts"
+						checked={push === "on"}
+						disabled={busy || (push !== "on" && push !== "off")}
+						onChange={() => void togglePush()}
+						setting="approval-alerts"
+					/>
+				</GroupedList>
+			)}
+
+			{can("approvals") && (
+				<GroupedList
+					title="Proven Devices"
+					footer={
+						<>
+							Each device that proved you're human on {node} has a passkey here
+							(Face ID or Touch ID). To add one, open Prove Human on that
+							device.
+						</>
+					}
+				>
+					{keys === null ? (
+						<SkeletonItem />
+					) : keys.length === 0 ? (
+						<ValueRow
+							icon={
+								<RowIcon tone="green">
 									<FingerprintIcon />
-								</Icon>
-								<IonLabel color="medium">
+								</RowIcon>
+							}
+							title={
+								<span className="p-li-muted">
 									No device has proven you're human on {node} yet
-								</IonLabel>
-							</IonItem>
-						) : (
-							keys.map((k, i) => (
-								<IonItem
-									key={k.id}
-									lines={i === keys.length - 1 ? "none" : "inset"}
-								>
-									<Icon tone="green">
+								</span>
+							}
+						/>
+					) : (
+						keys.map((k) => (
+							<ValueRow
+								key={k.id}
+								icon={
+									<RowIcon tone="green">
 										<FingerprintIcon />
-									</Icon>
-									<IonLabel>
-										<span className="p-set-title">{k.label}</span>
-										<span className="p-set-sub">
-											Added {new Date(k.createdAt).toLocaleDateString()}
-											{k.lastUsedAt ? ` · Used ${clock(k.lastUsedAt)}` : ""}
-										</span>
-									</IonLabel>
+									</RowIcon>
+								}
+								title={k.label}
+								sub={
+									<>
+										Added {new Date(k.createdAt).toLocaleDateString()}
+										{k.lastUsedAt ? ` · Used ${clock(k.lastUsedAt)}` : ""}
+									</>
+								}
+								after={
 									<button
 										type="button"
-										slot="end"
 										className="p-set-action is-danger"
 										aria-label={`Remove passkey ${k.label}`}
 										onClick={() => removeKey(k)}
 									>
 										Remove
 									</button>
-								</IonItem>
-							))
-						)}
-					</Group>
-				)}
+								}
+							/>
+						))
+					)}
+				</GroupedList>
+			)}
 
-				<Group
-					title="Signed-In Browsers"
-					foot="Browsers that proved you're human can send as you, answer prompts, stop agents and remove devices: for 12 hours on a computer, 7 days on a phone or tablet."
-				>
-					{sessions === null ? (
-						<SkeletonItem />
-					) : sessions.length === 0 ? (
-						<IonItem lines="none">
-							<Icon tone="blue">
+			<GroupedList
+				title="Signed-In Browsers"
+				footer="Browsers that proved you're human can send as you, answer prompts, stop agents and remove devices: for 12 hours on a computer, 7 days on a phone or tablet."
+			>
+				{sessions === null ? (
+					<SkeletonItem />
+				) : sessions.length === 0 ? (
+					<ValueRow
+						icon={
+							<RowIcon tone="blue">
 								<GlobeIcon />
-							</Icon>
-							<IonLabel color="medium">None</IonLabel>
-						</IonItem>
-					) : (
-						sessions.map((x, i) => (
-							<IonItem
-								key={x.id}
-								lines={i === sessions.length - 1 ? "none" : "inset"}
-							>
-								<Icon tone="blue">
+							</RowIcon>
+						}
+						title={<span className="p-li-muted">None</span>}
+					/>
+				) : (
+					sessions.map((x) => (
+						<ValueRow
+							key={x.id}
+							icon={
+								<RowIcon tone="blue">
 									<GlobeIcon />
-								</Icon>
-								<IonLabel>
-									<span className="p-set-title">
-										{x.device}
-										{x.id === h?.session?.id ? " (This Browser)" : ""}
-									</span>
-									<span className="p-set-sub">
-										{x.node} · Until{" "}
-										{new Date(x.expiresAt).toLocaleString([], {
-											dateStyle: "medium",
-											timeStyle: "short",
-										})}
-									</span>
-								</IonLabel>
+								</RowIcon>
+							}
+							title={`${x.device}${x.id === h?.session?.id ? " (This Browser)" : ""}`}
+							sub={`${x.node} · Until ${new Date(x.expiresAt).toLocaleString(
+								[],
+								{
+									dateStyle: "medium",
+									timeStyle: "short",
+								},
+							)}`}
+							after={
 								<button
 									type="button"
-									slot="end"
 									className="p-set-action is-danger"
 									aria-label={`Sign out ${x.device} on ${x.node}`}
 									onClick={() => signOut(x)}
 								>
 									Sign Out
 								</button>
-							</IonItem>
-						))
-					)}
-				</Group>
+							}
+						/>
+					))
+				)}
+			</GroupedList>
 
-				{machines.length > 0 && (
-					<Group
-						title="Machines"
-						foot="Every machine on your Tailscale account that runs Pulsar joins on its own."
-					>
-						{machines.map((n, i) => {
-							const word = linkWord(n!.link);
-							return (
-								<IonItem
-									key={n!.id}
-									lines={i === machines.length - 1 ? "none" : "inset"}
-								>
-									<Icon tone={word ? "gray" : "blue"}>
+			{machines.length > 0 && (
+				<GroupedList
+					title="Machines"
+					footer="Every machine on your Tailscale account that runs Pulsar joins on its own."
+				>
+					{machines.map((n) => {
+						const word = linkWord(n!.link);
+						return (
+							<ValueRow
+								key={n!.id}
+								icon={
+									<RowIcon tone={word ? "gray" : "blue"}>
 										<MonitorIcon />
-									</Icon>
-									<IonLabel>{n!.label}</IonLabel>
-									<IonNote slot="end">
-										{n!.link === "local"
-											? "This Machine"
-											: (word ?? "Connected")}
-									</IonNote>
-								</IonItem>
-							);
-						})}
-					</Group>
-				)}
+									</RowIcon>
+								}
+								title={n!.label}
+								after={
+									n!.link === "local" ? "This Machine" : (word ?? "Connected")
+								}
+							/>
+						);
+					})}
+				</GroupedList>
+			)}
 
-				{/* Sections features registered (lib/registry.tsx). */}
-				{shownSettingsSections(true).map((x) => {
-					const Body = x.phone!;
-					return (
-						<Group key={x.id} title={x.title}>
-							<Body />
-						</Group>
-					);
-				})}
+			{/* Sections features registered (lib/registry.tsx): Konsta rows. */}
+			{shownSettingsSections(true).map((x) => {
+				const Body = x.phone!;
+				return (
+					<GroupedList key={x.id} title={x.title}>
+						<Body />
+					</GroupedList>
+				);
+			})}
 
-				{h && (
-					<Group title="About">
-						<IonItem lines="inset">
-							<Icon tone="gray">
+			{h && (
+				<GroupedList title="About">
+					<ValueRow
+						icon={
+							<RowIcon tone="gray">
 								<InfoIcon />
-							</Icon>
-							<IonLabel>Served by</IonLabel>
-							<IonNote slot="end">{h.machine}</IonNote>
-						</IonItem>
-						{h.you && (
-							<IonItem lines="inset">
-								<IonLabel>Signed in as</IonLabel>
-								<IonNote slot="end">{h.you.login}</IonNote>
-							</IonItem>
-						)}
-						<IonItem lines="none">
-							<IonLabel>Version</IonLabel>
-							<IonNote slot="end">{h.version}</IonNote>
-						</IonItem>
-					</Group>
-				)}
-			</IonContent>
-		</>
+							</RowIcon>
+						}
+						title="Served by"
+						after={h.machine}
+					/>
+					{h.you && <ValueRow title="Signed in as" after={h.you.login} />}
+					<ValueRow title="Version" after={h.version} />
+				</GroupedList>
+			)}
+		</TabShell>
 	);
 }
 

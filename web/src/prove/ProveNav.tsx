@@ -1,7 +1,7 @@
 /**
- * "Prove Human" in the app's navigation: the desktop sidebar item and the
- * phone's home row. Each shows whether this device is proven; a tap opens
- * the sheet.
+ * "Prove Human" in the app's navigation: the desktop sidebar item (the
+ * phone's Settings row is ProvePhoneRow.tsx). It shows whether this device
+ * is proven; a tap opens the sheet.
  */
 import { ShieldAlertIcon, ShieldCheckIcon } from "lucide-react";
 import { observer } from "../lib/signals.ts";
@@ -44,25 +44,3 @@ function DesktopItemImpl() {
 	);
 }
 export const ProveNavItem = observer(DesktopItemImpl);
-
-function PhoneRowImpl() {
-	const s = proveStatus();
-	return (
-		<button
-			type="button"
-			className={`prove-row-phone${s.ok ? " ok" : ""}`}
-			aria-label={`Prove Human: ${s.text}`}
-			onClick={() => void proveHuman("manual")}
-		>
-			{s.ok ? (
-				<ShieldCheckIcon className="size-5" />
-			) : (
-				<ShieldAlertIcon className="size-5" />
-			)}
-			<span className="prove-row-text">
-				<strong>Prove Human</strong>
-			</span>
-		</button>
-	);
-}
-export const ProvePhoneRow = observer(PhoneRowImpl);

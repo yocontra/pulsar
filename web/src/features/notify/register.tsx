@@ -10,7 +10,7 @@ const Desktop = lazy(() =>
 	import("./Section.tsx").then((m) => ({ default: m.DesktopSection })),
 );
 const Phone = lazy(() =>
-	import("./Section.tsx").then((m) => ({ default: m.PhoneSection })),
+	import("./PhoneSection.tsx").then((m) => ({ default: m.PhoneSection })),
 );
 
 registerSettingsSection({

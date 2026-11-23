@@ -6,7 +6,7 @@ import { contrastFailures } from "./ui-audit.ts";
  * Plan usage limits in the app (web/src/features/limits): the Usage page's
  * Limits section, the session header note past a threshold, the in-app
  * warning toast, and Settings → "Usage limits" (kept on the node with
- * `PUT /usage/limits`). Shared by limits.desktop.e2e.ts and limits.ios.e2e.ts.
+ * `PUT /usage/limits`). Shared by limits.desktop.e2e.ts and limits.phone.e2e.ts.
  */
 
 const DAY = 86_400_000;
@@ -205,16 +205,22 @@ export function limitsSuite(platform: "desktop" | "phone") {
 					r.method() === "PUT" &&
 					match(r.postDataJSON()),
 			);
+		// Phone: a Konsta switch row (a tap anywhere on it flips the switch).
 		const toggle = phone
-			? section.locator('ion-toggle[aria-label="Usage limit warnings"]')
+			? section.locator('[data-setting="usage-limits"]')
 			: section.getByRole("switch", { name: "Usage limit warnings" });
-		if (!phone) await expect(toggle).toBeChecked();
+		const state = phone
+			? section.getByRole("checkbox", { name: "Usage Limit Warnings" })
+			: toggle;
+		await expect(state).toBeChecked();
 		const off = put((b) => b.enabled === false);
 		await tap(toggle);
 		await off;
+		await expect(state).not.toBeChecked();
 		const on = put((b) => b.enabled === true);
 		await tap(toggle);
 		await on;
+		await expect(state).toBeChecked();
 
 		if (phone) {
 			const row = section.locator('[data-setting="usage-limit-thresholds"]');

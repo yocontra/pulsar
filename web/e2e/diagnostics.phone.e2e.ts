@@ -1,4 +1,4 @@
 import { diagnosticsSuite } from "./diagnostics.shared.ts";
 
-// WebKit (iPhone layout).
+// The phone: iOS (WebKit) and Android (Chromium, Material).
 diagnosticsSuite("phone");

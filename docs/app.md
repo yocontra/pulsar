@@ -15,7 +15,7 @@ On an iPhone, iOS colours the status bar from the app's page, and the clock turn
 
 ## On a phone
 
-The phone app looks native: iOS on an iPhone, Material on Android. A tab bar at the bottom switches between **Agents**, **Needs You** (with a count of what waits on you), **Usage** and **Settings**. Pages you open from a tab (an agent, its changes, a file) cover the tab bar; back returns to the tab.
+The phone app looks native: iOS on an iPhone, Material on Android. A tab bar at the bottom switches between **Agents**, **Needs You** (with a count of what waits on you), **Usage** and **Settings**. Pages you open from a tab (an agent, its changes, a file) cover the tab bar; back returns to the tab. Needs You groups approvals, questions and prompts that wait in a terminal; when nothing waits, it says "Nothing needs you." Settings on a phone is a tab, with the same sections as on a computer in grouped lists, and Diagnostics opens from it.
 
 - Switching tabs keeps your place: each tab returns to where you left its list.
 - Tap the tab you are on to scroll back to the top.
@@ -238,7 +238,7 @@ Search covers prompts, replies, messages between agents and the titles of tool c
 
 ## Settings
 
-The gear button opens Settings:
+The gear button opens Settings (on a phone, the Settings tab):
 
 - **Show finished subagents**: list subagents that finished in the last day too, on this device.
 - **Notifications**: turn on "Approval pending" notifications for this browser.

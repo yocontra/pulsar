@@ -1,4 +1,4 @@
 import { notifySuite } from "./notify.shared.ts";
 
-// WebKit (iPhone layout).
+// The phone: iOS (WebKit) and Android (Chromium, Material).
 notifySuite("phone");

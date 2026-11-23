@@ -290,7 +290,7 @@ test.describe("ios gestures", () => {
 		await home(page);
 		await page.getByTestId("needs-summary").tap();
 		await page
-			.locator(".p-needs ion-item.p-attn", { hasText: "apparish-auth" })
+			.locator(".p-needs .p-attn", { hasText: "apparish-auth" })
 			.first()
 			.tap();
 		await expect(title(page)).toHaveText("apparish-auth");

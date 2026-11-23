@@ -1,16 +1,12 @@
 /**
  * Settings → "Agent activity": when an agent you started, messaged or opened
  * finishes its turn or stops with an error. One select and one switch, on
- * desktop (rows in the settings card) and phone (IonItems in an inset list).
+ * desktop (rows in the settings card); the phone's rows are PhoneSection.tsx.
  */
-import { BellRingIcon, MessageSquareIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ProveCancelled } from "../../api/client.ts";
 import { observer } from "../../lib/signals.ts";
 import { can } from "../../lib/store.ts";
-import { IonItem } from "../../mobile/ionic.ts";
-import { IonLabel, IonNote } from "../../mobile/ionic-lazy.tsx";
-import { useIonicLazy } from "../../mobile/lazyIonic.ts";
 import { enablePush, pushState } from "../../settings/push.ts";
 import {
 	inApp,
@@ -23,17 +19,16 @@ import {
 	wantsNotifications,
 } from "./prefs.ts";
 import "./notify.css";
-import { showActions } from "../../mobile/ui/actions.ts";
 
 export const HELP =
 	"For agents you started, messaged or opened in the last 6 hours. Notifications say only that an agent finished or stopped; details stay on your machines.";
 export const DENIED =
 	"Allow notifications in your browser or system settings to get these. Sound only still works.";
-const IN_APP_HELP =
+export const IN_APP_HELP =
 	"A short note in the corner when an agent finishes while Pulsar is open on another screen.";
 
 /** Settings state shared by both layouts. */
-function useAgentActivity() {
+export function useAgentActivity() {
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	useEffect(() => {
@@ -129,64 +124,3 @@ function DesktopImpl() {
 }
 
 export const DesktopSection = observer(DesktopImpl);
-
-function PhoneImpl() {
-	const lz = useIonicLazy();
-	const { error, busy, choose, toggleInApp } = useAgentActivity();
-	const current = shownMode();
-	const pick = async () => {
-		await showActions({
-			header: "When an agent finishes or fails",
-			subHeader: HELP,
-			buttons: [
-				...MODES.map(([value, label]) => ({
-					text: value === current ? `${label} ✓` : label,
-					handler: () => void choose(value),
-				})),
-				{ text: "Cancel", role: "cancel" },
-			],
-		});
-	};
-	return (
-		<>
-			<IonItem
-				button
-				detail
-				disabled={busy}
-				onClick={() => void pick()}
-				data-setting="agent-activity"
-			>
-				<span className="p-set-icon is-red" slot="start" aria-hidden="true">
-					<BellRingIcon />
-				</span>
-				<IonLabel>Finished or failed</IonLabel>
-				<IonNote slot="end">{MODES.find(([m]) => m === current)?.[1]}</IonNote>
-			</IonItem>
-			{error && (
-				<IonItem lines="none">
-					<IonLabel className="p-notify-error" role="alert">
-						{error}
-					</IonLabel>
-				</IonItem>
-			)}
-			<IonItem lines="none">
-				<span className="p-set-icon is-blue" slot="start" aria-hidden="true">
-					<MessageSquareIcon />
-				</span>
-				{lz ? (
-					<lz.IonToggle
-						checked={inApp.value}
-						onIonChange={(e) => void toggleInApp(e.detail.checked)}
-						aria-label="In-app notifications"
-					>
-						In-App Notifications
-					</lz.IonToggle>
-				) : (
-					<IonLabel>In-app notifications</IonLabel>
-				)}
-			</IonItem>
-		</>
-	);
-}
-
-export const PhoneSection = observer(PhoneImpl);

@@ -1,7 +1,11 @@
 /**
  * Full-screen states: can't reach the pool (offline, daemon down, wrong
- * account, error) and the first run (no agents yet).
+ * account, error) and the first run (no agents yet). They show instead of
+ * the navigation stack and tab bar: an IonContent scroller with the state
+ * hero (app.css .st, shared with the boot screen) and Konsta inside.
  */
+
+import { Button } from "konsta/react";
 import {
 	CircleAlertIcon,
 	MonitorIcon,
@@ -15,9 +19,11 @@ import { useState } from "react";
 import type { FailureKind } from "../api/client.ts";
 import { observer } from "../lib/signals.ts";
 import { failure, hello, lastKnown, retry } from "../lib/store.ts";
-import { IonContent, IonItem } from "./ionic.ts";
-import { IonLabel, IonList } from "./ionic-lazy.tsx";
+import { IonContent } from "./ionic.ts";
+import { isMaterial } from "./platform.ts";
 import { linkWord } from "./rows.tsx";
+import { GroupedList, ListItem } from "./ui/GroupedList.tsx";
+import { RowIcon, ValueRow } from "./ui/rows.tsx";
 
 const ICON = {
 	offline: WifiOffIcon,
@@ -32,7 +38,7 @@ const COPY: Record<
 > = {
 	offline: {
 		title: "Can't Reach Your Machines",
-		body: "This iPhone can't reach your machines over Tailscale.",
+		body: `This ${isMaterial ? "phone" : "iPhone"} can't reach your machines over Tailscale.`,
 		moreLabel: "What to Check",
 		more: (
 			<ul>
@@ -88,9 +94,10 @@ function Failure() {
 				</span>
 				<h1 className="st-title">{c.title}</h1>
 				<p className="st-text">{c.body}</p>
-				<button
-					type="button"
-					className="st-btn"
+				<Button
+					large
+					rounded
+					className="p-status-btn"
 					disabled={busy}
 					onClick={async () => {
 						setBusy(true);
@@ -99,7 +106,7 @@ function Failure() {
 					}}
 				>
 					{busy ? "Trying Again…" : "Try Again"}
-				</button>
+				</Button>
 				{(c.more || detail) && (
 					<details className="st-more">
 						<summary>{c.moreLabel}</summary>
@@ -111,31 +118,35 @@ function Failure() {
 				)}
 			</div>
 			{known.length > 0 && (
-				<section aria-label="Last known machines">
-					<h3 className="p-set-head">Last Known Machines</h3>
-					<IonList inset className="p-set-list">
-						{known.slice(0, 12).map((n, i, all) => (
-							<IonItem
-								key={n.id}
-								lines={i === all.length - 1 ? "none" : "inset"}
-							>
-								<span
-									className="p-icon p-item-icon is-offline"
-									slot="start"
-									aria-hidden="true"
-								>
+				<GroupedList title="Last Known Machines">
+					{known.slice(0, 12).map((n) => (
+						<ValueRow
+							key={n.id}
+							icon={
+								<RowIcon tone="gray">
 									<MonitorIcon />
-								</span>
-								<IonLabel>{n.label}</IonLabel>
-								<span className="p-quiet" slot="end">
-									{linkWord(n.link) ?? "Unreachable"}
-								</span>
-							</IonItem>
-						))}
-					</IonList>
-				</section>
+								</RowIcon>
+							}
+							title={n.label}
+							after={linkWord(n.link) ?? "Unreachable"}
+						/>
+					))}
+				</GroupedList>
 			)}
 		</IonContent>
+	);
+}
+
+function Step({ n, children }: { n: number; children: ReactNode }) {
+	return (
+		<ListItem
+			media={
+				<span className="p-step" aria-hidden="true">
+					{n}
+				</span>
+			}
+			title={<span className="p-step-text">{children}</span>}
+		/>
 	);
 }
 
@@ -157,35 +168,19 @@ function FirstRun() {
 					)}
 				</p>
 			</div>
-			<h3 className="p-set-head">Get started</h3>
-			<IonList inset className="p-set-list">
-				<IonItem lines="inset">
-					<span className="p-step" slot="start">
-						1
-					</span>
-					<IonLabel className="ion-text-wrap">
-						On each machine, run <code>npx pulsar setup</code> and turn on the
-						agent mesh.
-					</IonLabel>
-				</IonItem>
-				<IonItem lines="inset">
-					<span className="p-step" slot="start">
-						2
-					</span>
-					<IonLabel className="ion-text-wrap">
-						Restart your agents: Claude Code, Codex, OpenCode, pi or omp.
-					</IonLabel>
-				</IonItem>
-				<IonItem lines="none">
-					<span className="p-step" slot="start">
-						3
-					</span>
-					<IonLabel className="ion-text-wrap">
-						Machines on your Tailscale account join on their own. No codes, no
-						pairing.
-					</IonLabel>
-				</IonItem>
-			</IonList>
+			<GroupedList title="Get Started">
+				<Step n={1}>
+					On each machine, run <code>npx pulsar setup</code> and turn on the
+					agent mesh.
+				</Step>
+				<Step n={2}>
+					Restart your agents: Claude Code, Codex, OpenCode, pi or omp.
+				</Step>
+				<Step n={3}>
+					Machines on your Tailscale account join on their own. No codes, no
+					pairing.
+				</Step>
+			</GroupedList>
 			<p className="p-status-foot">
 				<TerminalIcon aria-hidden="true" /> Pulsar checks for new agents
 				automatically.

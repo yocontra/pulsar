@@ -6,7 +6,7 @@ import { agentId, expect, ready, test } from "./fixtures.ts";
  * CircleAlert, the agent's name, "Open agent", closed once that agent opens)
  * and Settings → "Agent activity" (the select and the in-app switch, kept
  * with this browser's push subscription by `POST /push/settings`). Shared by
- * notify.desktop.e2e.ts and notify.ios.e2e.ts.
+ * notify.desktop.e2e.ts and notify.phone.e2e.ts.
  */
 
 async function mock(request: APIRequestContext, body: object) {
@@ -153,11 +153,16 @@ export function notifySuite(platform: "desktop" | "phone") {
 				r.url().endsWith("/api/v1/push/settings") &&
 				r.postDataJSON()?.inApp === false,
 		);
+		// Phone: a Konsta switch row; a tap anywhere on the row flips it.
 		const toggle = phone
-			? section.locator('ion-toggle[aria-label="In-app notifications"]')
+			? section.locator('[data-setting="in-app-notifications"]')
 			: section.getByRole("switch", { name: "In-app notifications" });
 		await tap(toggle);
 		await off;
+		if (phone)
+			await expect(
+				section.getByRole("checkbox", { name: "In-App Notifications" }),
+			).not.toBeChecked();
 		// The daemon's copy wins after this device forgets its own.
 		await page.evaluate(() => localStorage.clear());
 		await ready(page);
@@ -181,7 +186,7 @@ export function notifySuite(platform: "desktop" | "phone") {
 
 	test(`notifications without a subscription explain why (${platform})`, async ({
 		page,
-	}) => {
+	}, info) => {
 		await ready(page);
 		const section = await openSettings(page, phone);
 		if (phone) {
@@ -193,8 +198,13 @@ export function notifySuite(platform: "desktop" | "phone") {
 				.getByTestId("actions")
 				.getByRole("button", { name: "Notifications only" })
 				.tap();
-			// iPhone Safari (not the Home Screen app) can't subscribe.
-			await expect(section.getByRole("alert")).toContainText("Home Screen");
+			// iPhone Safari (not the Home Screen app) can't subscribe; Android's
+			// browser has notifications blocked for this test site.
+			await expect(section.getByRole("alert")).toContainText(
+				info.project.name === "android"
+					? "Sound only still works"
+					: "Home Screen",
+			);
 		} else {
 			const select = section.getByRole("combobox", {
 				name: "When an agent finishes or fails",

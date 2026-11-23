@@ -11,6 +11,7 @@ export function GroupedList({
 	footer,
 	label,
 	className,
+	role,
 	children,
 }: {
 	title?: ReactNode;
@@ -18,6 +19,8 @@ export function GroupedList({
 	/** The group's accessible name when it has no visible title. */
 	label?: string;
 	className?: string;
+	/** The list's role (`radiogroup` for a group of choices), named by `label` or the title. */
+	role?: string;
 	children: ReactNode;
 }) {
 	return (
@@ -25,7 +28,17 @@ export function GroupedList({
 			aria-label={label ?? (typeof title === "string" ? title : undefined)}
 		>
 			{title && <BlockTitle>{title}</BlockTitle>}
-			<List strong inset className={className}>
+			<List
+				strong
+				inset
+				className={className}
+				role={role}
+				aria-label={
+					role
+						? (label ?? (typeof title === "string" ? title : undefined))
+						: undefined
+				}
+			>
 				{children}
 			</List>
 			{footer && <BlockFooter>{footer}</BlockFooter>}
