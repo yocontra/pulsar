@@ -32,7 +32,10 @@ const BUDGETS: Record<string, number> = {
 	// Home's search field is Konsta's, loaded after the first paint, not
 	// Ionic's IonSearchbar, and Konsta's shared runtime is one chunk
 	// (astro.config.mjs "konsta"), not split by lazy pages. Headroom ~2 KB.
-	PhoneApp: 183 * 1024,
+	// 185: the same commit measures 181.0 or 183.2 KB in two clean trees —
+	// rolldown's assignment to the "konsta" chunk isn't deterministic yet
+	// (K5 makes it deterministic and lowers this again).
+	PhoneApp: 185 * 1024,
 	DesktopApp: 130 * 1024,
 };
 // All of dist/web, uncompressed. Raised from 9 MB at 9.01 MB: the Konsta
