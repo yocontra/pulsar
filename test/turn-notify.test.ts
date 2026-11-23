@@ -15,12 +15,31 @@ import {
 	claudeTurnFailed,
 	codexTurnFailed,
 	piTurnFailed,
+	turnError,
 } from "../src/transcripts/turn-outcome.ts";
 import { until } from "./helpers.ts";
 import { browser, decrypt } from "./push-crypto.ts";
 
 const FIX = join(import.meta.dir, "fixtures", "turns");
 const fixture = (name: string) => readFileSync(join(FIX, name), "utf8");
+
+describe("the error that ended a failed turn, per harness", () => {
+	test("Claude's synthetic reply, Codex's task_complete and error event, pi's errorMessage", () => {
+		expect(turnError(fixture("claude-failed.jsonl"))).toBe(
+			"You've hit your weekly limit",
+		);
+		expect(turnError(fixture("codex-failed.jsonl"))).toContain(
+			"model is not supported",
+		);
+		expect(turnError(fixture("codex-error-event.jsonl"))).toBe(
+			"stream disconnected before completion",
+		);
+		expect(turnError(fixture("pi-failed.jsonl"))).toBe(
+			"This request would exceed your account's rate limit.",
+		);
+		expect(turnError(fixture("codex-finished.jsonl"))).toBeNull();
+	});
+});
 
 describe("failed turns, per harness", () => {
 	test("Claude: a synthetic API error ends the turn; a retry that answered does not", () => {
@@ -293,7 +312,7 @@ describe("notifications follow interest", () => {
 });
 
 describe("turn pushes", () => {
-	test("own topic per kind, no names or text, and the subscription's mode decides", async () => {
+	test("one topic per agent (opaque), the daemon's text, and the subscription's mode decides", async () => {
 		const { service, sent } = setup();
 		const subs = {
 			notify: browser(),
@@ -310,6 +329,7 @@ describe("turn pushes", () => {
 				chosen: true,
 				turns: mode,
 				inApp: true,
+				previews: true,
 			});
 		}
 		// A new subscription that never said gets no finish/fail pushes.
@@ -326,12 +346,13 @@ describe("turn pushes", () => {
 			kind: "failed",
 			agentId: "pi:s1",
 			at: Date.now(),
+			summary: { error: "API Error: 500 upstream" },
 		});
 		await until(() => sent.length === 2, 2000);
 		await sleep(20);
 		expect(sent).toHaveLength(2);
 		const payloads = sent.map((s) => {
-			expect(s.headers.Topic).toBe("failed");
+			expect(s.headers.Topic).toMatch(/^[\w-]{22}$/);
 			expect(s.headers.Urgency).toBe("high");
 			for (const ua of Object.values(subs))
 				try {
@@ -341,13 +362,24 @@ describe("turn pushes", () => {
 				} catch {}
 			throw new Error("no subscription decrypts this push");
 		});
-		// An opaque token, the same for every push about this agent; the app
-		// resolves it (GET /push/turns/:ref). Never the id, a name or text.
+		// An opaque token, the same for every push about this agent (the topic
+		// and the tag); older apps resolve it (GET /push/turns/:ref).
 		const ref = (payloads[0] as { ref: string }).ref;
 		expect(ref).toMatch(/^[\w-]{22}$/);
-		expect(payloads).toContainEqual({ kind: "failed", ref });
-		expect(payloads).toContainEqual({ kind: "failed", ref, sound: true });
-		expect(JSON.stringify(payloads)).not.toContain("pi:s1");
+		expect(sent[0]!.headers.Topic).toBe(ref);
+		const text = {
+			title: "An agent stopped with an error",
+			body: "The model service returned an error (500).",
+			tag: `agent:${ref}`,
+			url: "/#/a/pi%3As1",
+		};
+		expect(payloads).toContainEqual({ kind: "failed", ref, ...text });
+		expect(payloads).toContainEqual({
+			kind: "failed",
+			ref,
+			...text,
+			sound: true,
+		});
 		expect(service.push.turnAgent(user, ref)).toEqual({ agentId: "pi:s1" });
 		expect(() => service.push.turnAgent(user, "nope")).toThrow("too old");
 		sent.length = 0;
@@ -357,7 +389,7 @@ describe("turn pushes", () => {
 			at: Date.now(),
 		});
 		await until(() => sent.length === 2, 2000);
-		expect(sent.every((s) => s.headers.Topic === "finished")).toBe(true);
+		expect(sent.every((s) => s.headers.Topic === ref)).toBe(true);
 		expect(sent.every((s) => s.headers.Urgency === "normal")).toBe(true);
 	});
 
@@ -368,7 +400,13 @@ describe("turn pushes", () => {
 				endpoint: "https://web.push.apple.com/none",
 				turns: "both",
 			}),
-		).toEqual({ subscribed: false, chosen: false, turns: "both", inApp: true });
+		).toEqual({
+			subscribed: false,
+			chosen: false,
+			turns: "both",
+			inApp: true,
+			previews: true,
+		});
 		service.push.subscribe(user, {
 			endpoint: "https://web.push.apple.com/x",
 			keys: browser().keys,
@@ -383,7 +421,14 @@ describe("turn pushes", () => {
 			chosen: false,
 			turns: "notify",
 			inApp: false,
+			previews: true,
 		});
+		expect(
+			service.push.settings(user, {
+				endpoint: "https://web.push.apple.com/x",
+				previews: false,
+			}).previews,
+		).toBe(false);
 	});
 });
 

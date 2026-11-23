@@ -182,7 +182,7 @@ In a session's header (on a computer), a short line shows the session's cost so 
 
 When an agent's harness is past a warning threshold, its session header shows it (for example "Weekly limit: 88%"; on a phone, "88%"). Tap it to open Usage.
 
-Pulsar warns you when a limit passes 80% and 95%, and when one is reached: a note in the corner while Pulsar is open (if **In-app notifications** is on), and a notification on devices with notifications on. The notification says only that a limit passed a percent; Usage says which. Each warning comes once per limit window, and again after the window resets. A limit on any machine in the pool warns you; the same account on two machines warns once. Change the thresholds or turn warnings off in Settings → **Usage limits**.
+Pulsar warns you when a limit passes 80% and 95%, and when one is reached: a note in the corner while Pulsar is open (if **In-app notifications** is on), and a notification on devices with notifications on. The notification names the harness and window ("Codex at 96% of weekly limit") and says when it resets; Usage has the details. Each warning comes once per limit window, and again after the window resets. A limit on any machine in the pool warns you; the same account on two machines warns once. Change the thresholds or turn warnings off in Settings → **Usage limits**.
 
 ## New agent
 
@@ -246,7 +246,7 @@ Search covers prompts, replies, messages between agents and the titles of tool c
 The gear button opens Settings (on a phone, the Settings tab):
 
 - **Show finished subagents**: list subagents that finished in the last day too, on this device.
-- **Notifications**: turn on "Approval pending" notifications for this browser.
+- **Notifications**: turn on notifications for this browser. A notification names the agent (and its machine, in a pool) and its project, then says the specific thing: the command or file a prompt asks about ("Run `bun test auth`?"), the question, the first sentence of a finished turn's last message with how long it took and how many files changed, or a failed turn's error in plain words. Text is redacted (tokens, passwords) and cut short. A newer notification for the same agent replaces the older one, and a prompt you answer elsewhere closes its notification. Tapping one opens that agent or prompt. **Show previews on the lock screen** (on by default; shown once this browser has notifications on) turns names and text off: notifications then say only what kind of thing happened.
 - **Agent activity**: what happens when an agent you started, messaged or opened in the last 6 hours finishes its turn or stops with an error (an API error or a refused model, not a failing command): **Off**, **Notifications only**, **Sound only** or **Notifications with sound**. Notifications need this browser's notifications on; Sound only works without them. **In-app notifications** shows a short note in the corner while Pulsar is open, with **Open agent**; it closes when you open that agent. While Pulsar is in the background, the app icon and the tab title count what you missed. Kept on this device, and with its notifications on the machine that served the app. A finish on another machine reaches this browser too.
 - **Usage limits**: warn when a plan usage limit passes a threshold or is reached (on by default, at 80% and 95%). On a computer, type up to three percents; on a phone, pick a set. Kept on the machine that served the app, for every device on it.
 - **Diagnostics**: opens Diagnostics, the checks of every machine.

@@ -51,6 +51,7 @@ import {
 	proverLabel,
 	proverMethod,
 } from "../../src/service/passkeys.ts";
+import { type TurnSummary, turnNotice } from "../../src/service/push-copy.ts";
 import { UserSessions } from "../../src/service/user-sessions.ts";
 import { isAutoTag } from "../../src/tags.ts";
 import { serveStatic } from "../../src/transport/static.ts";
@@ -1683,7 +1684,12 @@ function parseSubscription(raw: unknown): Subscription {
 type RealtimeChange =
 	| { action: "status"; id: string; status: "busy" | "idle" }
 	/** A finished or failed turn the operator should hear about (`notify`). */
-	| { action: "turn"; id: string; kind: "finished" | "failed" }
+	| {
+			action: "turn";
+			id: string;
+			kind: "finished" | "failed";
+			summary?: TurnSummary;
+	  }
 	/** A plan usage limit warning (`limit`), as the daemon sends it. */
 	| { action: "limit"; warning: LimitWarning }
 	/** This node holds a push subscription for `endpoint` (no passkey ceremony in tests). */
@@ -1796,7 +1802,16 @@ function realtime(raw: unknown) {
 		}
 		case "turn": {
 			const a = agentOr404(c.id);
-			const n = { kind: c.kind, agentId: a.id, at: now };
+			// The daemon's text (src/service/push-copy.ts), as the toast shows it.
+			const { title, body } = turnNotice(
+				c.kind,
+				a.id,
+				{ name: a.name, project: a.project ?? null, machine: null },
+				"",
+				c.summary,
+				now,
+			);
+			const n = { kind: c.kind, agentId: a.id, at: now, title, body };
 			for (const s of streams.values()) s.push?.(frame(s, "notify", n));
 			// The token a push would carry (sw.js resolves it on tap).
 			const ref = `ref-${turnRefs.size + 1}`;
@@ -2180,7 +2195,11 @@ const turnRefs = new Map<string, string>();
 /** Finish/fail settings by push endpoint (the daemon keeps them on the subscription row). */
 const pushPrefs = new Map<
 	string,
-	{ turns?: "off" | "notify" | "sound" | "both"; inApp?: boolean }
+	{
+		turns?: "off" | "notify" | "sound" | "both";
+		inApp?: boolean;
+		previews?: boolean;
+	}
 >();
 
 function findApproval(id: string) {
@@ -3319,18 +3338,21 @@ async function route(
 				endpoint?: string;
 				turns?: "off" | "notify" | "sound" | "both";
 				inApp?: boolean;
+				previews?: boolean;
 			};
 			if (typeof b.endpoint !== "string") throw badRequest("endpoint");
 			const held = pushPrefs.get(b.endpoint);
 			if (held) {
 				if (b.turns) held.turns = b.turns;
 				if (typeof b.inApp === "boolean") held.inApp = b.inApp;
+				if (typeof b.previews === "boolean") held.previews = b.previews;
 			}
 			return json({
 				subscribed: !!held,
 				chosen: held?.turns !== undefined,
 				turns: held?.turns ?? b.turns ?? "notify",
 				inApp: held?.inApp ?? b.inApp ?? true,
+				previews: held?.previews ?? b.previews ?? true,
 			});
 		}
 	}

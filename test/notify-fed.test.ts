@@ -199,11 +199,17 @@ describe("finish and fail notifications across machines", () => {
 		// One push, for the agent the operator cares about; B has no subscription.
 		expect(a.sent).toHaveLength(1);
 		expect(b.sent).toHaveLength(0);
-		expect(a.sent[0]!.headers.Topic).toBe("finished");
 		const payload = JSON.parse(
 			decrypt(Buffer.from(a.sent[0]!.body), phone.priv, phone.auth).toString(),
-		) as PushPayload;
-		expect(payload).toEqual({ kind: "finished", ref: expect.any(String) });
+		) as PushPayload & { ref: string };
+		// The agent's name and machine (a pool), and a link to it through A.
+		expect(payload).toMatchObject({
+			kind: "finished",
+			title: "builder on b finished",
+			tag: `agent:${payload.ref}`,
+			url: `/#/a/${encodeURIComponent(target)}`,
+		});
+		expect(a.sent[0]!.headers.Topic).toBe(payload.ref);
 		// Tapping it on the phone opens the agent on B, through A.
 		const opened = await tailnet.request(
 			"phone",
@@ -228,14 +234,19 @@ describe("finish and fail notifications across machines", () => {
 		const payload = JSON.parse(
 			decrypt(Buffer.from(a.sent[0]!.body), phone.priv, phone.auth).toString(),
 		) as PushPayload;
-		expect(payload).toMatchObject({ kind: "failed" });
+		// B read the error from its log; A says it in plain words.
+		expect(payload).toMatchObject({
+			kind: "failed",
+			title: "builder on b stopped with an error",
+			body: "The model service is rate limiting requests. · api",
+		});
 		expect(
 			a.service.push.turnAgent(
 				{ kind: "human", login: OWNER, node: "phone" },
 				(payload as { ref: string }).ref,
 			),
 		).toEqual({ agentId: target });
-		expect(a.sent[0]!.headers.Topic).toBe("failed");
+		expect(a.sent[0]!.headers.Topic).toBe((payload as { ref: string }).ref);
 		// B's feed publishes again (any change): the same turn stays one push.
 		b.service.registry.setStatus(builder, "busy");
 		await new Promise((r) => setTimeout(r, 200));

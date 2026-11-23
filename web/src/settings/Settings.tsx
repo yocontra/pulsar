@@ -23,7 +23,7 @@ export const PUSH_TEXT: Record<PushState, string> = {
 		"On iPhone and iPad, add Pulsar to the Home Screen (Share → Add to Home Screen), open it from there, then turn notifications on.",
 	denied:
 		"Notifications are blocked for this site. Allow them in the browser's settings.",
-	off: "Get a notification when an agent needs your approval. It says only “Approval pending”; details stay on your machines. Turning it on asks you to prove you're human.",
+	off: "Get a notification when an agent needs your approval, with the agent's name and what it wants to do. Turning it on asks you to prove you're human.",
 	on: "On: this browser gets a notification when an agent on this machine needs your approval.",
 };
 

@@ -449,6 +449,7 @@ const PushSettingsBody = z
 		endpoint: z.string().max(2000),
 		turns: z.enum(["off", "notify", "sound", "both"]).optional(),
 		inApp: z.boolean().optional(),
+		previews: z.boolean().optional(),
 	})
 	.strict();
 

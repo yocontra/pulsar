@@ -1,10 +1,8 @@
 // pulsar app service worker: caches the static shell only. API responses
 // (/api/*) are never cached or intercepted, so stale agent data or
-// transcripts never live in the cache. It also shows Web Push notifications:
-// the push says only "approval pending" with an opaque id; tapping it opens
-// that approval (details come from this node's API, never from the push).
-// "An agent finished" / "An agent stopped with an error" carry only an
-// opaque token for the agent; tapping one opens that agent.
+// transcripts never live in the cache. It also shows Web Push notifications
+// with the text the daemon wrote (see `notice` below); tapping one opens the
+// screen it names (that agent, that prompt, Usage).
 // The cache belongs to one build: web/scripts/finish-dist.ts writes the build
 // id and that build's files below (the shell, and every JS and CSS file of
 // the build: a lazy chunk is never a network request away). Install fills
@@ -226,20 +224,49 @@ self.addEventListener("fetch", (event) => {
 	}
 });
 
+// The daemon writes each notification's text (src/service/push-copy.ts):
+// title, body, tag and the screen a tap opens. The payload is encrypted for
+// this browser, so the push service never sees it. Older daemons send only
+// the kind and opaque ids: then the generic copy below shows.
+const TITLE_MAX = 60;
+const BODY_MAX = 180;
+const str = (v, max) =>
+	typeof v === "string" && v.trim() ? v.slice(0, max) : "";
+/** Only this app's own routes: `/` or `/#/…`. */
+const route = (v) =>
+	typeof v === "string" && (v === "/" || v.startsWith("/#/")) ? v : "";
+
+/** The daemon's text when present, else the generic copy. */
+function notice(data, title, body, tag, extra) {
+	const url = route(data.url);
+	return self.registration.showNotification(
+		str(data.title, TITLE_MAX) || title,
+		{
+			body: str(data.body, BODY_MAX) || body,
+			tag: str(data.tag, 100) || tag,
+			// A newer notice for the same agent alerts again.
+			renotify: true,
+			icon: "/icon.svg",
+			...extra,
+			data: { ...extra?.data, ...(url ? { url } : {}) },
+		},
+	);
+}
+
 self.addEventListener("push", (event) => {
 	let data = {};
 	try {
 		data = event.data ? event.data.json() : {};
 	} catch {}
 	if (data.kind === "security") {
-		// A passkey or enrollment change: the app's settings say what happened.
 		event.waitUntil(
-			self.registration.showNotification("Pulsar security notice", {
-				body: "A passkey or enrollment change on one of your machines. Open Pulsar to check.",
-				tag: "security",
-				icon: "/icon.svg",
-				data: { security: true },
-			}),
+			notice(
+				data,
+				"Security notice",
+				"A passkey or device change. Open Pulsar to check.",
+				"security",
+				{ data: { security: true } },
+			),
 		);
 		return;
 	}
@@ -262,26 +289,23 @@ self.addEventListener("push", (event) => {
 	event.waitUntil(
 		Promise.all([
 			badge,
-			self.registration.showNotification(
-				data.interaction ? "Answer needed" : "Approval pending",
-				{
-					body: data.interaction
-						? "An agent is waiting for your answer."
-						: "An agent needs your approval.",
-					tag: `approval:${data.id}`,
-					icon: "/icon.svg",
-					data: { id: data.id },
-				},
+			notice(
+				data,
+				data.interaction ? "Answer needed" : "Approval needed",
+				data.interaction
+					? "An agent is waiting for your answer."
+					: "An agent is waiting for your approval.",
+				`approval:${data.id}`,
+				{ data: { id: data.id } },
 			),
 		]),
 	);
 });
 
 /**
- * An agent finished its turn or stopped with an error. The payload has only
- * an opaque token for the agent; tapping resolves it to the agent to open. A focused Pulsar tab shows
- * its own toast instead, where the browser allows a push without a
- * notification (Chromium; Safari and Firefox require one every time).
+ * An agent finished its turn or stopped with an error. A focused Pulsar
+ * tab shows its own toast instead, where the browser allows a push without
+ * a notification (Chromium; Safari and Firefox require one every time).
  */
 async function turnNotice(data) {
 	const failed = data.kind === "failed";
@@ -292,24 +316,21 @@ async function turnNotice(data) {
 		tabs.some((c) => c.focused && c.visibilityState === "visible")
 	)
 		return;
-	return self.registration.showNotification(
+	return notice(
+		data,
 		failed ? "An agent stopped with an error" : "An agent finished",
-		{
-			body: failed
-				? "Open Pulsar to see what went wrong."
-				: "Open Pulsar to see what it did.",
-			tag: `turn:${data.ref}`,
-			icon: "/icon.svg",
-			silent: data.sound !== true,
-			data: { turn: data.ref },
-		},
+		failed
+			? "Open Pulsar to see what went wrong."
+			: "Open Pulsar to see what it did.",
+		`turn:${data.ref}`,
+		{ silent: data.sound !== true, data: { turn: data.ref } },
 	);
 }
 
 /**
- * A plan usage limit passed a threshold or was reached: no names here, the
- * Usage page says which. One notice at a time (tag). A focused Pulsar tab
- * shows its own toast instead where the browser allows (as `turnNotice`).
+ * A plan usage limit passed a threshold or was reached. One notice per
+ * limit (tag). A focused Pulsar tab shows its own toast instead where the
+ * browser allows (as `turnNotice`).
  */
 async function limitNotice(data) {
 	const tabs = await self.clients.matchAll({ type: "window" });
@@ -321,18 +342,14 @@ async function limitNotice(data) {
 		return;
 	const reached = data.reached === true;
 	const level = Math.max(0, Math.min(100, Math.round(data.level)));
-	return self.registration.showNotification(
+	return notice(
+		data,
+		reached ? "A usage limit was reached" : `A usage limit passed ${level}%`,
 		reached
-			? "An agent hit its usage limit"
-			: "An agent is near its usage limit",
-		{
-			body: reached
-				? "Open Pulsar to see when it resets."
-				: `A usage limit passed ${level}%. Open Pulsar to see which.`,
-			tag: "limit",
-			icon: "/icon.svg",
-			data: { limit: true },
-		},
+			? "Agents on that plan pause until it resets. Open Pulsar to see when."
+			: "Open Pulsar to see which plan and when it resets.",
+		"limit",
+		{ data: { limit: true } },
 	);
 }
 
@@ -340,6 +357,7 @@ self.addEventListener("notificationclick", (event) => {
 	event.notification.close();
 	const id = event.notification.data?.id;
 	const turn = event.notification.data?.turn;
+	const url = route(event.notification.data?.url);
 	event.waitUntil(
 		(async () => {
 			let target = event.notification.data?.security
@@ -347,7 +365,9 @@ self.addEventListener("notificationclick", (event) => {
 				: event.notification.data?.limit
 					? "/#/usage"
 					: "/#/needs";
-			if (typeof turn === "string") {
+			// The daemon named the screen: no lookup needed.
+			if (url) target = url;
+			else if (typeof turn === "string") {
 				target = "/";
 				try {
 					const res = await fetch(
@@ -361,7 +381,7 @@ self.addEventListener("notificationclick", (event) => {
 					}
 				} catch {}
 			}
-			if (typeof id === "string") {
+			if (!url && typeof id === "string") {
 				try {
 					const res = await fetch(
 						`/api/v1/approvals/${encodeURIComponent(id)}`,

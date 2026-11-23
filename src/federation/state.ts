@@ -5,11 +5,13 @@ import type {
 	InteractionKind,
 	Link,
 	NeedsYou,
+	TurnSummary,
 	Wake,
 } from "../http/wire.ts";
 import { cleanRepoUrl } from "../repo-url.ts";
 import { cleanAnswer, cleanPrompt, KINDS } from "../service/interactions.ts";
 import type { PoolMachine } from "../service/pool.ts";
+import { clean as cleanText, clip, SUMMARY_MAX } from "../service/push-copy.ts";
 import type { Agent, AgentStatus, InboundPolicy } from "../types.ts";
 import {
 	clean,
@@ -150,7 +152,29 @@ function turnOf(raw: unknown): { turn?: FedAgent["turn"] } {
 	if (!t || typeof t !== "object") return {};
 	const at = Number(t.at);
 	if (!(at > 0) || (t.kind !== "finished" && t.kind !== "failed")) return {};
-	return { turn: { kind: t.kind, at } };
+	const summary = summaryOf(t.summary);
+	return { turn: { kind: t.kind, at, ...(summary ? { summary } : {}) } };
+}
+
+/** A peer's turn summary: bounded, and redacted again here. */
+function summaryOf(raw: unknown): TurnSummary | null {
+	const s = raw as Record<string, unknown> | null;
+	if (!s || typeof s !== "object") return null;
+	const out: TurnSummary = {};
+	const text = (v: unknown) =>
+		typeof v === "string"
+			? clip(cleanText(v.slice(0, 4 * SUMMARY_MAX)), SUMMARY_MAX)
+			: "";
+	const said = text(s.text);
+	if (said) out.text = said;
+	const error = text(s.error);
+	if (error) out.error = error;
+	const startedAt = Number(s.startedAt);
+	if (Number.isFinite(startedAt) && startedAt > 0) out.startedAt = startedAt;
+	const files = Number(s.files);
+	if (Number.isInteger(files) && files > 0 && files <= 100_000)
+		out.files = files;
+	return Object.keys(out).length ? out : null;
 }
 
 /** A remote turn older than this when it first arrives is not announced (a long-offline peer). */

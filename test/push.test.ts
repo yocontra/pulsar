@@ -201,7 +201,7 @@ describe("push service", () => {
 		return { service, sent, dir };
 	}
 
-	test("a new approval pushes only an opaque id and the badge; the key file is 0600", async () => {
+	test("a new approval pushes its text encrypted, with an opaque topic; the key file is 0600", async () => {
 		const { service, sent, dir } = setup();
 		const ua = browser();
 		const key = await service.push.publicKey(user);
@@ -247,7 +247,21 @@ describe("push service", () => {
 		const payload = JSON.parse(
 			decrypt(Buffer.from(sent[0]!.body), ua.priv, ua.auth).toString(),
 		) as PushPayload;
-		expect(payload).toEqual({ kind: "approval", id, badge: 1 });
+		expect(payload).toMatchObject({
+			kind: "approval",
+			id,
+			badge: 1,
+			title: `${agent.name} needs approval`,
+			body: "Run `cat ~/.ssh/id_rsa`?",
+			url: `/#/approval/${encodeURIComponent(agent.id)}`,
+		});
+		// The tag and topic carry the agent's opaque token, never a name.
+		expect(payload.tag).toMatch(/^agent:[A-Za-z0-9_-]{22}$/);
+		expect(sent[0]!.headers.Topic).toBe(payload.tag!.slice("agent:".length));
+		// The ciphertext holds no plaintext.
+		expect(Buffer.from(sent[0]!.body).toString("latin1")).not.toContain(
+			"id_rsa",
+		);
 		ac.abort();
 	});
 
@@ -328,7 +342,7 @@ describe("push service", () => {
 		).toHaveLength(50);
 	});
 
-	test("security notices push at most once a minute, with no details", async () => {
+	test("security notices push at most once a minute, saying what changed", async () => {
 		const { service, sent } = setup();
 		const ua = browser();
 		service.push.subscribe(user, {
@@ -349,10 +363,63 @@ describe("push service", () => {
 		const payload = JSON.parse(
 			decrypt(Buffer.from(sent[0]!.body), ua.priv, ua.auth).toString(),
 		);
-		expect(payload).toEqual({ kind: "security", badge: 0 });
+		expect(payload).toMatchObject({
+			kind: "security",
+			badge: 0,
+			title: "Notifications turned on",
+			tag: "security",
+			url: "/",
+		});
+		expect(payload.body).toContain("Not you? Check Settings.");
 	});
 
-	test("a usage limit warning pushes only the level, on its own topic", async () => {
+	test("previews off: generic copy with no names or commands, same tag and link", async () => {
+		const { service, sent } = setup();
+		const ua = browser();
+		const endpoint = "https://web.push.apple.com/quiet";
+		service.push.subscribe(user, { endpoint, keys: ua.keys });
+		expect(
+			service.push.settings(user, { endpoint, previews: false }).previews,
+		).toBe(false);
+		await until(() => sent.length >= 1);
+		const first = JSON.parse(
+			decrypt(Buffer.from(sent[0]!.body), ua.priv, ua.auth).toString(),
+		);
+		expect(first.title).toBe("Notifications turned on");
+		sent.length = 0;
+		service.events.emit("approval", {
+			approval: {
+				requestId: "r1",
+				agentId: "claude:quiet",
+				machine: "studio",
+				tool: "Bash",
+				input: { command: "deploy --prod" },
+				inputHash: "0",
+				cwd: null,
+				branch: null,
+				createdAt: 0,
+				expiresAt: 0,
+				state: "pending",
+				sessionRules: null,
+			},
+		});
+		await until(() => sent.length >= 1);
+		const body = decrypt(
+			Buffer.from(sent[0]!.body),
+			ua.priv,
+			ua.auth,
+		).toString();
+		expect(JSON.parse(body)).toMatchObject({
+			kind: "approval",
+			id: "r1",
+			title: "Approval needed",
+			body: "An agent is waiting for your approval.",
+			url: "/#/approval/claude%3Aquiet",
+		});
+		expect(body).not.toContain("deploy");
+	});
+
+	test("a usage limit warning names the plan and window, on its own topic", async () => {
 		const { service, sent } = setup();
 		const ua = browser();
 		service.push.subscribe(user, {
@@ -373,14 +440,24 @@ describe("push service", () => {
 		const bodies = sent.map((x) =>
 			decrypt(Buffer.from(x.body), ua.priv, ua.auth).toString(),
 		);
-		expect(bodies.map((b) => JSON.parse(b))).toEqual([
-			{ kind: "limit", level: 95 },
-			{ kind: "limit", level: 100, reached: true },
+		expect(bodies.map((b) => JSON.parse(b))).toMatchObject([
+			{
+				kind: "limit",
+				level: 95,
+				title: "Codex at 96% of weekly limit",
+				tag: "limit:codex:Weekly",
+				url: "/#/usage",
+			},
+			{
+				kind: "limit",
+				level: 100,
+				reached: true,
+				title: "Codex hit its weekly limit",
+			},
 		]);
-		for (const b of bodies) {
-			expect(b).not.toContain("codex");
-			expect(b).not.toContain("Weekly");
-		}
+		expect(JSON.parse(bodies[1]!).body).toMatch(
+			/^Agents pause until it resets\. Resets in /,
+		);
 		expect(sent[0]!.headers.Topic).toBe("limit");
 	});
 });

@@ -462,7 +462,13 @@ describe("end to end in one daemon", () => {
 		await until(() => sent.length >= 1);
 		expect(
 			JSON.parse(decrypt(Buffer.from(sent[0]!), ua.priv, ua.auth).toString()),
-		).toEqual({ kind: "limit", level: 80 });
+		).toMatchObject({
+			kind: "limit",
+			level: 80,
+			title: "Codex at 82% of weekly limit",
+			tag: "limit:codex:Weekly",
+			url: "/#/usage",
+		});
 		// More scans of the same window: nothing new.
 		await new Promise((r) => setTimeout(r, 200));
 		expect(sent).toHaveLength(1);
