@@ -116,4 +116,25 @@ test.describe("agents tab", () => {
 		await list.locator(".p-ids-row").first().click();
 		await expect(page).toHaveURL(/#\/a\//);
 	});
+
+	test("a tap before the lazy Ionic module loads has its ripple (no error)", async ({
+		page,
+	}) => {
+		// Hold the lazy Ionic chunk: only the first route's code is in. The
+		// fixture fails the test on any page error (Ionic's tap effect threw
+		// "addRipple is not a function" on Android here).
+		await page.route(/\/ionic-lazy\./, () => new Promise(() => {}));
+		await page.goto("/");
+		await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
+		expect(
+			await page.evaluate(() => !!customElements.get("ion-ripple-effect")),
+		).toBe(true);
+		await expect(page.locator("ion-ripple-effect:not(:defined)")).toHaveCount(
+			0,
+		);
+		await page.getByRole("treeitem", { name: /^apparish, project/ }).click();
+		await expect(
+			page.getByRole("treeitem", { name: /^apparish, project.*expanded/ }),
+		).toBeVisible();
+	});
 });

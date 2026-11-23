@@ -9,6 +9,7 @@ import "../styles/ionic-theme.css";
 import "./theme.css";
 import "./ui/konsta.css";
 import "./ui/ui.css";
+import { defineCustomElement as defineRippleEffect } from "@ionic/core/components/ion-ripple-effect.js";
 import { KonstaProvider } from "konsta/react";
 import { useEffect } from "react";
 import { Toasts } from "../components/Toasts.tsx";
@@ -31,6 +32,11 @@ setupIonicReact({
 	swipeBackEnabled: true,
 	hardwareBackButton: false,
 });
+// Ionic's tap effect calls addRipple on any ion-ripple-effect it finds
+// (IonItem and IonButton render one in Material mode), but nothing on the
+// first screen defines the element until the lazy Ionic module does: a tap
+// before then threw. Its class is in the first route's chunk already.
+defineRippleEffect();
 document.documentElement.dataset.platform = "phone";
 // Opened on a page: Home gets a real history entry under it (Android back).
 seatHome();
