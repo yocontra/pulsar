@@ -343,12 +343,20 @@ export function searchSuite(platform: "desktop" | "phone") {
 		const bar = findBar(page);
 		await bar.getByRole("searchbox").fill("fake timers");
 		await landed(page);
-		// Step to an older match, away from the end.
-		await bar.getByRole("button", { name: "Previous match" }).click();
 		const current = page
 			.locator("section.session")
 			.last()
 			.locator("[data-find-current]");
+		await expect(current).toHaveCount(1);
+		await current.evaluate((e) => e.setAttribute("data-zz-newest", ""));
+		// Step to an older match, away from the end. The mark moves once that
+		// match is revealed and pinned: until then `current` is still the
+		// newest one, and a touch now would come before the new pin.
+		await bar.getByRole("button", { name: "Previous match" }).click();
+		await expect(
+			page.locator("[data-zz-newest][data-find-current]"),
+		).toHaveCount(0);
+		await expect(current).toHaveCount(1);
 		// On screen and, on the phone, clear of the glass bar and the composer
 		// dock that overlay the conversation.
 		const uncovered = async (el: typeof current) => {
@@ -394,10 +402,30 @@ export function searchSuite(platform: "desktop" | "phone") {
 			await current.hover();
 			await page.mouse.wheel(0, -200);
 		}
-		const before = await current.evaluate((e) => e.getBoundingClientRect().top);
+		// Released: a scroll that takes the match off screen is not undone, on
+		// a scroll or a resize (a pin answers both within a frame). Content
+		// growing above is no test: reading above the end turns the browser's
+		// scroll anchoring on (AnchorWhileReading), which holds the match on its
+		// own, depending on which element the browser anchors to.
+		await current.evaluate((e) => {
+			let p = e.parentElement;
+			while (
+				p &&
+				!(
+					p.scrollHeight > p.clientHeight &&
+					/auto|scroll/.test(getComputedStyle(p).overflowY)
+				)
+			)
+				p = p.parentElement;
+			p?.scrollBy(0, -1500);
+		});
 		await grow();
-		await expect
-			.poll(() => current.evaluate((e) => e.getBoundingClientRect().top))
-			.toBeGreaterThan(before + 1000);
+		await page.evaluate(
+			() =>
+				new Promise((r) =>
+					requestAnimationFrame(() => requestAnimationFrame(r)),
+				),
+		);
+		await expect(current).not.toBeInViewport();
 	});
 }
