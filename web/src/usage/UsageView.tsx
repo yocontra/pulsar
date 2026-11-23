@@ -461,6 +461,7 @@ export function Unpriced({
 				className="usage-info"
 				aria-expanded={open}
 				aria-label="About unpriced usage"
+				title="About unpriced usage"
 				onClick={() => setOpen((o) => !o)}
 			>
 				<InfoIcon aria-hidden="true" />

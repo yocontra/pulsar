@@ -4,7 +4,7 @@ import type { TranscriptEvent, TranscriptNotice } from "../api/types.ts";
 import { MessageResponse } from "../components/ai-elements/message.tsx";
 import { AgentMark } from "../ds/index.ts";
 import { agentColor, nameKey } from "../lib/agent-color.ts";
-import { clock } from "../lib/format.ts";
+import { clock, fullDate } from "../lib/format.ts";
 import { peerFrom } from "./messages.ts";
 import { SubagentColors } from "./subagent-colors.tsx";
 
@@ -41,7 +41,11 @@ export function NoticeCard({
 		<AgentMark color={color} className="ds-notice-dot" />
 	);
 	const time = ev.ts ? (
-		<time className="ds-time" dateTime={new Date(ev.ts).toISOString()}>
+		<time
+			className="ds-time"
+			dateTime={new Date(ev.ts).toISOString()}
+			title={fullDate(ev.ts)}
+		>
 			{clock(ev.ts)}
 		</time>
 	) : null;

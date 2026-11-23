@@ -10,7 +10,7 @@ import { openPrompt } from "../../approval/focus.ts";
 import { terminalWhy } from "../../approval/terminal.ts";
 import { useNow } from "../../data/clock.ts";
 import { AgentAvatar, AgentStatus, Kbd } from "../../ds/index.ts";
-import { age, plural } from "../../lib/format.ts";
+import { age, fullDate, plural } from "../../lib/format.ts";
 import { navigate } from "../../lib/router.ts";
 import { observer } from "../../lib/signals.ts";
 import { attention, hello, recent } from "../../lib/store.ts";
@@ -76,7 +76,9 @@ export function NeedsRow({ item }: { item: AttentionItem }) {
 						)}
 					</span>
 				</span>
-				<span className="d-card-age">{age(item.createdAt, now)}</span>
+				<span className="d-card-age" title={fullDate(item.createdAt)}>
+					{age(item.createdAt, now)}
+				</span>
 				<span className="d-btn sm d-card-cta">
 					{approval ? "Review" : terminal ? "View" : "Reply"}
 				</span>

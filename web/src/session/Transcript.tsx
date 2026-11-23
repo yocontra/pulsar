@@ -31,7 +31,7 @@ import { MessageResponse } from "../components/ai-elements/message.tsx";
 import { AgentAvatar, harnessName } from "../components/ui/agent-avatar.tsx";
 import { LOCAL_PREFIX, useLocalSend } from "../data/pending.ts";
 import { splitAttached } from "../lib/attachments.ts";
-import { clock, duration, plural } from "../lib/format.ts";
+import { clock, duration, fullDate, plural } from "../lib/format.ts";
 import { linkPrs } from "../lib/links.ts";
 import { sentHere } from "../lib/sent.ts";
 import { AttachedFiles } from "./AttachedFiles.tsx";
@@ -237,7 +237,11 @@ export const Transcript = memo(function Transcript({
 function Time({ ts }: { ts: number }) {
 	if (!ts) return null;
 	return (
-		<time className="ds-time" dateTime={new Date(ts).toISOString()}>
+		<time
+			className="ds-time"
+			dateTime={new Date(ts).toISOString()}
+			title={fullDate(ts)}
+		>
 			{clock(ts)}
 		</time>
 	);

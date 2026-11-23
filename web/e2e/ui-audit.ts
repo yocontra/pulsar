@@ -517,7 +517,14 @@ export async function untitledRelativeTimes(page: Page): Promise<string[]> {
 		const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
 		for (let n = walk.nextNode(); n; n = walk.nextNode()) {
 			const p = n.parentElement;
-			if (!p || p.closest("time,textarea,input,pre,code,.transcript")) continue;
+			// Controls that pick a span ("24h", "7d") are durations, not times.
+			if (
+				!p ||
+				p.closest(
+					"time,textarea,input,pre,code,.transcript,button,option,select,[role=radio],[role=tab]",
+				)
+			)
+				continue;
 			const text = (p.textContent ?? "").trim();
 			if (REL.test(text)) check(p, text);
 		}
