@@ -641,3 +641,30 @@ html.k-ios ion-content.diag-phone-page .diag-machine {
 	border-radius: 24px;
 	padding: 14px 16px;
 }
+
+/* ------------------------------------------------------------ menus
+   ui/Menu.tsx (Konsta Popover + MenuList). Above Ionic's sheets; labels
+   take the item's color, not Ionic's link tint. */
+/* A zero-size stacking layer: the fixed backdrop and popover inside it sit
+   over Ionic's sheets (z 20000+) without blocking taps when closed. */
+.p-menu-layer {
+	position: relative;
+	z-index: 30000;
+}
+.p-menu a {
+	color: inherit;
+}
+.p-menu .p-menu-danger,
+.p-menu .p-menu-danger a {
+	color: var(--ds-danger-text);
+}
+/* Material 3 menu: flat 48 px rows edge to edge, not separate pills. */
+html.k-material .p-menu .k-list-item {
+	min-height: 48px;
+	margin-inline: 0;
+	border-radius: 0;
+}
+html.k-material .p-menu > div {
+	border-radius: 4px;
+	padding-block: 8px;
+}
