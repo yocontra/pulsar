@@ -106,6 +106,7 @@ function PrChip({
 					type="button"
 					className={`d-btn sm g-pr-chip ${pr.state}`}
 					aria-label={`PR #${pr.number}, ${PR_STATE[pr.state]}`}
+					title={`PR #${pr.number} (${PR_STATE[pr.state]}): ${pr.title}`}
 				>
 					<GitPullRequestIcon aria-hidden="true" />#{pr.number}
 				</button>
@@ -211,6 +212,7 @@ function GitDesktopImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 									type="button"
 									className="d-btn sm icon g-more"
 									aria-label="More git actions"
+									title="More git actions"
 								>
 									<ChevronDownIcon aria-hidden="true" />
 								</button>

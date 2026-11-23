@@ -135,7 +135,7 @@ export function PrCard({
 								<li key={`${c.name}-${i}`} className={`g-check ${c.state}`}>
 									<Icon aria-label={c.state} />
 									<ExtLink href={c.url}>
-										<span>{c.name}</span>
+										<span title={`${c.name}: ${c.state}`}>{c.name}</span>
 									</ExtLink>
 									{c.workflow && (
 										<span className="g-check-wf">{c.workflow}</span>
