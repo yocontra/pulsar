@@ -1,9 +1,10 @@
 /**
  * The phone agent page's bar and dock (mobile/AgentPage.tsx, AgentBar.tsx),
  * on iOS (`ios`) and Android (`android`): the actions (git, Find, Changes,
- * More) in iOS's glass capsule or as Material icon buttons; at 360 px or
- * less only Changes and More, with git and Find in More; the title never
- * runs under the actions; the composer floats in a dock above the home
+ * More) in iOS's glass capsule or as Material icon buttons; at 400 px or
+ * less Find is in More, and at 360 px or less git too; the title never
+ * runs under the actions, and on a 375 px iPhone a name like
+ * "apparish-auth" and "Needs approval" show whole; the composer floats in a dock above the home
  * indicator and the keyboard.
  */
 import type { Page } from "@playwright/test";
@@ -66,7 +67,7 @@ test.describe("agent page bar", () => {
 	}, info) => {
 		const md = info.project.name === "android";
 		const id = await agentId(request, "name=apparish-auth");
-		await open(page, id, 393);
+		await open(page, id, 430);
 		await expect(git(page)).toBeVisible();
 		await expect(find(page)).toBeVisible();
 		await expect(more(page)).toBeVisible();
@@ -124,12 +125,34 @@ test.describe("agent page bar", () => {
 			await expect(page.getByRole("dialog", { name: "Git" })).toBeVisible();
 		});
 
-	test("at 361 px all four actions show, and More lists neither git nor Find", async ({
+	for (const width of [361, 375, 400])
+		test(`at ${width} px: git, Changes and More, with Find in More`, async ({
+			page,
+			request,
+		}) => {
+			const id = await agentId(request, "name=apparish-auth");
+			await open(page, id, width);
+			await expect(git(page)).toBeVisible();
+			await expect(find(page)).toBeHidden();
+			await expect
+				.poll(() => shownActions(page))
+				.toEqual(["Git", "Changes", "More"]);
+			await fits(page);
+			await more(page).click();
+			const menu = page.getByRole("menu");
+			await expect(menu.getByRole("menuitem", { name: "Git" })).toHaveCount(0);
+			await menu.getByRole("menuitem", { name: "Find in Messages" }).click();
+			await expect(
+				page.getByRole("search", { name: "Find in messages" }),
+			).toBeVisible();
+		});
+
+	test("at 401 px all four actions show, and More lists neither git nor Find", async ({
 		page,
 		request,
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
-		await open(page, id, 361);
+		await open(page, id, 401);
 		await expect(git(page)).toBeVisible();
 		await expect(find(page)).toBeVisible();
 		await fits(page);
@@ -142,6 +165,32 @@ test.describe("agent page bar", () => {
 		await expect(
 			menu.getByRole("menuitem", { name: "Find in Messages" }),
 		).toHaveCount(0);
+	});
+
+	test("at 375 px with iPhone text size, the name and 'Needs approval' show whole", async ({
+		page,
+		request,
+	}) => {
+		// An iPhone's body text is 17 px (macOS WebKit reports 13).
+		await page.addInitScript(() => {
+			const set = () =>
+				document.documentElement.style.setProperty("font-size", "17px");
+			if (document.documentElement) set();
+			else document.addEventListener("DOMContentLoaded", set);
+		});
+		const id = await agentId(request, "name=apparish-auth");
+		await open(page, id, 375);
+		const sub = bar(page).locator(".p-nav-sub .ds-status-text");
+		await expect(sub).toHaveText("Needs approval");
+		await fits(page);
+		const clipped = await page.evaluate(() =>
+			[".p-nav-title h1", ".p-nav-sub .ds-status-text", ".p-nav-sub"]
+				.map((q) => document.querySelectorAll(q))
+				.flatMap((l) => [...l].slice(-1))
+				.filter((e) => e.scrollWidth > e.clientWidth + 0.5)
+				.map((e) => e.className || e.tagName),
+		);
+		expect(clipped).toEqual([]);
 	});
 });
 

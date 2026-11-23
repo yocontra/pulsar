@@ -1,6 +1,26 @@
 import type { Page } from "@playwright/test";
 import { agentId, expect, ready, test } from "./fixtures.ts";
 
+/** A phone at 400 px or less keeps Find in the agent bar's More menu. */
+const findInMore = (page: Page) => (page.viewportSize()?.width ?? 1440) <= 400;
+const findButton = (page: Page) =>
+	page.getByRole("button", { name: "Find in messages", exact: true });
+const moreButton = (page: Page) =>
+	page
+		.getByTestId("agent-actions")
+		.last()
+		.getByRole("button", { name: "More" });
+
+/** Open the agent page's find bar, from the bar or from More. */
+async function openFind(page: Page) {
+	if (!findInMore(page)) return findButton(page).click();
+	await moreButton(page).click();
+	await page
+		.getByRole("menu")
+		.getByRole("menuitem", { name: "Find in Messages" })
+		.click();
+}
+
 /**
  * Message search (web/src/features/search): Cmd-K's "In messages" group on
  * the desktop, the search page on the phone, and the find bar a hit opens
@@ -138,9 +158,7 @@ export function searchSuite(platform: "desktop" | "phone") {
 		await page.evaluate((id) => {
 			location.hash = `#/a/${encodeURIComponent(id)}`;
 		}, id);
-		await page
-			.getByRole("button", { name: "Find in messages", exact: true })
-			.click();
+		await openFind(page);
 		const bar = findBar(page);
 		await bar.getByRole("searchbox").fill("fake timers");
 		const n = await landed(page);
@@ -180,9 +198,7 @@ export function searchSuite(platform: "desktop" | "phone") {
 		await page.evaluate((id) => {
 			location.hash = `#/a/${encodeURIComponent(id)}`;
 		}, id);
-		await page
-			.getByRole("button", { name: "Find in messages", exact: true })
-			.click();
+		await openFind(page);
 		await findBar(page).getByRole("searchbox").fill("fake timers");
 		await expect(findBar(page)).toContainText(/\d+ of \d+/);
 		await page.evaluate(() => {
@@ -193,7 +209,7 @@ export function searchSuite(platform: "desktop" | "phone") {
 			location.hash = `#/a/${encodeURIComponent(id)}`;
 		}, id);
 		await expect(
-			page.getByRole("button", { name: "Find in messages", exact: true }),
+			findInMore(page) ? moreButton(page) : findButton(page),
 		).toBeVisible();
 		await expect(findBar(page)).toBeHidden();
 	});
@@ -217,9 +233,7 @@ export function searchSuite(platform: "desktop" | "phone") {
 				}),
 			}),
 		);
-		await page
-			.getByRole("button", { name: "Find in messages", exact: true })
-			.click();
+		await openFind(page);
 		const bar = findBar(page);
 		await bar.getByRole("searchbox").fill("fake timers");
 		await expect(bar).toContainText("Couldn't search");
@@ -266,10 +280,16 @@ export function searchSuite(platform: "desktop" | "phone") {
 		await page.evaluate((id) => {
 			location.hash = `#/a/${encodeURIComponent(id)}`;
 		}, id);
-		const find = page.getByRole("button", {
-			name: "Find in messages",
-			exact: true,
-		});
+		if (findInMore(page)) {
+			await moreButton(page).click();
+			await expect(
+				page
+					.getByRole("menu")
+					.getByRole("menuitem", { name: "Find in Messages" }),
+			).toBeDisabled();
+			return;
+		}
+		const find = findButton(page);
 		await expect(find).toBeDisabled();
 		await expect(
 			page.locator("span[title^='Message search is off']", { has: find }),
@@ -295,9 +315,7 @@ export function searchSuite(platform: "desktop" | "phone") {
 			location.hash = `#/a/${encodeURIComponent(id)}`;
 		}, id);
 		const bar = findBar(page);
-		await page
-			.getByRole("button", { name: "Find in messages", exact: true })
-			.click();
+		await openFind(page);
 		await bar.getByRole("searchbox").fill("fake timers");
 		const n = await landed(page);
 		// Older pages fail from now on.
@@ -337,9 +355,7 @@ export function searchSuite(platform: "desktop" | "phone") {
 		await page.evaluate((id) => {
 			location.hash = `#/a/${encodeURIComponent(id)}`;
 		}, id);
-		await page
-			.getByRole("button", { name: "Find in messages", exact: true })
-			.click();
+		await openFind(page);
 		const bar = findBar(page);
 		await bar.getByRole("searchbox").fill("fake timers");
 		await landed(page);

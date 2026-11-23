@@ -1,8 +1,8 @@
 /**
  * An agent: its conversation, the composer in a floating dock, and a bar
  * with the agent's name and live status (AgentBar). The bar's actions:
- * git, Find, Changes and More; at 360 px or less, Changes and More, with
- * git and Find in More. A prompt waiting on it shows inline in the
+ * git, Find, Changes and More; at 400 px or less Find moves into More (the
+ * title gets the room), and at 360 px or less git does too. A prompt waiting on it shows inline in the
  * conversation; the banner brings it into view.
  */
 import { EllipsisIcon, ShieldCheckIcon } from "lucide-react";
@@ -103,38 +103,42 @@ function useMessageMenu() {
 	return { handlers, messageActions };
 }
 
-/** At 360 px or less the bar keeps Changes and More; git and Find move into More. */
-const NARROW = "(max-width: 360px)";
+/**
+ * The bar gives its title the room: at 400 px or less Find moves into More,
+ * and at 360 px or less git does too (Changes and More always stay).
+ */
+const NARROW_FIND = "(max-width: 400px)";
+const NARROW_GIT = "(max-width: 360px)";
 
-function useNarrow() {
-	const [narrow, setNarrow] = useState(() => matchMedia(NARROW).matches);
+function useMedia(q: string) {
+	const [on, setOn] = useState(() => matchMedia(q).matches);
 	useEffect(() => {
-		const mq = matchMedia(NARROW);
-		const on = () => setNarrow(mq.matches);
-		mq.addEventListener("change", on);
-		return () => mq.removeEventListener("change", on);
-	}, []);
-	return narrow;
+		const mq = matchMedia(q);
+		const change = () => setOn(mq.matches);
+		mq.addEventListener("change", change);
+		return () => mq.removeEventListener("change", change);
+	}, [q]);
+	return on;
 }
 
 /** The ••• button and its menu (a Konsta popover anchored to it). */
 const MoreMenu = observer(function MoreMenu({ a }: { a: AgentRow | null }) {
 	const [open, setOpen] = useState(false);
 	const btn = useRef<HTMLIonButtonElement | null>(null);
-	const narrow = useNarrow();
+	const gitInMore = useMedia(NARROW_GIT);
+	const findInMore = useMedia(NARROW_FIND);
 	const items: MenuItem[] = [];
-	if (a && narrow) {
-		if (gitOffered.value.has(a.id))
-			items.push({
-				label: "Git",
-				onSelect: () => showGit(a.id),
-			});
+	if (a && gitInMore && gitOffered.value.has(a.id))
+		items.push({
+			label: "Git",
+			onSelect: () => showGit(a.id),
+		});
+	if (a && findInMore)
 		items.push({
 			label: "Find in Messages",
 			disabled: !can("search") || !a.hasTranscript,
 			onSelect: () => openFind(a.id),
 		});
-	}
 	if (a)
 		for (const b of agentButtons(a))
 			items.push({

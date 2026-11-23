@@ -60,11 +60,16 @@ html.md .p-agent-actions ion-button {
 	--border-radius: 50%;
 }
 
-/* At 360 px or less only Changes and More stay: git and Find are in More
-   (AgentPage's NARROW). Their components stay mounted (sheets, find bar). */
-@media (max-width: 360px) {
-	.p-agent-actions .g-phone-btn,
+/* The title gets the room: at 400 px or less Find is in More, at 360 px or
+   less git too (AgentPage's NARROW_FIND / NARROW_GIT). Their components stay
+   mounted (sheets, find bar). */
+@media (max-width: 400px) {
 	.p-agent-actions .p-find-btn {
+		display: none;
+	}
+}
+@media (max-width: 360px) {
+	.p-agent-actions .g-phone-btn {
 		display: none;
 	}
 }
