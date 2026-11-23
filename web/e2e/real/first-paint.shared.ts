@@ -75,9 +75,14 @@ export async function revisitPaintsFromSnapshot(
 	await expect(page.locator('[data-node="m:gone"]')).toBeVisible();
 	if (phone) {
 		const n = asked.length;
+		// Ionic moves the row's aria-label onto its native button (in the
+		// shadow root): that button is what a screen reader names.
 		await expect(
-			page.getByTestId("needs-summary").locator(".p-title"),
-		).toHaveText(`${n} ${n === 1 ? "needs" : "need"} you`);
+			page.getByTestId("needs-summary").getByRole("button", {
+				name: `${n} ${n === 1 ? "needs" : "need"} you`,
+				exact: true,
+			}),
+		).toBeVisible();
 	} else
 		await expect(
 			page

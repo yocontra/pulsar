@@ -53,7 +53,10 @@ test.describe("agents tab", () => {
 		await ready(page);
 		const sum = page.getByTestId("needs-summary");
 		await expect(sum).toBeVisible();
-		await expect(sum).toHaveAccessibleName(/^\d+ (needs|need) you$/);
+		// The row's native button (Ionic moves aria-label onto it) is named.
+		await expect(
+			sum.getByRole("button", { name: /^\d+ (needs|need) you$/ }),
+		).toBeVisible();
 		// One row, not the list of approvals.
 		await expect(page.locator(".p-home ion-item.p-attn")).toHaveCount(0);
 		const field = page.getByLabel("Search agents and messages");
