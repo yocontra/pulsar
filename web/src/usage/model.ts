@@ -4,6 +4,12 @@
  * the page and its tests share it.
  */
 import { priceFor } from "../../../src/usage/prices.ts";
+
+export { isLocalModel, modelName } from "../../../src/usage/prices.ts";
+
+/** A local model's cost in the breakdown: why it is $0. */
+export const LOCAL_LABEL = "Local · $0";
+
 import type {
 	UsagePrice,
 	UsageReport,

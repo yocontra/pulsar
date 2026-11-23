@@ -14,7 +14,10 @@ import {
 	bucketLabel,
 	cacheHitRate,
 	compact,
+	isLocalModel,
+	LOCAL_LABEL,
 	type Metric,
+	modelName,
 	money,
 	percent,
 	priceOf,
@@ -235,12 +238,16 @@ export function ModelSheet({
 	const chart = series(report, mine, metric, () => model);
 	const fmt = metric === "cost" ? money : compact;
 	const price = priceOf(model, report.prices);
+	const local = isLocalModel(model);
+	const name = modelName(model);
 	return (
-		<Frame title={model} onClose={onClose}>
+		<Frame title={name} onClose={onClose}>
 			<dl className="usage-totals usage-totals-3">
 				<div>
-					<dt>{priced ? "API estimate" : "Cost"}</dt>
-					<dd className="usage-num">{priced ? money(cost) : "No price"}</dd>
+					<dt>{priced && !local ? "API estimate" : "Cost"}</dt>
+					<dd className="usage-num">
+						{local ? LOCAL_LABEL : priced ? money(cost) : "No price"}
+					</dd>
 				</div>
 				<div>
 					<dt>Cache hit rate</dt>
@@ -256,14 +263,20 @@ export function ModelSheet({
 			<UsageChart
 				buckets={chart.buckets}
 				series={chart.series}
-				label={`${model} trend`}
+				label={`${name} trend`}
 				format={fmt}
 				bucketLabel={(b) => bucketLabel(b, report.bucket)}
-				name={() => model}
+				name={() => name}
 				color={() => "var(--ds-primary)"}
 			/>
 			<h3 className="usage-h2">Price</h3>
-			<PriceForm model={model} current={price} />
+			{local ? (
+				<p className="usage-muted">
+					Local · $0. A model on your own hardware costs nothing.
+				</p>
+			) : (
+				<PriceForm model={model} current={price} />
+			)}
 		</Frame>
 	);
 }

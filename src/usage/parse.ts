@@ -27,6 +27,12 @@ export interface UsageRecord {
 	dedupeId?: string;
 	/** pi/omp: the provider that answered (a later answer clears its reached limit). */
 	account?: string;
+	/**
+	 * The provider that answered, as the harness config names it (pi/omp:
+	 * `message.provider`; Codex: the session's `model_provider`), so the
+	 * scanner can tell a local model (src/usage/local.ts).
+	 */
+	provider?: string;
 }
 
 export interface FileState {
@@ -34,6 +40,8 @@ export interface FileState {
 	cwd?: string;
 	/** The model in use (Codex names it in `turn_context`, before token counts). */
 	model?: string;
+	/** Codex: the session's `model_provider` (`openai`, `ollama`, a custom one). */
+	provider?: string;
 	/** Codex: the last cumulative totals, so a repeated event adds nothing. */
 	total?: CodexTotals;
 	/** Tokens in the latest request's context, and the window when the harness says. */
@@ -174,6 +182,8 @@ function codexLine(d: Json, state: FileState): UsageRecord | null {
 		if (cwd) state.cwd = cwd;
 		const model = str(p.model);
 		if (model) state.model = model;
+		const provider = str(p.model_provider);
+		if (provider) state.provider = provider;
 		return null;
 	}
 	if (d.type !== "event_msg" || p.type !== "token_count") return null;
@@ -214,6 +224,7 @@ function codexLine(d: Json, state: FileState): UsageRecord | null {
 		cacheWrite1h: 0,
 		output: add.output,
 	};
+	if (state.provider) r.provider = state.provider;
 	return empty(r) ? null : r;
 }
 
@@ -248,7 +259,10 @@ function piLine(d: Json, state: FileState): UsageRecord | null {
 	const id = str(m.responseId);
 	if (id) r.dedupeId = id;
 	const provider = str(m.provider);
-	if (provider) r.account = provider;
+	if (provider) {
+		r.account = provider;
+		r.provider = provider;
+	}
 	state.model = model;
 	state.context = { used: r.input + r.cacheRead + write, window: null };
 	return empty(r) ? null : r;

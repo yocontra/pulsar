@@ -32,6 +32,8 @@ const SOURCES = [
 	{ machine: "studio", harness: "codex", model: "acme-coder-9", scale: 5 },
 	{ machine: "mbp-a", harness: "claude", model: "claude-sonnet-5-5", scale: 4 },
 	{ machine: "desk", harness: "pi", model: "claude-haiku-5-5", scale: 2 },
+	// A model on desk's own Ollama: the scanner tags it local ($0).
+	{ machine: "desk", harness: "pi", model: "qwen3.8:27b[local]", scale: 1 },
 ];
 /** Machines asked; mbp-b is asleep, as in the mock pool. */
 const MACHINES = [

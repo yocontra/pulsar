@@ -33,7 +33,10 @@ import {
 	compact,
 	type Filters,
 	filterRows,
+	isLocalModel,
+	LOCAL_LABEL,
 	type Metric,
+	modelName,
 	money,
 	percent,
 	processed,
@@ -442,12 +445,18 @@ function Body({
 											key={g.key}
 											link
 											data-model={g.key}
-											title={<span className="p-usage-model">{g.key}</span>}
+											title={
+												<span className="p-usage-model">
+													{modelName(g.key)}
+												</span>
+											}
 											after={
 												<span className="usage-num">
-													{metric === "cost" && unpriced
-														? "No price"
-														: fmt(value(metric, g.cost, g.tokens))}
+													{metric === "cost" && isLocalModel(g.key)
+														? LOCAL_LABEL
+														: metric === "cost" && unpriced
+															? "No price"
+															: fmt(value(metric, g.cost, g.tokens))}
 												</span>
 											}
 											footer={<ShareBar share={g.share} />}
