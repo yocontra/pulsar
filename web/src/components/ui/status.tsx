@@ -1,5 +1,12 @@
 import { cx as cn } from "../../lib/cx.ts";
-import { badgeCount, STATUS_LABEL, stateLabel } from "../../lib/format.ts";
+import {
+	badgeCount,
+	fullDate,
+	heldFor,
+	num,
+	STATUS_LABEL,
+	stateLabel,
+} from "../../lib/format.ts";
 
 export type AgentState = "busy" | "idle" | "needs-you" | "offline";
 export type Tone = AgentState | "failed" | "done";
@@ -30,6 +37,7 @@ export function StatusDot({
 			className={cn("ds-dot", `s-${state}`, live && "is-live", className)}
 			{...a11y}
 		>
+			{label && <title>{label}</title>}
 			{state === "busy" && <circle cx="6" cy="6" r="4" fill="currentColor" />}
 			{state === "idle" && (
 				<circle
@@ -95,6 +103,7 @@ export function StatusBadge({
 	live,
 	variant = "soft",
 	className,
+	title,
 }: {
 	state: Tone;
 	/** The words. Use STATUS_LABEL[state] (+ a duration) from lib/format. */
@@ -102,9 +111,12 @@ export function StatusBadge({
 	live?: boolean;
 	variant?: "soft" | "plain";
 	className?: string;
+	/** Hover text: what a short label means ("Idle since Nov 22, 4:56 PM"). */
+	title?: string;
 }) {
 	return (
 		<span
+			title={title}
 			className={cn(
 				"ds-status",
 				`s-${state}`,
@@ -133,7 +145,7 @@ export function NeedsBadge({
 }) {
 	if (count <= 0) return null;
 	return (
-		<span className={cn("ds-needs-badge", className)}>
+		<span className={cn("ds-needs-badge", className)} title={label}>
 			<span aria-hidden={label ? true : undefined}>{badgeCount(count)}</span>
 			{label && <span className="sr-only">{label}</span>}
 		</span>
@@ -148,7 +160,14 @@ export function CountBadge({
 	count: number;
 	className?: string;
 }) {
-	return <span className={cn("ds-count", className)}>{badgeCount(count)}</span>;
+	return (
+		<span
+			className={cn("ds-count", className)}
+			title={count > 99 ? num(count) : undefined}
+		>
+			{badgeCount(count)}
+		</span>
+	);
 }
 
 /**
@@ -204,6 +223,11 @@ export function AgentStatus({
 			live={state === "busy"}
 			variant={variant}
 			className={className}
+			title={
+				state === "idle" && !lastSession && heldFor(ts, now) && ts
+					? `Idle since ${fullDate(ts)}`
+					: undefined
+			}
 		>
 			{words}
 		</StatusBadge>

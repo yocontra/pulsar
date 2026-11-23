@@ -1,5 +1,6 @@
 import { harnessUi } from "../../harnesses/index.ts";
 import { cx as cn } from "../../lib/cx.ts";
+import { STATUS_LABEL } from "../../lib/format.ts";
 
 /**
  * Harness identity: the harness's own mark (from its UI adapter in
@@ -121,7 +122,11 @@ export function AgentAvatar({
 			className={cn("ds-avatar", `ds-avatar--${size}`, className)}
 			data-harness={k}
 			aria-hidden={label ? undefined : true}
-			title={label ? undefined : harnessName(harness)}
+			title={
+				status
+					? `${harnessName(harness)} · ${STATUS_LABEL[status]}`
+					: harnessName(harness)
+			}
 		>
 			{label && <span className="sr-only">{label}</span>}
 			<HarnessGlyph harness={harness} size={Math.round(px * 0.56)} />

@@ -21,6 +21,7 @@ function CloseXImpl({
 		<button
 			type="button"
 			aria-label="Close"
+			title="Close"
 			{...rest}
 			disabled={disabled || inFlight.value > 0}
 			className={`close-x${tone ? ` is-${tone}` : ""} ${className}`.trim()}
