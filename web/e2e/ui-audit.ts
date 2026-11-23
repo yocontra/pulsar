@@ -436,3 +436,89 @@ export async function midY(loc: Locator): Promise<number> {
 	if (!b) throw new Error("no box");
 	return b.y + b.height / 2;
 }
+
+/**
+ * Visible controls (buttons, links, tabs) that show no text and carry no
+ * `title`: a sighted mouse user gets no hint what they do (an aria-label
+ * alone is spoken, never shown). A title on the control or its direct
+ * wrapper counts. Returns the offenders as readable strings.
+ */
+export async function untitledIconControls(page: Page): Promise<string[]> {
+	return page.evaluate(() => {
+		const SEL =
+			"button,a[href],[role=button],[role=link],[role=tab],[role=menuitem],summary";
+		const shown = (el: Element) => {
+			const r = el.getBoundingClientRect();
+			if (r.width < 2 || r.height < 2) return false;
+			if (r.bottom < 0 || r.right < 0) return false;
+			if (r.top > innerHeight || r.left > innerWidth) return false;
+			if (el.closest("[aria-hidden=true],[inert]")) return false;
+			// Hover-revealed row actions (opacity 0 until hover) count too.
+			return getComputedStyle(el).visibility !== "hidden";
+		};
+		// A title on the control or on its direct wrapper (a disabled
+		// button's span, say); one further out describes something else.
+		const titleOf = (el: Element) =>
+			(el.getAttribute("title") || el.parentElement?.getAttribute("title"))?.trim();
+		// Text a sighted user can read inside the control (not sr-only text).
+		const hasText = (el: Element) => {
+			const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+			for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+				if (!(n.textContent ?? "").trim()) continue;
+				const p = n.parentElement;
+				if (!p || p.closest(".sr-only")) continue;
+				const r = p.getBoundingClientRect();
+				if (r.width > 2 && r.height > 2) return true;
+			}
+			// An <input> button or an image with alt text shows its own label.
+			return !!el.querySelector("img[alt]:not([alt=''])");
+		};
+		const out: string[] = [];
+		for (const el of document.querySelectorAll(SEL)) {
+			if (!shown(el) || hasText(el)) continue;
+			if (titleOf(el)) continue;
+			const cls =
+				typeof el.className === "string"
+					? el.className.trim().split(/\s+/).slice(0, 2).join(".")
+					: "";
+			out.push(
+				`${el.tagName.toLowerCase()}${cls ? `.${cls}` : ""} "${el.getAttribute("aria-label") ?? ""}"`,
+			);
+		}
+		return out;
+	});
+}
+
+/**
+ * Visible relative times ("4 min ago", "3h", a <time>) with no full date or
+ * time in a `title` on them or their direct wrapper. Returns the offenders.
+ */
+export async function untitledRelativeTimes(page: Page): Promise<string[]> {
+	return page.evaluate(() => {
+		const REL =
+			/^(now|\d+s ago|\d+ min ago|\d+ h ago|yesterday|\d+[smhd]( ago)?)$/;
+		// A full date or time: a clock time or a year.
+		const DATE = /\d{1,2}:\d{2}|\d{4}/;
+		const out: string[] = [];
+		const check = (el: Element, text: string) => {
+			const r = el.getBoundingClientRect();
+			if (r.width < 2 || r.height < 2) return;
+			if (r.bottom < 0 || r.top > innerHeight) return;
+			if (el.closest("[aria-hidden=true],[inert]")) return;
+			const t =
+				el.getAttribute("title") || el.parentElement?.getAttribute("title");
+			if (t && DATE.test(t)) return;
+			out.push(`${el.tagName.toLowerCase()}.${el.className} "${text}"`);
+		};
+		for (const el of document.querySelectorAll("time"))
+			check(el, (el.textContent ?? "").trim());
+		const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+		for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+			const p = n.parentElement;
+			if (!p || p.closest("time,textarea,input,pre,code,.transcript")) continue;
+			const text = (p.textContent ?? "").trim();
+			if (REL.test(text)) check(p, text);
+		}
+		return [...new Set(out)];
+	});
+}

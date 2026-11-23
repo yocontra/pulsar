@@ -51,6 +51,20 @@ export function ago(ts: number, now = Date.now()) {
 	return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+const fullFmt = new Intl.DateTimeFormat([], {
+	dateStyle: "medium",
+	timeStyle: "short",
+});
+/**
+ * The full local date and time, for the `title` of a relative or short time
+ * ("4m", "3 h ago", "04:56 PM"): "Nov 22, 2026, 4:56 PM". "" for no time.
+ */
+export function fullDate(ts: number | string | null | undefined) {
+	if (ts == null || ts === "") return "";
+	const t = typeof ts === "string" ? Date.parse(ts) : ts;
+	return Number.isFinite(t) ? fullFmt.format(t) : "";
+}
+
 /** A duration for people: "0.4 s", "3.1 s", "48 s", "4 min", "1 h 20 min". */
 export function duration(ms: number) {
 	if (ms < 10_000) return `${(Math.max(0, ms) / 1000).toFixed(1)} s`;

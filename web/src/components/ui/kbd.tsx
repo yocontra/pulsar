@@ -38,6 +38,15 @@ export function keyLabel(k: string): { glyph: string; spoken: string } {
 	return { glyph: APPLE ? hit[0] : hit[1], spoken: hit[2] };
 }
 
+/** A shortcut as plain text: "⌘⇧B" on Apple platforms, "Ctrl+Shift+B" elsewhere. */
+export function keyCombo(keys: string[]) {
+	return keys.map((k) => keyLabel(k).glyph).join(APPLE ? "" : "+");
+}
+
+/** A hover title with its shortcut: "Broadcast (⌘⇧B)". */
+export const withKeys = (label: string, keys: string[]) =>
+	`${label} (${keyCombo(keys)})`;
+
 /**
  * A keyboard shortcut: <Kbd keys={["mod", "shift", "B"]} /> renders one chip,
  * ⌘⇧B on Apple platforms and Ctrl+Shift+B elsewhere. Hidden on touch-only
