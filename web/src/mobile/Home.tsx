@@ -577,7 +577,7 @@ const TIPS = {
 	readd: {
 		key: "pulsar.readdHint",
 		title: "Add Pulsar to your Home Screen again",
-		text: "This copy was added before Pulsar could use the area under the status bar, so that bar keeps the phone's colours. Remove Pulsar from the Home Screen, then add it again from Safari.",
+		text: "This copy has an old status bar that ignores Pulsar's theme. Remove it from the Home Screen, then add it again from Safari.",
 	},
 } as const;
 

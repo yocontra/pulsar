@@ -130,6 +130,10 @@ test("every bar follows the Appearance setting live", async ({
 	};
 
 	await expectAll("system, OS light", isLight, "light dark");
+	// A marker that a reload would drop.
+	await page.evaluate(() => {
+		(window as unknown as { __same: boolean }).__same = true;
+	});
 	await group.getByRole("radio", { name: "Dark" }).tap();
 	await expectAll("System → Dark, OS light", isDark, "dark");
 	await group.getByRole("radio", { name: "Light" }).tap();
@@ -142,9 +146,9 @@ test("every bar follows the Appearance setting live", async ({
 	// Still the same document: no reload happened along the way.
 	expect(
 		await page.evaluate(
-			() => performance.getEntriesByType("navigation").length,
+			() => (window as unknown as { __same?: boolean }).__same,
 		),
-	).toBe(1);
+	).toBe(true);
 });
 
 test("a pushed page's top bar follows the setting live", async ({
