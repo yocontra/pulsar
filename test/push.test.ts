@@ -265,6 +265,59 @@ describe("push service", () => {
 		ac.abort();
 	});
 
+	test("a finish while a prompt still waits gets its own tag and topic", async () => {
+		const { service, sent } = setup();
+		const ua = browser();
+		const endpoint = "https://web.push.apple.com/both";
+		service.push.subscribe(user, { endpoint, keys: ua.keys });
+		service.push.settings(user, { endpoint, turns: "notify" });
+		const agent = service.registry.upsert({
+			harness: "claude",
+			sessionId: "s2",
+			pid: null,
+			cwd: "/w/webshop",
+			project: "webshop",
+			branch: null,
+			tags: [],
+			meta: {},
+			registered: true,
+		});
+		const ac = new AbortController();
+		const caller: Caller = {
+			principal: { kind: "agent", agentId: agent.id },
+			closed: ac.signal,
+			emit() {},
+		};
+		void service.approvals.request(caller, {
+			sessionId: "s2",
+			promptId: "p",
+			tool: "Bash",
+			input: { command: "bun test" },
+			suggestions: [],
+			cwd: "/w/webshop",
+			transcriptPath: null,
+		});
+		await until(() => sent.length >= 2);
+		const read = (i: number) =>
+			JSON.parse(
+				decrypt(Buffer.from(sent[i]!.body), ua.priv, ua.auth).toString(),
+			) as PushPayload;
+		const prompt = read(1);
+		expect(prompt.tag).toMatch(/^agent:/);
+		service.events.emit("notify", {
+			kind: "finished",
+			agentId: agent.id,
+			at: Date.now(),
+		});
+		await until(() => sent.length >= 3);
+		const done = read(2);
+		const ref = prompt.tag!.slice("agent:".length);
+		expect(done.tag).toBe(`turn:${ref}`);
+		expect(sent[2]!.headers.Topic).toBe(`t${ref}`);
+		expect(sent[1]!.headers.Topic).toBe(ref);
+		ac.abort();
+	});
+
 	test("a gone subscription (410) is dropped; unknown push hosts are refused", async () => {
 		const { service } = setup(410);
 		service.push.subscribe(user, {
@@ -456,7 +509,7 @@ describe("push service", () => {
 			},
 		]);
 		expect(JSON.parse(bodies[1]!).body).toMatch(
-			/^Agents pause until it resets\. Resets in /,
+			/^Agents pause for .+, until the limit resets\.$/,
 		);
 		expect(sent[0]!.headers.Topic).toBe("limit");
 	});

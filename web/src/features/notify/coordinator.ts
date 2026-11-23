@@ -9,7 +9,8 @@
  *   that agent is not the one open: CircleCheck or CircleAlert, the push's
  *   title and body ("api-fix finished", its last message), and "Open
  *   agent". It closes once that agent opens.
- * - A prompt that is answered elsewhere closes its system notification.
+ * - A prompt answered elsewhere closes its system notification, while the
+ *   app is open on this device (close.ts).
  * - A badge count while the window is in the background: the app badge (the
  *   installed app) and "(n)" in the title, "9+" at most; focus clears it.
  *
@@ -18,12 +19,13 @@
 import { CircleAlertIcon, CircleCheckIcon } from "lucide-react";
 import { createElement } from "react";
 import { api } from "../../api/client.ts";
-import type { AgentRow, Approval, ServerEvents } from "../../api/types.ts";
+import type { AgentRow, ServerEvents } from "../../api/types.ts";
 import { keys } from "../../data/keys.ts";
 import { live, queryClient } from "../../data/runtime.ts";
 import { navigate, route } from "../../lib/router.ts";
 import { effect } from "../../lib/signals.ts";
 import { dismissToast, type ToastId, toast } from "../../lib/toast.ts";
+import { closeAnswered } from "./close.ts";
 import { inApp, mode, refresh, wantsSound } from "./prefs.ts";
 
 type Notice = ServerEvents["notify"];
@@ -103,21 +105,6 @@ function clearBadge() {
 	if (unseen === 0) return;
 	unseen = 0;
 	showBadge();
-}
-
-// ---------------------------------------------------------- notifications
-
-/**
- * Closes the system notification of a prompt that was answered, denied or
- * expired (the push for it can't be taken back: Safari shows every push).
- */
-export async function closeAnswered(a: Approval) {
-	if (a.state === "pending" || !("serviceWorker" in navigator)) return;
-	try {
-		const reg = await navigator.serviceWorker.getRegistration();
-		for (const n of (await reg?.getNotifications()) ?? [])
-			if ((n.data as { id?: unknown } | null)?.id === a.requestId) n.close();
-	} catch {}
 }
 
 // ------------------------------------------------------------------ toasts
