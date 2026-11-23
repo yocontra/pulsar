@@ -334,6 +334,9 @@
 	min-width: 20px;
 	height: 20px;
 	padding: 0 5px;
+	/* The keycap outline is the inset shadow below; the base kbd border
+	   (app.css) would draw a second one. */
+	border: 0;
 	border-radius: 5px;
 	color: var(--ds-text-3);
 	background: color-mix(in srgb, currentColor 7%, transparent);
