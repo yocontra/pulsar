@@ -6,9 +6,9 @@
  * --sat/--sab/--sal/--sar, which every safe-area rule reads) are set to an
  * iPhone 15/16 Pro's values. NOTCH_SHOTS_DIR saves a screenshot per screen.
  */
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { agentId, expect, ready, test } from "./fixtures.ts";
-import { settled } from "./ui-audit.ts";
+import { animationsDone } from "./ui-audit.ts";
 
 type Insets = { top: number; bottom: number; left: number; right: number };
 
@@ -135,17 +135,6 @@ function insetViolations(page: Page, ins: Insets) {
 	}, ins);
 }
 
-/** apparish-auth's fixture approval is still pending (it expires 10 min into a worker's mock). */
-async function authWaits(request: APIRequestContext, auth: string) {
-	const res = await request.get("/api/v1/attention", {
-		headers: { "X-Pulsar": "1" },
-	});
-	const { items } = (await res.json()) as {
-		items: { approval?: unknown; agent: { id: string } }[];
-	};
-	return items.some((i) => i.approval && i.agent.id === auth);
-}
-
 type Screen = [name: string, open: (page: Page, ids: Ids) => Promise<void>];
 type Ids = { codex: string; auth: string };
 
@@ -165,17 +154,23 @@ const SCREENS: Screen[] = [
 			await page.goto(`/#/a/${encodeURIComponent(auth)}`);
 			await page.locator(".prompt-inline").first().waitFor();
 			// The banner shows while the inline prompt is scrolled off screen.
-			// Scroll once the transcript stops loading, or it follows the end.
-			await settled(page);
-			await page.locator(".p-agent-body").evaluate((body) => {
-				for (const el of body.querySelectorAll("*"))
-					if (
-						el.scrollHeight > el.clientHeight + 5 &&
-						/auto|scroll/.test(getComputedStyle(el).overflowY)
-					)
-						el.scrollTo(0, 0);
-			});
-			await page.locator(".p-approval-banner").waitFor();
+			// Content that loads after a scroll can bring the conversation back
+			// to its end (and the prompt on screen): scroll to the top until the
+			// banner shows.
+			const banner = page.locator(".p-approval-banner");
+			await expect
+				.poll(async () => {
+					await page.locator(".p-agent-body").evaluate((body) => {
+						for (const el of body.querySelectorAll("*"))
+							if (
+								el.scrollHeight > el.clientHeight + 5 &&
+								/auto|scroll/.test(getComputedStyle(el).overflowY)
+							)
+								el.scrollTo(0, 0);
+					});
+					return banner.isVisible();
+				})
+				.toBe(true);
 		},
 	],
 	[
@@ -370,21 +365,21 @@ test.describe("notch and home indicator", () => {
 				};
 				const dir = process.env.NOTCH_SHOTS_DIR;
 				for (const [name, open] of SCREENS) {
-					if (
-						name === "agent with approval" &&
-						!(await authWaits(request, ids.auth))
-					) {
-						test.info().annotations.push({
-							type: "skipped screen",
-							description: `${name}: the fixture approval expired`,
+					// The fixture approval expires 10 min into a worker's mock (and
+					// stays listed): late in a full run its banner never shows. Each
+					// approval screen gets a fresh one.
+					if (name === "agent with approval" || name === "approval") {
+						const res = await request.post("/api/v1/__mock/realtime", {
+							headers: { "X-Pulsar": "1" },
+							data: { action: "needs-you", id: ids.auth, tool: "Bash" },
 						});
-						continue;
+						expect(res.ok()).toBe(true);
 					}
 					// A fresh document: an open sheet would cover the next screen.
 					await page.goto("about:blank");
 					await open(page, ids);
-					// Ionic's page and sheet transitions.
-					await page.waitForTimeout(700);
+					// Ionic's page and sheet transitions: measure at rest.
+					await animationsDone(page);
 					if (dir) {
 						// WebKit screenshots inject a stylesheet the CSP refuses.
 						const before = errors.length;

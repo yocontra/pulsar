@@ -334,28 +334,34 @@ test.describe("tabs", () => {
 			await phoneInsets(page, info.project.name === "android");
 			await page.goto(`/${hash}`);
 			await expect(bar(page)).toBeInViewport();
-			await page.waitForTimeout(500);
-			const r = await topContent(page).evaluate(async (c) => {
-				const el = await (c as unknown as ScrollerHost).getScrollElement();
-				el.scrollTop = el.scrollHeight;
-				await new Promise((r) => setTimeout(r, 300));
-				// Rows and text (leaves), not containers padded past them.
-				const kids = [...c.querySelectorAll("*")].filter(
-					(e) =>
-						e.childElementCount === 0 &&
-						(e as HTMLElement).offsetParent &&
-						e.getBoundingClientRect().height > 0,
-				);
-				const last = Math.max(
-					...kids.map((e) => e.getBoundingClientRect().bottom),
-				);
-				const barTop = document
-					.querySelector(
-						'[data-testid="tabbar"] .k-toolbar-pane, [data-testid="tabbar"]',
-					)!
-					.getBoundingClientRect().top;
-				return { last, barTop };
-			});
-			expect(r.last).toBeLessThanOrEqual(r.barTop + 1);
+			// Scrolled to the very end, at rest. The content can still grow after
+			// a scroll (Home's next page of machines as its end comes near, Usage's
+			// data), which puts rows below the bar until the next scroll: scroll
+			// and measure until it holds. A row that stays under the bar fails.
+			const overlap = () =>
+				topContent(page).evaluate(async (c) => {
+					const el = await (c as unknown as ScrollerHost).getScrollElement();
+					el.scrollTop = el.scrollHeight;
+					await new Promise((r) =>
+						requestAnimationFrame(() => requestAnimationFrame(r)),
+					);
+					// Rows and text (leaves), not containers padded past them.
+					const kids = [...c.querySelectorAll("*")].filter(
+						(e) =>
+							e.childElementCount === 0 &&
+							(e as HTMLElement).offsetParent &&
+							e.getBoundingClientRect().height > 0,
+					);
+					const last = Math.max(
+						...kids.map((e) => e.getBoundingClientRect().bottom),
+					);
+					const barTop = document
+						.querySelector(
+							'[data-testid="tabbar"] .k-toolbar-pane, [data-testid="tabbar"]',
+						)!
+						.getBoundingClientRect().top;
+					return last - barTop;
+				});
+			await expect.poll(overlap).toBeLessThanOrEqual(1);
 		});
 });

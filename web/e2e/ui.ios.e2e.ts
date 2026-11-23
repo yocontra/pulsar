@@ -9,6 +9,7 @@
 import type { Page } from "@playwright/test";
 import { agentId, expect, test } from "./fixtures.ts";
 import {
+	animationsDone,
 	baselineY,
 	contrastFailures,
 	expectBarInside,
@@ -373,7 +374,8 @@ test.describe("phone UI", () => {
 			];
 			for (const [name, open] of screens) {
 				await open(page, id);
-				await page.waitForTimeout(700);
+				// Ionic's page and sheet transitions: measure the colors at rest.
+				await animationsDone(page);
 				const lum = await pageLuminance(page);
 				if (scheme === "dark") expect(lum, name).toBeLessThan(0.05);
 				else expect(lum, name).toBeGreaterThan(0.8);

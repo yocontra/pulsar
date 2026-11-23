@@ -531,3 +531,20 @@ export async function untitledRelativeTimes(page: Page): Promise<string[]> {
 		return [...new Set(out)];
 	});
 }
+
+/**
+ * Every finite animation on the page has finished: Ionic's page and sheet
+ * transitions run as Web Animations, and CSS transitions show up there too.
+ * Infinite ones (spinners, skeleton shimmer) never end and are left out.
+ */
+export async function animationsDone(page: Page) {
+	await page.waitForFunction(() =>
+		document
+			.getAnimations()
+			.every(
+				(a) =>
+					a.playState !== "running" ||
+					a.effect?.getComputedTiming().endTime === Infinity,
+			),
+	);
+}
