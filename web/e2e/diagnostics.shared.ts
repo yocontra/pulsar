@@ -317,6 +317,8 @@ export function diagnosticsSuite(platform: "desktop" | "phone") {
 			.click();
 		await fold.click();
 		expect(await contrastFailures(page, ".diag *")).toEqual([]);
+		await page.emulateMedia({ colorScheme: "dark" });
+		expect(await contrastFailures(page, ".diag *")).toEqual([]);
 	});
 
 	test(`a fix's command copies with one tap (${platform})`, async ({
@@ -363,7 +365,7 @@ export function diagnosticsSuite(platform: "desktop" | "phone") {
 	});
 
 	if (phone)
-		test("nothing overflows a 320 px screen, passed checks open", async ({
+		test("nothing overflows a 320 px screen at 17 and 23 px text, passed checks open", async ({
 			page,
 		}) => {
 			await page.setViewportSize({ width: 320, height: 640 });
@@ -379,16 +381,23 @@ export function diagnosticsSuite(platform: "desktop" | "phone") {
 			for (const name of ["10 checks passed", "1 check passed"])
 				await v.getByRole("button", { name }).click();
 			await expect(v.locator('.diag-check[data-level="ok"]')).toHaveCount(11);
-			const wide = await v.evaluate((root) => {
-				const out: string[] = [];
-				for (const e of root.querySelectorAll<HTMLElement>(".diag *")) {
-					if (e.closest(".diag-sr")) continue;
-					const r = e.getBoundingClientRect();
-					if (r.width && (r.left < -0.5 || r.right > innerWidth + 0.5))
-						out.push(`${e.className || e.tagName}: ${r.left}–${r.right}`);
-				}
-				return out;
-			});
-			expect(wide).toEqual([]);
+			for (const font of [17, 23]) {
+				await page.evaluate(
+					(px) =>
+						document.documentElement.style.setProperty("font-size", `${px}px`),
+					font,
+				);
+				const wide = await v.evaluate((root) => {
+					const out: string[] = [];
+					for (const e of root.querySelectorAll<HTMLElement>(".diag *")) {
+						if (e.closest(".diag-sr")) continue;
+						const r = e.getBoundingClientRect();
+						if (r.width && (r.left < -0.5 || r.right > innerWidth + 0.5))
+							out.push(`${e.className || e.tagName}: ${r.left}–${r.right}`);
+					}
+					return out;
+				});
+				expect(wide, `${font} px text`).toEqual([]);
+			}
 		});
 }

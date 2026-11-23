@@ -50,7 +50,33 @@ describe("fixParts", () => {
 			fixParts("re-run `pulsar setup`").filter((p) => p.command),
 		).toHaveLength(1);
 	});
+	test("doctor's other command forms are commands", () => {
+		const cmds = (f: string) =>
+			fixParts(f)
+				.filter((p) => p.command)
+				.map((p) => p.text);
+		expect(cmds("run `npx pulsar@latest setup`")).toEqual([
+			"npx pulsar@latest setup",
+		]);
+		expect(cmds("let it in with `pulsar mesh allow mbp-a`")).toEqual([
+			"pulsar mesh allow mbp-a",
+		]);
+		expect(cmds("e.g. `headscale nodes register`")).toEqual([
+			"headscale nodes register",
+		]);
+		expect(
+			cmds(
+				"Start the daemon yourself, e.g. `tmux new -d -s pulsar 'pulsar daemon --service'`",
+			),
+		).toEqual(["tmux new -d -s pulsar 'pulsar daemon --service'"]);
+	});
 	test("other code spans and plain fixes have no command", () => {
+		expect(
+			fixParts("configures no agents (only the `pulsar`)").some(
+				(p) => p.command,
+			),
+		).toBe(false);
+		expect(fixParts("pass `--client none`").some((p) => p.command)).toBe(false);
 		expect(
 			fixParts("each report is a `client load error` line in daemon.log").some(
 				(p) => p.command,
