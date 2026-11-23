@@ -117,12 +117,19 @@ function scrollParent(el: HTMLElement): HTMLElement | null {
 	return null;
 }
 
-/** True when `el` is fully inside the scroller's visible box (or as much of it as fits). */
+/**
+ * True when `el` is fully inside the scroller's visible box (or as much of
+ * it as fits). The box excludes the scroll padding: on the phone the bar
+ * and the composer dock overlay the scroll area (conversation.css).
+ */
 function inView(el: HTMLElement, scroller: HTMLElement): boolean {
 	const r = el.getBoundingClientRect();
-	const s = scroller.getBoundingClientRect();
-	if (r.height >= s.height) return r.top < s.bottom && r.bottom > s.top;
-	return r.top >= s.top && r.bottom <= s.bottom;
+	const box = scroller.getBoundingClientRect();
+	const cs = getComputedStyle(scroller);
+	const top = box.top + (Number.parseFloat(cs.scrollPaddingTop) || 0);
+	const bottom = box.bottom - (Number.parseFloat(cs.scrollPaddingBottom) || 0);
+	if (r.height >= bottom - top) return r.top < bottom && r.bottom > top;
+	return r.top >= top && r.bottom <= bottom;
 }
 
 /** Keys that scroll a page: pressing one hands the scroll back to the operator. */

@@ -349,7 +349,31 @@ export function searchSuite(platform: "desktop" | "phone") {
 			.locator("section.session")
 			.last()
 			.locator("[data-find-current]");
-		await expect(current).toBeInViewport();
+		// On screen and, on the phone, clear of the glass bar and the composer
+		// dock that overlay the conversation.
+		const uncovered = async (el: typeof current) => {
+			await expect(el).toBeInViewport();
+			if (!phone) return;
+			await expect
+				.poll(() =>
+					el.evaluate((e) => {
+						const r = e.getBoundingClientRect();
+						const page = e.closest(".ion-page");
+						const bar = page
+							?.querySelector("ion-header")
+							?.getBoundingClientRect();
+						const dock = page
+							?.querySelector(".m-composer")
+							?.getBoundingClientRect();
+						return (
+							r.top >= (bar?.bottom ?? 0) - 1 &&
+							r.bottom <= (dock?.top ?? innerHeight) + 1
+						);
+					}),
+				)
+				.toBe(true);
+		};
+		await uncovered(current);
 		// Something above the match grows (an image or diagram that sized late).
 		const grow = () =>
 			page.evaluate(() => {
@@ -363,7 +387,7 @@ export function searchSuite(platform: "desktop" | "phone") {
 				turn?.parentElement?.insertBefore(tall, turn);
 			});
 		await grow();
-		await expect(current).toBeInViewport();
+		await uncovered(current);
 		// The operator scrolls: the match is theirs to leave.
 		if (phone) await current.dispatchEvent("touchstart");
 		else {
