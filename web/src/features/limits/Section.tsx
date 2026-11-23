@@ -16,7 +16,7 @@ import {
 import "./limits.css";
 
 export const HELP =
-	"A notification when a limit passes a threshold or is reached, once per limit window. Codex reports percentages; Claude Code, pi and omp only report a reached limit.";
+	"A notification when a limit passes a threshold or is reached, once per limit window. Codex and Claude Code report percentages; OpenCode, pi and omp only report a reached limit.";
 export const THRESHOLD_HELP = "Up to 3 values from 1 to 99, like 80, 95.";
 
 export const show = (t: number[]) => t.map((n) => `${n}%`).join(", ");

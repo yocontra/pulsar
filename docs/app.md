@@ -178,7 +178,7 @@ In a session's header (on a computer), a short line shows the session's cost so 
 
 ### Limits
 
-**Limits** on the Usage page lists the plan usage limits your harnesses reported on each machine: how much of each window is used and when it resets. Codex reports how much of each limit (for example the weekly one) is used. Claude Code, pi and omp only say when a limit is reached, so they show here only then, with when it was reached. A window drops off the list once it resets, and a reached limit drops off once that harness answers again (for example on extra usage or another model).
+**Limits** on the Usage page lists the plan usage limits your harnesses reported on each machine: how much of each window is used and when it resets. Codex reports how much of each limit (for example the weekly one) is used. Claude Code reports it too, but only when you open `/usage` in Claude Code, so Pulsar shows its last reading with "As of" and the time when it is more than an hour old (an old reading does not show in the session header or warn). OpenCode (OpenCode Go), pi and omp only say when a limit is reached, so they show here only then, with when it was reached. The plan name shows next to a limit when the harness gives one. Pulsar reads all of this from files on the machine and makes no network call for it. A window drops off the list once it resets, and a reached limit drops off once that harness answers again (for example on extra usage or another model).
 
 When an agent's harness is past a warning threshold, its session header shows it (for example "Weekly limit: 88%"; on a phone, "88%"). Tap it to open Usage.
 
