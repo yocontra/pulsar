@@ -5,7 +5,7 @@
  * - Budget, per layout: the initial route's JS (boot.js, entry + static
  *   imports + that layout's app chunk) gzipped (the .gz sidecars
  *   finish-dist.ts writes, which the daemon serves): the phone (Ionic shell,
- *   with its mode's Ionic styles) ≤ 185 KB, the desktop ≤ 130 KB.
+ *   with its mode's Ionic styles) ≤ 183 KB, the desktop ≤ 130 KB.
  * - Package: dist/web ≤ 9 MB and ≤ 420 files unpacked, not counting the
  *   precompressed .br/.gz sidecars, which have their own ≤ 4 MB budget
  *   (Shiki languages and KaTeX fonts are trimmed in astro.config.mjs;
@@ -31,16 +31,18 @@ const BUDGETS: Record<string, number> = {
 	// bar; tailwind-merge with it, ~15 KB), then lowered from 185 at 180.8:
 	// Home's search field is Konsta's, loaded after the first paint, not
 	// Ionic's IonSearchbar, and Konsta's shared runtime is one chunk
-	// (astro.config.mjs "konsta"), not split by lazy pages. Headroom ~2 KB.
-	// 185: the same commit measures 181.0 or 183.2 KB in two clean trees —
-	// rolldown's assignment to the "konsta" chunk isn't deterministic yet
-	// (K5 makes it deterministic and lowers this again).
-	PhoneApp: 185 * 1024,
+	// (astro.config.mjs "konsta"), not split by lazy pages. Briefly 185
+	// while a stale nested tailwind-merge copy put 2 KB more in some
+	// checkouts' konsta chunk (astro.config.mjs resolve.dedupe fixes it);
+	// lowered to 183 at 180.5 once the dead phone CSS and Ionic wrappers
+	// were gone. Headroom ~2 KB.
+	PhoneApp: 183 * 1024,
 	DesktopApp: 130 * 1024,
 };
-// All of dist/web, uncompressed. Raised from 9 MB at 9.01 MB: the Konsta
-// phone screens (Usage, the Agents tab) added their chunks and styles.
-const PACKAGE_BYTES = 9.5 * 1024 * 1024;
+// All of dist/web, uncompressed. Briefly 9.5 MB for the Konsta phone
+// screens (9.01 MB); back to 9 MB at 8.85 MB once the dead phone CSS,
+// Ionic wrappers and phone branches were deleted.
+const PACKAGE_BYTES = 9 * 1024 * 1024;
 // The count catches a bundle that fans out (Shiki's full bundle was 300+
 // grammar chunks). What's here now is on-demand and expected: ~36 Mermaid
 // diagram types, 20 KaTeX fonts, ~22 Shiki grammars, the formatter's
