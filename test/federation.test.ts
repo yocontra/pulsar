@@ -1446,7 +1446,8 @@ describe("approvals across machines (relayed ceremony: the home node verifies)",
 			});
 			expect(r.won).toBe(true);
 			expect(r.approval.requestId).toBe(q.address);
-			expect(r.approval.outcome).toContain("iPhone");
+			// The browser's node (forwarded by B), not the passkey's label.
+			expect(r.approval.outcome).toContain("passkey on phone");
 			expect(await q.decision).toEqual({ behavior: "allow" });
 			expect(c.service.approvals.get(q.id)!.state).toBe("allowed");
 		} finally {

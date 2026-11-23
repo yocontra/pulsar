@@ -39,11 +39,13 @@ import {
 	needsDetail,
 	redactAnswer,
 } from "./interactions.ts";
-import type {
-	ApprovalBinding,
-	Passkeys,
-	RelyingParty,
-	Signer,
+import {
+	type ApprovalBinding,
+	type Passkeys,
+	proverLabel,
+	proverMethod,
+	type RelyingParty,
+	type Signer,
 } from "./passkeys.ts";
 import { isAddress, type RemoteApprovals } from "./pool.ts";
 import { type Confirmed, spendConfirmed } from "./presence.ts";
@@ -574,6 +576,7 @@ export class Approvals {
 					device: this.o.registry.machine,
 					method,
 				},
+				on: this.o.registry.machine,
 			},
 			{ decision: "answer", answer, note: null },
 		);
@@ -788,13 +791,15 @@ export class Approvals {
 			answer?: InteractionAnswer | null;
 			by?: string;
 			signer?: Signer;
+			/** The device that proved it, shown as "on Mac (contra-m2-mbp)". */
+			on?: string | null;
 		},
 		result: InteractionResult | null,
 	): boolean {
 		const r = this.o.store.db
 			.prepare(
 				`UPDATE approvals SET state = ?, answered_by = ?, decision = ?, note = ?, answer = ?, decided_by = ?,
-				   decided_device = ?, decided_method = ?, decided_at = ?
+				   decided_device = ?, decided_method = ?, decided_on = ?, decided_at = ?
 				 WHERE id = ? AND state = 'pending'`,
 			)
 			.run(
@@ -806,6 +811,7 @@ export class Approvals {
 				f.by ?? null,
 				f.signer?.device ?? null,
 				f.signer?.method ?? null,
+				f.on ?? null,
 				this.now(),
 				id,
 			);
@@ -906,8 +912,7 @@ export class Approvals {
 		if (state === "allowed" || state === "denied") {
 			const d = r.decision as ApprovalDecision;
 			const who = (r.decided_by as string | null) || "you";
-			const method = r.decided_method ? ` · ${r.decided_method}` : "";
-			const device = r.decided_device ? ` on ${r.decided_device}` : "";
+			const { method, device } = decidedHow(r);
 			const what =
 				d === "answer" && answer
 					? answerLabel(answer, prompt)
@@ -1295,6 +1300,14 @@ export class Approvals {
 			decision === "answer"
 				? answer !== null && answerApproves(answer, prompt)
 				: decision !== "deny";
+		// Shown as the device that proved (the request's tailnet node), not the
+		// passkey's label: a synced passkey keeps its registering device's name.
+		const human = p.kind === "human" ? p : null;
+		const on = human ? proverLabel(human) : null;
+		const method =
+			signer.method === "passkey session"
+				? signer.method
+				: proverMethod(human?.os);
 		const won = this.finish(
 			id,
 			allowed ? "allowed" : "denied",
@@ -1305,8 +1318,9 @@ export class Approvals {
 				// Stored and shown without secret fields; the agent gets the real one.
 				answer: answer ? redactAnswer(answer, prompt) : null,
 				// The operator's name from Tailscale, shown in the outcome.
-				by: operatorName(p.kind === "human" ? p.name : null, login),
-				signer,
+				by: operatorName(human?.name ?? null, login),
+				signer: { ...signer, method },
+				on,
 			},
 			{ decision, answer, note },
 		);
@@ -1315,10 +1329,33 @@ export class Approvals {
 			won,
 			...(answer ? { answerHash: answerHash(answer) } : {}),
 			device: signer.device,
+			on,
 			credential: signer.credentialId,
 		});
 		return { won, approval: this.get(id)! };
 	}
+}
+
+/**
+ * How a decided row shows its method and device: " · Touch ID", " on Mac
+ * (contra-m2-mbp)". `decided_on` is the device that proved. App rows from
+ * before it stored the passkey's label in `decided_device` (wrong for a
+ * synced passkey) and a method guessed from that label: they show neither,
+ * except "passkey session", which was always right.
+ */
+export function decidedHow(r: Record<string, unknown>): {
+	method: string;
+	device: string;
+} {
+	const on = r.decided_on as string | null | undefined;
+	const legacyApp = !on && r.answered_by === "app";
+	const m = r.decided_method as string | null | undefined;
+	const shownMethod = legacyApp && m && m !== "passkey session" ? "passkey" : m;
+	const d = legacyApp ? null : (on ?? (r.decided_device as string | null));
+	return {
+		method: shownMethod ? ` · ${shownMethod}` : "",
+		device: d ? ` on ${d}` : "",
+	};
 }
 
 /** The rules a stored session grant shows: Claude's rules, or an extension's labels. */

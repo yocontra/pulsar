@@ -4,6 +4,7 @@ import type {
 	Approval,
 	DecideResponse,
 	PasskeyRegisterResponse,
+	SessionVerifyResponse,
 } from "../src/http/wire.ts";
 import type { HookDecision } from "../src/service/approvals.ts";
 import type { Caller } from "../src/service/caller.ts";
@@ -416,5 +417,102 @@ describe("answering with the passkey session", () => {
 			expect(no.body.won).toBe(true);
 			await expect(p.confirmed).rejects.toMatchObject({ code: "denied" });
 		});
+	});
+});
+
+describe("the device a decision names", () => {
+	let syncedKey: SoftAuthenticator | null = null;
+	let macToken = "";
+	test("a passkey registered as iPhone and synced to a Mac: the session and its decisions name the Mac", async () => {
+		// The iPhone registered this passkey; iCloud Keychain syncs it, and
+		// the Mac's browser signs with the same credential.
+		const synced = new SoftAuthenticator({ origin, rpId: "localhost" });
+		syncedKey = synced;
+		const rp = { rpId: "localhost", origins: [origin] };
+		await service.approvals.passkeys.verifyRegistration(
+			OWNER,
+			rp,
+			synced.register(
+				await service.approvals.passkeys.registrationOptions(OWNER, rp, {
+					label: "iPhone",
+				}),
+			),
+		);
+		const o = await api<{ requestId: string; options: never }>(
+			MAC,
+			"POST",
+			"/session/options",
+			{ device: "Mac" },
+		);
+		expect(o.status).toBe(200);
+		const s = await api<SessionVerifyResponse>(MAC, "POST", "/session/verify", {
+			requestId: o.body.requestId,
+			assertion: synced.assert(o.body.options),
+		});
+		expect(s.status).toBe(200);
+		expect(s.body.session.device).toBe("Mac");
+		expect(s.body.session.node).toBe("macbook");
+		macToken = s.body.token;
+
+		const p = ask("echo synced");
+		const d = await api<DecideResponse>(
+			MAC,
+			"POST",
+			`${p.path}/decide`,
+			{ decision: "allow-once", inputHash: p.a.inputHash },
+			s.body.token,
+		);
+		expect(d.body.won).toBe(true);
+		expect(d.body.approval.outcome).toMatch(
+			/^Allowed once by Ada Lovelace · passkey session on Mac \(macbook\) · \d\d:\d\d$/,
+		);
+		expect(d.body.approval.outcome).not.toContain("iPhone");
+		await p.decision;
+	});
+
+	test("a signed answer from the Mac with the iPhone's passkey names the Mac and Touch ID", async () => {
+		const p = ask("echo signed");
+		const o = await api<{ options: never }>(MAC, "POST", `${p.path}/options`, {
+			decision: "allow-once",
+		});
+		// The passkey registered as iPhone in the test above.
+		const synced = syncedKey!;
+		const d = await api<DecideResponse>(MAC, "POST", `${p.path}/decide`, {
+			decision: "allow-once",
+			assertion: synced.assert(o.body.options),
+		});
+		expect(d.body.won).toBe(true);
+		expect(d.body.approval.outcome).toMatch(
+			/^Allowed once by Ada Lovelace · Touch ID on Mac \(macbook\) · \d\d:\d\d$/,
+		);
+		await p.decision;
+	});
+
+	test("rows decided before the prover's device was stored: no device, and no method guessed from a passkey label", async () => {
+		const p = ask("echo legacy");
+		const d = await api<DecideResponse>(
+			MAC,
+			"POST",
+			`${p.path}/decide`,
+			{ decision: "allow-once", inputHash: p.a.inputHash },
+			macToken,
+		);
+		expect(d.body.won).toBe(true);
+		await p.decision;
+		const id = d.body.approval.requestId;
+		const outcome = (device: string, method: string) => {
+			store.db
+				.prepare(
+					"UPDATE approvals SET decided_on = NULL, decided_device = ?, decided_method = ? WHERE id = ?",
+				)
+				.run(device, method, id);
+			return service.approvals.get(id)?.outcome;
+		};
+		expect(outcome("iPhone", "passkey session")).toMatch(
+			/^Allowed once by Ada Lovelace · passkey session · \d\d:\d\d$/,
+		);
+		expect(outcome("iPhone", "Face ID")).toMatch(
+			/^Allowed once by Ada Lovelace · passkey · \d\d:\d\d$/,
+		);
 	});
 });

@@ -26,6 +26,7 @@ const user: Principal = {
 	kind: "human",
 	login: "me@example.com",
 	node: "phone",
+	os: "iOS",
 	verified: true,
 };
 
@@ -304,7 +305,7 @@ describe("interactions through the hook", () => {
 		expect(r.won).toBe(true);
 		expect(r.approval.state).toBe("allowed");
 		expect(r.approval.outcome).toMatch(
-			/^Answered: Pear · Large by .+ · Face ID on iPhone/,
+			/^Answered: Pear · Large by .+ · Face ID on iOS \(phone\)/,
 		);
 		expect(r.approval.answer).toEqual({
 			kind: "question",

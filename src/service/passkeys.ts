@@ -70,9 +70,10 @@ export interface ApprovalBinding {
 	expiresAt: number;
 }
 
-/** Who signed: shown as "by Ada Lovelace · Face ID on iPhone". */
+/** Which passkey signed. How a decision is shown comes from the request, not from here (see `proverLabel`). */
 export interface Signer {
 	credentialId: string;
+	/** The passkey's label: the device it was registered on, not always the one that used it. */
 	device: string;
 	method: string;
 }
@@ -158,10 +159,33 @@ function purposeChallenge(purpose: Purpose, nonce: string): Buffer {
 	);
 }
 
-/** "Face ID" on an iPhone, "Touch ID" on a Mac; a plain passkey elsewhere. */
-function methodOf(label: string): string {
-	if (/iphone|ipad/i.test(label)) return "Face ID";
-	if (/mac/i.test(label)) return "Touch ID";
+/** Tailscale whois OS names as shown ("macOS" → "Mac"). */
+const OS_NAMES: Record<string, string> = {
+	macos: "Mac",
+	ios: "iOS",
+	android: "Android",
+	windows: "Windows",
+	linux: "Linux",
+};
+
+/**
+ * The device that proved a decision, from the request's Tailscale node and
+ * OS: "Mac (contra-m2-mbp)", or the node alone when the OS is unknown. Never
+ * the passkey's label: a synced passkey (iCloud Keychain) keeps the name of
+ * the device it was registered on, whichever device uses it.
+ */
+export function proverLabel(p: { node?: string; os?: string }): string | null {
+	const node = p.node?.trim() ? cleanLabel(p.node) : null;
+	const os = OS_NAMES[(p.os ?? "").toLowerCase()];
+	if (os && node) return `${os} (${node})`;
+	return node ?? os ?? null;
+}
+
+/** "Face ID" on iOS, "Touch ID" on a Mac; a plain passkey elsewhere or when the OS is unknown. */
+export function proverMethod(os: string | undefined): string {
+	const o = (os ?? "").toLowerCase();
+	if (o === "ios") return "Face ID";
+	if (o === "macos") return "Touch ID";
 	return "passkey";
 }
 
@@ -562,7 +586,7 @@ export class Passkeys {
 		return {
 			credentialId: cred.id,
 			device: cred.label,
-			method: methodOf(cred.label),
+			method: "passkey",
 		};
 	}
 

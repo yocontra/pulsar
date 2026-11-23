@@ -96,7 +96,7 @@ beforeAll(async () => {
 		registered: true,
 	}).id;
 	http = new HttpTransport(service, {
-		identity: new StaticIdentity(OWNER, "phone"),
+		identity: new StaticIdentity(OWNER, "phone", "dev", { os: "iOS" }),
 		owner: OWNER,
 		hosts: ["127.0.0.1"],
 		port: 0,
@@ -244,7 +244,7 @@ describe("approvals over HTTP", () => {
 		expect(d.status).toBe(200);
 		expect(d.body.won).toBe(true);
 		expect(d.body.approval.outcome).toMatch(
-			/^Allowed once by me@example.com · .+ on iPhone/,
+			/^Allowed once by me@example.com · Face ID on iOS \(phone\)/,
 		);
 		expect((await p.decision) as HookDecision).toEqual({ behavior: "allow" });
 		await until(() => text.split("event: approval").length >= 3, 1000);

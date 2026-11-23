@@ -749,7 +749,7 @@ test.describe("desktop", () => {
 		await expect(page.locator(".toast")).toContainText("New passkey");
 		// Proving started the session: the answer went with it (one check in all).
 		await expect(page.locator(".prompt-outcome")).toContainText(
-			/Allowed once by You · passkey session on .+ · \d/,
+			/Allowed once by You · passkey session on Mac \(studio\) · \d/,
 		);
 		// The passkey was made on this authenticator, with user verification.
 		const { credentials } = await cdp.send("WebAuthn.getCredentials", {

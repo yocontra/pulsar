@@ -145,13 +145,10 @@ export class UserSessions {
 			p.expiresAt <= this.now()
 		)
 			throw new RpcError("bad_assertion", "unknown or used session request");
-		const signer = await this.passkeys.verifySession(
-			login,
-			rp,
-			p.context,
-			input.assertion,
-		);
-		return this.issue(login, signer.device || p.device, where);
+		await this.passkeys.verifySession(login, rp, p.context, input.assertion);
+		// The browser's own device name, not the passkey's label: a synced
+		// passkey keeps the name of the device it was registered on.
+		return this.issue(login, p.device, where);
 	}
 
 	/**

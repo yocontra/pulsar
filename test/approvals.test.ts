@@ -21,6 +21,7 @@ const user: Principal = {
 	kind: "human",
 	login: "me@example.com",
 	node: "phone",
+	os: "iOS",
 	verified: true,
 };
 
@@ -151,7 +152,7 @@ describe("approvals", () => {
 		expect(r.won).toBe(true);
 		expect(r.approval.state).toBe("allowed");
 		expect(r.approval.outcome).toMatch(
-			/^Allowed once by [^·]+ · Face ID on iPhone · \d\d:\d\d$/,
+			/^Allowed once by [^·]+ · Face ID on iOS \(phone\) · \d\d:\d\d$/,
 		);
 		expect(await a.decision).toEqual({ behavior: "allow" });
 		expect(service.registry.needsYou(agent.id)).toBeNull();
@@ -770,7 +771,7 @@ describe("approvals migration (4)", () => {
 		db.close();
 		const store = new Store(file);
 		expect(store.version()).toBe(SCHEMA_VERSION);
-		expect(SCHEMA_VERSION).toBe(10);
+		expect(SCHEMA_VERSION).toBe(11);
 		const cols = (
 			store.db.prepare("PRAGMA table_info(approvals)").all() as {
 				name: string;
