@@ -8,7 +8,7 @@ import { UsageView } from "./UsageView.tsx";
 export function UsageDesktop() {
 	return (
 		<main className="usage-page" aria-label="Usage">
-			<UsageView variant="desktop" />
+			<UsageView />
 		</main>
 	);
 }
