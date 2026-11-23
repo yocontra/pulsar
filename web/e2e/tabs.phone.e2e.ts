@@ -98,8 +98,12 @@ test.describe("tabs", () => {
 		await tab(page, "needs").click();
 		await expect(page).toHaveURL(/#\/needs$/);
 		await expect(tab(page, "needs")).toHaveAttribute("aria-current", "page");
+		// Named for screen readers; the tab bar shows where you are.
 		await expect(
-			page.locator("ion-nav > .ion-page:last-child ion-title").first(),
+			page
+				.locator("ion-nav > .ion-page:last-child")
+				.locator("h1.p-tab-title, ion-title")
+				.first(),
 		).toHaveText("Needs You");
 		// A tab's root has no back button.
 		await expect(
@@ -239,6 +243,88 @@ test.describe("tabs", () => {
 			document.documentElement.style.setProperty("font-size", "23px"),
 		);
 		expect(await barMetrics(page)).toEqual(m);
+	});
+
+	// Tab roots on TabShell with no controls of their own. (Needs You and
+	// Settings join when they move to TabShell.)
+	for (const [hash, name] of [["#/usage", "Usage"]])
+		test(`${hash}: no title or empty bar; content starts under the status bar`, async ({
+			page,
+		}, info) => {
+			await phoneInsets(page, info.project.name === "android");
+			await page.addInitScript(() =>
+				document.addEventListener("DOMContentLoaded", () =>
+					document.documentElement.style.setProperty("--sat", "47px"),
+				),
+			);
+			await page.goto(`/${hash}`);
+			await expect(bar(page)).toBeInViewport();
+			const top = page.locator("ion-nav > .ion-page:last-child");
+			// No bar: these roots have no controls of their own.
+			await expect(top.locator("ion-header, ion-title")).toHaveCount(0);
+			await expect(top.getByRole("heading", { level: 1, name })).toBeAttached();
+			await page.waitForTimeout(300);
+			const r = await topContent(page).evaluate((c) => {
+				// The first painted leaf: right under the status bar.
+				const first = [...c.querySelectorAll("*")]
+					.filter(
+						(e) =>
+							e.childElementCount === 0 &&
+							!e.closest(".p-tab-title, [slot=fixed]") &&
+							e.getBoundingClientRect().height > 0 &&
+							e.checkVisibility(),
+					)
+					.map((e) => e.getBoundingClientRect().top);
+				return Math.min(...first);
+			});
+			expect(r).toBeGreaterThanOrEqual(47);
+			// No large title's worth of space above it.
+			expect(r).toBeLessThanOrEqual(47 + 48);
+		});
+
+	test("Agents: no title; one slim row of search and actions under the status bar", async ({
+		page,
+	}, info) => {
+		await phoneInsets(page, info.project.name === "android");
+		await page.addInitScript(() =>
+			document.addEventListener("DOMContentLoaded", () =>
+				document.documentElement.style.setProperty("--sat", "47px"),
+			),
+		);
+		await ready(page);
+		const top = page.locator("ion-nav > .ion-page:last-child");
+		await expect(top.locator("ion-title")).toHaveCount(0);
+		await expect(
+			top.getByRole("heading", { level: 1, name: "Agents" }),
+		).toBeAttached();
+		const row = top.locator(".p-tab-row");
+		await expect(row).toBeVisible();
+		await expect(row.getByLabel("Search agents and messages")).toBeVisible();
+		const m = await row.evaluate((r) => {
+			const box = (e: Element) => e.getBoundingClientRect();
+			const field = box(r.querySelector(".p-tab-row-main")!);
+			const buttons = [...r.querySelectorAll(".p-tab-row-end ion-button")]
+				.filter((b) => b.checkVisibility())
+				.map(box);
+			const header = box(r.closest("ion-header")!);
+			return {
+				rowTop: box(r).top,
+				rowHeight: box(r).height,
+				headerBottom: header.bottom,
+				field,
+				buttons,
+			};
+		});
+		// Right under the status bar, and slim: no large title's room.
+		expect(m.rowTop).toBeGreaterThanOrEqual(47);
+		expect(m.rowHeight).toBeLessThanOrEqual(64);
+		expect(m.headerBottom).toBeLessThanOrEqual(47 + 72);
+		// The actions sit beside the field, never over it.
+		expect(m.buttons.length).toBeGreaterThan(0);
+		for (const b of m.buttons) {
+			expect(b.left).toBeGreaterThanOrEqual(m.field.right);
+			expect(b.width).toBeGreaterThanOrEqual(36);
+		}
 	});
 
 	for (const hash of ["#/", "#/needs", "#/usage", "#/settings"])

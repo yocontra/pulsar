@@ -692,9 +692,6 @@ function HomeImpl() {
 	return (
 		<TabShell
 			title={HOME_TITLE}
-			// A tab's root: the tab bar says where you are, so no large title
-			// (TabShell will ignore `large`: one slim row of search and actions).
-			large={false}
 			className="p-home"
 			below={<SearchField />}
 			end={
