@@ -10,7 +10,6 @@ import {
 import { useStickToBottomContext } from "use-stick-to-bottom";
 import { ApiError } from "../api/client.ts";
 import type { AgentRow } from "../api/types.ts";
-import { focusPrompt } from "../approval/focus.ts";
 import { PromptInline, promptCallId } from "../approval/PromptInline.tsx";
 import { Composer } from "../components/Composer.tsx";
 import { useAgent, useLiveEvent, useTranscript } from "../data/index.ts";
@@ -39,19 +38,15 @@ const WINDOW = 300;
 function SessionViewImpl({
 	id,
 	mobile,
-	approval,
-	bare,
 	inline,
 	messageActions,
 }: {
 	id: string;
-	mobile: boolean;
-	approval?: boolean;
 	/**
 	 * The platform shell draws the header and the approval surface itself
 	 * (desktop: components/desktop/SessionDesktop.tsx; phone: mobile/AgentPage.tsx).
 	 */
-	bare?: boolean;
+	mobile: boolean;
 	/** Shown after the last turn (the desktop's approval notice). */
 	inline?: React.ReactNode;
 	/** Per-message actions (copy...); see Transcript's `messageActions`. */
@@ -285,22 +280,6 @@ function SessionViewImpl({
 				)}
 				{inline}
 			</ConversationView>
-			{att?.approval?.state === "pending" && mobile && !approval && !bare && (
-				<button
-					type="button"
-					className="banner warn approval-banner"
-					onClick={() => focusPrompt(id)}
-				>
-					<span className="m-ab-icon" aria-hidden="true">
-						!
-					</span>
-					<span className="m-ab-text">
-						<strong>Approval pending</strong>
-						<span className="mono">{att.approval.tool}</span>
-					</span>
-					<span className="m-ab-cta">Review</span>
-				</button>
-			)}
 			{agent && (
 				<Composer
 					key={agent.id}

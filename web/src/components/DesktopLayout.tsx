@@ -266,7 +266,6 @@ function DesktopImpl() {
 				</div>
 				<Tree
 					rowView={DesktopRow}
-					mobile={false}
 					onContext={(e, node) => setMenu({ x: e.clientX, y: e.clientY, node })}
 				/>
 				{sel.size > 0 && (

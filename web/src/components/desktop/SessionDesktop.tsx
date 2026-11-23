@@ -79,12 +79,7 @@ function SessionDesktopImpl({
 		<div className="d-session" onContextMenu={onContextMenu}>
 			<DesktopSessionHeader agent={agent} extra={<ChangesToggle id={id} />} />
 			<ChangesSplit id={id} open={!!changes} file={changes?.file ?? null}>
-				<SessionView
-					id={id}
-					mobile={false}
-					bare
-					messageActions={messageActions}
-				/>
+				<SessionView id={id} mobile={false} messageActions={messageActions} />
 			</ChangesSplit>
 			{menu && (
 				<div
