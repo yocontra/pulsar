@@ -35,13 +35,13 @@ const BUDGETS: Record<string, number> = {
 	// while a stale nested tailwind-merge copy put 2 KB more in some
 	// checkouts' konsta chunk (astro.config.mjs resolve.dedupe fixes it);
 	// lowered to 183 at 180.5 once the dead phone CSS and Ionic wrappers
-	// were gone. Headroom ~2 KB.
+	// were gone (181.2 with modes and subagent colors). Headroom ~2 KB.
 	PhoneApp: 183 * 1024,
 	DesktopApp: 130 * 1024,
 };
 // All of dist/web, uncompressed. Briefly 9.5 MB for the Konsta phone
 // screens (9.01 MB); back to 9 MB at 8.85 MB once the dead phone CSS,
-// Ionic wrappers and phone branches were deleted.
+// Ionic wrappers and phone branches were deleted (8.89 MB with modes).
 const PACKAGE_BYTES = 9 * 1024 * 1024;
 // The count catches a bundle that fans out (Shiki's full bundle was 300+
 // grammar chunks). What's here now is on-demand and expected: ~36 Mermaid
