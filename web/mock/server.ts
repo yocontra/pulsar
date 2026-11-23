@@ -91,6 +91,13 @@ import {
 	resetChanges,
 } from "./changes.ts";
 import {
+	mockCommands,
+	mockModes,
+	mockRun,
+	mockSetMode,
+	ranCommands,
+} from "./controls.ts";
+import {
 	agentById,
 	agents,
 	BLOCKS,
@@ -2956,6 +2963,41 @@ async function route(
 			throw e;
 		}
 	}
+	// Modes and slash commands (web/mock/controls.ts): reads, and two acting
+	// ops (Prove Human here, the home node's check for an address).
+	if (
+		seg[0] === "agents" &&
+		seg.length === 3 &&
+		["modes", "commands", "mode", "command"].includes(seg[2]!)
+	) {
+		const raw = seg[1]!;
+		const a = agentOr404(
+			raw.includes("/") ? raw.slice(raw.indexOf("/") + 1) : raw,
+		);
+		if (GET && seg[2] === "modes") return json(mockModes(a));
+		if (GET && seg[2] === "commands") return json(mockCommands(a));
+		if (POST && (seg[2] === "mode" || seg[2] === "command")) {
+			const key = seg[2] === "mode" ? "mode" : "line";
+			const body = await jsonBody(req);
+			if (!body || typeof body !== "object" || Array.isArray(body))
+				throw badRequest("the body must be an object");
+			const { assertion, ...rest } = body as Record<string, unknown>;
+			const value = rest[key];
+			if (typeof value !== "string")
+				throw badRequest(`${key} must be a string`);
+			await requireActing(
+				req,
+				seg[2] === "mode" ? "agents.mode" : "agents.command",
+				{ agent: raw },
+				{ [key]: value },
+				assertion,
+			);
+			return json(
+				seg[2] === "mode" ? mockSetMode(a, value) : mockRun(a, value),
+			);
+		}
+	}
+	if (GET && path === "/__mock/commands") return json(ranCommands);
 	// The issue card (web/mock/issues.ts); an address stands for a remote agent.
 	if (GET && seg[0] === "agents" && seg[2] === "issue" && seg.length === 3) {
 		const raw = seg[1]!;

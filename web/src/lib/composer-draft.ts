@@ -31,6 +31,11 @@ export class ComposerDraft {
 	readonly files = signal<DraftFile[]>([]);
 	/** Paths picked from the `@` menu (chips while `@path` stays in the text). */
 	readonly mentions = signal<string[]>([]);
+	/**
+	 * A draft that starts with `/` goes as a plain message, not a command
+	 * (the "Send as text" choice under the `/` menu).
+	 */
+	readonly asText = signal(false);
 
 	add(f: DraftFile) {
 		this.files.value = [...this.files.value, f];
@@ -57,6 +62,7 @@ export class ComposerDraft {
 		}
 		this.files.value = [];
 		this.mentions.value = [];
+		this.asText.value = false;
 	}
 
 	/** Why Send waits, or null. */

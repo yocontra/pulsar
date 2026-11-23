@@ -92,6 +92,9 @@ function linkButtons(a: AgentRow) {
 		.map(([text, url]) => ({ text, handler: () => openExternal(url) }));
 }
 
+/** Harnesses with modes Pulsar can switch (src/service/controls.ts MODES). */
+const MODE_HARNESSES = new Set(["claude", "codex", "opencode", "omp"]);
+
 /** Long-press menu for an agent. */
 export async function agentMenu(a: AgentRow) {
 	await showActions({
@@ -133,6 +136,18 @@ export function agentButtons(a: AgentRow): ActionButton[] {
 			: []),
 		...(node
 			? [{ text: pinned ? "Unpin" : "Pin", handler: () => togglePin(node) }]
+			: []),
+		// Plan mode and the like (features/slash), where the harness has modes.
+		...(MODE_HARNESSES.has(a.harness) && !a.id.includes("/sub:")
+			? [
+					{
+						text: "Mode…",
+						handler: () =>
+							void import("../features/slash/data.ts").then((m) =>
+								m.chooseMode(a),
+							),
+					},
+				]
 			: []),
 		{ text: "Copy Name", handler: () => void copy(a.name, "name") },
 		...(canStop(a)

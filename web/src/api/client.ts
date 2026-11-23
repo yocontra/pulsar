@@ -8,6 +8,7 @@ import {
 	skippedForSends,
 } from "../prove/state.ts";
 import {
+	type AgentModes,
 	type AgentRow,
 	type AgentSort,
 	type AgentsPage,
@@ -24,6 +25,8 @@ import {
 	type AttentionList,
 	type ChangesMode,
 	type ChangesSummary,
+	type CommandCatalog,
+	type ControlResult,
 	type DecideRequest,
 	type DecideResponse,
 	type DiagnosticsReport,
@@ -566,6 +569,41 @@ export const api = {
 			method: "POST",
 			body: { manifest, ...(assertion !== undefined ? { assertion } : {}) },
 		}),
+	/** An agent's modes and the current one (src/service/controls.ts). */
+	modes: (agentId: string, signal?: AbortSignal) =>
+		request<AgentModes>(`/agents/${enc(agentId)}/modes`, { signal }),
+	/** The composer's `/` menu: commands and skills for one agent. */
+	commands: (agentId: string, signal?: AbortSignal) =>
+		request<CommandCatalog>(`/agents/${enc(agentId)}/commands`, { signal }),
+	/**
+	 * Switch an agent's mode, or run one `/name args` line in its session:
+	 * acting ops (Prove Human here; a remote agent's machine checks one
+	 * passkey assertion for exactly this mode or line).
+	 */
+	setMode: (agentId: string, mode: string) =>
+		api.acting<ControlResult>(
+			"agents.mode",
+			{ agent: agentId },
+			{ mode },
+			(assertion) =>
+				request<ControlResult>(`/agents/${enc(agentId)}/mode`, {
+					method: "POST",
+					body: assertion === undefined ? { mode } : { mode, assertion },
+				}),
+			"control",
+		),
+	runCommand: (agentId: string, line: string) =>
+		api.acting<ControlResult>(
+			"agents.command",
+			{ agent: agentId },
+			{ line },
+			(assertion) =>
+				request<ControlResult>(`/agents/${enc(agentId)}/command`, {
+					method: "POST",
+					body: assertion === undefined ? { line } : { line, assertion },
+				}),
+			"control",
+		),
 	/** The composer's `@` menu: files in the agent's folder. */
 	files: (agentId: string, q: string, signal?: AbortSignal) =>
 		request<FileSearch>(`/agents/${enc(agentId)}/files${query({ q })}`, {
@@ -821,7 +859,9 @@ export type ActingOp =
 	| "git.resolve"
 	| "git.review"
 	| "queue.withdraw"
-	| "queue.promote";
+	| "queue.promote"
+	| "agents.mode"
+	| "agents.command";
 
 /**
  * One attached file's bytes into an open upload (`PUT`, streamed; XHR for

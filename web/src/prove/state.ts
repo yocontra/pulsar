@@ -18,6 +18,8 @@ export type ProveReason =
 	| "signout"
 	/** An acting op (attach, start an agent, commit, push, PR): api.acting. */
 	| "act"
+	/** Switch an agent's mode, or run a slash command in its session. */
+	| "control"
 	| "manual";
 
 export type ProveResult = "proven" | "skipped" | "cancelled";
