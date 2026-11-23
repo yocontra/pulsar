@@ -355,6 +355,18 @@ CREATE TABLE IF NOT EXISTS search_state (
 );
 `),
 	},
+	// 11: the device that proved an app decision ("Mac (contra-m2-mbp)"),
+	// from the request's Tailscale node. `decided_device` held the passkey's
+	// label, which names the device it was registered on, not the one that
+	// used it (a synced passkey). Rows without it show no device.
+	{
+		ensure: (db) => {
+			if (!hasColumn(db, "approvals", "decided_on"))
+				db.exec(
+					"ALTER TABLE approvals ADD COLUMN decided_on TEXT DEFAULT NULL",
+				);
+		},
+	},
 ];
 
 /** The schema version this pulsar writes. */

@@ -39,6 +39,8 @@ import {
 	type ApprovalBinding,
 	MemoryPasskeyStore,
 	Passkeys,
+	proverLabel,
+	proverMethod,
 } from "../../src/service/passkeys.ts";
 import { UserSessions } from "../../src/service/user-sessions.ts";
 import { isAutoTag } from "../../src/tags.ts";
@@ -2238,7 +2240,7 @@ function sessionSigner(
 			"bad_assertion",
 			"the rules differ from the ones the card listed",
 		);
-	return { method: "passkey session", device: s.device };
+	return { method: "passkey session" };
 }
 
 async function approvalRoute(
@@ -2315,7 +2317,7 @@ async function approvalRoute(
 		if (approval.outcome) return json({ won: false, approval });
 		// Like the daemon: a local prompt may be decided with the request's
 		// passkey session, bound to the card's input hash (and listed rules).
-		const signer =
+		const signed =
 			body.assertion === undefined
 				? sessionSigner(req, approval, decision, body)
 				: await passkeys.verifyAssertion(
@@ -2324,6 +2326,15 @@ async function approvalRoute(
 						binding(approval, decision, body.note, answer),
 						body.assertion,
 					);
+		// Like the daemon: the device that proved (this request's node), not
+		// the passkey's label (a synced passkey keeps its first device's name).
+		const signer = {
+			method:
+				signed.method === "passkey session"
+					? signed.method
+					: proverMethod(me.os),
+			device: proverLabel(me) ?? "browser",
+		};
 		if (answer) {
 			const t = new Date().toLocaleTimeString([], {
 				hour: "2-digit",

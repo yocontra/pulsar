@@ -116,7 +116,7 @@ test.describe("Prove Human once", () => {
 			.click();
 		await expect(sheet(page)).toHaveCount(0);
 		await expect(page.locator(".prompt-outcome")).toContainText(
-			/Allowed once by You · passkey session on /,
+			/Allowed once by You · passkey session on (Mac \(studio\)|iOS \(iphone\)|Android \(iphone\)) · /,
 		);
 		expect(await ceremonies(page)).toBe(1);
 

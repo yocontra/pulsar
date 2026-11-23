@@ -446,7 +446,11 @@ export interface Approval {
 	 * nothing narrower than a mode change, so the app offers Allow once only.
 	 */
 	sessionRules: string[] | null;
-	/** Once decided: "Allowed once by Ada Lovelace · Face ID on iPhone · 10:46". */
+	/**
+	 * Once decided: "Allowed once by Ada Lovelace · passkey session on Mac
+	 * (contra-m2-mbp) · 10:46". The device is the one that proved (its tailnet
+	 * node), never the passkey's label.
+	 */
 	outcome?: string;
 }
 
@@ -1274,7 +1278,7 @@ export interface AskResponse {
  */
 export interface UserSessionInfo {
 	id: string;
-	/** The passkey's device label ("iPhone", "MacBook"). */
+	/** The browser's device ("Mac", "iPhone"), as it named itself when the session began. */
 	device: string;
 	/** The tailnet node the browser runs on. */
 	node: string;
