@@ -174,6 +174,26 @@ export const MODES: Record<string, ModeOption[]> = {
 	omp: [{ id: "default", label: "Default" }, plan],
 };
 
+/**
+ * The reasoning effort Codex's own Shift+Tab applies for a mode: the
+ * operator's config (`plan_mode_reasoning_effort` for Plan,
+ * `model_reasoning_effort` otherwise), else the mode preset's.
+ */
+export function codexModeEffort(
+	mode: string,
+	presets:
+		| { data?: Array<{ mode?: unknown; reasoning_effort?: unknown }> }
+		| undefined,
+	config: Record<string, unknown> | undefined,
+): string | null {
+	const key =
+		mode === "plan" ? "plan_mode_reasoning_effort" : "model_reasoning_effort";
+	const configured = config?.[key];
+	if (typeof configured === "string" && configured) return configured;
+	const preset = presets?.data?.find((p) => p.mode === mode)?.reasoning_effort;
+	return typeof preset === "string" ? preset : null;
+}
+
 /** Modes that run tools without asking: never passed through mid-turn. */
 const PERMISSIVE = new Set(["bypassPermissions", "auto", "dontAsk"]);
 
@@ -462,9 +482,8 @@ export class Controls {
 					via: "codex",
 					detail: "Codex runs a turn; switch when it is idle.",
 				});
-			// In its pane, Shift+Tab is exactly what the operator would press
-			// (the TUI applies its own per-mode effort); the app-server
-			// otherwise.
+			// In its pane, Shift+Tab is exactly what the operator would press;
+			// the app-server otherwise, with the same per-mode effort.
 			if (
 				agent.sessionId &&
 				!(await this.ports.pane(agent)) &&
@@ -512,12 +531,14 @@ export class Controls {
 		if (
 			agent.harness === "claude" &&
 			agent.status === "busy" &&
-			claudePath(first.mode, target).some((m) => PERMISSIVE.has(m))
+			(PERMISSIVE.has(target) ||
+				!MODES.claude!.some((m) => m.id === first.mode) ||
+				claudePath(first.mode, target).some((m) => PERMISSIVE.has(m)))
 		)
 			return {
 				result: "busy",
 				via,
-				detail: `The way to ${target} passes a mode that runs tools without asking; switch when the agent is idle.`,
+				detail: `Switching to ${target} now would pass through or land in a mode that runs tools without asking; switch when the agent is idle.`,
 			};
 		let mode = first.mode;
 		for (let press = 0; press < MAX_PRESSES; press++) {
@@ -573,27 +594,20 @@ export class Controls {
 		const via = "codex-app-server";
 		try {
 			const threadId = agent.sessionId!;
-			const [read, presets] = (await this.ports.codex([
+			const [read, presets, config] = (await this.ports.codex([
 				["thread/read", { threadId }],
 				["collaborationMode/list", {}],
+				["config/read", { cwd: agent.cwd }],
 			])) as [
-				{ thread?: { model?: unknown; reasoningEffort?: unknown } } | undefined,
+				{ thread?: { model?: unknown } } | undefined,
 				(
 					| { data?: Array<{ mode?: unknown; reasoning_effort?: unknown }> }
 					| undefined
 				),
+				{ config?: Record<string, unknown> } | undefined,
 			];
 			const model = read?.thread?.model;
-			// Only the mode changes: the thread keeps its reasoning effort (the
-			// preset's when the thread names none).
-			const preset = presets?.data?.find((p) => p.mode === target);
-			const current = read?.thread?.reasoningEffort;
-			const effort =
-				typeof current === "string"
-					? current
-					: typeof preset?.reasoning_effort === "string"
-						? preset.reasoning_effort
-						: null;
+			const effort = codexModeEffort(target, presets, config?.config);
 			if (typeof model !== "string" || !model)
 				return {
 					result: "failed",

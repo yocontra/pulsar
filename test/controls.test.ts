@@ -56,6 +56,7 @@ const FOOTER: Record<string, string> = {
 	plan: "⏸ plan mode on (shift+tab to cycle)",
 	auto: "⏵⏵ auto mode on (shift+tab to cycle)",
 	bypassPermissions: "⏵⏵ bypass permissions on (shift+tab to cycle)",
+	dontAsk: "⏵⏵ don't ask on (shift+tab to cycle)",
 };
 
 /** A pane that behaves like the harness TUI for the keys Pulsar sends. */
@@ -130,6 +131,7 @@ function rig(opts: {
 	codexReady?: boolean;
 	codexThreadModel?: string;
 	codexThreadEffort?: string;
+	codexConfig?: Record<string, unknown>;
 	opencode?: (method: string, path: string, body?: unknown) => ApiResult;
 	extension?: (req: Record<string, unknown>) => Record<string, unknown> | null;
 	home?: string;
@@ -183,6 +185,7 @@ function rig(opts: {
 								: {}),
 						},
 					};
+				if (method === "config/read") return { config: opts.codexConfig ?? {} };
 				if (method === "collaborationMode/list")
 					return {
 						data: [
@@ -396,6 +399,44 @@ describe("Claude Code modes (tmux, Shift+Tab)", () => {
 		expect(idle).toMatchObject({ result: "ok", mode: "default" });
 	});
 
+	test("mid-turn, never into a mode that runs tools without asking", async () => {
+		const full = [
+			"default",
+			"acceptEdits",
+			"plan",
+			"bypassPermissions",
+			"auto",
+		];
+		for (const [from, to] of [
+			["plan", "bypassPermissions"], // adjacent
+			["acceptEdits", "bypassPermissions"], // one safe mode between
+			["bypassPermissions", "auto"], // permissive to permissive
+			["default", "auto"], // the long way round
+		] as const) {
+			const pane = new FakePane("claude", full, from);
+			const r = await rig({ pane }).controls.setMode(
+				agent({ status: "busy" }),
+				to,
+			);
+			expect({ from, to, result: r.result }).toEqual({
+				from,
+				to,
+				result: "busy",
+			});
+			expect(pane.keys).toEqual([]);
+		}
+	});
+
+	test("mid-turn, a start mode Pulsar does not list (don't ask) is refused", async () => {
+		const pane = new FakePane("claude", ["dontAsk", "default"], "dontAsk");
+		const r = await rig({ pane }).controls.setMode(
+			agent({ status: "busy" }),
+			"default",
+		);
+		expect(r.result).toBe("busy");
+		expect(pane.keys).toEqual([]);
+	});
+
 	test("mid-turn, a safe path is fine", async () => {
 		const pane = new FakePane("claude", CLAUDE_CYCLE, "default");
 		const r = await rig({ pane }).controls.setMode(
@@ -508,13 +549,18 @@ describe("Codex", () => {
 	const codex = (over: Partial<Agent> = {}) =>
 		agent({ id: "codex:t1", harness: "codex", sessionId: "t1", ...over });
 
-	test("no pane: the mode through the app-server; the thread keeps its effort", async () => {
+	test("no pane: the mode through the app-server, with the effort Shift+Tab applies", async () => {
 		const a = codex();
 		const r0 = rig({
 			pane: null,
 			codexReady: true,
 			codexThreadModel: "gpt-6",
 			codexThreadEffort: "high",
+			// The operator's config, as the TUI reads it for each mode.
+			codexConfig: {
+				model_reasoning_effort: "high",
+				plan_mode_reasoning_effort: "xhigh",
+			},
 			agents: [a],
 		});
 		const r = await r0.controls.setMode(a, "plan");
@@ -526,6 +572,7 @@ describe("Codex", () => {
 		expect(r0.codexCalls).toEqual([
 			["thread/read", { threadId: "t1" }],
 			["collaborationMode/list", {}],
+			["config/read", { cwd: a.cwd }],
 			[
 				"thread/settings/update",
 				{
@@ -534,16 +581,27 @@ describe("Codex", () => {
 						mode: "plan",
 						settings: {
 							model: "gpt-6",
-							reasoning_effort: "high",
+							reasoning_effort: "xhigh",
 							developer_instructions: null,
 						},
 					},
 				},
 			],
 		]);
+		// Back to Default: the configured default effort.
+		r0.codexCalls.length = 0;
+		await r0.controls.setMode(a, "default");
+		const update = r0.codexCalls.find(([m]) => m === "thread/settings/update");
+		expect(
+			(
+				update![1] as {
+					collaborationMode: { settings: { reasoning_effort: string } };
+				}
+			).collaborationMode.settings.reasoning_effort,
+		).toBe("high");
 	});
 
-	test("no effort on the thread: the preset's", async () => {
+	test("nothing configured: the mode preset's effort", async () => {
 		const a = codex();
 		const r0 = rig({ pane: null, codexReady: true, agents: [a] });
 		await r0.controls.setMode(a, "plan");
@@ -785,11 +843,40 @@ describe("pi and omp through the extension", () => {
 		expect(await none.modes(a.id)).toMatchObject({ canSwitch: false });
 	});
 
-	test("an answer from another agent is ignored", () => {
-		const { controls } = rig({});
-		expect(controls.answer("claude:s1", { requestId: "nope" })).toEqual({
-			ok: false,
+	test("an answer from another agent is ignored; the asked agent's counts", async () => {
+		const a = agent({ id: "omp:asked", harness: "omp" });
+		const pending: Array<Record<string, unknown>> = [];
+		// The extension hears the request but does not answer on its own.
+		const { controls } = rig({
+			agents: [a],
+			extension: (req) => {
+				pending.push(req);
+				return null;
+			},
 		});
+		const read = controls.modes(a.id);
+		await Promise.resolve();
+		const requestId = pending[0]!.requestId;
+		expect(typeof requestId).toBe("string");
+		// Another agent answering with the real id: refused, still pending.
+		expect(
+			controls.answer("omp:intruder", {
+				requestId,
+				result: "ok",
+				mode: "plan",
+			}),
+		).toEqual({ ok: false });
+		let settled = false;
+		void read.then(() => {
+			settled = true;
+		});
+		await new Promise((r) => setTimeout(r, 10));
+		expect(settled).toBe(false);
+		// The asked agent's answer resolves it.
+		expect(
+			controls.answer(a.id, { requestId, result: "ok", mode: "default" }),
+		).toEqual({ ok: true });
+		expect(await read).toMatchObject({ current: "default", canSwitch: true });
 	});
 });
 

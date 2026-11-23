@@ -75,7 +75,7 @@ The app can switch an agent's mode and run slash commands and skills in its sess
 | Harness | Modes | How the mode changes | How commands run |
 | --- | --- | --- | --- |
 | Claude Code | Manual, Accept edits, Plan, Auto, Bypass permissions | Shift+Tab in its tmux pane, one press at a time, footer read back | Typed into its tmux pane |
-| Codex | Default, Plan | Shift+Tab in its tmux pane (the TUI applies its own effort per mode); else `thread/settings/update` on Codex's app-server daemon (the TUI follows; the thread keeps its effort) | Typed into its tmux pane (skills as `$name`) |
+| Codex | Default, Plan | Shift+Tab in its tmux pane (the TUI applies its own effort per mode); else `thread/settings/update` on Codex's app-server daemon with the same per-mode effort (the TUI follows) | Typed into its tmux pane (skills as `$name`) |
 | OpenCode | Build, Plan | Shift+Tab in its pane (only an agent Pulsar started in tmux: OpenCode reports no pid); else the service's `/agent` API (the terminal may not follow) | Server commands and skills through the service; the TUI's own commands typed into its pane |
 | pi | None | — | The Pulsar extension (extension commands, prompt templates, `/skill:name`), when idle |
 | omp | Default, Plan | The Pulsar extension (`sessionModes`) | Not supported (omp runs commands only when typed) |
