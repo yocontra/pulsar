@@ -59,10 +59,14 @@ test.describe("git sheet", () => {
 
 	test("overview → commit form → confirm → Prove Human → progress → done", async ({
 		page,
+		browserName,
 		request,
 	}) => {
 		// Linux WebKit (CI) has no WebAuthn at all: Prove Human can't run.
-		test.skip(process.platform === "linux", "no WebAuthn in Linux WebKit");
+		test.skip(
+			process.platform === "linux" && browserName === "webkit",
+			"no WebAuthn in Linux WebKit",
+		);
 		const sheet = await sheetFor(page, request, "name=apparish-auth");
 		const rows = sheet.locator(".g-rows");
 		await expect(rows).toContainText("fix-1378");
@@ -97,9 +101,16 @@ test.describe("git sheet", () => {
 		await expect(sheet2.locator(".g-rows")).toContainText("Clean");
 	});
 
-	test("commit on a new branch from the sheet", async ({ page, request }) => {
+	test("commit on a new branch from the sheet", async ({
+		page,
+		browserName,
+		request,
+	}) => {
 		// Linux WebKit (CI) has no WebAuthn at all: Prove Human can't run.
-		test.skip(process.platform === "linux", "no WebAuthn in Linux WebKit");
+		test.skip(
+			process.platform === "linux" && browserName === "webkit",
+			"no WebAuthn in Linux WebKit",
+		);
 		const sheet = await sheetFor(page, request, "name=apparish-auth");
 		await sheet.getByRole("button", { name: "Commit", exact: true }).click();
 		const form = await sheetNamed(page, "Commit changes");
@@ -151,6 +162,12 @@ test.describe("git sheet", () => {
 			"1 failing",
 		);
 		await expect(pr.locator(".g-comment")).toHaveCount(2);
+		expect(
+			await contrastFailures(
+				page,
+				'[data-testid="git-sheet"] .p-sheet-frame *',
+			),
+		).toEqual([]);
 		await pr.getByRole("button", { name: "Ask apparish-auth to fix" }).click();
 		const ask = await sheetNamed(page, "Ask apparish-auth to fix");
 		await expect(ask.getByLabel("Message")).toHaveValue(/^Please fix PR #1402/);

@@ -538,3 +538,20 @@ html.md .prv-phone .prv-box-foot .m-btn {
 .prv-panel.files > .prv-note.warn {
 	margin: 12px 16px 0;
 }
+
+/* Phone: the review and comment fields on the sheet's or page's grouped
+   background (iOS), or Material's outlined field. */
+.prv-form.mobile .g-textarea,
+.prv-phone .prv-box .g-textarea {
+	border: 1px solid transparent;
+	border-radius: 12px;
+	background: var(--ds-surface);
+	color: var(--ds-text);
+	font-size: 16px;
+}
+html.md .prv-form.mobile .g-textarea,
+html.md .prv-phone .prv-box .g-textarea {
+	border-color: var(--ds-border-strong);
+	border-radius: 4px;
+	background: transparent;
+}

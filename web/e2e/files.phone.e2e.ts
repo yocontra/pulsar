@@ -9,6 +9,7 @@ import {
 	ref,
 } from "./files.shared.ts";
 import { agentId, expect, test } from "./fixtures.ts";
+import { contrastFailures } from "./ui-audit.ts";
 
 /** The phone file viewer: one pushed page per folder or file. */
 
@@ -63,6 +64,7 @@ test.describe("file viewer", () => {
 		await expect(p.locator(".ds-code")).toContainText(
 			"const lock = new Mutex();",
 		);
+		expect(await contrastFailures(page, ".fv-phone .fv-head *")).toEqual([]);
 		await p.getByRole("button", { name: "Copy path" }).click();
 		await expect(page.getByText("Path copied")).toBeVisible();
 		expect(await copies(page)).toContain(
@@ -90,6 +92,7 @@ test.describe("file viewer", () => {
 		p = top(page);
 		await expect(p).toContainText("This file may hold secrets");
 		await expect(p).not.toContainText("API_TOKEN");
+		expect(await contrastFailures(page, ".fv-phone .fv-secret *")).toEqual([]);
 		await p.getByRole("button", { name: "Show", exact: true }).click();
 		await expect(p.locator(".ds-code")).toContainText("API_TOKEN=");
 	});
