@@ -149,7 +149,7 @@ export function liveSuite(platform: "desktop" | "phone") {
 		await ready(page);
 		const hash = (h: string) => () => go(page, h);
 		const screens: [string, () => Promise<unknown>][] = [
-			["home", () => ready(page)],
+			["home", hash("#/")],
 			["agent", hash(`#/a/${encodeURIComponent(id)}`)],
 			["usage", hash("#/usage")],
 			["diagnostics", hash("#/diagnostics")],

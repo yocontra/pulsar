@@ -89,7 +89,7 @@ test.describe("git stays live", () => {
 		await page.goto(
 			`${localhostBase()}/#/file/${encodeURIComponent(id)}?path=src`,
 		);
-		await expect(page.getByRole("main")).toBeVisible();
+		await expect(page.getByRole("main", { name: "Files" })).toBeVisible();
 		await watched;
 		// Bounded well inside the viewer's 30 s fallback poll.
 		const reread = page.waitForRequest(
