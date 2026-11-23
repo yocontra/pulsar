@@ -22,6 +22,7 @@ import "./agent.css";
 export function AgentBar({
 	route,
 	name,
+	mark,
 	sub,
 	end,
 	below,
@@ -30,6 +31,8 @@ export function AgentBar({
 }: {
 	route: Route;
 	name: string;
+	/** Before the name, in the heading (a subagent's color dot). */
+	mark?: ReactNode;
 	/** The second line: status, model, type. */
 	sub?: ReactNode;
 	/** The actions: a glass capsule on iOS, icon buttons on Android. */
@@ -52,7 +55,10 @@ export function AgentBar({
 				</IonButtons>
 				<IonTitle>
 					<span className="p-nav-title">
-						<h1>{name}</h1>
+						<h1>
+							{mark}
+							{name}
+						</h1>
 						{sub && <span className="p-nav-sub">{sub}</span>}
 					</span>
 				</IonTitle>
