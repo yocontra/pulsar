@@ -29,7 +29,7 @@ const DAY = 24 * HOUR;
 /** Who uses what: machine, harness, model and a daily scale. */
 const SOURCES = [
 	{ machine: "studio", harness: "claude", model: "claude-opus-5-5", scale: 9 },
-	{ machine: "studio", harness: "codex", model: "gpt-6.2-sol", scale: 5 },
+	{ machine: "studio", harness: "codex", model: "acme-coder-9", scale: 5 },
 	{ machine: "mbp-a", harness: "claude", model: "claude-sonnet-5-5", scale: 4 },
 	{ machine: "desk", harness: "pi", model: "claude-haiku-5-5", scale: 2 },
 ];

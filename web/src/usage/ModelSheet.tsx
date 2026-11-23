@@ -285,8 +285,8 @@ export function PricesSheet({
 	return (
 		<Frame title="Model prices" onClose={onClose}>
 			<p className="usage-muted">
-				Used for every machine's tokens. A price covers model ids that start
-				with its name.
+				Used for every machine's tokens. A price also covers its model's dated
+				and numbered versions.
 			</p>
 			{unpriced.length > 0 && (
 				<p className="usage-muted">No price yet: {unpriced.join(", ")}</p>

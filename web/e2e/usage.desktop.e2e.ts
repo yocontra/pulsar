@@ -49,7 +49,7 @@ test.describe("usage page", () => {
 		).not.toContainText("mbp-b: mbp-b");
 		// Codex's model has no price: counted out of the estimate, said so.
 		await u.getByRole("button", { name: "About unpriced usage" }).click();
-		await expect(u.getByRole("note")).toContainText("gpt-6.2-sol");
+		await expect(u.getByRole("note")).toContainText("acme-coder-9");
 		await expect(u.locator("dl.usage-totals")).toContainText("Cache savings");
 		expect(await contrastFailures(page, ".usage *")).toEqual([]);
 	});
@@ -119,11 +119,11 @@ test.describe("usage page", () => {
 		await page.goto("/#/usage");
 		const u = usage(page);
 		const row = u.locator(".usage-breakdown .usage-row", {
-			hasText: "gpt-6.2-sol",
+			hasText: "acme-coder-9",
 		});
 		await expect(row).toContainText("No price");
 		await row.click();
-		const sheet = page.getByRole("dialog", { name: "gpt-6.2-sol" });
+		const sheet = page.getByRole("dialog", { name: "acme-coder-9" });
 		await expect(sheet).toContainText("Cache hit rate");
 		await expect(
 			sheet.getByRole("button", { name: "Set price" }),
@@ -144,7 +144,7 @@ test.describe("usage page", () => {
 		await page.keyboard.press("Escape");
 		await expect(sheet).toHaveCount(0);
 		await expect(page).toHaveURL(/#\/usage$/);
-		await expect(row).toContainText(/^gpt-6\.2-sol\$[\d,.]+$/);
+		await expect(row).toContainText(/^acme-coder-9\$[\d,.]+$/);
 	});
 
 	test("model prices from the machine menu", async ({ page }) => {
@@ -155,7 +155,7 @@ test.describe("usage page", () => {
 			.selectOption({ label: "Model prices…" });
 		const sheet = page.getByRole("dialog", { name: "Model prices" });
 		await expect(sheet).toContainText("claude-opus-5-5");
-		await expect(sheet).toContainText("No price yet: gpt-6.2-sol");
+		await expect(sheet).toContainText("No price yet: acme-coder-9");
 		await sheet.getByRole("button", { name: "Close" }).last().click();
 		await expect(sheet).toHaveCount(0);
 	});
