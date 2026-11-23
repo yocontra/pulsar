@@ -175,10 +175,14 @@ test.describe("phone UI", () => {
 		const badge = group.locator(".ds-needs-badge");
 		// The badge comes with the rollup, after the row itself paints.
 		await expect(badge).toBeVisible();
-		const size = await group
-			.locator(".p-title")
-			.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-		const ratio = async () => ((await badge.boundingBox())?.height ?? 0) / size;
+		// Read the size with each poll: Home can swap the row for a fresh one
+		// after the badge shows, and a detached element has no computed style.
+		const ratio = async () => {
+			const size = await group
+				.locator(".p-title")
+				.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+			return ((await badge.boundingBox())?.height ?? 0) / size;
+		};
 		await expect.poll(ratio).toBeLessThanOrEqual(1.2);
 		await expect.poll(ratio).toBeGreaterThanOrEqual(1);
 		expect(
