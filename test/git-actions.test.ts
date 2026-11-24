@@ -6,6 +6,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -561,7 +562,9 @@ describe("PR", () => {
 		forgetPr(root);
 		expect((await gitStatus("a", d)).gh).toBe("logged_out");
 		forgetPr(root);
-		process.env.PATH = "/usr/bin:/bin";
+		const gitOnly = tmpFolder();
+		symlinkSync(Bun.which("git")!, join(gitOnly, "git"));
+		process.env.PATH = gitOnly;
 		try {
 			expect(await message(createPr(d, {}))).toBe(
 				"gh is not installed on the agent's machine.",

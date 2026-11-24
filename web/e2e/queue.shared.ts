@@ -11,14 +11,16 @@ import { contrastFailures } from "./ui-audit.ts";
 
 export const QUEUED_AGENT = "codex@apparish";
 
-export async function seedQueue(request: APIRequestContext) {
+export async function seedQueue(page: Page, request: APIRequestContext) {
+	const createdAt = Date.now();
+	await page.clock.setFixedTime(createdAt);
 	const res = await request.post("/api/v1/__mock/queue", {
 		headers: { "X-Pulsar": "1" },
 		data: {
 			reset: true,
 			agent: QUEUED_AGENT,
 			items: [
-				{ body: "Run the billing tests next", state: "next-turn" },
+				{ body: "Run the billing tests next", state: "next-turn", createdAt },
 				{
 					body: "Pause refresh() changes",
 					state: "held",

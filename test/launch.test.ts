@@ -80,6 +80,7 @@ writeFileSync(
 	FAKE,
 	`#!/bin/sh
 # $1: plain | trust | exit; $2: where typed lines go
+pwd -P > "$2.cwd"
 if [ "$1" = exit ]; then echo "fake: no such thing"; exit 3; fi
 if [ "$1" = trust ]; then
   echo "Do you trust the files in this folder?"
@@ -366,15 +367,13 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 		expect(s.cwd).toBe(project);
 		expect(s.session).toMatch(/^pulsar-/);
 		await until(() => now(home, s.id).step === "waiting", 5000);
-		expect(
-			tmux(
-				"display-message",
-				"-p",
-				"-t",
-				`=${s.session}:`,
-				"#{pane_current_path}",
-			).trim(),
-		).toBe(project);
+		const cwdLog = `${logs.at(-1)!}.cwd`;
+		await until(
+			() =>
+				existsSync(cwdLog) && readFileSync(cwdLog, "utf8").trim().length > 0,
+			5000,
+		);
+		expect(readFileSync(cwdLog, "utf8").trim()).toBe(project);
 		// Not registered yet: nothing goes out, however long it waits.
 		await new Promise((r) => setTimeout(r, 300));
 		expect(sends.length).toBe(before);
@@ -828,12 +827,19 @@ describe("who may launch", () => {
 	});
 
 	test("options list folders agents used and harnesses a login shell finds", async () => {
+		const cwd = join(HOME, "options-project");
+		mkdirSync(cwd);
+		home.service.registry.upsert({
+			...registration({ sessionId: "options-project", cwd }),
+			meta: {},
+			registered: false,
+		});
 		const o = (await home.service.launches.read(VERIFIED, null, {
 			op: "launch.options",
 		})) as LaunchOptions;
 		expect(o.machine).toBe("home");
 		expect(o.home).toBe(HOME);
-		expect(o.projects.some((x) => x.path === project)).toBe(true);
+		expect(o.projects.some((x) => x.path === cwd)).toBe(true);
 		expect(o.harnesses.map((h) => h.id)).toEqual([
 			"claude",
 			"codex",

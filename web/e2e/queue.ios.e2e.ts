@@ -24,7 +24,7 @@ test.describe("queue strip", () => {
 		page,
 		request,
 	}) => {
-		await seedQueue(request);
+		await seedQueue(page, request);
 		const id = await agentId(
 			request,
 			"name=codex@apparish branch=feat/billing",

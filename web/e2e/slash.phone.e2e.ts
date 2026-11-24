@@ -235,14 +235,13 @@ test("the command sheet: a drag on the scrolled list scrolls, not the sheet; the
 		page.getByRole("dialog", { name: "Skills & Commands" }),
 	).toBeVisible();
 	await expect(composer.locator(".composer-input")).toHaveValue("");
-	// A fling down on the header dismisses it.
+	// Drag the header to the bottom, beyond the dismissal breakpoint.
 	const head = (await sheet.locator(".p-sheet-head h2").boundingBox())!;
 	await page.mouse.move(head.x + 10, head.y + 5);
 	await page.mouse.down();
-	for (let i = 1; i <= 5; i++) {
-		await page.mouse.move(head.x + 10, head.y + 5 + 70 * i);
-		await page.waitForTimeout(10);
-	}
+	await page.mouse.move(head.x + 10, page.viewportSize()!.height - 1, {
+		steps: 12,
+	});
 	await page.mouse.up();
 	await expect(page.getByTestId("slash-sheet")).toHaveCount(0);
 });

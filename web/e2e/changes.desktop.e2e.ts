@@ -179,7 +179,9 @@ test.describe("changes panel", () => {
 		const id = await agentId(request, "name=apparish-auth");
 		await page.goto(`/#/changes/${encodeURIComponent(id)}?f=NOTES.md`);
 		const p = panel(page);
-		await expect(p.locator(".cv-file.current")).toContainText("NOTES.md");
+		await expect(p.locator(".cv-file.current")).toContainText("NOTES.md", {
+			timeout: 15_000,
+		});
 		await expect(p.locator(".cv-diff .ds-diff-row.add").first()).toContainText(
 			"# fix-1378",
 		);

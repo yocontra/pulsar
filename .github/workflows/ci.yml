@@ -30,15 +30,43 @@ jobs:
       - run: bun run test
       - name: CLI smoke test on Node
         run: |
-          export PULSAR_HOME="$(mktemp -d)"
+          PULSAR_HOME="$(mktemp -d)"
+          export PULSAR_HOME
           node dist/cli.js --version
           node dist/cli.js ls
           node dist/cli.js doctor || true
           node dist/cli.js stop
 
   e2e:
-    # The app's Playwright suites: mock API (desktop + mobile) and a real daemon.
-    runs-on: ubuntu-latest
+    name: e2e (${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: chromium
+            os: ubuntu-latest
+            browsers: chromium
+            workers: 2
+            config: web/playwright.config.ts
+            # Playwright prepends the project name to each test title.
+            args: --grep-invert "^ios "
+          - suite: ios
+            os: macos-latest
+            browsers: webkit
+            workers: 1
+            config: web/playwright.config.ts
+            args: --project=ios
+          - suite: real-daemon
+            os: ubuntu-latest
+            browsers: chromium webkit
+            workers: 1
+            config: web/playwright.real.config.ts
+            args: ""
+    runs-on: ${{ matrix.os }}
+    env:
+      PULSAR_NO_SCAN: "1"
+      PULSAR_E2E_WORKERS: ${{ matrix.workers }}
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -46,30 +74,20 @@ jobs:
         with:
           node-version: "24"
       - run: bun install --frozen-lockfile
-      # The suites need only the built app (dist/web); the real daemon runs
-      # from src.
       - run: bun run build:web
-      # Browsers are cached per lockfile (the Playwright version); the system
-      # libraries they need are installed every time.
       - id: browsers
         uses: actions/cache@v4
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          path: .playwright-browsers
+          key: playwright-${{ runner.os }}-${{ matrix.suite }}-${{ hashFiles('bun.lock') }}
       - if: steps.browsers.outputs.cache-hit != 'true'
-        run: bunx playwright install --with-deps chromium webkit
+        run: bunx playwright install --with-deps ${{ matrix.browsers }}
       - if: steps.browsers.outputs.cache-hit == 'true'
-        run: bunx playwright install-deps chromium webkit
-      # One worker per core, each with its own mock or daemon (web/e2e/infra.ts).
-      - run: bunx playwright test -c web/playwright.config.ts
-        env:
-          PULSAR_NO_SCAN: "1"
-      - run: bunx playwright test -c web/playwright.real.config.ts
-        env:
-          PULSAR_NO_SCAN: "1"
+        run: bunx playwright install-deps ${{ matrix.browsers }}
+      - run: bunx playwright test -c ${{ matrix.config }} ${{ matrix.args }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-results
+          name: e2e-results-${{ matrix.suite }}
           path: web/test-results
           retention-days: 7
