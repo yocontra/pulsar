@@ -180,6 +180,13 @@ export interface Tool {
 	annotations?: { readOnlyHint?: boolean };
 	/** Callable but left out of tools/list (an old name kept for cached tool lists). */
 	hidden?: boolean;
+	/**
+	 * The arguments a command-line call gives without a flag, in order
+	 * (`send <to> <body>`). Listed as required, in this order, for clients
+	 * that turn tools into commands (see `cliArgs`); `validate` still uses
+	 * the schema's own `required`.
+	 */
+	positional?: string[];
 	/** Runs with arguments already checked against inputSchema. */
 	handler: (
 		args: never,
@@ -231,6 +238,9 @@ function paramsError(field: string, expected: string, v: unknown) {
 	);
 }
 
+/** MCP clients (`clientInfo.name`) that call tools as commands with positionals. */
+const CLI_CLIENTS = /^omp\b/;
+
 /** Lines longer than this are dropped (the SDK's stdio limit was 10 MB too). */
 const MAX_LINE = 10 * 1024 * 1024;
 
@@ -240,6 +250,12 @@ export class McpStdioServer {
 	private logLevel: LogLevel | null = null;
 	private readonly info: { name: string; version: string };
 	private readonly instructions: string;
+	/**
+	 * The client turns tools into shell-like commands (omp): only required
+	 * scalar arguments become positionals, in `required` order, so tools/list
+	 * shows each tool's `positional` arguments as required, first.
+	 */
+	cliArgs = false;
 
 	constructor(info: { name: string; version: string }, instructions: string) {
 		this.info = info;
@@ -362,6 +378,10 @@ export class McpStdioServer {
 		switch (method) {
 			case "initialize": {
 				const asked = params.protocolVersion;
+				const client = (params.clientInfo as { name?: unknown } | undefined)
+					?.name;
+				if (typeof client === "string" && CLI_CLIENTS.test(client))
+					this.cliArgs = true;
 				return {
 					protocolVersion:
 						typeof asked === "string" &&
@@ -389,7 +409,7 @@ export class McpStdioServer {
 							description: t.description,
 							inputSchema: {
 								$schema: "http://json-schema.org/draft-07/schema#",
-								...t.inputSchema,
+								...this.listedSchema(t),
 							},
 							...(t.annotations ? { annotations: t.annotations } : {}),
 							execution: { taskSupport: "forbidden" },
@@ -433,6 +453,15 @@ export class McpStdioServer {
 			default:
 				throw new RpcFailure(-32601, "Method not found");
 		}
+	}
+
+	/** The schema tools/list shows: with positionals required first for a `cliArgs` client. */
+	private listedSchema(t: Tool): InputSchema {
+		if (!this.cliArgs || !t.positional?.length) return t.inputSchema;
+		const rest = (t.inputSchema.required ?? []).filter(
+			(k) => !t.positional?.includes(k),
+		);
+		return { ...t.inputSchema, required: [...t.positional, ...rest] };
 	}
 
 	private async callTool(params: Record<string, unknown>): Promise<ToolResult> {

@@ -45,6 +45,9 @@ export const ompIdent = {
 
 	matchProcess: isOmpProcess,
 
+	// Its model calls MCP tools as commands: `mcp__pulsar_send <to> <body>`.
+	cliArgs: true,
+
 	// Push goes through the pulsar extension; omp reports idle with `agent_end`.
 	extension: {
 		isHost: isOmpHost,

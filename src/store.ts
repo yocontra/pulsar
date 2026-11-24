@@ -940,6 +940,23 @@ export class Store {
 	}
 
 	/**
+	 * Messages the human operator sent to an agent from the app (`user:<login>`,
+	 * or a peer's copy `<machine>/user:<login>`), newest first, whatever their
+	 * receipt state: a pushed (delivered, read, replied) one counts too.
+	 */
+	fromHumansTo(agentId: string, limit = 5): Message[] {
+		return (
+			this.db
+				.prepare(
+					`SELECT m.* FROM messages m JOIN receipts r ON r.message_id = m.id
+					 WHERE r.agent_id = ? AND (m.from_id LIKE 'user:%' OR m.from_id LIKE '%/user:%')
+					 ORDER BY m.created_at DESC, m.rowid DESC LIMIT ?`,
+				)
+				.all(agentId, limit) as Row[]
+		).map(toMessage);
+	}
+
+	/**
 	 * Messages waiting for an agent, oldest first. A message pushed into the
 	 * agent's conversation is `delivered`, not waiting, so it is not repeated.
 	 */
