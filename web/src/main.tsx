@@ -22,13 +22,31 @@ const registry = {
 	registerSlot,
 };
 
-// Keyboard-avoiding composer: expose how much of the layout viewport the
-// on-screen keyboard covers.
+// The on-screen keyboard. iOS never resizes the layout viewport for it (it
+// ignores the viewport meta's interactive-widget): it shrinks the visual
+// viewport and pans it down to show the focused field, which leaves the
+// fixed body (Ionic's) and its top bar above the screen. So:
+// - --kb is the keyboard's height, the bottom padding docks and sheets add
+//   to sit on it;
+// - --vv-top is the pan: the body moves down by it (mobile/theme.css,
+//   html[data-vv-pan]), so the top bar stays at the top of what shows and
+//   the conversation takes the room between it and the dock, as in
+//   Messages.
+// Android's resizes-content shrinks the layout viewport instead: both stay 0.
+// While zoomed in (pinch), the pan is the zoom's, not the keyboard's.
 const vv = window.visualViewport;
 if (vv) {
+	const root = document.documentElement;
 	const update = () => {
-		const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-		document.documentElement.style.setProperty("--kb", `${covered}px`);
+		const zoomed = vv.scale > 1.01;
+		const pan = zoomed ? 0 : Math.max(0, Math.round(vv.offsetTop));
+		const covered = Math.max(
+			0,
+			Math.round(window.innerHeight - vv.height - (zoomed ? vv.offsetTop : 0)),
+		);
+		root.style.setProperty("--kb", `${covered}px`);
+		root.style.setProperty("--vv-top", `${pan}px`);
+		root.toggleAttribute("data-vv-pan", pan > 0);
 	};
 	vv.addEventListener("resize", update);
 	vv.addEventListener("scroll", update);
