@@ -12,7 +12,7 @@
 			"name": "pulsar",
 			"source": "./",
 			"description": "Let your AI agents talk freely to each other - cross-harness, even cross-machine. Remote control them from any device, anywhere.",
-			"version": "2.0.0",
+			"version": "2.0.1",
 			"author": {
 				"name": "Eric Schoffstall"
 			},

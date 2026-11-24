@@ -1,5 +1,47 @@
 # Changelog
 
+## 2.0.1 - 2026-11-23
+
+### Phone app
+
+- The phone app is rebuilt on Konsta UI over Ionic: native iOS styling on iPhone (Liquid Glass bars, inset grouped lists, sheets with detents) and Material 3 on Android, picked per device. A floating tab bar (Agents, Needs You, Usage, Settings) replaces the big page titles on tab roots.
+- The composer row is + · message · mic. + holds Skills & Commands, Photo Library, Choose Files, the delivery choice (Interrupt now, Next turn, Don't wake) and Expect a Reply; a non-default choice marks the button. Choose Files opens the file picker again.
+- The command sheet ("Skills & Commands") has its search field under the header, groups rows into Recent, Commands and Skills, and scrolls on its own; only the header or a pull at the list's top moves the sheet.
+- The agent page's header gives the title the room: on iPhones 400 px wide or less, Find moves into More, so names and "Needs approval" show whole. A status too long for the header ends in an ellipsis.
+- Usage has a phone layout: segmented period and metric, a chart card, pickers, totals and a model breakdown.
+- Diagnostics shows a summary per machine, problems first, passed checks folded into one row, and a Copy button on fix commands.
+- Hover titles on icon buttons and short times, with the full date.
+
+### Live data
+
+- Usage, git status, PRs, diagnostics and open files update live; the refresh buttons and pull-to-refresh are gone.
+- The Ask view and `POST /api/v1/ask` are removed from the app. `pulsar ask`, the MCP tools and federation asks are unchanged.
+
+### Usage
+
+- Prices for GPT, DeepSeek, Gemini, Grok and OpenCode Zen models, from each provider's pricing page (source and date kept with each price). Model ids match with or without a provider prefix or a date suffix.
+- Local models (a provider on this machine, the LAN or the tailnet, or Ollama, LM Studio, llama.cpp, MLX, vLLM) are priced at $0 and show "Local · $0".
+- Plan limits for Claude Code, from Claude Code's own cached `/usage` answer (shown with its reading time), and for OpenCode Go: hard stops from OpenCode's database, and the rolling, weekly and monthly percentages from OpenCode's local service, asked at most every 5 minutes while it runs (OpenCode makes the upstream call with its own sign-in).
+
+### Notifications
+
+- Each push says who and what: the agent, the command or file an approval asks about, the question, a finished agent's result with how long it took and how many files changed, a failure's error, or which limit and when it resets. Text is redacted and cut to fit a lock screen. A prompt and its agent's finish replace each other; a tap opens that agent or prompt.
+- The text travels inside the Web Push payload, which is encrypted for the device, so push services see only ciphertext. "Show previews on the lock screen" (on by default) sends generic text to a device instead. SECURITY.md says what the payload carries.
+
+### Agents
+
+- Mode switching from the app: Claude Code's modes (plan, auto-accept and the rest) and plan or regular for the other harnesses, never into a permissive mode mid-turn.
+- Slash commands and skills: a `/` menu in the composer and the Skills & Commands sheet on the phone.
+- Each subagent keeps one color, shown next to its name everywhere.
+
+### Reliability
+
+- The app keeps working across deploys: old builds' files stay available, the service worker caches every file of a build, and a failed chunk recovers by itself.
+- When the app can't reach the machine (for example with Tailscale off on the phone), it says so and reconnects by itself, instead of showing "Importing a module script failed."
+- App load failures are reported to the daemon log, `pulsar doctor` and Diagnostics, and the failure screen has Copy details.
+- The service retries serving the app until Tailscale is up after a restart or reboot.
+- A passkey decision names the device that proved it, not the passkey's label.
+
 ## 2.0.0 - 2026-11-19
 
 Pulsar 2 adds the agent mesh: agents on every machine you own in one pool, and an app on your phone or another computer to watch and steer them, over Tailscale. Everything from 1.x works as before on one machine.
