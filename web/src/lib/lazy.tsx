@@ -67,8 +67,11 @@ export function lazy<P extends object>(
 	function Lazy(props: P): JSX.Element {
 		const [error, setError] = useState<unknown>(null);
 		const [, set] = useState(0);
+		// A preload can finish between this render and the effect. If this
+		// render showed the fallback, subscribe even to a settled promise.
+		const Loaded = C;
 		useEffect(() => {
-			if (C) return;
+			if (Loaded) return;
 			let live = true;
 			preload().then(
 				() => live && set((n) => n + 1),
@@ -85,8 +88,8 @@ export function lazy<P extends object>(
 			return () => {
 				live = false;
 			};
-		}, []);
-		if (C) return <C {...props} />;
+		}, [Loaded]);
+		if (Loaded) return <Loaded {...props} />;
 		if (error)
 			return (
 				<LoadFailed

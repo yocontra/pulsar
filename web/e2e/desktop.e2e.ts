@@ -144,6 +144,14 @@ test.describe("desktop", () => {
 		const reply = page
 			.locator(".ev.msg", { hasText: "The refresh path races" })
 			.first();
+		// A wheel up stops the conversation following the newest turn while
+		// code and images load. Then scroll to the older diagrams.
+		await reply.waitFor({ state: "attached" });
+		await page.getByRole("log", { name: /Conversation with/ }).hover();
+		await page.mouse.wheel(0, -500);
+		await expect(
+			page.getByRole("button", { name: "Jump to latest" }),
+		).toBeVisible();
 		await reply.scrollIntoViewIfNeeded();
 		// Shiki tokens carry colors.
 		await expect(
