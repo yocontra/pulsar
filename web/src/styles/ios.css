@@ -1045,7 +1045,8 @@
 		height: 31px;
 		margin: 0;
 		border-radius: 16px;
-		background: var(--m-fill);
+		/* Off: 3:1 against the cell, like the Konsta switches (ui/rows.tsx). */
+		background: var(--ds-switch-off);
 		transition: background 0.25s ease;
 	}
 

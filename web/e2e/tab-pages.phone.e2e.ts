@@ -167,6 +167,74 @@ test.describe("tab pages", () => {
 		// No CSP report from Konsta's rows and switches: the errors fixture.
 	});
 
+	test("Settings: an off switch shows 3:1 against its row, light and dark", async ({
+		page,
+	}, info) => {
+		const material = info.project.name === "android";
+		await ready(page);
+		await page.getByTestId("tab-settings").tap();
+		const row = page
+			.getByTestId("settings")
+			.locator('[data-setting="show-finished-subagents"]');
+		await expect(
+			row.getByRole("checkbox", { name: "Show Finished Subagents" }),
+		).not.toBeChecked();
+		for (const scheme of ["light", "dark"] as const) {
+			await page.emulateMedia({ colorScheme: scheme });
+			const ratio = await row.evaluate((el, material) => {
+				const cv = document.createElement("canvas");
+				cv.width = cv.height = 1;
+				const cx = cv.getContext("2d")!;
+				// A CSS color as 0-255 RGBA (the canvas resolves any syntax).
+				const rgba = (c: string) => {
+					cx.clearRect(0, 0, 1, 1);
+					cx.fillStyle = c;
+					cx.fillRect(0, 0, 1, 1);
+					return [...cx.getImageData(0, 0, 1, 1).data];
+				};
+				const over = (top: number[], under: number[]) => {
+					const a = top[3]! / 255;
+					return [0, 1, 2].map((i) => top[i]! * a + under[i]! * (1 - a));
+				};
+				// What the switch sits on: every background up to the page.
+				const behind = (from: Element | null): number[] => {
+					const layers: number[][] = [];
+					for (let n = from; n; n = n.parentElement) {
+						const c = rgba(getComputedStyle(n).backgroundColor);
+						if (c[3]! > 0) layers.push(c);
+						if (c[3] === 255) break;
+					}
+					let out = [255, 255, 255];
+					for (const l of layers.reverse()) out = over(l, out);
+					return out;
+				};
+				const lum = (c: number[]) => {
+					const [r, g, b] = c.map((v) => {
+						const x = v / 255;
+						return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+					});
+					return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+				};
+				const toggle = el.querySelector(".k-toggle")!;
+				const surface = behind(toggle.parentElement);
+				// iOS: the off track (Konsta's second span). Material: the outline.
+				const edge = material
+					? rgba(getComputedStyle(toggle).borderTopColor)
+					: rgba(
+							getComputedStyle(toggle.querySelectorAll(":scope > span")[1]!)
+								.backgroundColor,
+						);
+				const a = lum(over(edge, surface));
+				const b = lum(surface);
+				return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+			}, material);
+			expect(
+				ratio,
+				`${scheme}: off switch against its row`,
+			).toBeGreaterThanOrEqual(3);
+		}
+	});
+
 	test("Diagnostics: pushed from Settings with a back button", async ({
 		page,
 	}) => {

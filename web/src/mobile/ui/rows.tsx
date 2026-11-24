@@ -78,6 +78,17 @@ export function LinkRow({
 	);
 }
 
+/**
+ * A switch's off state stays visible on every surface: the track (iOS) or
+ * outline and thumb (Material) get --ds-switch-off, 3:1 against the cell
+ * (Konsta's defaults are a faint tint, nearly gone in dark).
+ */
+const TOGGLE = {
+	bgIos: "bg-[var(--ds-switch-off)]",
+	borderMaterial: "border-[var(--ds-switch-off)]",
+	thumbBgMaterial: "bg-[var(--ds-switch-off)]",
+};
+
 export function ToggleRow({
 	icon,
 	title,
@@ -103,6 +114,7 @@ export function ToggleRow({
 			after={
 				<Toggle
 					component="div"
+					colors={TOGGLE}
 					checked={checked}
 					disabled={disabled}
 					onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
