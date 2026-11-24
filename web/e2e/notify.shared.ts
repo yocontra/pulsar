@@ -130,6 +130,21 @@ export function notifySuite(platform: "desktop" | "phone") {
 		const endpoint = `https://web.push.apple.com/e2e-${platform}-${Date.now()}`;
 		await mock(request, { action: "push-subscription", endpoint });
 		await fakeSubscription(page, endpoint);
+		// Sound preferences still save when the device cannot start audio.
+		await page.addInitScript(() => {
+			class UnavailableAudioContext {
+				state = "suspended";
+				async resume() {
+					throw new DOMException(
+						"Audio device unavailable",
+						"InvalidStateError",
+					);
+				}
+			}
+			Object.defineProperty(window, "AudioContext", {
+				value: UnavailableAudioContext,
+			});
+		});
 		await ready(page);
 		const saved = () =>
 			page.waitForRequest(

@@ -56,10 +56,10 @@ async function nameOf(agentId: string): Promise<string> {
 
 let audio: AudioContext | null = null;
 
-function unlock() {
+async function unlock() {
 	try {
 		audio ??= new AudioContext();
-		if (audio.state === "suspended") void audio.resume();
+		if (audio.state === "suspended") await audio.resume();
 	} catch {}
 }
 
