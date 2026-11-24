@@ -63,19 +63,73 @@ html.k-material .p-usage-total {
 .p-usage-types section {
 	margin: 0;
 }
-.p-usage-model {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+.p-usage .limits-list {
+	gap: 0;
+	padding-inline: 12px;
+	border-radius: 12px;
+	background: var(--ds-surface);
 }
-.p-usage .usage-breakdown .usage-bar {
-	width: 100%;
-	margin-top: 6px;
+.p-usage .limits-row {
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	grid-template-areas: "icon name name" ". bar used" ". reset reset";
+	row-gap: 4px;
+	padding-block: 10px;
+}
+.p-usage .limits-row + .limits-row {
+	border-top: 1px solid var(--ds-border);
+}
+.p-usage .limits-name,
+.p-usage-model,
+.p-usage-modal .p-sheet-head h2,
+.p-usage-sheet .usage-row-name {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.p-usage .p-usage-picker {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr) auto;
+	text-align: end;
+	overflow-wrap: anywhere;
+}
+.p-usage-modal .p-sheet-head {
+	grid-template-columns: 44px minmax(0, 1fr) 44px;
+}
+.p-usage-breakdown-value {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 12px;
+	font-size: var(--ds-text-secondary);
+	color: var(--ds-text-2);
+}
+.p-usage-types .usage-legend {
+	display: grid;
+}
+.p-usage-types .usage-legend li {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto 4ch;
+	align-items: center;
+	gap: 6px;
+}
+.p-usage-types .usage-legend .usage-muted {
+	text-align: end;
+	font-variant-numeric: tabular-nums;
 }
 .p-usage-sheet {
 	padding: 0 16px 16px;
+	overflow-wrap: anywhere;
 }
-/* iOS segmented controls are 32 tall; a comfortable target on Android too. */
+.p-usage-sheet .usage-row {
+	grid-template-columns: 1fr auto;
+	row-gap: 2px;
+}
+.p-usage-sheet .usage-row-name {
+	grid-column: 1 / -1;
+}
+.p-usage-sheet .usage-price-grid input,
+.p-usage-sheet .usage-add-price label {
+	min-width: 0;
+}
 .p-usage [role="radiogroup"] [role="radio"] {
-	min-height: 32px;
+	min-height: 44px;
 }

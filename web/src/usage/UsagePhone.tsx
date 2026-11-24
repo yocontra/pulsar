@@ -123,6 +123,7 @@ function FrameSheet({
 	const [open, setOpen] = useState(true);
 	return (
 		<SheetShell
+			className="p-usage-modal"
 			open={open}
 			onClose={() => setOpen(false)}
 			onClosed={onClose}
@@ -258,6 +259,16 @@ export default function UsagePhone() {
 	);
 }
 
+/** Keep the value with its bar so the label can use the whole line. */
+function BreakdownValue({ share, amount }: { share: number; amount: string }) {
+	return (
+		<span className="p-usage-breakdown-value">
+			<ShareBar share={share} />
+			<span className="usage-num">{amount}</span>
+		</span>
+	);
+}
+
 function Body({
 	report,
 	metric,
@@ -306,6 +317,7 @@ function Body({
 			<ListItem
 				link
 				title="Machine"
+				titleWrapClassName="p-usage-picker"
 				after={machineName}
 				onClick={onMachine}
 				data-testid="usage-machine"
@@ -313,6 +325,7 @@ function Body({
 			<ListItem
 				link
 				title="Harness"
+				titleWrapClassName="p-usage-picker"
 				after={harnessLabel}
 				onClick={onHarness}
 				data-testid="usage-harness"
@@ -444,22 +457,26 @@ function Body({
 										<ListItem
 											key={g.key}
 											link
+											linkComponent="button"
+											contentClassName="w-full text-start"
 											data-model={g.key}
 											title={
 												<span className="p-usage-model">
 													{modelName(g.key)}
 												</span>
 											}
-											after={
-												<span className="usage-num">
-													{metric === "cost" && isLocalModel(g.key)
-														? LOCAL_LABEL
-														: metric === "cost" && unpriced
-															? "No price"
-															: fmt(value(metric, g.cost, g.tokens))}
-												</span>
+											footer={
+												<BreakdownValue
+													share={g.share}
+													amount={
+														metric === "cost" && isLocalModel(g.key)
+															? LOCAL_LABEL
+															: metric === "cost" && unpriced
+																? "No price"
+																: fmt(value(metric, g.cost, g.tokens))
+													}
+												/>
 											}
-											footer={<ShareBar share={g.share} />}
 											onClick={() => onModel(g.key)}
 										/>
 									);
@@ -468,12 +485,12 @@ function Body({
 									<ListItem
 										key={g.key}
 										title={bucketLabel(Number(g.key), report.bucket)}
-										after={
-											<span className="usage-num">
-												{fmt(value(metric, g.cost, g.tokens))}
-											</span>
+										footer={
+											<BreakdownValue
+												share={g.share}
+												amount={fmt(value(metric, g.cost, g.tokens))}
+											/>
 										}
-										footer={<ShareBar share={g.share} />}
 									/>
 								))}
 					</List>

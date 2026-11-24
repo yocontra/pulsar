@@ -5,6 +5,7 @@
  * model's sheet. Readable from 320 to 430 px wide (web/mock/usage.ts).
  */
 import type { Page } from "@playwright/test";
+import type { UsageReport } from "../src/api/types.ts";
 import { expect, test } from "./fixtures.ts";
 import { contrastFailures } from "./ui-audit.ts";
 
@@ -80,6 +81,63 @@ test.describe("usage tab", () => {
 		expect(await contrastFailures(page, ".p-usage *")).toEqual([]);
 	});
 
+	test("long names wrap above the bars on a narrow phone", async ({ page }) => {
+		await page.setViewportSize({ width: 320, height: 700 });
+		const model =
+			"research/long-context-model-with-a-very-long-version-identifier";
+		await page.route("**/api/v1/usage?*", async (route) => {
+			const response = await route.fetch();
+			const report: UsageReport = await response.json();
+			report.limits = [
+				{
+					machine: "studio",
+					harness: "codex",
+					account: "codex",
+					window: "weekly",
+					label: "Weekly usage for the extended context window",
+					usedPercent: 62,
+					reached: false,
+					resetsAt: null,
+					at: Date.now(),
+					plan: "pro",
+				},
+			];
+			report.rows[0]!.model = model;
+			await route.fulfill({ response, json: report });
+		});
+		await openUsage(page);
+		const p = top(page);
+		for (const [row, name, bar] of [
+			[p.getByTestId("limit-row").first(), ".limits-name", ".limits-bar"],
+			[p.locator(`[data-model="${model}"]`), ".p-usage-model", ".usage-bar"],
+		] as const) {
+			const label = row.locator(name);
+			await expect(label).toBeVisible();
+			const lines = await label.evaluate((el) => {
+				const range = document.createRange();
+				range.selectNodeContents(el);
+				return [...range.getClientRects()].map((r) => ({
+					bottom: r.bottom,
+					right: r.right,
+				}));
+			});
+			expect(new Set(lines.map((r) => r.bottom)).size).toBeGreaterThan(1);
+			const track = (await row.locator(bar).boundingBox())!;
+			expect(Math.max(...lines.map((r) => r.bottom))).toBeLessThanOrEqual(
+				track.y,
+			);
+			expect(Math.max(...lines.map((r) => r.right))).toBeLessThanOrEqual(320);
+		}
+		await p.getByRole("button", { name: new RegExp(model) }).click();
+		const heading = page
+			.getByTestId("usage-sheet")
+			.getByRole("heading", { name: model });
+		await expect(heading).toBeVisible();
+		expect(
+			await heading.evaluate((el) => el.scrollWidth <= el.clientWidth),
+		).toBe(true);
+	});
+
 	for (const width of [320, 375, 430])
 		test(`fits ${width} px: no sideways scroll, the chart fills its card`, async ({
 			page,
@@ -119,6 +177,6 @@ test.describe("usage tab", () => {
 			expect(r.scroll).toBeLessThanOrEqual(0);
 			expect(r.chart).toBeGreaterThan(r.card * 0.85);
 			expect(r.minLabel).toBeGreaterThanOrEqual(11);
-			expect(r.minSeg).toBeGreaterThanOrEqual(28);
+			expect(r.minSeg).toBeGreaterThanOrEqual(44);
 		});
 });
