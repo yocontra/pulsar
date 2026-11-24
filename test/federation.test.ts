@@ -1841,24 +1841,36 @@ describe("security regressions (review F1–F9)", () => {
 			body: `{"frames":["${"x".repeat(9 * 1024 * 1024)}"]}`,
 		});
 		expect(big.status).toBe(413);
+		// A peer of its own: B's live link to A holds one of B's four stream
+		// slots or not, depending on the tests before this one (and on a
+		// reconnect under load). f8's link is stopped once A knows it, so
+		// every slot it has on A is the test's.
+		const f8 = await startNode("f8", { owner: OWNER });
+		await a.fed.discover();
+		await until(() => a.fed.machines().some((m) => m.name === "f8"), 10_000);
+		f8.fed.stop();
+		const stream = () =>
+			tailnet.request("f8", "a", "/fed/v1/stream", {
+				headers: { "x-pulsar-fed": "1" },
+			});
+		// f8's own stream on A ends with its link: once four open, all are ours.
 		const open: Response[] = [];
-		for (let i = 0; i < 5; i++)
-			open.push(
-				await tailnet.request("b", "a", "/fed/v1/stream", {
-					headers: { "x-pulsar-fed": "1" },
-				}),
-			);
-		expect(open.slice(0, 4).every((r) => r.status === 200)).toBe(true);
-		expect(open[4]!.status).toBe(429);
+		await until(async () => {
+			for (const r of open.splice(0)) await r.body?.cancel();
+			for (let i = 0; i < 4; i++) open.push(await stream());
+			return open.every((r) => r.status === 200);
+		}, 5000);
+		const fifth = await stream();
+		expect(fifth.status).toBe(429);
+		await fifth.body?.cancel();
 		for (const r of open) await r.body?.cancel();
 		// Closing them frees the slots.
 		await until(async () => {
-			const r = await tailnet.request("b", "a", "/fed/v1/stream", {
-				headers: { "x-pulsar-fed": "1" },
-			});
+			const r = await stream();
 			await r.body?.cancel();
 			return r.status === 200;
 		}, 5000);
+		await stopNode(f8);
 	});
 });
 

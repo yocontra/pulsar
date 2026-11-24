@@ -263,7 +263,16 @@ beforeAll(async () => {
 	);
 	writeFileSync(join(web, "_app", "main.abc123.js.gz"), gzipSync(BUNDLE));
 	store = new Store(join(dir, "pulsar.db"));
-	service = new PulsarService({ store, scan: false, machine: "studio" });
+	service = new PulsarService({
+		store,
+		scan: false,
+		machine: "studio",
+		// Never the machine's own: the real ports run the installed
+		// `pi --version` and read ~/.pi.
+		controls: {
+			catalog: { home: () => join(dir, "home"), version: async () => null },
+		},
+	});
 	for (let p = 0; p < PROJECTS; p++)
 		for (let i = 0; i < PER_PROJECT; i++) addAgent(project(p));
 	// One agent whose session pulsar can push into (an extension connection).
