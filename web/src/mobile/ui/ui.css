@@ -705,6 +705,11 @@ html.k-material .k-list-item .p-set-icon svg {
 	position: relative;
 	z-index: 30000;
 }
+/* Room for an icon and a label like "Open Pull Request #1402" on one line
+   (Konsta's 15rem wraps it). */
+.p-menu {
+	width: min(17.5rem, calc(100vw - 32px));
+}
 .p-menu a {
 	color: inherit;
 }

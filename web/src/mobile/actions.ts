@@ -79,17 +79,35 @@ function openExternal(url: string) {
 	window.open(url, "_blank", "noopener,noreferrer");
 }
 
+/** What an agent action does, for its icon in the ••• menu (AgentPage). */
+export type ActionId =
+	| "files"
+	| "pr"
+	| "branch"
+	| "repo"
+	| "issue"
+	| "pin"
+	| "unpin"
+	| "mode"
+	| "copy"
+	| "stop";
+export type AgentButton = ActionButton & { kind: ActionId };
+
 /** "Open Pull Request #n", "Open Branch", "Open Repository", for what's known. */
 function linkButtons(a: AgentRow) {
 	const pr = tagValue(a.tags, "pr");
-	const links: [string, string | null][] = [
-		[`Open Pull Request #${pr}`, prLink(a.repoUrl, pr)],
-		["Open Branch", branchLink(a.repoUrl, a.branch)],
-		["Open Repository", repoLink(a.repoUrl)],
+	const links: [ActionId, string, string | null][] = [
+		["pr", `Open Pull Request #${pr}`, prLink(a.repoUrl, pr)],
+		["branch", "Open Branch", branchLink(a.repoUrl, a.branch)],
+		["repo", "Open Repository", repoLink(a.repoUrl)],
 	];
 	return links
-		.filter((l): l is [string, string] => l[1] !== null)
-		.map(([text, url]) => ({ text, handler: () => openExternal(url) }));
+		.filter((l): l is [ActionId, string, string] => l[2] !== null)
+		.map(([kind, text, url]) => ({
+			kind,
+			text,
+			handler: () => openExternal(url),
+		}));
 }
 
 /** Harnesses with modes Pulsar can switch (src/service/controls.ts MODES). */
@@ -117,30 +135,44 @@ export async function agentMenu(a: AgentRow) {
  * An agent's actions after "Open Conversation" (the agent page's ••• menu
  * lists these): files, links, issue, pin, copy, stop.
  */
-export function agentButtons(a: AgentRow): ActionButton[] {
+export function agentButtons(a: AgentRow): AgentButton[] {
 	const node = agentNode(a.id);
 	const pinned = node ? isPinned(node.id) : false;
 	return [
 		// The file viewer (features/files), for an agent with a folder.
 		...(a.cwd && !a.id.includes("/sub:")
-			? [{ text: "Files", handler: () => navigate(fileRoute(a.id, "")) }]
+			? [
+					{
+						kind: "files" as const,
+						text: "Files",
+						handler: () => navigate(fileRoute(a.id, "")),
+					},
+				]
 			: []),
 		...linkButtons(a),
 		...(issueOf(a)
 			? [
 					{
+						kind: "issue" as const,
 						text: `Issue #${issueOf(a)}`,
 						handler: () => showIssue(a.id),
 					},
 				]
 			: []),
 		...(node
-			? [{ text: pinned ? "Unpin" : "Pin", handler: () => togglePin(node) }]
+			? [
+					{
+						kind: pinned ? ("unpin" as const) : ("pin" as const),
+						text: pinned ? "Unpin" : "Pin",
+						handler: () => togglePin(node),
+					},
+				]
 			: []),
 		// Plan mode and the like (features/slash), where the harness has modes.
 		...(MODE_HARNESSES.has(a.harness) && !a.id.includes("/sub:")
 			? [
 					{
+						kind: "mode" as const,
 						text: "Mode…",
 						handler: () =>
 							void import("../features/slash/data.ts").then((m) =>
@@ -149,10 +181,15 @@ export function agentButtons(a: AgentRow): ActionButton[] {
 					},
 				]
 			: []),
-		{ text: "Copy Name", handler: () => void copy(a.name, "name") },
+		{
+			kind: "copy" as const,
+			text: "Copy Name",
+			handler: () => void copy(a.name, "name"),
+		},
 		...(canStop(a)
 			? [
 					{
+						kind: "stop" as const,
 						text: "Stop Turn…",
 						role: "destructive" as const,
 						handler: () => void confirmStop(a),

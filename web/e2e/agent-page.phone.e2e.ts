@@ -238,6 +238,50 @@ test.describe("agent page bar with a limit warning", () => {
 		});
 });
 
+test("every More item has an icon, like the + menu's", async ({
+	page,
+	request,
+}) => {
+	const id = await agentId(request, "name=apparish-auth");
+	// 320 px: git and Find are in More too.
+	await open(page, id, 320);
+	await more(page).click();
+	const menu = page.getByRole("menu", { name: "apparish-auth actions" });
+	const items = menu.getByRole("menuitem");
+	await expect(items.first()).toBeVisible();
+	const labels = await items.allInnerTexts();
+	expect(labels.length).toBeGreaterThan(5);
+	expect(labels.map((l) => l.trim())).toEqual(
+		expect.arrayContaining(["Git", "Find in Messages", "Copy Name"]),
+	);
+	const sizes = await items.evaluateAll((els) =>
+		els.map((el) => {
+			// Computed, not the box: the popover scales in.
+			const svg = el.querySelector("svg");
+			const cs = svg && getComputedStyle(svg);
+			return cs ? `${cs.width}x${cs.height}` : "none";
+		}),
+	);
+	await page.keyboard.press("Escape");
+	await page.mouse.click(5, 300);
+	// The + menu's icons, for the size.
+	await page
+		.locator(".p-agent .m-composer")
+		.last()
+		.getByRole("button", { name: /^Message options/ })
+		.click();
+	const plus = page.getByRole("menu", { name: "Message options" });
+	await expect(plus.getByRole("menuitem").first()).toBeVisible();
+	const plusSize = await plus
+		.getByRole("menuitem")
+		.first()
+		.evaluate((el) => {
+			const cs = getComputedStyle(el.querySelector("svg")!);
+			return `${cs.width}x${cs.height}`;
+		});
+	expect(sizes).toEqual(labels.map(() => plusSize));
+});
+
 test.describe("composer dock", () => {
 	test("floats above the home indicator and rides up with the keyboard", async ({
 		page,
@@ -270,5 +314,99 @@ test.describe("composer dock", () => {
 			})
 			.toBeGreaterThanOrEqual(300);
 		expect(vh - (box.y + box.height)).toBeLessThan(330);
+	});
+
+	test("the keyboard keeps the top bar on screen", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=apparish-auth");
+		await open(page, id);
+		const SAT = 47;
+		await page.evaluate(
+			(sat) => document.documentElement.style.setProperty("--sat", `${sat}px`),
+			SAT,
+		);
+		const field = page.locator(".p-agent .m-composer textarea").last();
+		await field.focus();
+		// What iOS does on focus: a 300 px keyboard shrinks the visual
+		// viewport, and Safari pans it down 220 px to show the field. The
+		// layout viewport and the document stay put.
+		await page.evaluate(() => {
+			const vv = window.visualViewport!;
+			const h = innerHeight - 300;
+			Object.defineProperty(vv, "height", { configurable: true, get: () => h });
+			Object.defineProperty(vv, "offsetTop", {
+				configurable: true,
+				get: () => 220,
+			});
+			vv.dispatchEvent(new Event("resize"));
+			vv.dispatchEvent(new Event("scroll"));
+		});
+		// Where things show on the screen: the visual viewport's coordinates.
+		const onScreen = () =>
+			page.evaluate(() => {
+				const vv = window.visualViewport!;
+				const bars = [
+					...document.querySelectorAll<HTMLElement>("[data-testid=agent-bar]"),
+				];
+				const barEl = bars[bars.length - 1]!;
+				const bar = barEl.getBoundingClientRect();
+				const docks = [
+					...document.querySelectorAll<HTMLElement>(".p-agent .m-composer"),
+				];
+				const dock = docks[docks.length - 1]!.getBoundingClientRect();
+				const back = barEl
+					.querySelector<HTMLElement>("[aria-label^='Back']")
+					?.getBoundingClientRect();
+				return {
+					barTop: bar.top - vv.offsetTop,
+					backTop: back ? back.top - vv.offsetTop : null,
+					dockBottom: dock.bottom - vv.offsetTop,
+					vvHeight: vv.height,
+					scrollTop: document.scrollingElement!.scrollTop,
+					scrollY: window.scrollY,
+				};
+			});
+		await expect
+			.poll(async () => (await onScreen()).barTop)
+			.toBeGreaterThanOrEqual(0);
+		const s = await onScreen();
+		const title = (await bar(page).locator("h1").boundingBox())!;
+		const vvTop = 220;
+		expect(
+			title.y - vvTop,
+			"title under the status bar",
+		).toBeGreaterThanOrEqual(SAT);
+		if (s.backTop !== null) expect(s.backTop).toBeGreaterThanOrEqual(SAT - 1);
+		// The dock sits on the keyboard: its bottom at the screen's (8 px gap).
+		expect(s.dockBottom).toBeLessThanOrEqual(s.vvHeight);
+		expect(s.dockBottom).toBeGreaterThan(s.vvHeight - 20);
+		// The document never scrolled.
+		expect(s.scrollTop).toBe(0);
+		expect(s.scrollY).toBe(0);
+		// The keyboard goes: everything back in place.
+		await page.evaluate(() => {
+			const vv = window.visualViewport!;
+			Object.defineProperty(vv, "height", {
+				configurable: true,
+				get: () => innerHeight,
+			});
+			Object.defineProperty(vv, "offsetTop", {
+				configurable: true,
+				get: () => 0,
+			});
+			vv.dispatchEvent(new Event("resize"));
+		});
+		await expect
+			.poll(() =>
+				page.evaluate(() =>
+					document.documentElement.hasAttribute("data-vv-pan"),
+				),
+			)
+			.toBe(false);
+		const after = (await bar(page).locator("h1").boundingBox())!;
+		expect(after.y).toBeGreaterThanOrEqual(SAT);
+		expect(after.y).toBeLessThan(SAT + 44);
 	});
 });

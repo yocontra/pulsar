@@ -5,7 +5,23 @@
  * title gets the room), and at 360 px or less git does too. A prompt waiting on it shows inline in the
  * conversation; the banner brings it into view.
  */
-import { EllipsisIcon, ShieldCheckIcon } from "lucide-react";
+import {
+	BookMarkedIcon,
+	CircleDotIcon,
+	CircleStopIcon,
+	CopyIcon,
+	EllipsisIcon,
+	FolderIcon,
+	GitBranchIcon,
+	GitForkIcon,
+	GitPullRequestIcon,
+	type LucideIcon,
+	PinIcon,
+	PinOffIcon,
+	RepeatIcon,
+	SearchIcon,
+	ShieldCheckIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentRow, Approval } from "../api/types.ts";
 import { focusPrompt, promptOnScreen } from "../approval/focus.ts";
@@ -21,7 +37,7 @@ import { showFinished, subagentsLabel } from "../lib/subagents.ts";
 import SessionView from "../session/SessionView.tsx";
 import type { MessageAction } from "../session/Transcript.tsx";
 import { AgentBar, useUnderGlass } from "./AgentBar.tsx";
-import { agentButtons } from "./actions.ts";
+import { type ActionId, agentButtons } from "./actions.ts";
 import { now } from "./clock.ts";
 import { IonButton, IonContent, IonToolbar } from "./ionic.ts";
 import { isMaterial } from "./platform.ts";
@@ -121,6 +137,21 @@ function useMedia(q: string) {
 	return on;
 }
 
+/** The ••• menu's icons: one per action, the + menu's size. */
+const ACTION_ICON: Record<ActionId, LucideIcon> = {
+	files: FolderIcon,
+	pr: GitPullRequestIcon,
+	branch: GitForkIcon,
+	repo: BookMarkedIcon,
+	issue: CircleDotIcon,
+	pin: PinIcon,
+	unpin: PinOffIcon,
+	mode: RepeatIcon,
+	copy: CopyIcon,
+	stop: CircleStopIcon,
+};
+const menuIcon = (I: LucideIcon) => <I className="size-5" aria-hidden="true" />;
+
 /** The ••• button and its menu (a Konsta popover anchored to it). */
 const MoreMenu = observer(function MoreMenu({ a }: { a: AgentRow | null }) {
 	const [open, setOpen] = useState(false);
@@ -131,11 +162,13 @@ const MoreMenu = observer(function MoreMenu({ a }: { a: AgentRow | null }) {
 	if (a && gitInMore && gitOffered.value.has(a.id))
 		items.push({
 			label: "Git",
+			icon: menuIcon(GitBranchIcon),
 			onSelect: () => showGit(a.id),
 		});
 	if (a && findInMore)
 		items.push({
 			label: "Find in Messages",
+			icon: menuIcon(SearchIcon),
 			disabled: !can("search") || !a.hasTranscript,
 			onSelect: () => openFind(a.id),
 		});
@@ -143,6 +176,7 @@ const MoreMenu = observer(function MoreMenu({ a }: { a: AgentRow | null }) {
 		for (const b of agentButtons(a))
 			items.push({
 				label: b.text,
+				icon: menuIcon(ACTION_ICON[b.kind]),
 				destructive: b.role === "destructive",
 				disabled: b.disabled,
 				onSelect: () => b.handler?.(),
