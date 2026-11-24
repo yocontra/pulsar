@@ -38,11 +38,13 @@ const vv = window.visualViewport;
 if (vv) {
 	const root = document.documentElement;
 	const update = () => {
-		const zoomed = vv.scale > 1.01;
-		const pan = zoomed ? 0 : Math.max(0, Math.round(vv.offsetTop));
+		// The desktop layout (an iPad) keeps its body where it is: there the
+		// pan stays out of --kb.
+		const follow = vv.scale <= 1.01 && root.dataset.platform === "phone";
+		const pan = follow ? Math.max(0, Math.round(vv.offsetTop)) : 0;
 		const covered = Math.max(
 			0,
-			Math.round(window.innerHeight - vv.height - (zoomed ? vv.offsetTop : 0)),
+			Math.round(window.innerHeight - vv.height - (follow ? 0 : vv.offsetTop)),
 		);
 		root.style.setProperty("--kb", `${covered}px`);
 		root.style.setProperty("--vv-top", `${pan}px`);
