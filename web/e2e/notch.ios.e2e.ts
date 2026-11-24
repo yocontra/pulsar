@@ -344,6 +344,7 @@ test("the installed app hides the Add to Home Screen tip", async ({ page }) => {
 	// A Safari tab shows it (no saved dismissal in a fresh context)...
 	await ready(page);
 	await expect(page.getByRole("complementary", { name: "Tip" })).toBeVisible();
+	await expect(page.locator("body")).toHaveCSS("position", "fixed");
 	// ...the Home Screen app does not: iOS 27 reports navigator.standalone
 	// there, and display-mode: standalone does not match.
 	await page.addInitScript(() =>
@@ -354,6 +355,8 @@ test("the installed app hides the Add to Home Screen tip", async ({ page }) => {
 	await page.goto("about:blank");
 	await ready(page);
 	await expect(page.getByRole("complementary", { name: "Tip" })).toHaveCount(0);
+	// WebKit keeps the native status bar in the launch theme with a fixed body.
+	await expect(page.locator("body")).toHaveCSS("position", "absolute");
 });
 
 test("the installed app shows no tip, with or without a top inset", async ({

@@ -9,6 +9,9 @@
 //   after boot. Keep keys, bounds and colors in sync with those modules.
 (() => {
 	const root = document.documentElement;
+	// iOS exposes standalone on Home Screen launches, before Ionic starts.
+	if (navigator.standalone === true)
+		root.setAttribute("data-ios-standalone", "");
 	const get = (k) => {
 		try {
 			return localStorage.getItem(k);

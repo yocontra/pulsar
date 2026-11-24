@@ -169,6 +169,12 @@
 		font-feature-settings: "kern";
 	}
 
+	/* A fixed body at first paint makes iOS keep the launch status-bar
+	   color after a theme switch. Keep Ionic's viewport size and overflow. */
+	html[data-ios-standalone] body {
+		position: absolute;
+	}
+
 	button,
 	[role="button"],
 	a,
