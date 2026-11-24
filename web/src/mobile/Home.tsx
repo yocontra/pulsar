@@ -533,7 +533,7 @@ const NeedsSummary = observer(NeedsSummaryImpl);
 
 /* ------------------------------------------------------------ page */
 
-type Hint = "install" | "readd" | null;
+type Hint = "install" | null;
 
 /** True in the Home Screen app (iOS 27 reports only navigator.standalone). */
 function standalone() {
@@ -544,25 +544,13 @@ function standalone() {
 }
 
 /**
- * Which tip Home shows. "readd": a Home Screen app added while index.html
- * still had apple-mobile-web-app-status-bar-style (removed in a8d1db0). iOS
- * reads that key only when the app is added, so the old install keeps a
- * separate system status bar: white or black by the phone's setting, not
- * Pulsar's Appearance, and no safe-area inset at the top. Every iPhone app
- * without the key reports a top inset in portrait (20 px or more), so 0
- * there means the old bar.
+ * Which tip Home shows: "install" in an iPhone or iPad Safari tab until it
+ * is dismissed; none in the Home Screen app.
  */
 function pickHint(): Hint {
 	try {
-		if (!/iPhone|iPad/.test(navigator.userAgent)) return null;
-		if (!standalone())
-			return localStorage.getItem("pulsar.installHint") ? null : "install";
-		if (localStorage.getItem("pulsar.readdHint")) return null;
-		const portrait = matchMedia("(orientation: portrait)").matches;
-		const sat = Number.parseFloat(
-			getComputedStyle(document.documentElement).getPropertyValue("--sat"),
-		);
-		return portrait && sat === 0 ? "readd" : null;
+		if (!/iPhone|iPad/.test(navigator.userAgent) || standalone()) return null;
+		return localStorage.getItem("pulsar.installHint") ? null : "install";
 	} catch {
 		return null;
 	}
@@ -573,11 +561,6 @@ const TIPS = {
 		key: "pulsar.installHint",
 		title: "Add Pulsar to your Home Screen",
 		text: "Tap Share, then Add to Home Screen. Pulsar opens full screen and can notify you about approvals.",
-	},
-	readd: {
-		key: "pulsar.readdHint",
-		title: "Add Pulsar to your Home Screen again",
-		text: "This copy has an old status bar that ignores Pulsar's theme. Remove it from the Home Screen, then add it again from Safari.",
 	},
 } as const;
 
