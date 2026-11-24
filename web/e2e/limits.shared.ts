@@ -211,10 +211,6 @@ export function limitsSuite(platform: "desktop" | "phone") {
 		await expect(go).toContainText(/Reached .+ · Resets /);
 		await expect(go).toHaveAttribute("data-level", "reached");
 		expect(await contrastFailures(page, ".limits *")).toEqual([]);
-		if (process.env.PULSAR_LIMIT_SHOTS)
-			await u.locator(".limits").screenshot({
-				path: `${process.env.PULSAR_LIMIT_SHOTS}/limits-${platform}.png`,
-			});
 	});
 
 	test(`the session header notes a limit past a threshold and opens Usage (${platform})`, async ({

@@ -140,6 +140,7 @@ const previousEnv = {
 	CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
 	PULSAR_HOME: process.env.PULSAR_HOME,
 	XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+	XDG_DATA_HOME: process.env.XDG_DATA_HOME,
 };
 let daemon: Daemon;
 let port: number;
@@ -163,6 +164,8 @@ beforeAll(async () => {
 	process.env.PULSAR_HOME = home;
 	// Never the operator's OpenCode service.json (the scanner would read it).
 	process.env.XDG_STATE_HOME = join(home, "xdg-state");
+	// …nor its database (the scanner reads OpenCode Go hard stops there).
+	process.env.XDG_DATA_HOME = join(home, "xdg-data");
 	port = await freePort();
 	daemon = new Daemon({
 		socket: socketPath(),

@@ -77,6 +77,8 @@ const LOCAL_RETAG_KEY = "usage.localRetagged";
 const DEFAULTS = priceTable({});
 /** The last OpenCode `session_message` rowid read for limits. */
 const OPENCODE_CURSOR_KEY = "usage.opencodeLimitCursor";
+/** When OpenCode's server is asked next, and the wait after a failure. */
+const OPENCODE_ASK_KEY = "usage.opencodeAsk";
 /** OpenCode's server is asked for usage limits at most this often… */
 const OPENCODE_ASK_MS = 5 * 60_000;
 /** …and after failures, twice as long each time up to this. */
@@ -153,9 +155,6 @@ export class UsageScanner {
 	private providers: Partial<Record<UsageHarness, Providers>> = {};
 	/** The mtime of Claude Code's state file when last read. */
 	private claudeStateMtime: number | null = null;
-	/** When OpenCode's server may be asked again, and the wait after a failure. */
-	private opencodeAskAt = 0;
-	private opencodeWait = OPENCODE_ASK_MS;
 
 	private readonly chunk: number;
 	private readonly commitBytes: number;
@@ -363,23 +362,9 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 			cursor = r.cursor;
 			moved = cursor !== null && cursor !== from;
 		}
-		if (roots.opencodeUsage && now >= this.opencodeAskAt) {
-			const a = await roots
-				.opencodeUsage()
-				.catch((): OpencodeUsageAnswer => ({ running: true, ok: false }));
-			if (!a.running) {
-				// Asked again on the next scan, when it may run.
-			} else if (a.ok) {
-				this.opencodeWait = OPENCODE_ASK_MS;
-				this.opencodeAskAt = now + OPENCODE_ASK_MS;
-				for (const l of opencodeGoLimits(a.data, now)) batch.onLimit(l);
-			} else {
-				this.opencodeAskAt = now + this.opencodeWait;
-				this.opencodeWait = Math.min(
-					this.opencodeWait * 2,
-					OPENCODE_ASK_MAX_MS,
-				);
-			}
+		if (roots.opencodeUsage) {
+			const r = await this.askOpencode(roots.opencodeUsage, now);
+			for (const l of r) batch.onLimit(l);
 		}
 		if (!batch.limits.size && !batch.answered.size && !moved) return;
 		const db = this.store.db;
@@ -397,6 +382,44 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 			db.exec("ROLLBACK");
 			throw e;
 		}
+	}
+
+	/**
+	 * OpenCode Go's meters from OpenCode's server, when due: every
+	 * `OPENCODE_ASK_MS` after an answer, doubling after a failure or an
+	 * answer without OpenCode Go (up to `OPENCODE_ASK_MAX_MS`). The next
+	 * time is kept in `meta`, so a restart does not ask early. Not running:
+	 * looked at again on the next scan.
+	 */
+	private async askOpencode(
+		ask: () => Promise<OpencodeUsageAnswer>,
+		now: number,
+	): Promise<LimitState[]> {
+		let next = 0;
+		let wait = OPENCODE_ASK_MS;
+		try {
+			const v = JSON.parse(this.store.metaGet(OPENCODE_ASK_KEY) ?? "{}");
+			if (Number.isFinite(v.next)) next = v.next;
+			if (Number.isFinite(v.wait)) wait = v.wait;
+		} catch {}
+		if (now < next) return [];
+		const started = Date.now();
+		const a = await ask().catch(
+			(): OpencodeUsageAnswer => ({ running: true, ok: false }),
+		);
+		if (!a.running) return [];
+		// From when it answered (a slow answer does not shorten the gap).
+		const at = now + (Date.now() - started);
+		const limits = a.ok ? opencodeGoLimits(a.data, at) : [];
+		if (limits.length) {
+			next = at + OPENCODE_ASK_MS;
+			wait = OPENCODE_ASK_MS;
+		} else {
+			next = at + wait;
+			wait = Math.min(wait * 2, OPENCODE_ASK_MAX_MS);
+		}
+		this.store.metaSet(OPENCODE_ASK_KEY, JSON.stringify({ next, wait }));
+		return limits;
 	}
 
 	private async find(

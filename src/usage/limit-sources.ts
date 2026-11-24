@@ -231,10 +231,13 @@ const { DatabaseSync } = createRequire(import.meta.url)(
 ) as typeof import("node:sqlite");
 
 /**
- * New OpenCode hard stops and answers since `cursor` (a `session_message`
- * rowid; null on the first read: only the last `firstMs`). Opens the
- * database read-only; a missing database or an older OpenCode (no
- * `session_message`) gives nothing.
+ * OpenCode hard stops and answers written since `cursor` (the newest
+ * `session_message.time_updated` read; null on the first read: only the
+ * last `firstMs`). OpenCode writes an assistant row when a turn starts and
+ * updates it with its error or finish later, so the cursor follows updates,
+ * not new rows; rows at the cursor are read again (a reading read twice is
+ * saved once). Opens the database read-only; a missing database or an
+ * older OpenCode (no `session_message`) gives nothing.
  */
 export function readOpencodeLimits(
 	path: string,
@@ -252,12 +255,11 @@ export function readOpencodeLimits(
 		db = new DatabaseSync(path, { readOnly: true });
 		db.exec("PRAGMA busy_timeout = 500");
 		const top = db
-			.prepare("SELECT max(rowid) AS id FROM session_message")
-			.get() as { id: number | null } | undefined;
-		const max = fin(top?.id);
+			.prepare("SELECT max(time_updated) AS t FROM session_message")
+			.get() as { t: number | null } | undefined;
+		const max = fin(top?.t);
 		if (max === null || max === cursor) return { ...none, cursor: max };
-		const from = cursor ?? 0;
-		const since = cursor === null ? now - firstMs : 0;
+		const from = cursor ?? now - firstMs;
 		const rows = db
 			.prepare(
 				`SELECT time_created AS t,
@@ -266,20 +268,20 @@ export function readOpencodeLimits(
 	json_extract(data, '$.error.retryAfterMs') AS retryAfterMs,
 	json_extract(data, '$.error.message') AS message
 FROM session_message
-WHERE rowid > ? AND rowid <= ? AND time_created >= ? AND type = 'assistant'
+WHERE time_updated >= ? AND time_updated <= ? AND type = 'assistant'
 	AND json_extract(data, '$.error.type') = 'provider.go-limit'`,
 			)
-			.all(from, max, since) as unknown as OpencodeRow[];
+			.all(from, max) as unknown as OpencodeRow[];
 		const answers = db
 			.prepare(
-				`SELECT json_extract(data, '$.model.providerID') AS provider, max(time_created) AS t
+				`SELECT json_extract(data, '$.model.providerID') AS provider, max(time_updated) AS t
 FROM session_message
-WHERE rowid > ? AND rowid <= ? AND time_created >= ? AND type = 'assistant'
+WHERE time_updated >= ? AND time_updated <= ? AND type = 'assistant'
 	AND json_extract(data, '$.error') IS NULL
 	AND json_extract(data, '$.finish') IS NOT NULL
 GROUP BY provider`,
 			)
-			.all(from, max, since) as { provider: string | null; t: number }[];
+			.all(from, max) as { provider: string | null; t: number }[];
 		const limits: LimitState[] = [];
 		for (const r of rows) {
 			const l = opencodeLimit({
