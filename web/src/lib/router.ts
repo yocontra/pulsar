@@ -16,8 +16,14 @@ export { hrefFor, parseHash, type Route };
 const HOME: Route = { view: "home" };
 // Guarded: unit tests render components that import this outside a browser.
 const first = parseHash(globalThis.location?.hash ?? "");
-let depth =
-	(globalThis.history?.state as { depth?: number } | null)?.depth ?? 0;
+const depthOf = (state: unknown) => {
+	const d = (state as { depth?: unknown } | null)?.depth;
+	return typeof d === "number" ? d : null;
+};
+const bootDepth = depthOf(globalThis.history?.state);
+let depth = bootDepth ?? 0;
+/** The first entry's URL, when it has no depth of its own (see popstate). */
+const firstHref = bootDepth === null ? (globalThis.location?.href ?? "") : null;
 
 export const route = signal<Route>(first);
 export const stack = signal<Route[]>(
@@ -40,12 +46,23 @@ onPageName(() => {
 	stack.value = [HOME, r];
 });
 let pendingPop: "pop" | "none" | null = null;
+/** backBy ran out of entries: show Home on the first one when it lands. */
+let pendingHome = false;
 
 addEventListener("popstate", (e) => {
 	const next = parseHash(location.hash);
 	// `PopStateEvent` without naming it: the bun-typed tests reach this file too.
 	const state = (e as Event & { state?: unknown }).state;
-	const d = (state as { depth?: number } | null)?.depth ?? 0;
+	// No depth: the app's first entry, or one the browser made for a hash
+	// link (a link in a message, a card, a typed hash; WebKit also re-runs a
+	// tab link's own href). A link takes the current screen's place, as
+	// navigate({replace}) does; reading it as depth 0 instead left the stack
+	// longer than history, and a tab switch then went back out of the app.
+	let d = depthOf(state);
+	if (d === null) {
+		d = location.href === firstHref ? 0 : depth;
+		history.replaceState({ ...(state ?? {}), depth: d }, "");
+	}
 	const s = stack.value;
 	// Index in `stack` of the entry history moved to (the stack starts at home).
 	const top = s.length - 1;
@@ -57,13 +74,23 @@ addEventListener("popstate", (e) => {
 			: at > top
 				? [...s, next]
 				: [...s.slice(0, top), next];
+	// Home is only ever the root.
+	if (next.view === "home") ns = [next];
 	// After a reload deep in history the stack starts here: home stays under it.
-	if (ns[0]?.view !== "home") ns = [HOME, ...ns];
+	else if (ns[0]?.view !== "home") ns = [HOME, ...ns];
 	stack.value = ns;
 	motion.value = at < top ? (pendingPop ?? "none") : "none";
 	pendingPop = null;
 	depth = d;
 	route.value = next;
+	if (pendingHome && d === 0) {
+		pendingHome = false;
+		if (next.view !== "home") {
+			history.replaceState({ depth: 0 }, "", "#/");
+			stack.value = [HOME];
+			route.value = HOME;
+		}
+	}
 });
 
 export function navigate(
@@ -103,6 +130,24 @@ export function seatHome() {
 	history.replaceState({ depth: 0 }, "", "#/");
 	history.pushState({ depth: 1 }, "", href);
 	depth = 1;
+}
+
+/**
+ * Go back `n` screens, but never past the app's first history entry: with
+ * fewer entries under this one, go back to the first and show Home there.
+ */
+export function backBy(n: number) {
+	if (n <= 0) return;
+	const k = Math.min(n, depth);
+	if (k > 0) {
+		if (k < n) pendingHome = true;
+		history.go(-k);
+	} else {
+		history.replaceState({ depth: 0 }, "", "#/");
+		stack.value = [HOME];
+		motion.value = "none";
+		route.value = HOME;
+	}
 }
 
 /**

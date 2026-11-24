@@ -17,7 +17,7 @@
  * - Each tab keeps its root's scroll position only.
  * - Tapping the active tab scrolls its root to the top (or pops to it).
  */
-import { hrefFor, navigate, type Route, stack } from "../lib/router.ts";
+import { backBy, hrefFor, navigate, type Route, stack } from "../lib/router.ts";
 import { computed } from "../lib/signals.ts";
 
 export type TabId = "agents" | "needs" | "usage" | "settings";
@@ -102,7 +102,7 @@ export function selectTab(id: TabId) {
 	if (id === cur) {
 		const above = s.length - 1 - start;
 		// lib/router follows history (popstate), without animating.
-		if (above > 0 && !tabOf(s[s.length - 1])) history.go(-above);
+		if (above > 0 && !tabOf(s[s.length - 1])) backBy(above);
 		else
 			void document
 				.querySelector<HTMLIonContentElement>(
@@ -117,7 +117,7 @@ export function selectTab(id: TabId) {
 	// Agents is the stack's first entry: go back to it. Leaving Agents
 	// pushes the one tab entry; between other tabs it is replaced.
 	if (id === "agents") {
-		if (s.length > 1) history.go(-(s.length - 1));
+		if (s.length > 1) backBy(s.length - 1);
 	} else if (cur === "agents" && s.length === 1)
 		navigate(tab.route, { animated: false });
 	else navigate(tab.route, { replace: true });
