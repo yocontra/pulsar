@@ -60,6 +60,15 @@ async function startNode(name: string): Promise<Node> {
 		machine: name,
 		push: { keyFile: join(dir, "vapid.json") },
 		approvals: { probe: () => null },
+		// Never the machine's own: the real ports run the installed
+		// `pi --version` and read ~/.pi. Under load that process alone took
+		// longer than the federation's 2 s request timeout below.
+		controls: {
+			catalog: {
+				home: () => join(dir, "home"),
+				version: async () => null,
+			},
+		},
 	});
 	const http = new HttpTransport(service, {
 		identity: tailnet.identity,

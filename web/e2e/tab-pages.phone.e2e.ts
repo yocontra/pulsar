@@ -5,7 +5,6 @@
  * (Chromium, Material).
  */
 import { expect, ready, test } from "./fixtures.ts";
-import { baselineY, midY } from "./ui-audit.ts";
 
 /** Chromium logs each request the test aborts on purpose. */
 function dropNetErrors(errors: string[]) {
@@ -59,28 +58,59 @@ test.describe("tab pages", () => {
 			const rows = page.getByTestId("needs").locator(".p-attn");
 			await expect(rows.first()).toBeVisible();
 			for (const i of [0, 1, 2]) {
-				const row = rows.nth(i);
-				const title = row.locator(".p-title");
-				const time = row.locator(".p-trail .p-quiet");
-				const chevron = row.locator(".p-attn-wrap > svg");
 				const where = `${width} px, ${font} px text, row ${i}`;
+				// All in one go: the list is live, and a needs item that lands
+				// between two reads moves every row down by one (a row's height
+				// apart, in a run under load).
+				const m = await rows.nth(i).evaluate((row) => {
+					const box = (sel: string) =>
+						row.querySelector(sel)!.getBoundingClientRect();
+					// The y of an element's first text baseline (as ui-audit's
+					// baselineY): a zero-size inline-block in front of the text.
+					const baseline = (sel: string) => {
+						const el = row.querySelector(sel)!;
+						const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+							acceptNode: (n) =>
+								n.textContent?.trim()
+									? NodeFilter.FILTER_ACCEPT
+									: NodeFilter.FILTER_SKIP,
+						});
+						const text = walk.nextNode()!;
+						const wrap = document.createElement("span");
+						const probe = document.createElement("span");
+						probe.style.cssText =
+							"display:inline-block;width:0;height:0;vertical-align:baseline";
+						text.parentNode!.insertBefore(wrap, text);
+						wrap.append(probe, text);
+						const y = probe.getBoundingClientRect().top;
+						wrap.replaceWith(text);
+						return y;
+					};
+					const t = box(".p-trail .p-quiet");
+					const c = box(".p-attn-wrap > svg");
+					const line = box(".p-line1");
+					return {
+						baselines: Math.abs(
+							baseline(".p-trail .p-quiet") - baseline(".p-title"),
+						),
+						timeEnd: t.right,
+						timeHeight: t.height,
+						chevronX: c.left,
+						chevronMid: c.top + c.height / 2,
+						lineMid: line.top + line.height / 2,
+						lineHeight: line.height,
+					};
+				});
 				// Same line and baseline as the agent's name.
-				expect(
-					Math.abs((await baselineY(time)) - (await baselineY(title))),
-					where,
-				).toBeLessThanOrEqual(1);
+				expect(m.baselines, where).toBeLessThanOrEqual(1);
 				// Right-aligned, ending before the chevron, on one line.
-				const t = (await time.boundingBox())!;
-				const c = (await chevron.boundingBox())!;
-				const line = (await row.locator(".p-line1").boundingBox())!;
-				expect(t.x + t.width, where).toBeLessThanOrEqual(c.x);
-				expect(c.x - (t.x + t.width), where).toBeLessThan(24);
-				expect(t.height, where).toBeLessThan(line.height + 1);
+				expect(m.timeEnd, where).toBeLessThanOrEqual(m.chevronX);
+				expect(m.chevronX - m.timeEnd, where).toBeLessThan(24);
+				expect(m.timeHeight, where).toBeLessThan(m.lineHeight + 1);
 				// The chevron sits on that line, not centred on the row.
-				expect(
-					Math.abs((await midY(chevron)) - (line.y + line.height / 2)),
-					where,
-				).toBeLessThanOrEqual(2);
+				expect(Math.abs(m.chevronMid - m.lineMid), where).toBeLessThanOrEqual(
+					2,
+				);
 			}
 		}
 	});
