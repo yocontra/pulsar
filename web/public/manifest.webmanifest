@@ -1,6 +1,6 @@
 {
-	"name": "pulsar",
-	"short_name": "pulsar",
+	"name": "Pulsar",
+	"short_name": "Pulsar",
 	"description": "Every agent on every machine you own.",
 	"start_url": "/",
 	"scope": "/",

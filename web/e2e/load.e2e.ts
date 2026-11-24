@@ -497,6 +497,12 @@ test("static headers: compressed, immutable /_app/, no-cache HTML and sw.js", as
 		expect((await request.get(path)).headers()["cache-control"]).toBe(
 			"no-cache",
 		);
+	// The Home Screen name Add to Home Screen proposes (iOS reads the
+	// manifest), the same as apple-mobile-web-app-title.
+	const manifest = await (await request.get("/manifest.webmanifest")).json();
+	expect([manifest.name, manifest.short_name]).toEqual(["Pulsar", "Pulsar"]);
+	const html = await (await request.get("/")).text();
+	expect(html).toContain('name="apple-mobile-web-app-title" content="Pulsar"');
 	const sw = await (await request.get("/sw.js")).text();
 	expect(sw).toContain(`const BUILD = "${current().build}"`);
 	expect(sw).not.toContain("__PULSAR_");
