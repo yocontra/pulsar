@@ -10,7 +10,9 @@ import { realtime } from "./live.shared.ts";
 
 const KINDS = ["sequence", "flowchart-v2", "pie", "mindmap"];
 
-test.afterEach(async ({ request }) => {
+// The page subscribes to this agent until it closes. Restore the mock after
+// page teardown so the subscription cannot refetch an agent we just removed.
+test.afterAll(async ({ request }) => {
 	await realtime(request, { action: "restore" });
 });
 
