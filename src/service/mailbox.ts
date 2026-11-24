@@ -173,7 +173,7 @@ export class Mailbox {
 		const targets = resolved ?? this.registry.resolvePool(input.to, sender);
 		if (targets.length === 0) {
 			if (!resolved && !this.registry.human(sender.id))
-				return this.toOperator(sender, input);
+				return await this.toOperator(sender, input);
 			throw new RpcError(
 				"no_recipients",
 				`no live agent matches "${input.to}". Call list_agents to see who is online.`,
