@@ -27,7 +27,10 @@
 
 @media (max-width: 1023px) {
 	:root {
-		--m-bg: #f2f2f7;
+		/* The page: the same --ds-bg-sunken the phone app paints, from the boot
+		   shell on. iOS samples the top edge for the Home Screen app's status
+		   bar at first paint, so a different shell color stays as a seam. */
+		--m-bg: var(--ds-bg-sunken);
 		--m-cell: #fff;
 		--m-cell-2: #f2f2f7;
 		--m-plain: #fff;
@@ -83,7 +86,7 @@
 
 @media (max-width: 1023px) and (prefers-color-scheme: dark) {
 	:root:not([data-theme="light"]) {
-		--m-bg: #000;
+		--m-bg: var(--ds-bg-sunken);
 		--m-cell: #1c1c1e;
 		--m-cell-2: #2c2c2e;
 		--m-plain: #000;
@@ -115,7 +118,7 @@
 }
 @media (max-width: 1023px) {
 	:root[data-theme="dark"] {
-		--m-bg: #000;
+		--m-bg: var(--ds-bg-sunken);
 		--m-cell: #1c1c1e;
 		--m-cell-2: #2c2c2e;
 		--m-plain: #000;

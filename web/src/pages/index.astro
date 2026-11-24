@@ -23,18 +23,19 @@ import "../styles/desktop.css";
 		<meta name="theme-color" content="#151517" media="(min-width: 1024px) and (prefers-color-scheme: dark)" />
 		<meta name="referrer" content="no-referrer" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<!-- No apple-mobile-web-app-status-bar-style, on purpose. Checked with a
-		     test page in the iOS 27 Simulator: with no key, the Home Screen app's
-		     status bar takes the colour of the page's top edge (there, a sticky
-		     header) and the clock turns black or white with the theme, live. Our
-		     header is not sticky (Ionic's body is fixed), so whether iOS samples
-		     the header or the body background needs a device check; theme-color
-		     and the body background match per theme either way. "default" gives a separate system
-		     bar; black-translucent is deprecated (WebKit bug 317153), forces a white
-		     clock and gets a system scrim since iOS 26.1. iOS reads the key when the
-		     app is added, so an old install keeps its bar until it is re-added.
-		     Safe-area padding (styles/ios.css --sat/--sab/--sal/--sar) still covers
-		     any inset iOS reports. -->
+		<!-- No apple-mobile-web-app-status-bar-style, on purpose. Checked in the
+		     iOS 27 Simulator with fresh Home Screen installs: with no key, iOS
+		     draws an opaque status bar (top inset 0, the page starts below it)
+		     and colours it from the page's top edge, live as the page changes;
+		     theme-color does not change it. It samples at first paint, so the
+		     boot shell paints the app's own page colour (styles/ios.css
+		     --m-bg = --ds-bg-sunken), or the bar keeps a seam.
+		     black-translucent (content under the bar) is deprecated (WebKit bug
+		     317153), forces a white clock and gets a system scrim since iOS
+		     26.1. iOS reads the key when the app is added, so an old install
+		     keeps its bar until it is re-added. Safe-area padding
+		     (styles/ios.css --sat/--sab/--sal/--sar) covers any inset iOS
+		     reports. -->
 
 		<meta name="apple-mobile-web-app-title" content="Pulsar" />
 		<title>Pulsar</title>

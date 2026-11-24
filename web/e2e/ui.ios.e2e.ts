@@ -340,7 +340,8 @@ test.describe("phone UI", () => {
 					.getPropertyValue("--m-bg")
 					.trim(),
 			);
-		expect(bar).toBe("#000");
+		// The dark page (--ds-bg-sunken), as theme-color and the boot shell.
+		expect(bar).toBe("#0b0b0a");
 		await group.getByRole("radio", { name: "System" }).tap();
 		await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.*/);
 		expect(await pageLuminance(page)).toBeGreaterThan(0.8);
