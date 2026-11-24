@@ -151,6 +151,50 @@ test("every bar follows the Appearance setting live", async ({
 	).toBe(true);
 });
 
+test("theme-color changes in the same task as the tap", async ({ page }) => {
+	await setInsets(page, PORTRAIT);
+	await page.emulateMedia({ colorScheme: "light" });
+	await page.goto("/#/settings");
+	const group = page.getByRole("radiogroup", { name: "Appearance" });
+	await group.waitFor();
+	// Click and read back in one evaluate: no frame, timer or render between.
+	const read = (name: string) =>
+		page.evaluate((name) => {
+			const radio = [
+				...document.querySelectorAll<HTMLElement>('[role="radio"]'),
+			].find((el) => el.textContent?.trim() === name);
+			if (!radio) throw new Error(`no ${name} radio`);
+			radio.click();
+			const cv = document.createElement("canvas");
+			cv.width = cv.height = 1;
+			const cx = cv.getContext("2d")!;
+			const rgb = (c: string) => {
+				cx.clearRect(0, 0, 1, 1);
+				cx.fillStyle = c;
+				cx.fillRect(0, 0, 1, 1);
+				return [...cx.getImageData(0, 0, 1, 1).data.slice(0, 3)].join();
+			};
+			const meta = [
+				...document.querySelectorAll<HTMLMetaElement>(
+					'meta[name="theme-color"]',
+				),
+			].find((m) => !m.media || matchMedia(m.media).matches);
+			return {
+				theme: document.documentElement.dataset.theme ?? "",
+				meta: meta ? rgb(meta.content) : "",
+				body: rgb(getComputedStyle(document.body).backgroundColor),
+			};
+		}, name);
+	let c = await read("Dark");
+	expect(c.theme).toBe("dark");
+	expect(c.meta, "theme-color is the dark background").toBe(c.body);
+	expect(c.meta).toBe("11,11,10");
+	c = await read("Light");
+	expect(c.theme).toBe("light");
+	expect(c.meta, "theme-color is the light background").toBe(c.body);
+	expect(c.meta).toBe("244,243,241");
+});
+
 test("a pushed page's top bar follows the setting live", async ({
 	page,
 	request,
