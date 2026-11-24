@@ -302,7 +302,7 @@ describe("reading OpenCode's database", () => {
 		});
 		expect(JSON.stringify(first.limits)).not.toContain("example.test");
 		expect(first.answered.get("opencode\0opencode-go")).toBe(NOW - 2 * HOUR);
-		expect(first.cursor).toBe(4);
+		expect(first.cursor).toBe(NOW - 30 * MIN);
 
 		const again = readOpencodeLimits(path, first.cursor, NOW, 8 * DAY);
 		expect(again.limits).toEqual([]);
@@ -311,7 +311,7 @@ describe("reading OpenCode's database", () => {
 		oc.answer(NOW - 10 * MIN);
 		const later = readOpencodeLimits(path, first.cursor, NOW, 8 * DAY);
 		expect(later.answered.get("opencode\0opencode-go")).toBe(NOW - 10 * MIN);
-		expect(later.cursor).toBe(5);
+		expect(later.cursor).toBe(NOW - 10 * MIN);
 		oc.db.close();
 	});
 
@@ -328,6 +328,42 @@ describe("reading OpenCode's database", () => {
 			cursor: 7,
 		});
 	});
+});
+
+test("a turn's row written first and its error later is still read", () => {
+	const path = join(dir, "opencode", "opencode.db");
+	const oc = opencodeDb(path);
+	oc.answer(NOW - 3 * HOUR);
+	// OpenCode adds the assistant row when the turn starts…
+	oc.add("assistant", NOW - 2 * HOUR, {
+		time: { created: NOW - 2 * HOUR },
+		model: { id: "m", providerID: "opencode-go" },
+	});
+	const first = readOpencodeLimits(path, null, NOW, 8 * DAY);
+	expect(first.limits).toEqual([]);
+	// …and writes the error into it when the turn fails.
+	const t = NOW - HOUR;
+	oc.db
+		.prepare(
+			"UPDATE session_message SET time_updated = ?, data = ? WHERE seq = 2",
+		)
+		.run(
+			t,
+			JSON.stringify({
+				time: { created: NOW - 2 * HOUR },
+				model: { id: "m", providerID: "opencode-go" },
+				error: {
+					type: "provider.go-limit",
+					message: "OpenCode Go weekly usage limit reached.",
+					retryAfterMs: DAY,
+				},
+			}),
+		);
+	const later = readOpencodeLimits(path, first.cursor, NOW, 8 * DAY);
+	expect(later.limits).toHaveLength(1);
+	expect(later.limits[0]).toMatchObject({ window: "weekly", reached: true });
+	expect(later.cursor).toBe(t);
+	oc.db.close();
 });
 
 describe("the scanner", () => {
@@ -429,31 +465,55 @@ describe("the scanner", () => {
 		const week = usage.limits
 			.local(NOW + 2 * MIN)
 			.find((l) => l.harness === "opencode" && l.window === "weekly");
-		expect(week).toMatchObject({
-			usedPercent: 81,
-			plan: "Go",
-			at: NOW + 2 * MIN,
-		});
+		expect(week).toMatchObject({ usedPercent: 81, plan: "Go" });
+		// Its time is when the server answered (the scan's time, plus how long it took).
+		expect(week!.at - (NOW + 2 * MIN)).toBeLessThan(1000);
 		expect(usage.limits.forHarness("opencode", NOW + 2 * MIN)).toHaveLength(3);
 		// Within 5 minutes: not asked.
 		await usage.scanner.scan(NOW + 6 * MIN);
 		expect(asked).toBe(3);
 		// A failure waits 5, then 10 minutes.
 		answers.push({ running: true, ok: false }, { running: true, ok: false });
-		await usage.scanner.scan(NOW + 7 * MIN);
+		await usage.scanner.scan(NOW + 7 * MIN + 1000);
 		expect(asked).toBe(4);
 		await usage.scanner.scan(NOW + 11 * MIN);
 		expect(asked).toBe(4);
-		await usage.scanner.scan(NOW + 12 * MIN);
+		await usage.scanner.scan(NOW + 12 * MIN + 2000);
 		expect(asked).toBe(5);
 		await usage.scanner.scan(NOW + 21 * MIN);
 		expect(asked).toBe(5);
 		// Back to every 5 minutes after it answers.
 		answers.push(go(90));
-		await usage.scanner.scan(NOW + 22 * MIN);
+		await usage.scanner.scan(NOW + 22 * MIN + 3000);
 		expect(asked).toBe(6);
-		await usage.scanner.scan(NOW + 27 * MIN);
+		// A restart (a new scanner on the same database) does not ask early.
+		const again = new Usage(store, {
+			roots: () => ({ ...rootsIn(dir), opencodeUsage: ask }),
+		});
+		await again.scanner.scan(NOW + 23 * MIN);
+		expect(asked).toBe(6);
+		await again.scanner.scan(NOW + 27 * MIN + 4000);
 		expect(asked).toBe(7);
+	});
+
+	test("an answer without OpenCode Go waits longer each time", async () => {
+		let asked = 0;
+		store.close();
+		store = new Store(join(dir, "pulsar4.db"));
+		usage = new Usage(store, {
+			roots: () => ({
+				...rootsIn(dir),
+				opencodeUsage: async () => {
+					asked++;
+					return { running: true, ok: true, data: null };
+				},
+			}),
+		});
+		for (const m of [0, 4, 6, 14, 16, 34, 36])
+			await usage.scanner.scan(NOW + m * MIN);
+		// Asked at 0, then after 5, 10 and 20 minutes.
+		expect(asked).toBe(4);
+		expect(usage.limits.local(NOW)).toEqual([]);
 	});
 
 	test("a hard stop newer than the server's last reading shows as reached", async () => {
