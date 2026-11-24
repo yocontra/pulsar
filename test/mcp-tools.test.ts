@@ -44,7 +44,7 @@ afterAll(async () => {
 	cleanup();
 });
 
-async function mcp(sessionId: string) {
+async function mcp(sessionId: string, harness = "codex") {
 	const transport = new StdioClientTransport({
 		command: NODE,
 		args: [cli, "mcp"],
@@ -53,7 +53,7 @@ async function mcp(sessionId: string) {
 			...(process.env as Record<string, string>),
 			HOME: home,
 			PULSAR_HOME: home,
-			PULSAR_HARNESS: "codex",
+			PULSAR_HARNESS: harness,
 			PULSAR_SESSION_ID: sessionId,
 			PULSAR_NO_SCAN: "1",
 		},
@@ -134,6 +134,36 @@ describe("tool list", () => {
 					r.text.includes("not found") && r.text.includes(`Tool ${name}`),
 			}).toEqual({ name, notFound: false });
 		}
+	});
+});
+
+describe("command-style harnesses (omp)", () => {
+	test("main arguments are listed as required positionals, in order", async () => {
+		const { client, call } = await mcp("omp-tools", "omp");
+		const tools = (await client.listTools()).tools;
+		const required = (name: string) =>
+			tools.find((t) => t.name === name)?.inputSchema.required;
+		expect(required("list_agents")).toEqual(["selector"]);
+		expect(required("send")).toEqual(["to", "body"]);
+		expect(required("respond")).toEqual(["message_id", "state", "text"]);
+		// Bare inbox stays valid (omp refuses a missing required argument).
+		expect(required("inbox")).toBeUndefined();
+		// `list_agents iphone-13-mini`: a bare name that is no agent points at respond.
+		const r = await call("list_agents", { selector: "iphone-13-mini" });
+		expect(r.err).toBe(false);
+		expect(r.text).toContain(
+			'"iphone-13-mini" is not an agent. If it is your human operator or their device, answer them with respond',
+		);
+		// Calls without the listed-as-required arguments still work.
+		expect((await call("list_agents")).err).toBe(false);
+	});
+
+	test("other harnesses keep optional arguments optional", async () => {
+		const { client } = await mcp("codex-tools");
+		const tools = (await client.listTools()).tools;
+		expect(
+			tools.find((t) => t.name === "list_agents")?.inputSchema.required,
+		).toBeUndefined();
 	});
 });
 

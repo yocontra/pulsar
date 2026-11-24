@@ -28,6 +28,29 @@ export interface SendInput {
 	expectReply: boolean;
 }
 
+/** Words that name the human operator in a send's `to`, besides their own names. */
+const OPERATOR_WORDS = new Set([
+	"operator",
+	"human",
+	"user",
+	"human operator",
+	"the operator",
+	"the user",
+	"my operator",
+]);
+
+/** A name as `to` aliases compare it: no case, `@` or surrounding quotes. */
+function aliasKey(name: string): string {
+	return name
+		.trim()
+		.replace(/^["'@]+|["']+$/g, "")
+		.trim()
+		.toLowerCase();
+}
+
+/** A message id (`m_...`): a history query that is one looks the message up. */
+const MESSAGE_ID = /^m_[a-z0-9]+$/;
+
 /** Past this many senders, a send first drops the ones with nothing recent. */
 const SEND_LOG_SWEEP = 1000;
 
@@ -148,11 +171,14 @@ export class Mailbox {
 		const priority = normalPriority(input.priority);
 		const broadcast = isBroadcast(parseSelector(input.to));
 		const targets = resolved ?? this.registry.resolvePool(input.to, sender);
-		if (targets.length === 0)
+		if (targets.length === 0) {
+			if (!resolved && !this.registry.human(sender.id))
+				return this.toOperator(sender, input);
 			throw new RpcError(
 				"no_recipients",
 				`no live agent matches "${input.to}". Call list_agents to see who is online.`,
 			);
+		}
 		this.checkRate(sender, broadcast);
 		this.recordSend(sender, broadcast);
 
@@ -194,6 +220,60 @@ export class Mailbox {
 		if (parent)
 			this.waiters.resolveReplies(parent.id, delivered(message, sender));
 		return { message, receipts };
+	}
+
+	/**
+	 * A send from an agent that matched no live agent. When `to` names the
+	 * human operator ("operator", "user", their login or name, the device
+	 * they sent from), it goes to them as a reply to their latest message to
+	 * this agent: the same path, and the same rules, as `respond ... reply`.
+	 * Otherwise the error says how to answer the operator.
+	 */
+	private async toOperator(
+		sender: Agent,
+		input: SendInput,
+	): Promise<{ message: Message; receipts: Receipt[] }> {
+		const recent = this.store.fromHumansTo(sender.id, 5);
+		const want = aliasKey(input.to);
+		const ids = recent.map((m) => m.id).join(", ");
+		if (this.operatorAliases(recent).has(want)) {
+			const latest = recent[0];
+			if (!latest)
+				throw new RpcError(
+					"no_recipients",
+					`"${input.to}" is your human operator, not an agent, and no message from them has reached you. To answer the operator, use respond <message id> state=reply text=<answer>, with the id from the "reply: respond m_..." line at the end of their message.`,
+				);
+			return this.reply(sender, latest.id, input.body, input.priority);
+		}
+		throw new RpcError(
+			"no_recipients",
+			`no live agent matches "${input.to}". Call list_agents to see who is online.${
+				ids
+					? ` To answer your human operator, use respond <message id> state=reply text=<answer> (their latest messages to you: ${ids}), or send to "operator".`
+					: ""
+			}`,
+		);
+	}
+
+	/** Every way an agent may name the operator who sent `messages`, as `aliasKey`s. */
+	private operatorAliases(messages: Message[]): Set<string> {
+		const names = new Set(OPERATOR_WORDS);
+		for (const m of messages) {
+			const login = m.fromId.slice(
+				m.fromId.indexOf(USER_PREFIX) + USER_PREFIX.length,
+			);
+			const human = this.registry.from(m.fromId, m.fromName);
+			for (const n of [
+				m.fromName,
+				login,
+				login.split("@")[0],
+				human?.machine,
+				human?.meta.operatorName,
+			])
+				if (n) names.add(aliasKey(n));
+		}
+		names.delete("");
+		return names;
 	}
 
 	/** An earlier reply from `sender` to `parentId` with this exact body, with its receipts. */
@@ -336,11 +416,19 @@ export class Mailbox {
 				throw new RpcError("not_found", `no thread ${p.threadId}`);
 			return { messages: shown(this.store.thread(p.threadId, limit)) };
 		}
-		if (typeof p.messageId === "string" && p.messageId) {
-			const m = this.store.getMessage(p.messageId);
+		// A message id given as the search text (`inbox --query m_...`).
+		const query = String(p.query ?? "").trim();
+		const messageId =
+			typeof p.messageId === "string" && p.messageId
+				? p.messageId.trim()
+				: MESSAGE_ID.test(query)
+					? query
+					: "";
+		if (messageId) {
+			const m = this.store.getMessage(messageId);
 			// Another agents' thread reads as missing.
 			if (!m || !this.inThread(me, m.threadId))
-				throw new RpcError("not_found", `no message ${p.messageId}`);
+				throw new RpcError("not_found", `no message ${messageId}`);
 			return {
 				messages: shown(this.store.thread(m.threadId, limit)),
 				receipts: this.store.receiptsFor(m.id),
@@ -348,7 +436,7 @@ export class Mailbox {
 		}
 		const scope = me.id === OPERATOR_ID ? null : me.id;
 		return {
-			messages: shown(this.store.search(scope, String(p.query ?? ""), limit)),
+			messages: shown(this.store.search(scope, query, limit)),
 		};
 	}
 

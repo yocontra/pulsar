@@ -204,6 +204,7 @@ export type HarnessIdent = Pick<
 	| "currentSession"
 	| "toolSessions"
 	| "extension"
+	| "cliArgs"
 >;
 
 export interface HarnessDriver {
@@ -246,6 +247,13 @@ export interface HarnessDriver {
 	 * daemon moves the agent over. Null: unknown, keep the registration's.
 	 */
 	currentSession?(reg: Registration): Promise<string | null>;
+
+	/**
+	 * The harness shows MCP tools to its model as shell-like commands, where
+	 * only required arguments can be positional (omp). The MCP server then
+	 * lists each tool's main arguments as required, in order.
+	 */
+	cliArgs?: boolean;
 
 	/**
 	 * For harnesses that run one MCP process for many sessions and name the
