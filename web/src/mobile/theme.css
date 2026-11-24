@@ -121,11 +121,12 @@ body {
 	font-family: var(--p-font);
 	-webkit-font-smoothing: antialiased;
 }
-/* The keyboard: iOS pans the visual viewport down to show the focused
-   field, past the fixed body. The body follows the pan (main.tsx sets
-   --vv-top), so the top bar stays on screen and the dock, padded by --kb,
-   sits on the keyboard. Ionic's own transform is translateZ(0). */
-html[data-vv-pan] body {
+/* The keyboard (main.tsx): while it is up, the body is the visual
+   viewport, so the top bar stays on screen and the dock sits on the
+   keyboard. Ionic's own transform is translateZ(0). */
+html[data-vv] body {
+	height: var(--vvh);
+	max-height: var(--vvh);
 	transform: translate3d(0, var(--vv-top, 0px), 0);
 }
 ion-content {

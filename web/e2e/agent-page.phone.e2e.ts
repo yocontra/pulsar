@@ -319,7 +319,7 @@ test.describe("composer dock", () => {
 	test("the keyboard keeps the top bar on screen", async ({
 		page,
 		request,
-	}) => {
+	}, info) => {
 		const id = await agentId(request, "name=apparish-auth");
 		await open(page, id);
 		const SAT = 47;
@@ -328,21 +328,31 @@ test.describe("composer dock", () => {
 			SAT,
 		);
 		const field = page.locator(".p-agent .m-composer textarea").last();
-		await field.focus();
-		// What iOS does on focus: a 300 px keyboard shrinks the visual
-		// viewport, and Safari pans it down 220 px to show the field. The
-		// layout viewport and the document stay put.
-		await page.evaluate(() => {
-			const vv = window.visualViewport!;
-			const h = innerHeight - 300;
-			Object.defineProperty(vv, "height", { configurable: true, get: () => h });
-			Object.defineProperty(vv, "offsetTop", {
-				configurable: true,
-				get: () => 220,
-			});
-			vv.dispatchEvent(new Event("resize"));
-			vv.dispatchEvent(new Event("scroll"));
-		});
+		// A tap focuses the field (main.tsx focuses it itself, without
+		// Safari's scroll to it), and nothing scrolls.
+		if (info.project.name === "ios") await field.tap();
+		else await field.focus();
+		await expect(field).toBeFocused();
+		/** The keyboard as iOS reports it: the visual viewport `h` px tall,
+		 *  moved down `pan` px. The layout viewport stays as it was. */
+		const keyboard = (h: number | null, pan: number) =>
+			page.evaluate(
+				([h, pan]) => {
+					const vv = window.visualViewport!;
+					const height = h ?? innerHeight;
+					Object.defineProperty(vv, "height", {
+						configurable: true,
+						get: () => height,
+					});
+					Object.defineProperty(vv, "offsetTop", {
+						configurable: true,
+						get: () => pan,
+					});
+					vv.dispatchEvent(new Event("resize"));
+					vv.dispatchEvent(new Event("scroll"));
+				},
+				[h, pan] as const,
+			);
 		// Where things show on the screen: the visual viewport's coordinates.
 		const onScreen = () =>
 			page.evaluate(() => {
@@ -351,16 +361,17 @@ test.describe("composer dock", () => {
 					...document.querySelectorAll<HTMLElement>("[data-testid=agent-bar]"),
 				];
 				const barEl = bars[bars.length - 1]!;
-				const bar = barEl.getBoundingClientRect();
+				const title = barEl.querySelector("h1")!.getBoundingClientRect();
+				const back = barEl
+					.querySelector<HTMLElement>("[aria-label^='Back']")
+					?.getBoundingClientRect();
 				const docks = [
 					...document.querySelectorAll<HTMLElement>(".p-agent .m-composer"),
 				];
 				const dock = docks[docks.length - 1]!.getBoundingClientRect();
-				const back = barEl
-					.querySelector<HTMLElement>("[aria-label^='Back']")
-					?.getBoundingClientRect();
 				return {
-					barTop: bar.top - vv.offsetTop,
+					barTop: barEl.getBoundingClientRect().top - vv.offsetTop,
+					titleTop: title.top - vv.offsetTop,
 					backTop: back ? back.top - vv.offsetTop : null,
 					dockBottom: dock.bottom - vv.offsetTop,
 					vvHeight: vv.height,
@@ -368,45 +379,39 @@ test.describe("composer dock", () => {
 					scrollY: window.scrollY,
 				};
 			});
-		await expect
-			.poll(async () => (await onScreen()).barTop)
-			.toBeGreaterThanOrEqual(0);
-		const s = await onScreen();
-		const title = (await bar(page).locator("h1").boundingBox())!;
-		const vvTop = 220;
-		expect(
-			title.y - vvTop,
-			"title under the status bar",
-		).toBeGreaterThanOrEqual(SAT);
-		if (s.backTop !== null) expect(s.backTop).toBeGreaterThanOrEqual(SAT - 1);
-		// The dock sits on the keyboard: its bottom at the screen's (8 px gap).
-		expect(s.dockBottom).toBeLessThanOrEqual(s.vvHeight);
-		expect(s.dockBottom).toBeGreaterThan(s.vvHeight - 20);
-		// The document never scrolled.
-		expect(s.scrollTop).toBe(0);
-		expect(s.scrollY).toBe(0);
+		const vh = page.viewportSize()!.height;
+		// iOS 27 Safari, measured: a 339 px keyboard, no pan once the field is
+		// focused without the scroll; and the pan iOS adds when it scrolls.
+		for (const pan of [0, 220]) {
+			await keyboard(vh - 300, pan);
+			await expect
+				.poll(async () => (await onScreen()).dockBottom, `pan ${pan}`)
+				.toBeLessThanOrEqual(vh - 300);
+			const s = await onScreen();
+			expect(s.barTop, `pan ${pan}: bar on screen`).toBeGreaterThanOrEqual(0);
+			expect(
+				s.titleTop,
+				`pan ${pan}: title under the status bar`,
+			).toBeGreaterThanOrEqual(SAT);
+			if (s.backTop !== null) expect(s.backTop).toBeGreaterThanOrEqual(SAT - 1);
+			// The dock sits on the keyboard (an 8 px gap at most 20).
+			expect(s.dockBottom, `pan ${pan}: dock on the keyboard`).toBeGreaterThan(
+				s.vvHeight - 20,
+			);
+			// The document never scrolled.
+			expect(s.scrollTop).toBe(0);
+			expect(s.scrollY).toBe(0);
+		}
 		// The keyboard goes: everything back in place.
-		await page.evaluate(() => {
-			const vv = window.visualViewport!;
-			Object.defineProperty(vv, "height", {
-				configurable: true,
-				get: () => innerHeight,
-			});
-			Object.defineProperty(vv, "offsetTop", {
-				configurable: true,
-				get: () => 0,
-			});
-			vv.dispatchEvent(new Event("resize"));
-		});
+		await keyboard(null, 0);
 		await expect
 			.poll(() =>
-				page.evaluate(() =>
-					document.documentElement.hasAttribute("data-vv-pan"),
-				),
+				page.evaluate(() => document.documentElement.hasAttribute("data-vv")),
 			)
 			.toBe(false);
-		const after = (await bar(page).locator("h1").boundingBox())!;
-		expect(after.y).toBeGreaterThanOrEqual(SAT);
-		expect(after.y).toBeLessThan(SAT + 44);
+		const after = await onScreen();
+		expect(after.titleTop).toBeGreaterThanOrEqual(SAT);
+		expect(after.titleTop).toBeLessThan(SAT + 44);
+		expect(after.dockBottom).toBeGreaterThan(vh - 60);
 	});
 });
