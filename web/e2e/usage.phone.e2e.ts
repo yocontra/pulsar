@@ -102,13 +102,24 @@ test.describe("usage tab", () => {
 					plan: "pro",
 				},
 			];
+			report.limits.push({
+				...report.limits[0]!,
+				window: "daily",
+				label: "Daily",
+				reached: true,
+				usedPercent: 100,
+			});
 			report.rows[0]!.model = model;
 			await route.fulfill({ response, json: report });
 		});
 		await openUsage(page);
 		const p = top(page);
 		for (const [row, name, bar] of [
-			[p.getByTestId("limit-row").first(), ".limits-name", ".limits-bar"],
+			[
+				p.getByTestId("limit-row").filter({ hasText: "extended context" }),
+				".limits-name",
+				".limits-bar",
+			],
 			[p.locator(`[data-model="${model}"]`), ".p-usage-model", ".usage-bar"],
 		] as const) {
 			const label = row.locator(name);
@@ -127,6 +138,18 @@ test.describe("usage tab", () => {
 				track.y,
 			);
 			expect(Math.max(...lines.map((r) => r.right))).toBeLessThanOrEqual(320);
+		}
+		const meters = await p.getByRole("meter").evaluateAll((bars) =>
+			bars.map((bar) => ({
+				track: bar.getBoundingClientRect().width,
+				fill: bar.firstElementChild!.getBoundingClientRect().width,
+				percent: Number(bar.getAttribute("aria-valuenow")),
+			})),
+		);
+		expect(meters).toHaveLength(2);
+		expect(meters[0]!.track).toBe(meters[1]!.track);
+		for (const { track, fill, percent } of meters) {
+			expect(Math.abs(fill - (track * percent) / 100)).toBeLessThan(1);
 		}
 		await p.getByRole("button", { name: new RegExp(model) }).click();
 		const heading = page
@@ -164,7 +187,12 @@ test.describe("usage tab", () => {
 				const segs = [...el.querySelectorAll('[role="radio"]')].map(
 					(b) => b.getBoundingClientRect().height,
 				);
+				const tracks = [
+					...el.querySelectorAll(".limits-bar, .usage-breakdown .usage-bar"),
+				].map((bar) => bar.getBoundingClientRect());
 				return {
+					trackLefts: tracks.map((bar) => bar.left),
+					trackRights: tracks.map((bar) => bar.right),
 					card: card.width,
 					chart: chart.width,
 					overflow,
@@ -178,5 +206,9 @@ test.describe("usage tab", () => {
 			expect(r.chart).toBeGreaterThan(r.card * 0.85);
 			expect(r.minLabel).toBeGreaterThanOrEqual(11);
 			expect(r.minSeg).toBeGreaterThanOrEqual(44);
+			expect(r.trackLefts.length).toBeGreaterThan(1);
+			for (const edges of [r.trackLefts, r.trackRights]) {
+				expect(Math.max(...edges) - Math.min(...edges)).toBeLessThanOrEqual(1);
+			}
 		});
 });

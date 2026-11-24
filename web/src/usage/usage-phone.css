@@ -1,6 +1,8 @@
 /* The phone's Usage tab (UsagePhone.tsx): Konsta blocks, lists and cards
    on the page; only the pieces Konsta doesn't lay out are styled here. */
 .p-usage-body {
+	/* Reserve the same space for values in Limits and Breakdown. */
+	--p-usage-value-column: min(7rem, 40%);
 	padding-bottom: 8px;
 }
 /* Period over Cost/Tokens, each the full width. */
@@ -65,13 +67,13 @@ html.k-material .p-usage-total {
 }
 .p-usage .limits-list {
 	gap: 0;
-	padding-inline: 12px;
+	padding-inline: 1rem;
 	border-radius: 12px;
 	background: var(--ds-surface);
 }
 .p-usage .limits-row {
-	grid-template-columns: auto minmax(0, 1fr) auto;
-	grid-template-areas: "icon name name" ". bar used" ". reset reset";
+	grid-template-columns: auto minmax(0, 1fr) var(--p-usage-value-column);
+	grid-template-areas: "icon name name" "bar bar used" "reset reset reset";
 	row-gap: 4px;
 	padding-block: 10px;
 }
@@ -96,11 +98,16 @@ html.k-material .p-usage-total {
 }
 .p-usage-breakdown-value {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-columns: minmax(0, 1fr) var(--p-usage-value-column);
 	align-items: center;
-	gap: 12px;
+	gap: var(--ds-space-2);
 	font-size: var(--ds-text-secondary);
 	color: var(--ds-text-2);
+}
+.p-usage-breakdown-value .usage-num,
+.p-usage .limits-used {
+	text-align: end;
+	overflow-wrap: anywhere;
 }
 .p-usage-types .usage-legend {
 	display: grid;
