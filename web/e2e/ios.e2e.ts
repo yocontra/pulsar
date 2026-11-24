@@ -8,6 +8,7 @@ import {
 	resetPasskeys,
 	test,
 } from "./fixtures.ts";
+import { realtime } from "./live.shared.ts";
 import { softAuthenticator } from "./soft-webauthn.ts";
 
 /**
@@ -309,17 +310,27 @@ test.describe("ios gestures", () => {
 		await resetPasskeys(request);
 		await softAuthenticator(page);
 		const id = await agentId(request, "name=apparish-auth");
-		await page.goto(`${localhostBase()}/#/approval/${encodeURIComponent(id)}`);
-		const card = page.locator(".prompt-inline .approval-card");
-		await expect(card).toContainText("apparish-auth");
-		await card.getByRole("button", { name: /^Allow once( · Face ID)?$/ }).tap();
-		const prove = page.getByRole("dialog", { name: "Prove Human" });
-		await expect(prove).toContainText("To answer this prompt");
-		await prove.getByRole("button", { name: "Prove with passkey" }).tap();
-		await expect(prove).toHaveCount(0);
-		await expect(page.locator(".prompt-outcome")).toContainText(
-			/Allowed once by You · .+ on .+ · \d/,
-		);
+		// The seeded request can expire while earlier files use this worker.
+		await realtime(request, { action: "needs-you", id, tool: "Bash" });
+		try {
+			await page.goto(
+				`${localhostBase()}/#/approval/${encodeURIComponent(id)}`,
+			);
+			const card = page.locator(".prompt-inline .approval-card");
+			await expect(card).toContainText("apparish-auth");
+			await card
+				.getByRole("button", { name: /^Allow once( · Face ID)?$/ })
+				.tap();
+			const prove = page.getByRole("dialog", { name: "Prove Human" });
+			await expect(prove).toContainText("To answer this prompt");
+			await prove.getByRole("button", { name: "Prove with passkey" }).tap();
+			await expect(prove).toHaveCount(0);
+			await expect(page.locator(".prompt-outcome")).toContainText(
+				/Allowed once by You · .+ on .+ · \d/,
+			);
+		} finally {
+			await realtime(request, { action: "restore" });
+		}
 	});
 });
 

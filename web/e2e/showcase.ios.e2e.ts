@@ -1,4 +1,5 @@
 import { agentId, expect, ready, test } from "./fixtures.ts";
+import { realtime } from "./live.shared.ts";
 
 /**
  * The showcase transcript on the phone, in WebKit: every Mermaid diagram
@@ -9,12 +10,24 @@ import { agentId, expect, ready, test } from "./fixtures.ts";
 
 const KINDS = ["sequence", "flowchart-v2", "pie", "mindmap"];
 
+test.afterEach(async ({ request }) => {
+	await realtime(request, { action: "restore" });
+});
+
 test("every showcase diagram renders as it scrolls into view, with no console error (phone)", async ({
 	page,
 	request,
 }) => {
 	await ready(page);
-	const id = await agentId(request, "name=apparish-auth");
+	// Each fixed studio session starts with the showcase in its newest
+	// page. Earlier tests can stream it out of an existing agent's window.
+	await realtime(request, {
+		action: "add-agent",
+		machine: "studio",
+		name: "diagram-showcase",
+		harness: "claude",
+	});
+	const id = await agentId(request, "name=diagram-showcase");
 	await page.evaluate((id) => {
 		location.hash = `#/a/${encodeURIComponent(id)}`;
 	}, id);
