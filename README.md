@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/logo.svg" width="120" height="120" alt="Pulsar logo">
+<img src="https://raw.githubusercontent.com/yocontra/pulsar/main/docs/assets/logo.svg" width="120" height="120" alt="Pulsar logo">
 
 # Pulsar
 
@@ -8,17 +8,17 @@
 
 [![CI](https://github.com/yocontra/pulsar/actions/workflows/ci.yml/badge.svg)](https://github.com/yocontra/pulsar/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/pulsar.svg)](https://www.npmjs.com/package/pulsar)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/yocontra/pulsar/blob/main/LICENSE)
 
 </div>
 
-Pulsar connects the coding agents you already run: Claude Code, Codex, OpenCode, pi, omp, Cursor, Copilot, Antigravity, or another MCP client. For sessions that Pulsar starts, see the [ACP provider catalog](docs/acp.md). You can also [view and start hosted tasks](docs/hosted.md) on the machine signed in to the provider. Each agent can see who else is running and message one agent, a group, or all of them. A message wakes an idle agent in most harnesses.
+Use Pulsar to send a question from Claude Code to Codex, follow an OpenCode session from your phone, or approve a command while you’re away from your terminal. Agents can find each other by project, branch, or pull request.
 
-Turn on the agent mesh and this works across all your machines. The Pulsar app lets you watch and steer every agent from your phone or another computer. There is no Pulsar server and no account.
+Pulsar runs on your machine. Enable the optional Tailscale mesh to reach sessions on your other machines from the same app. Each machine serves the app and keeps its provider credentials locally.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/desktop-session-dark.webp">
-  <img src="docs/assets/screenshots/desktop-session-light.webp" alt="The Pulsar app on a desktop: agents grouped by machine and project on the left, and a live Claude Code session on the right with a file write, a message from another agent and a pending Bash approval">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/yocontra/pulsar/main/docs/assets/screenshots/desktop-session-dark.webp">
+  <img src="https://raw.githubusercontent.com/yocontra/pulsar/main/docs/assets/screenshots/desktop-session-light.webp" alt="The Pulsar app on a desktop: agents grouped by machine and project on the left, and a live Claude Code session on the right with a file write, a message from another agent and a pending Bash approval">
 </picture>
 
 ## Install
@@ -41,7 +41,7 @@ No Node? Run `curl -fsSL https://raw.githubusercontent.com/yocontra/pulsar/main/
 | omp | `omp install pulsar` |
 | pi | `pi install npm:pulsar` |
 
-Any other MCP client: `{ "command": "npx", "args": ["-y", "pulsar", "mcp"] }`. `pulsar setup` also sets a few harness options that plugin installs can't. See [docs/adapters.md](docs/adapters.md).
+Any other MCP client: `{ "command": "npx", "args": ["-y", "pulsar", "mcp"] }`. `pulsar setup` also sets a few harness options that plugin installs can't. See [docs/adapters.md](https://github.com/yocontra/pulsar/blob/main/docs/adapters.md).
 
 </details>
 
@@ -64,7 +64,20 @@ Sent m_mwk3jlo0 to 3 agents.
 
 Agents are tagged with their harness, model, project, branch, PR and GitHub issue. Send to a name, a selector (`project=apparish`, `pr=1402 role=reviewer`, `issue=1378`), or `*` for everyone. Agents know a message comes from another agent, not from you, and that it can't approve anything.
 
-The agent tools are `list_agents`, `send`, `respond`, `wait`, `inbox` and `set_identity`. Delivery details: [docs/delivery.md](docs/delivery.md).
+The agent tools are `list_agents`, `send`, `respond`, `wait`, `inbox` and `set_identity`. Delivery details: [docs/delivery.md](https://github.com/yocontra/pulsar/blob/main/docs/delivery.md).
+
+## Start a session
+
+Run these commands in the project where you want the agent to work. The first command lists providers and shows which executables Pulsar found. The second starts a session with a signed-in Antigravity CLI.
+
+```bash
+pulsar acp --list
+pulsar acp antigravity
+```
+
+The app also uses the Agent Client Protocol (ACP) when it finds a compatible executable. Antigravity and OpenCode speak ACP directly. Claude Code and Codex use separate ACP adapters. The provider guide lists the executable, available features, and live test results for each provider. [ACP provider guide](https://github.com/yocontra/pulsar/blob/main/docs/acp.md)
+
+For cloud work, open **Hosted agents** to view or start GitHub Copilot, Codex Cloud, or Cursor Cloud tasks. Choose the machine signed in to the provider. That machine verifies your passkey before submitting work. [Hosted agent setup](https://github.com/yocontra/pulsar/blob/main/docs/hosted.md)
 
 ## Agent mesh
 
@@ -74,44 +87,22 @@ The mesh links every machine on your [Tailscale](https://tailscale.com) network 
 2. In the Tailscale admin console, turn on **HTTPS Certificates** ([DNS page](https://login.tailscale.com/admin/dns)).
 3. On each machine, say yes when `pulsar setup` asks about the mesh, or run `pulsar mesh on`.
 
-Machines signed in as you link on their own. There are no pairing codes. `pulsar doctor --mesh` finds problems and tells you how to fix them. Servers, tagged devices, Linux notes and how linking works: [docs/federation.md](docs/federation.md). Running your own control server: [docs/headscale.md](docs/headscale.md).
+Machines signed in as you link on their own. There are no pairing codes. `pulsar doctor --mesh` finds problems and tells you how to fix them. Servers, tagged devices, Linux notes and how linking works: [docs/federation.md](https://github.com/yocontra/pulsar/blob/main/docs/federation.md). Running your own control server: [docs/headscale.md](https://github.com/yocontra/pulsar/blob/main/docs/headscale.md).
 
 ## The app
 
 Run `pulsar qr` and scan the code with your phone, then add the page to your home screen. On a computer, run `pulsar ui`.
 
-<p align="center"><img src="docs/assets/screenshots/phone-home.webp" alt="Phone: the Agents tab with a search field, a 2 need you row, the machines with their projects, and the floating tab bar (Agents, Needs You, Usage, Settings)" width="300"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/yocontra/pulsar/main/docs/assets/screenshots/phone-home.webp" alt="Phone: the Agents tab with a search field, a 2 need you row, the machines with their projects, and the floating tab bar (Agents, Needs You, Usage, Settings)" width="300"></p>
 
-- See every machine, project and agent, with a "Needs you" list.
-- Watch each session live: replies, tool calls, diffs, code and images.
-- Answer permission prompts and questions. The prompt also stays in the terminal.
-- Message one agent or a group. Attach files and images, and mention files with `@`.
-- See the messages that wait for an agent, and cancel, send now or edit them before they arrive.
-- Stop an agent's turn.
-- Start a new agent on any machine, in a folder or a new git worktree.
-- Review an agent's changes, then commit, push and open a PR.
-- See the GitHub issue an agent works on, with its card.
-- Browse the files in an agent's folder; file links in its replies open there.
-- Review an agent's PR: comment on lines, reply, resolve threads, approve or request changes.
-- Search the pool and every session's messages.
-- Get notifications when an agent needs you, finishes or fails.
-- See token usage and an API cost estimate per harness, model and day.
-- See plan usage limits, with a warning when one passes 80% or 95% or is reached.
-- Check every machine at once: `pulsar doctor`'s results, fixes and versions.
+- Open **Needs you** to answer a permission prompt or question. The terminal prompt stays available.
+- Follow live replies, tool output, diffs, and images. Codex hides empty wait events and keeps output and errors.
+- Send messages and attachments, start a session in a worktree, or stop a turn. The controls available depend on the harness and how the session was started.
+- Browse files, review changes, commit, push, or review a pull request from the session.
+- Enable push notifications for approvals, completed turns, and failures. Lock-screen previews use plain text.
+- Open **Usage** to compare tokens and costs by harness, model, and day. Pulsar distinguishes reported costs, estimates, and local models.
 
-Full tour and keyboard shortcuts: [docs/app.md](docs/app.md).
-
-| Harness | Answer prompts from the app | Stop |
-| --- | --- | --- |
-| Claude Code | Yes | Yes, in tmux |
-| OpenCode | Yes | Yes |
-| omp, pi | Yes | Yes |
-| Codex | Yes¹ | Yes |
-| Cursor, Gemini CLI | No | No |
-
-¹ A session started with `codex --no-daemon` shows its prompts read-only.
-
-Details per harness, setup flags and environment variables: [docs/adapters.md](docs/adapters.md).
+[App tour and keyboard shortcuts](https://github.com/yocontra/pulsar/blob/main/docs/app.md) · [Controls available per harness](https://github.com/yocontra/pulsar/blob/main/docs/adapters.md)
 
 ## Prove Human
 
@@ -129,7 +120,7 @@ The app asks before you:
 
 You prove once in each machine's app. It lasts 12 hours in a computer's browser and 7 days on a phone. An action on an agent on another machine asks again, because each machine checks for itself.
 
-Some commands change who can reach your agents: `pulsar mesh allow`, `deny`, `forget`, `owner`, and `pulsar passkeys remove`. Agents can run them too, so each one waits until you confirm it with Touch ID (or Windows Hello, or polkit) on that machine, or with your passkey in the app. Details: [docs/presence.md](docs/presence.md).
+Some commands change who can reach your agents: `pulsar mesh allow`, `deny`, `forget`, `owner`, and `pulsar passkeys remove`. Agents can run them too, so each one waits until you confirm it with Touch ID (or Windows Hello, or polkit) on that machine, or with your passkey in the app. Details: [docs/presence.md](https://github.com/yocontra/pulsar/blob/main/docs/presence.md).
 
 ## CLI
 
@@ -152,7 +143,7 @@ pulsar doctor                      # check the daemon, harnesses and mesh
 - The app listens only on Tailscale and accepts only your Tailscale identity.
 - No telemetry.
 
-Read [SECURITY.md](SECURITY.md) for the full model and to report a vulnerability.
+Read [SECURITY.md](https://github.com/yocontra/pulsar/blob/main/SECURITY.md) for the full model and to report a vulnerability.
 
 ## Development
 
@@ -162,7 +153,7 @@ bun run check     # typecheck, lint, tests
 bun run mock      # the app against a simulated pool
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](https://github.com/yocontra/pulsar/blob/main/CONTRIBUTING.md).
 
 ## License
 
