@@ -166,9 +166,18 @@ test.describe("realtime", () => {
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
 		await openApparish(page);
+		const subscribed = page.waitForResponse((response) => {
+			const request = response.request();
+			return (
+				response.ok() &&
+				request.method() === "PUT" &&
+				new URL(response.url()).pathname.startsWith("/api/v1/subscriptions/") &&
+				request.postDataJSON()?.session === id
+			);
+		});
 		await page.locator(`.tree [data-agent="${id}"]`).click();
 		await expect(page.locator(".transcript .ev").first()).toBeVisible();
-		await settle(page);
+		await subscribed;
 		const text = `realtime line ${Date.now().toString(36)}`;
 		await change(request, { action: "transcript", id, text });
 		await expect(page.locator(".transcript")).toContainText(text, {

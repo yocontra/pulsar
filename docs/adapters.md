@@ -50,15 +50,15 @@ See [delivery.md](delivery.md) for receipts and redelivery.
 
 ### Native harness smoke checks
 
-These checks used separate workspaces and Pulsar state directories on macOS.
+These checks used separate workspaces and Pulsar state directories on macOS. The child messaging checks used a local model fixture to exercise the installed harness and Pulsar together.
 
 | Installed harness | Verified result |
 | --- | --- |
-| Claude Code 2.1.331 | Pulsar found the process and session ID and accepted a local test message. Claude required sign-in before it could reply. |
+| Claude Code 2.1.331 | A child received a message through a tool hook, replied as itself, and updated its identity. Its parent kept its original identity. |
 | Codex CLI 0.172.0 | Codex stopped at thread creation because it could not synchronize managed preferences. The native reply and idle wait could not run in this environment. |
-| OpenCode 2.2.5 | A standalone native text turn completed. OpenCode read the test configuration, but its standalone MCP list did not expose the configured Pulsar server in this environment. The [ACP smoke check](acp.md#provider-verification) also completed a turn. |
+| OpenCode 2.2.5 | A native child listed agents, received a direct message through the OpenCode service, and replied from its own child address. Pulsar also found a nested child through the native session API. |
 | pi 1.5.0 | The native RPC process answered its state request. The configured model request was rate-limited before a Pulsar reply. |
-| omp 19.1.1 | Pulsar found the process and accepted a local test message. The native run exited before replying. The separate RPC run stopped during model setup. |
+| omp 19.1.1 | Two native children discovered one another. Pulsar delivered a message to the first child, which sent to its sibling and received the reply. |
 
 ## Prompts in the app
 

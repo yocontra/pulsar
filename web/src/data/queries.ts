@@ -12,6 +12,7 @@ import type {
 	FacetKey,
 	Hello,
 	SubagentRow,
+	TranscriptEvent,
 	TreeGroup,
 	TreeNode,
 	TreeSort,
@@ -21,6 +22,7 @@ import { e2eNumber } from "../lib/e2e.ts";
 import { keys } from "./keys.ts";
 import {
 	type AgentPages,
+	applyTranscriptLive,
 	applyTranscriptPage,
 	type ListData,
 	type TranscriptData,
@@ -206,8 +208,11 @@ export function transcriptDef(
 	client: QueryClient,
 	agentId: string,
 	flush: () => Promise<void>,
-	/** Calls back with the ids of live events for this agent; returns off. */
-	watch?: (agentId: string, fn: (ids: string[]) => void) => () => void,
+	/** Calls back with live events for this agent; returns off. */
+	watch?: (
+		agentId: string,
+		fn: (events: TranscriptEvent[]) => void,
+	) => () => void,
 	/** The open event stream's id, if any (the page then subscribes it). */
 	stream?: () => string | null,
 ): LiveDef<TranscriptData> {
@@ -215,9 +220,9 @@ export function transcriptDef(
 	return {
 		queryKey,
 		queryFn: async () => {
-			const touched = new Set<string>();
-			const off = watch?.(agentId, (ids) => {
-				for (const id of ids) touched.add(id);
+			const touched = new Map<string, TranscriptEvent>();
+			const off = watch?.(agentId, (events) => {
+				for (const event of events) touched.set(event.id, event);
 			});
 			try {
 				// The daemon follows the transcript for this stream before it reads
@@ -229,12 +234,16 @@ export function transcriptDef(
 					id ? flush().catch(() => {}) : flush(),
 					api.transcript(agentId, null, id),
 				]);
-				return applyTranscriptPage(
+				const merged = applyTranscriptPage(
 					client.getQueryData<TranscriptData>(queryKey),
 					p,
 					false,
-					touched,
+					new Set(touched.keys()),
 				);
+				// Before the first page there may be no query data to patch.
+				return touched.size
+					? applyTranscriptLive(merged, [...touched.values()])
+					: merged;
 			} finally {
 				off?.();
 			}

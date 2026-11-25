@@ -87,10 +87,14 @@ export class LiveSync {
 	/** What the last acknowledged PUT covered (query hashes). */
 	private acked = new Set<string>();
 	private ackedKey = "";
-	private sentKey = "";
-	private pendingCovered = new Set<string>();
+	private subscriptionEpoch = 0;
 	private subTimer: unknown;
-	private inflight: Promise<void> | null = null;
+	private inflight: {
+		id: string;
+		key: string;
+		epoch: number;
+		done: Promise<void>;
+	} | null = null;
 	private stateListeners = new Set<() => void>();
 	private listeners: {
 		[K in keyof Listeners]: Set<(v: Listeners[K]) => void>;
@@ -213,7 +217,7 @@ export class LiveSync {
 
 	private clearAck() {
 		this.ackedKey = "";
-		this.sentKey = "";
+		this.subscriptionEpoch++;
 		if (this.acked.size) {
 			this.acked = new Set();
 			this.changed();
@@ -258,6 +262,19 @@ export class LiveSync {
 		this.opts.clearTimeout(this.subTimer);
 		const id = this.streamId;
 		if (!id) return;
+		const pending = this.inflight;
+		if (pending?.id === id) {
+			// PUT replaces the whole server subscription. An older request must
+			// finish before the next one can change the same stream.
+			await pending.done;
+			if (this.streamId !== id) return;
+			if (
+				pending.epoch === this.subscriptionEpoch &&
+				pending.key === subscriptionKey(this.current().sub)
+			)
+				return;
+			return this.flush();
+		}
 		const { sub, covered } = this.current();
 		const key = subscriptionKey(sub);
 		// Coverage can grow without a new PUT (a second query on a covered topic).
@@ -265,24 +282,23 @@ export class LiveSync {
 			this.setAcked(covered);
 			return;
 		}
-		if (key === this.sentKey && this.inflight) return this.inflight;
-		this.sentKey = key;
-		this.pendingCovered = covered;
-		const run = this.opts
+		const epoch = this.subscriptionEpoch;
+		const done = this.opts
 			.subscribe(id, sub)
 			.then(() => {
-				if (this.streamId !== id || this.sentKey !== key) return;
+				if (this.streamId !== id || this.subscriptionEpoch !== epoch) return;
 				this.ackedKey = key;
-				this.setAcked(this.pendingCovered);
+				const desired = this.current();
+				this.setAcked(
+					subscriptionKey(desired.sub) === key ? desired.covered : covered,
+				);
 			})
-			.catch(() => {
-				if (this.sentKey === key) this.sentKey = "";
-			})
+			.catch(() => {})
 			.finally(() => {
-				if (this.inflight === run) this.inflight = null;
+				if (this.inflight?.done === done) this.inflight = null;
 			});
-		this.inflight = run;
-		return run;
+		this.inflight = { id, key, epoch, done };
+		return done;
 	}
 
 	private setAcked(covered: Set<string>) {

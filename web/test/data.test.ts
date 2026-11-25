@@ -39,6 +39,7 @@ import {
 } from "../src/data/patch.ts";
 import { isStopping, localSend } from "../src/data/pending.ts";
 import { createPrefetcher } from "../src/data/prefetch.ts";
+import { transcriptDef } from "../src/data/queries.ts";
 import { deriveSubscription } from "../src/data/topics.ts";
 
 // ------------------------------------------------------------ fixtures
@@ -125,7 +126,9 @@ interface Rig {
 }
 const rigs: Rig[] = [];
 
-function rig(): Rig {
+function rig(
+	applySubscription: (sub: Subscription) => Promise<void> = async () => {},
+): Rig {
 	const client = new QueryClient({
 		defaultOptions: { queries: { retry: false, staleTime: 0 } },
 	});
@@ -137,6 +140,7 @@ function rig(): Rig {
 		transport: t.transport,
 		subscribe: async (_id, sub) => {
 			subs.push(sub);
+			await applySubscription(sub);
 		},
 		debounceMs: 0,
 		frame: (fn) => fn(),
@@ -164,6 +168,69 @@ afterEach(() => {
 		r.client.clear();
 	}
 	focusManager.setFocused(undefined);
+});
+
+test("a session subscription waits for any older replacement on the same stream", async () => {
+	const first = Promise.withResolvers<void>();
+	let applied: Subscription | undefined;
+	const r = rig(async (sub) => {
+		if (!sub.session) await first.promise;
+		applied = sub;
+	});
+	await connect(r);
+	const observer = observeLive(r.client, r.live, {
+		queryKey: keys.transcript("a"),
+		queryFn: async () => ({ events: [], available: true, cursor: null }),
+		poll: false,
+	});
+	try {
+		const settled = r.live.flush();
+		expect(r.subs.map((sub) => sub.session)).toEqual([null]);
+		first.resolve();
+		await settled;
+		expect(applied?.session).toBe("a");
+	} finally {
+		first.resolve();
+		observer.stop();
+	}
+});
+
+test("a live transcript frame during the first history request keeps its event and the page cursor", async () => {
+	const { client, live } = rig();
+	const realFetch = globalThis.fetch;
+	const history = Promise.withResolvers<Response>();
+	globalThis.fetch = Object.assign(() => history.promise, {
+		preconnect: realFetch.preconnect,
+	});
+	try {
+		const def = transcriptDef(
+			client,
+			"a",
+			async () => {},
+			(agent, fn) =>
+				live.on("transcript", (batch) => {
+					if (batch.agentId === agent) fn(batch.events);
+				}),
+		);
+		const first = def.queryFn({ signal: new AbortController().signal });
+		live.onEvent({
+			type: "transcript",
+			data: { agent: "a", events: [ev("live", 2)] },
+		});
+		expect(client.getQueryData(keys.transcript("a"))).toBeUndefined();
+		history.resolve(
+			Response.json({
+				events: [ev("history", 1)],
+				cursor: "123",
+				available: true,
+			}),
+		);
+		const merged = await first;
+		expect(merged.events.map((event) => event.id)).toEqual(["history", "live"]);
+		expect(merged.cursor).toBe("123");
+	} finally {
+		globalThis.fetch = realFetch;
+	}
 });
 
 // ------------------------------------------------------------ patches

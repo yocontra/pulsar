@@ -19,7 +19,6 @@ export function createPrefetcher(
 	client: QueryClient,
 	flush: () => Promise<void>,
 	watch?: Parameters<typeof transcriptDef>[3],
-	stream?: Parameters<typeof transcriptDef>[4],
 ) {
 	let inFlight = 0;
 	const recent = new Map<string, number>();
@@ -31,7 +30,7 @@ export function createPrefetcher(
 		if (recent.size > 200) recent.delete(recent.keys().next().value!);
 		inFlight++;
 		const agent = defs.agent(id);
-		const t = transcriptDef(client, id, flush, watch, stream);
+		const t = transcriptDef(client, id, flush, watch);
 		void Promise.allSettled([
 			client.prefetchQuery({
 				queryKey: agent.queryKey,

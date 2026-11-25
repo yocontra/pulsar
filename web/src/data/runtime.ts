@@ -9,6 +9,7 @@ import {
 	QueryClient,
 } from "@tanstack/react-query";
 import { ApiError, api, openEvents } from "../api/client.ts";
+import type { TranscriptEvent } from "../api/types.ts";
 import { LiveSync } from "./live.ts";
 import { createPrefetcher, installPrefetch } from "./prefetch.ts";
 
@@ -44,13 +45,13 @@ export const live = new LiveSync({
 			: setTimeout(fn, 16),
 });
 
-/** Ids of live transcript events for one agent (transcriptDef's `watch`). */
+/** Live transcript events for one agent (transcriptDef's `watch`). */
 export const watchTranscript = (
 	agentId: string,
-	fn: (ids: string[]) => void,
+	fn: (events: TranscriptEvent[]) => void,
 ): (() => void) =>
 	live.on("transcript", (v) => {
-		if (v.agentId === agentId) fn(v.events.map((e) => e.id));
+		if (v.agentId === agentId) fn(v.events);
 	});
 
 /** Loads an agent's row and transcript ahead of opening it (prefetch.ts). */
@@ -58,7 +59,6 @@ export const prefetchAgent = createPrefetcher(
 	queryClient,
 	() => live.flush(),
 	watchTranscript,
-	() => live.streamId,
 );
 
 /** How long a hidden tab keeps its stream open. */
