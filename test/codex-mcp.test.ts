@@ -145,3 +145,49 @@ describe("Codex MCP tool calls", () => {
 		).toEqual([]);
 	});
 });
+
+test("Codex cell waits only appear when they return output", () => {
+	const state = newParseState({ atStart: false });
+	const read = (payload: object) =>
+		parseCodex(JSON.stringify({ type: "response_item", payload }), state);
+	const call = (id: string) =>
+		read({
+			type: "function_call",
+			name: "wait",
+			call_id: id,
+			arguments: '{"cell_id":"g1:2"}',
+		});
+	const result = (id: string, output: unknown) =>
+		read({ type: "function_call_output", call_id: id, output });
+	for (const header of [
+		"Script running with cell ID g1:2",
+		"Script completed",
+	]) {
+		expect(call(header)).toEqual([]);
+		expect(
+			result(header, `${header}\nWall time 61.0 seconds\nOutput:\n`),
+		).toEqual([]);
+	}
+	const poll = (status: object) =>
+		`Script completed\nWall time 1.0 seconds\nOutput:\n${JSON.stringify({ chunk_id: "abc", output: "", ...status })}`;
+	expect(call("terminal")).toEqual([]);
+	expect(result("terminal", poll({ session_id: 42 }))).toEqual([]);
+	expect(call("exit")).toEqual([]);
+	expect(result("exit", poll({ exit_code: 1 }))).toHaveLength(2);
+	expect(call("useful")).toEqual([]);
+	const output =
+		"Script completed\nWall time 0.3 seconds\nOutput:\nTests passed";
+	const events = result("useful", [{ type: "input_text", text: output }]);
+	expect(events.map((e) => e.kind)).toEqual(["tool_call", "tool_result"]);
+	expect(events[1]?.text).toBe(output);
+	expect(call("failed")).toEqual([]);
+	expect(result("failed", "Unknown cell ID")[1]?.text).toBe("Unknown cell ID");
+	expect(
+		read({
+			type: "function_call",
+			name: "wait",
+			call_id: "agents",
+			arguments: '{"ids":["reviewer"]}',
+		}),
+	).toHaveLength(1);
+});

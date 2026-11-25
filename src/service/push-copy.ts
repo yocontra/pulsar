@@ -6,11 +6,12 @@
  * goes through `clean` (secrets redacted first, then markdown, control and
  * bidi characters stripped) and is cut short at a word boundary. Titles say
  * who and what happened ("api-fix finished"); bodies say the specific thing
- * ("Run `bun test auth`? · pulsar"). No ids, no exclamation marks.
+ * ("Run bun test auth? · pulsar"). No ids, no exclamation marks.
  *
  * With previews off (a subscription's "Show previews on the lock screen"),
  * `generic` gives the same notice without names or text.
  */
+import { Lexer, type Token } from "marked";
 import type {
 	Approval,
 	LimitWarning,
@@ -52,22 +53,47 @@ export interface Who {
 /** Control, format (bidi, zero-width) characters; newlines stay for the markdown rules. */
 const INVISIBLE = /(?!\n)[\p{Cc}\p{Cf}]/gu;
 
-/**
- * Agent or harness text made safe and plain for a notification: secrets
- * redacted (before anything is cut, so a token is never left half-matched),
- * markdown, control and bidi characters removed, whitespace collapsed.
- */
+/** Read visible text from Markdown, including nested lists, links and tables. */
+function visibleText(token: Token): string {
+	switch (token.type) {
+		case "list":
+			return token.items.map(visibleText).join(" ");
+		case "table":
+			return [token.header, ...token.rows]
+				.flat()
+				.map((cell) => cell.tokens.map(visibleText).join(""))
+				.join(" ");
+		case "html":
+			return token.text.replace(/<!--.*?-->|<[^>]*>/gs, " ");
+		case "def":
+			return "";
+		case "br":
+		case "hr":
+		case "space":
+			return " ";
+	}
+	if ("tokens" in token && token.tokens) {
+		const text = token.tokens.map(visibleText).join("");
+		return ["paragraph", "heading", "blockquote", "list_item"].includes(
+			token.type,
+		)
+			? ` ${text} `
+			: text;
+	}
+	// Redaction can consume the closing backtick of a credential assignment.
+	if (token.type === "text") return token.text.replace(/`/g, "");
+	return "text" in token ? token.text : "";
+}
+
+/** Redact before parsing or clipping so a partial credential never reaches the preview. */
 export function clean(text: string): string {
-	return redactSecrets(text)
-		.replace(INVISIBLE, " ")
-		.replace(/```[^\n]*\n?/g, " ")
-		.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-		.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-		.replace(/^\s{0,3}(?:#{1,6}|>|[-*+]|\d+[.)])\s+/gm, "")
-		.replace(/(\*\*|__)(.+?)\1/g, "$2")
-		.replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s).,;:!?]|$)/g, "$1$2")
-		.replace(/`/g, "")
-		.replace(/<\/?[a-z][^>]*>/gi, " ")
+	const redacted = redactSecrets(text.replace(/\r\n/g, "\n")).replace(
+		INVISIBLE,
+		" ",
+	);
+	return Lexer.lex(redacted)
+		.map(visibleText)
+		.join(" ")
 		.replace(/\s+/g, " ")
 		.trim();
 }
@@ -205,7 +231,7 @@ const IMPERATIVE: Record<string, string> = {
 	Starting: "Start",
 };
 
-/** "Run `bun test auth`?", "Edit src/auth/session.ts?", "Use Notebook edit?" */
+/** "Run bun test auth?", "Edit src/auth/session.ts?", "Use Notebook edit?" */
 export function actionLine(
 	tool: string,
 	input: unknown,
@@ -219,10 +245,6 @@ export function actionLine(
 	const verb = line ? IMPERATIVE[line.verb] : undefined;
 	const target = line?.target ? cleanCode(line.target.text) : "";
 	if (!verb || !target) return `Use ${clip(clean(toolLabel(tool)), max - 5)}?`;
-	if (line?.target?.as === "cmd") {
-		const room = max - verb.length - 4;
-		return `${verb} \`${clip(target.replace(/`/g, "'"), room)}\`?`;
-	}
 	return `${verb} ${clip(target, max - verb.length - 2)}?`;
 }
 

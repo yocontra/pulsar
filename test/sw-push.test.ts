@@ -145,7 +145,7 @@ describe("sw.js shows the daemon's text", () => {
 			id: "req-1",
 			badge: 1,
 			title: "auth-fix needs approval",
-			body: "Run `bun test auth`? · webshop",
+			body: "Run bun test auth? · webshop",
 			tag: "agent:R1",
 			url: "/#/approval/claude%3As1",
 		});
@@ -158,7 +158,7 @@ describe("sw.js shows the daemon's text", () => {
 			url: "/#/a/claude%3As1",
 		});
 		expect(w.shown.map((n) => [n.title, n.opts.body, n.opts.tag])).toEqual([
-			["auth-fix needs approval", "Run `bun test auth`? · webshop", "agent:R1"],
+			["auth-fix needs approval", "Run bun test auth? · webshop", "agent:R1"],
 			[
 				"auth-fix finished",
 				"Fixed the token refresh race. · webshop · 4 min",

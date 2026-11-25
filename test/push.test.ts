@@ -252,7 +252,7 @@ describe("push service", () => {
 			id,
 			badge: 1,
 			title: `${agent.name} needs approval`,
-			body: "Run `cat ~/.ssh/id_rsa`?",
+			body: "Run cat ~/.ssh/id_rsa?",
 			url: `/#/approval/${encodeURIComponent(agent.id)}`,
 		});
 		// The tag and topic carry the agent's opaque token, never a name.

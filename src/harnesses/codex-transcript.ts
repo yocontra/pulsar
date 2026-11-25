@@ -180,9 +180,15 @@ export function parseCodex(
 					payload.type === "function_call"
 						? parseArgs(payload.arguments)
 						: payload.input;
-				out.push(
-					callEvent(state, { id, ts, ...withModel }, name, callId, input),
+				const call = callEvent(
+					state,
+					{ id, ts, ...withModel },
+					name,
+					callId,
+					input,
 				);
+				// A code-mode wait only polls an existing cell. Show it when it returns useful output.
+				if (!cellWait(name, input)) out.push(call);
 				break;
 			}
 			case "function_call_output":
@@ -191,6 +197,16 @@ export function parseCodex(
 				if (seenResults(state).has(callId)) break;
 				seenResults(state).add(callId);
 				const { text, isError } = codexOutput(payload.output);
+				const pending = state.calls.get(callId);
+				if (
+					pending &&
+					cellWait(pending.name, pending.input) &&
+					!isError &&
+					emptyCellOutput(text)
+				) {
+					state.calls.delete(callId);
+					break;
+				}
 				const events = resultEvents(state, { id, ts }, callId, text, isError);
 				attachImages(state, events.at(-1), outputImages(payload.output));
 				out.push(...events);
@@ -199,6 +215,33 @@ export function parseCodex(
 		}
 	}
 	return out;
+}
+
+function cellWait(name: string, input: unknown): boolean {
+	return (
+		(name === "wait" || name === "functions.wait") &&
+		typeof obj(input)?.cell_id === "string"
+	);
+}
+
+/** Code mode wraps a cell's output, which can itself be an empty terminal poll. */
+function emptyCellOutput(text: string): boolean {
+	const output = text
+		.replace(
+			/^(?:Script running with cell ID [^\n]+|Script completed)\r?\nWall time [\d.]+ seconds\r?\nOutput:\s*/,
+			"",
+		)
+		.trim();
+	if (!output) return true;
+	if (!output.startsWith("{")) return false;
+	const poll = obj(parseArgs(output));
+	return (
+		!!poll &&
+		typeof poll.chunk_id === "string" &&
+		poll.output === "" &&
+		(poll.exit_code === 0 ||
+			(poll.exit_code == null && typeof poll.session_id === "number"))
+	);
 }
 
 /** How many call ids to remember for deduping (a long session holds thousands). */

@@ -96,6 +96,7 @@
 		"katex": "0.18.2",
 		"konsta": "5.5.0",
 		"lucide-react": "1.74.0",
+		"marked": "16.4.2",
 		"mermaid": "11",
 		"nanoid": "6.0.2",
 		"prettier": "3.10.1",

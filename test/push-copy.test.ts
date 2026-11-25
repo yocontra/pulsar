@@ -72,6 +72,18 @@ describe("text helpers", () => {
 		);
 	});
 
+	test("notification Markdown keeps readable labels, task text and table cells", () => {
+		expect(
+			clean(
+				"## **Status**\n> - [x] ~~Old~~ [**new**](https://example.org/a_(b)).",
+			),
+		).toBe("Status Old new.");
+		expect(
+			clean("| File | Result |\n| --- | --- |\n| `a_b.ts` | *Passed* |"),
+		).toBe("File Result a_b.ts Passed");
+		expect(clean("~~~sh\nbun test\n~~~")).toBe("bun test");
+	});
+
 	test("firstSentence keeps file names and drops exclamation marks", () => {
 		expect(firstSentence("Fixed session.ts. Then ran tests.")).toBe(
 			"Fixed session.ts.",
@@ -92,7 +104,7 @@ describe("approvals", () => {
 		const n = approvalNotice(approval(), who, REF);
 		expect(n).toEqual({
 			title: "auth-fix needs approval",
-			body: "Run `bun test auth`? · webshop",
+			body: "Run bun test auth? · webshop",
 			tag: `agent:${REF}`,
 			url: "/#/approval/claude%3As1",
 		});
@@ -115,7 +127,7 @@ describe("approvals", () => {
 		expect(n.body).toBe("Edit src/auth/session.ts? · webshop");
 	});
 
-	test("a secret in the command is redacted, and a long command is cut inside its backticks", () => {
+	test("a secret in the command is redacted, and a long command is cut before the question mark", () => {
 		const n = approvalNotice(
 			approval({
 				input: {
@@ -127,14 +139,14 @@ describe("approvals", () => {
 		);
 		expect(n.body).not.toContain("ghp_");
 		expect(n.body).toContain("[redacted]");
-		expect(n.body).toMatch(/^Run `[^`]+…`\? · webshop$/);
+		expect(n.body).toMatch(/^Run .+…\? · webshop$/);
 		fits(n);
 	});
 
 	test("a command keeps its globs and underscores as typed", () => {
 		expect(
 			actionLine("Bash", { command: "rm *.tmp *.log __pycache__" }, null),
-		).toBe("Run `rm *.tmp *.log __pycache__`?");
+		).toBe("Run rm *.tmp *.log __pycache__?");
 	});
 
 	test("an unknown tool names the tool", () => {
@@ -213,7 +225,7 @@ describe("approvals", () => {
 			REF,
 		);
 		expect(short.title).toBe("api on studio needs approval");
-		expect(short.body).toBe("Run `bun test auth`?");
+		expect(short.body).toBe("Run bun test auth?");
 	});
 
 	test("a presence check names the action and who asked", () => {
@@ -248,7 +260,7 @@ describe("approvals", () => {
 			{ name: "webshop-auth", project: "webshop", machine: null },
 			REF,
 		);
-		expect(n.body).toBe("Run `bun test auth`?");
+		expect(n.body).toBe("Run bun test auth?");
 	});
 });
 
