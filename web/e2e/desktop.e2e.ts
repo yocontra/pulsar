@@ -155,7 +155,10 @@ test.describe("desktop", () => {
 		await reply.scrollIntoViewIfNeeded();
 		// Shiki tokens carry colors.
 		await expect(
-			reply.locator("pre span[style*='--sdm-c']").first(),
+			reply
+				.locator(".ds-code", { hasText: "getSession" })
+				.locator(".ds-lc span[style*='--ds-syn']")
+				.first(),
 		).toBeVisible({ timeout: 15_000 });
 		// Mermaid renders an SVG (its <style> moved to CSSOM for the CSP).
 		// Diagrams render once on screen: bring the first one into view.
@@ -1175,13 +1178,16 @@ test.describe("desktop extras", () => {
 			.first();
 		await reply.scrollIntoViewIfNeeded();
 		await expect(
-			reply.locator("pre span[style*='--sdm-c']").first(),
+			reply
+				.locator(".ds-code", { hasText: "getSession" })
+				.locator(".ds-lc span[style*='--ds-syn']")
+				.first(),
 		).toBeVisible({ timeout: 15_000 });
 		// The code block re-renders when tokens arrive; retry the scroll.
 		for (let i = 0; i < 5; i++) {
 			try {
 				await page
-					.locator("pre", { hasText: "getSession" })
+					.locator(".ds-code", { hasText: "getSession" })
 					.first()
 					.scrollIntoViewIfNeeded({ timeout: 2000 });
 				break;
