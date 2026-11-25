@@ -1,4 +1,5 @@
 import { type ProcessInfo, processTable } from "../processes.ts";
+import { antigravityIdent } from "./antigravity-ident.ts";
 import { HARNESSES } from "./catalog.ts";
 import { claudeIdent } from "./claude-ident.ts";
 import { codexIdent } from "./codex-ident.ts";
@@ -19,6 +20,7 @@ import type { HarnessIdent } from "./types.ts";
  * transcript parsing and setup code it never runs.
  */
 const native = [
+	antigravityIdent,
 	claudeIdent,
 	codexIdent,
 	opencodeIdent,

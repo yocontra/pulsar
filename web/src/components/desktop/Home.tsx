@@ -10,7 +10,7 @@ import { openPrompt } from "../../approval/focus.ts";
 import { terminalWhy } from "../../approval/terminal.ts";
 import { useNow } from "../../data/clock.ts";
 import { AgentAvatar, AgentStatus, Kbd } from "../../ds/index.ts";
-import { age, fullDate, plural } from "../../lib/format.ts";
+import { activityLine, age, fullDate, plural } from "../../lib/format.ts";
 import { navigate } from "../../lib/router.ts";
 import { observer } from "../../lib/signals.ts";
 import { attention, hello, recent } from "../../lib/store.ts";
@@ -100,9 +100,7 @@ function AgentCardRow({ a }: { a: AgentRow }) {
 				<AgentAvatar harness={a.harness} size="list" />
 				<span className="d-card-text">
 					<span className="d-card-title">{a.name}</span>
-					<span className="d-card-sub">
-						{a.activity ?? (a.branch ? `On ${a.branch}` : "No activity yet")}
-					</span>
+					<span className="d-card-sub">{activityLine(a)}</span>
 				</span>
 				<span className="d-card-meta">{a.machine}</span>
 				<AgentStatus

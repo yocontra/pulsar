@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AgentRow } from "../../api/types.ts";
+import { useChangesPeek } from "../../changes/data.ts";
 import { stopAgentTurn, takeStopAsk, useStopping } from "../../data/index.ts";
 import {
 	AgentAvatar,
@@ -88,6 +89,7 @@ function DesktopSessionHeaderImpl({
 	/** More actions before Stop (the changes toggle). */
 	extra?: React.ReactNode;
 }) {
+	const inRepo = useChangesPeek(agent?.id ?? "").data?.available;
 	const [confirmStop, setConfirmStop] = useState(false);
 	// Not optimistic: "Stopping…" until the daemon answers (data/mutations.ts).
 	const stopping = useStopping(agent?.id ?? "");
@@ -136,13 +138,16 @@ function DesktopSessionHeaderImpl({
 					</span>
 					{agent.project && (
 						<span title={`Project: ${agent.project}`} className="d-sh-shrink">
-							<ExtLink href={repoLink(agent.repoUrl)} className="d-sh-repo">
+							<ExtLink
+								href={inRepo ? repoLink(agent.repoUrl) : null}
+								className="d-sh-repo"
+							>
 								<FolderIcon aria-hidden="true" />
 								<span className="d-sh-project">{agent.project}</span>
 							</ExtLink>
 						</span>
 					)}
-					{agent.branch && (
+					{inRepo && agent.branch && (
 						<span
 							title={`Branch: ${agent.branch}${worktree ? `, worktree ${worktree}` : ""}`}
 							className="d-sh-shrink is-branch"
@@ -156,7 +161,7 @@ function DesktopSessionHeaderImpl({
 							</ExtLink>
 						</span>
 					)}
-					{pr && (
+					{inRepo && pr && (
 						<span title={`Pull request #${pr}`}>
 							<ExtLink href={prLink(agent.repoUrl, pr)} className="d-sh-pr">
 								<GitPullRequestIcon aria-hidden="true" />

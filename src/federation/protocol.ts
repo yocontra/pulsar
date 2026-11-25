@@ -1,3 +1,4 @@
+import type { HostedProvider } from "../hosted/wire.ts";
 import type {
 	Approval,
 	ApprovalDecision,
@@ -323,7 +324,8 @@ export type FedAction =
 			body?: string;
 	  }
 	/** The receiver's own token usage (unpriced), and one of its agents'. */
-	| { op: "hosted.list" }
+	| { op: "hosted.list"; fresh?: boolean }
+	| { op: "hosted.detail"; provider: HostedProvider; id: string }
 	| { op: "usage.rows"; period: UsagePeriod; tz: number }
 	| { op: "usage.agent"; agent: string }
 	/** Launch reads on the receiver itself (src/service/launch.ts). */

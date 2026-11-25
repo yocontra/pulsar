@@ -1,7 +1,11 @@
 import { CopyIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { focusPrompt } from "../../approval/focus.ts";
-import { ChangesSplit, ChangesToggle } from "../../changes/ChangesSplit.tsx";
+import {
+	ChangesSplit,
+	ChangesToggle,
+	useChangesPanel,
+} from "../../changes/ChangesSplit.tsx";
 import { useAgent, useApprovalItem } from "../../data/index.ts";
 import { CopyButton, type MessageAction } from "../../ds/conversation.ts";
 import { observer } from "../../lib/signals.ts";
@@ -26,6 +30,7 @@ function SessionDesktopImpl({
 	changes?: { file: string | null };
 }) {
 	const agent = useAgent(id).data ?? findAgent(id);
+	const panel = useChangesPanel(id, !!changes);
 	// `#/approval/<id>` (Needs You, a push, a badge): the conversation, with
 	// its inline prompt card in view and focused.
 	const att = useApprovalItem(id);
@@ -77,8 +82,17 @@ function SessionDesktopImpl({
 	}, [menu]);
 	return (
 		<div className="d-session" onContextMenu={onContextMenu}>
-			<DesktopSessionHeader agent={agent} extra={<ChangesToggle id={id} />} />
-			<ChangesSplit id={id} open={!!changes} file={changes?.file ?? null}>
+			<DesktopSessionHeader
+				agent={agent}
+				extra={panel.available ? <ChangesToggle {...panel} /> : null}
+			/>
+			<ChangesSplit
+				id={id}
+				open={panel.open}
+				canToggle={panel.available || !!changes}
+				setOpen={panel.setOpen}
+				file={changes?.file ?? null}
+			>
 				<SessionView id={id} mobile={false} messageActions={messageActions} />
 			</ChangesSplit>
 			{menu && (

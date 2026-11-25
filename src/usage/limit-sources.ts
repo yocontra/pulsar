@@ -112,7 +112,7 @@ export async function readClaudeCached(
 ): Promise<{ mtime: number; limits: LimitState[] } | null> {
 	try {
 		const st = await stat(path);
-		const mtime = Math.floor(st.mtimeMs);
+		const mtime = st.mtimeMs;
 		if (!st.isFile() || mtime === seen) return null;
 		// Large configs are not Claude Code's (it is a few hundred KB).
 		if (st.size > 32 << 20) return { mtime, limits: [] };

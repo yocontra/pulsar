@@ -78,8 +78,8 @@ function parse(line: string): Json | null {
 const WANTED: Record<UsageHarness, string[]> = {
 	claude: ['"usage"'],
 	codex: ['"token_count"', '"turn_context"', '"session_meta"'],
-	pi: ['"usage"', '"type":"session"'],
-	omp: ['"usage"', '"type":"session"'],
+	pi: ['"usage"', '"session"', '"model_change"'],
+	omp: ['"usage"', '"session"', '"model_change"'],
 };
 
 /**
@@ -234,6 +234,17 @@ function codexLine(d: Json, state: FileState): UsageRecord | null {
  * `message` line has `usage` with input, cache reads and writes, output.
  */
 function piLine(d: Json, state: FileState): UsageRecord | null {
+	if (d.type === "model_change") {
+		const qualified = str(d.model);
+		const slash = qualified?.indexOf("/") ?? -1;
+		state.model =
+			str(d.modelId) ??
+			(slash > 0 ? qualified!.slice(slash + 1) : qualified) ??
+			undefined;
+		state.provider =
+			str(d.provider) ?? (slash > 0 ? qualified!.slice(0, slash) : undefined);
+		return null;
+	}
 	if (d.type === "session") {
 		const cwd = str(d.cwd);
 		if (cwd) state.cwd = cwd;
@@ -259,7 +270,9 @@ function piLine(d: Json, state: FileState): UsageRecord | null {
 	};
 	const id = str(m.responseId);
 	if (id) r.dedupeId = id;
-	const provider = str(m.provider);
+	const provider =
+		str(m.provider) ?? (model === state.model ? state.provider : undefined);
+	state.provider = provider;
 	if (provider) {
 		r.account = provider;
 		r.provider = provider;

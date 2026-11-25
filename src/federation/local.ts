@@ -56,7 +56,7 @@ export class LocalFeed {
 				status: agent.status,
 				statusSince: registry.statusSince(agent),
 				model: agent.model,
-				activity: agent.activity,
+				activity: row.activity,
 				inbound: agent.inbound,
 				registered: agent.registered,
 				reach: agent.reach,

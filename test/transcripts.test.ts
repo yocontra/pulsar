@@ -19,6 +19,7 @@ import { RemoteTranscriptReader } from "../src/federation/transcripts.ts";
 import { claudeTranscript } from "../src/harnesses/claude.ts";
 import { codexMissRetry } from "../src/harnesses/codex.ts";
 import { driverFor, extensionHostFor } from "../src/harnesses/index.ts";
+import { ompActivity } from "../src/harnesses/omp-activity.ts";
 import {
 	hostSessionId,
 	locatePiStyle,
@@ -47,7 +48,7 @@ import {
 	type TranscriptPage,
 } from "../src/transcripts/types.ts";
 import type { Agent } from "../src/types.ts";
-import { restoreEnv, until } from "./helpers.ts";
+import { registration, restoreEnv, until } from "./helpers.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "transcripts");
 const CLAUDE = join(FIXTURES, "claude", "session.jsonl");
@@ -548,6 +549,168 @@ describe("locate", () => {
 				dir,
 			),
 		).toEqual({ kind: "file", path: newer, headerLine: true });
+	});
+
+	test("omp activity appears in app rows for the exact session without transcript details", async () => {
+		const savedHome = process.env.HOME;
+		process.env.HOME = dir;
+		const store = new Store(":memory:");
+		const service = new PulsarService({ store, scan: false, machine: "local" });
+		try {
+			const cwd = join(dir, "tmp");
+			const folder = join(dir, ".omp", "agent", "sessions", "-tmp");
+			mkdirSync(folder, { recursive: true });
+			const file = join(folder, "1_ours.jsonl");
+			const line = (message: unknown) =>
+				`${JSON.stringify({ type: "message", message })}\n`;
+			writeFileSync(
+				file,
+				line({
+					role: "assistant",
+					content: [
+						{
+							type: "toolCall",
+							name: "bash",
+							arguments: { command: "private command" },
+						},
+					],
+				}),
+			);
+			writeFileSync(
+				join(folder, "2_other.jsonl"),
+				line({ role: "user", content: "private prompt" }),
+			);
+			const register = (sessionId: string) =>
+				service.registry.upsert({
+					...registration({ harness: "omp", sessionId, cwd, branch: null }),
+					meta: {},
+					registered: true,
+				});
+			const own = register("ours");
+			const missing = register("missing");
+			const row = (id: string) => service.app.agent({ kind: "terminal" }, id);
+			await service.registry.refreshActivity();
+			expect(row(own.id).activity).toBe("Requested a command");
+			expect(row(missing.id).activity).toBeNull();
+			appendFileSync(
+				file,
+				line({
+					role: "toolResult",
+					toolName: "bash",
+					content: "private output",
+				}),
+			);
+			await service.registry.refreshActivity();
+			expect(row(own.id).activity).toBe("Ran a command");
+			service.registry.setIdentity(own, { activity: "Reviewing the plan" });
+			await service.registry.refreshActivity();
+			expect(row(own.id).activity).toBe("Reviewing the plan");
+		} finally {
+			service.stop();
+			store.close();
+			restoreEnv("HOME", savedHome);
+		}
+	});
+
+	test("omp backs off missing session activity and retries on time or identity change", async () => {
+		const savedHome = process.env.HOME;
+		process.env.HOME = dir;
+		try {
+			const folder = join(
+				dir,
+				".omp",
+				"agent",
+				"sessions",
+				"another-workspace",
+			);
+			mkdirSync(folder, { recursive: true });
+			const agent = { harness: "omp", sessionId: "first", cwd: null };
+			const prompt = `${JSON.stringify({ type: "message", message: { role: "user" } })}\n`;
+			expect(await ompActivity(agent, 1_000)).toBeNull();
+			writeFileSync(join(folder, "1_first.jsonl"), prompt);
+			const open = async () => [join(folder, "1_first.jsonl")];
+			expect(
+				await locatePiStyle(
+					"omp",
+					{ ...agent, sessionId: "different", pid: 101 },
+					dir,
+					open,
+					true,
+				),
+			).toBeNull();
+			expect(
+				await locatePiStyle(
+					"omp",
+					{ ...agent, sessionId: null, pid: 101 },
+					dir,
+					open,
+					true,
+				),
+			).toMatchObject({
+				kind: "file",
+				path: join(folder, "1_first.jsonl"),
+			});
+			expect(await ompActivity(agent, 16_000)).toBeNull();
+			expect(await ompActivity(agent, 61_000)).toBe("Received a prompt");
+			agent.sessionId = "missing";
+			expect(await ompActivity(agent, 62_000)).toBeNull();
+			agent.sessionId = "first";
+			expect(await ompActivity(agent, 62_001)).toBe("Received a prompt");
+		} finally {
+			restoreEnv("HOME", savedHome);
+		}
+	});
+
+	test("pi-style readers prefer the live PID's primary file over an old resume key", async () => {
+		const primary = join(dir, ".omp", "agent", "sessions", "-workspace");
+		const nested = join(primary, "subagents");
+		mkdirSync(nested, { recursive: true });
+		const current = join(primary, "2_current.jsonl");
+		const old = join(primary, "1_old.jsonl");
+		const child = join(nested, "3_child.jsonl");
+		for (const path of [current, old, child]) writeFileSync(path, "");
+		const agent = {
+			harness: "omp",
+			sessionId: null,
+			pid: 102,
+			cwd: null,
+			meta: { resumeKey: "omp:old" },
+		};
+		const held = async () => [current, current, child];
+		expect(await locatePiStyle("omp", agent, dir, held)).toMatchObject({
+			kind: "file",
+			path: current,
+		});
+		expect(await locatePiStyle("omp", agent, dir, held, true)).toMatchObject({
+			kind: "file",
+			path: current,
+		});
+		expect(
+			await locatePiStyle(
+				"omp",
+				{ ...agent, sessionId: "old" },
+				dir,
+				held,
+				true,
+			),
+		).toMatchObject({ kind: "file", path: old });
+		const ambiguous = async () => [current, old];
+		expect(
+			await locatePiStyle("omp", agent, dir, ambiguous, true),
+		).toMatchObject({ kind: "file", path: old });
+		expect(
+			await locatePiStyle("omp", { ...agent, meta: {} }, dir, ambiguous, true),
+		).toBeNull();
+		expect(
+			await locatePiStyle("omp", agent, dir, async () => [], true),
+		).toMatchObject({ kind: "file", path: old });
+		const noEvidence = { ...agent, cwd: join(dir, "workspace"), meta: {} };
+		expect(
+			await locatePiStyle("omp", noEvidence, dir, async () => []),
+		).toMatchObject({ kind: "file", guess: true });
+		expect(
+			await locatePiStyle("omp", noEvidence, dir, async () => [], true),
+		).toBeNull();
 	});
 
 	test("pi/omp: an omp session an older extension registered as pi", async () => {

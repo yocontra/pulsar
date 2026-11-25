@@ -3,10 +3,12 @@
  * harness reports a window ("Context: 42% used"), and the session's cost
  * (an API estimate) or its tokens when the model has no price.
  */
+import { Popover } from "radix-ui";
 import { useAgentUsage } from "./data.ts";
 import {
 	compact,
 	costSourcesLabel,
+	modelName,
 	money,
 	tokenSourcesLabel,
 } from "./model.ts";
@@ -36,6 +38,17 @@ export default function AgentUsage({ agentId }: { agentId: string }) {
 		u.cost === null && u.tokens.records > 0
 			? `${compact(total)} ${tokenSourcesLabel(tokenSources)} · ${costSourcesLabel(costSources)}`
 			: costSourcesLabel(costSources);
+	const scopeLabel =
+		u.byModel?.length && label === "API estimate"
+			? "Session API estimate"
+			: label;
+	const costLabel =
+		u.cost === null ? label : `${money(u.cost)} · ${scopeLabel}`;
+	const dates = new Intl.DateTimeFormat(undefined, {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+	});
 	return (
 		<span className="usage-agent" data-high={pct !== null && pct >= 80}>
 			{pct !== null && c?.window && (
@@ -56,7 +69,64 @@ export default function AgentUsage({ agentId }: { agentId: string }) {
 					</span>
 				</span>
 			)}
-			<span>{u.cost === null ? label : `${money(u.cost)} · ${label}`}</span>
+			{u.byModel?.length ? (
+				<Popover.Root>
+					<Popover.Trigger asChild>
+						<button
+							type="button"
+							className="usage-session-cost"
+							title="Session usage by model"
+						>
+							{costLabel}
+						</button>
+					</Popover.Trigger>
+					<Popover.Portal>
+						<Popover.Content
+							className="usage-cost-detail"
+							sideOffset={6}
+							collisionPadding={8}
+							aria-label="Session usage by model"
+						>
+							<strong>Session usage by model</strong>
+							{u.period && (
+								<p>
+									{dates.formatRange(u.period.firstHour, u.period.lastHour)}
+								</p>
+							)}
+							<table>
+								<thead>
+									<tr>
+										<th>Model</th>
+										<th>Responses</th>
+										<th>Estimate</th>
+									</tr>
+								</thead>
+								<tbody>
+									{u.byModel.map((row) => (
+										<tr key={row.model}>
+											<td>{modelName(row.model)}</td>
+											<td>{row.records.toLocaleString()}</td>
+											<td>
+												{row.cost === null
+													? "Unpriced"
+													: row.cost >= 1000
+														? row.cost.toLocaleString("en-US", {
+																style: "currency",
+																currency: "USD",
+															})
+														: money(row.cost)}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+							<p>Includes recorded subagent usage. Estimates use API rates.</p>
+						</Popover.Content>
+					</Popover.Portal>
+				</Popover.Root>
+			) : (
+				<span>{costLabel}</span>
+			)}
 		</span>
 	);
 }

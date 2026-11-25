@@ -649,6 +649,42 @@
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 }
+.usage-session-cost {
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+	text-decoration: underline dotted;
+	text-underline-offset: 3px;
+}
+.usage-cost-detail {
+	z-index: 1000;
+	max-width: min(95vw, 32rem);
+	max-height: var(--radix-popover-content-available-height);
+	overflow: auto;
+	padding: 12px;
+	border: 1px solid var(--ds-border);
+	border-radius: var(--ds-radius-md);
+	background: var(--ds-surface);
+	color: var(--ds-text);
+	box-shadow: var(--ds-shadow-md);
+}
+.usage-cost-detail table {
+	width: 100%;
+	margin-block: 8px;
+	font-variant-numeric: tabular-nums;
+}
+.usage-cost-detail :is(td, th) {
+	text-align: right;
+	padding: 3px 6px;
+}
+.usage-cost-detail :is(td, th):first-child {
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+.usage-cost-detail p {
+	color: var(--ds-text-2);
+	font-size: var(--ds-text-caption);
+}
 .usage-agent .usage-bar {
 	width: 48px;
 }

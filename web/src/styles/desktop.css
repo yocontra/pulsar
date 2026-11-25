@@ -57,10 +57,11 @@
 }
 
 .d-app {
-	position: fixed;
+	position: absolute;
 	inset: 0;
 	display: grid;
 	grid-template-columns: var(--d-side-w, 296px) minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
 	background: var(--d-bg);
 }
 

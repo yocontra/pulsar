@@ -25,7 +25,7 @@ The phone app looks native: iOS on an iPhone, Material on Android. A tab bar at 
 - Everything on the phone is live: agents, Needs You, Usage, git and Diagnostics change as soon as the machines report. There is no pull to refresh and no refresh button.
 - Usage on a phone is one column: Period and Cost or Tokens at the top, then the total, the chart, the Machine and Harness filters, Limits, each harness, Totals and Breakdown.
 
-An agent's page has its name and status at the top, then its actions: the branch button (git), find in messages, Changes and •••. On a narrow phone (360 px wide or less), git and find move into the ••• menu. The composer floats at the bottom, above the keyboard when you type. On an iPhone the conversation scrolls under the top bar and the composer.
+An agent's page has its name and status at the top, then actions for finding messages, Git, and Changes when available. The ••• menu has more actions. On a narrow phone (360 px wide or less), git and find move into the ••• menu. The composer floats at the bottom, above the keyboard when you type. On an iPhone the conversation scrolls under the top bar and the composer.
 
 ## The pool
 
@@ -81,14 +81,14 @@ Your own messages need no extra check, as for sending. Another agent's message n
 
 ## Subagents
 
-An agent that runs subagents (Claude Code tasks and agent-team members, Codex spawned threads, omp tasks, OpenCode child sessions) shows "3 subagents · 1 running" under its row in the sidebar, collapsed. Click it to list them, running ones first; a subagent started by another subagent sits under it. Click one to open its own transcript in the main pane, with the parent's name above it to go back. On a phone, the agent's page has a Subagents line under the title bar; tap it, then tap a subagent to open its page. In a parent's transcript, an expanded subagent card has **Open** to go to that subagent's page.
+An agent that runs subagents (Claude Code tasks and agent-team members, Codex spawned threads, omp tasks, OpenCode child sessions) shows a collapsed count such as "2 running subagents" under its row in the sidebar. Click it to list them, running ones first; a subagent started by another subagent sits under it. Click one to open its own transcript in the main pane, with the parent's name above it to go back. On a phone, the agent's page has a Subagents line under the title bar; tap it, then tap a subagent to open its page. In a parent's transcript, an expanded subagent card has **Open** to go to that subagent's page.
 
 Subagents are not agents: they are never in the agent list, counts, selectors or broadcasts, and only their own page sends to them. The line above the composer says where a message goes:
 
 - **OpenCode**: into the subagent's own session, while it is running or idle.
 - **Claude Code, Codex, omp**: these harnesses give no way into a subagent, so the message goes to the parent agent, starting `For your subagent "<name>"`. Pulsar never says it reached the subagent.
 
-The sidebar lists running and idle subagents, and its count line counts only those: an agent whose subagents all finished shows no line. To also list finished ones, dimmed, turn on **Show finished subagents** in Settings (saved per device). A subagent that finished more than a day ago is not listed or counted even then; its parent's transcript card still opens it.
+Desktop and phone lists show running subagents by default. A parent with no running subagents has no count line. Each listed subagent has a color mark, its name, its state, and a role when that differs from its name. To also list idle and recently finished ones, turn on **Show idle and finished subagents** in Settings (saved per device). A subagent that finished more than a day ago is not listed or counted even then; its parent's transcript card still opens it.
 
 A subagent is running only while it works, and idle only while it is alive and waiting; everything else is finished:
 
@@ -101,7 +101,7 @@ Limits: Codex subagents are listed only while Codex's app-server runs, and a Cod
 
 ## Changes
 
-**Changes** shows what the agent has dirty in its git worktree, live, like a diff beside your editor. On a computer it is a panel beside the conversation: the **Changes** button in the session header (with the number of changed files) or Cmd-\ opens and closes it. Drag its left edge to resize it. The app remembers both on this device; with no choice yet, the panel opens by itself in windows 1600 px wide or more. On a phone, the diff button in the agent's top bar ("Changes (N)") opens the file list, and a file opens its diff.
+**Changes** shows working tree and branch diffs live. The Changes control appears when Pulsar detects a diff for the session and stays available after the files are clean. On older machines it appears only while the working tree has changes. On a computer it is a panel beside the conversation: the **Changes** button in the session header (with the number of changed files) or Cmd-\ opens and closes it. Drag its left edge to resize it. The app remembers the size and whether the panel is open. If you have not set a preference, it opens automatically in windows at least 1600 px wide. On a phone, the diff button in the agent's top bar ("Changes (N)") opens the file list, and a file opens its diff.
 
 - **Working tree** compares the worktree with its last commit: staged, unstaged and new (untracked) files. **Branch vs base** compares it with where the branch left the default branch (`origin/HEAD`, else `main` or `master`): what the branch committed, plus uncommitted work.
 - The header shows the repo, the branch and how far it is ahead of or behind its upstream.
@@ -109,13 +109,14 @@ Limits: Codex subagents are listed only while Codex's app-server runs, and a Cod
 - Binary files and diffs over 512 KB show a note instead. The list shows at most 500 files.
 - It updates as the agent works (after each edit or command, and every few seconds while open) and keeps your place.
 
-The Changes view reads the worktree with git and never writes to it (only the git actions below do, when you ask): it takes no index lock, runs no external diff tools, textconv filters or fsmonitor hooks, shows only files `git status` lists (never ignored ones), and reads a new file only inside the repo and never through a symbolic link (a link shows its target). Diffs show file contents as they are; Pulsar redacts nothing. The same people who can read an agent's transcript can read its changes: you, from the app on any of your machines (the agent's machine reads them), and the agent itself. Tagged devices you allowed get nothing. An agent on a machine with an older Pulsar shows "update it to see changes".
+The Changes view reads the worktree with git and never writes to it (only the git actions below do, when you ask): it takes no index lock, runs no external diff tools, textconv filters or fsmonitor hooks, shows only files `git status` lists (never ignored ones), and reads a new file only inside the repo and never through a symbolic link (a link shows its target). Diffs show file contents as they are; Pulsar redacts nothing. The same people who can read an agent's transcript can read its changes: you, from the app on any of your machines (the agent's machine reads them), and the agent itself. Tagged devices you allowed get nothing. If you open a saved Changes link for an agent on a machine that lacks Changes support, Pulsar asks you to update that machine.
 
 ## Files
 
 **Files** shows the files in the agent's folder, read-only. On a computer, the folder button in the session header opens it in the main pane: a folder tree on the left, the open file on the right, and the path above (click a folder in the path to list it). Esc goes back. On a phone, **Files** in the agent's ••• menu opens it, and so does a file link; each folder and file opens as a page.
 
 - Text files show with highlighting and line numbers (the first 1 MB; no highlighting past 256 KB). PNG, JPEG, GIF and WebP images show as images. Other files say what they are and their size.
+- In a text file, use **Find** (Cmd/Ctrl+F) or **Go to line** (Cmd/Ctrl+G). With the code focused, Up and Down move by line. Home and End select the first and last line.
 - **Copy path** copies the file's full path on the agent's machine.
 - **Open in Changes** shows when the file has uncommitted changes, and opens its diff.
 - A file whose name looks like it holds secrets (`.env` files other than `.example` copies, keys and certificates such as `.pem` or `id_rsa`, `.npmrc`, `.netrc`, `credentials…`) is hidden until you tap **Show**. Pulsar reads it only then, and only for that file.
@@ -125,7 +126,7 @@ Files opens any file inside the agent's folder, also files git ignores (an agent
 
 ## Commit, push and PR
 
-The session header has the git actions for the agent's worktree. On a computer: **+N −M** (hover for each file; click to open Changes), the PR (**#N**, when the branch has one) and a split button. On a phone: the branch button in the agent's top bar opens a sheet with the branch, changes, remote and PR, and the same actions.
+Git controls appear in the session header and phone menu when the working folder belongs to a Git repository. **Files** is available in other working folders too. On a computer: **+N −M** (hover for each file; click to open Changes), the PR (**#N**, when the branch has one) and a split button. On a phone: the branch button in the agent's top bar opens a sheet with the branch, changes, remote and PR, and the same actions.
 
 - The main button does the next useful thing: **Commit, push & PR**, **Commit & push**, **Push & create PR**, **Create PR**, **Push**, or **View PR #N**. The menu (the arrow) has **Commit…**, **Push** and **Create PR** on their own.
 - An action that can't run says why: on a computer when you hover it, on a phone under the buttons. For example "Worktree is clean. Make changes before committing.", "Branch is behind upstream. Pull or rebase before pushing.", "Detached HEAD: check out a branch first." or "gh isn't logged in on studio."
@@ -171,6 +172,7 @@ These actions use `gh` on the agent's machine, as that machine's GitHub account.
 - Pick a period (24h, 7d, 30d, 90d) and **Cost** or **Tokens**. Narrow the view to one machine or one harness from the line at the top.
 - The big number is the total, with the number of sessions. Below it, each harness's share. The chart shows each harness per day (per hour for 24h); point at it for the numbers.
 - **Totals** splits the tokens: processed, cached input, uncached input, output, and what cache reads saved. **Breakdown** lists models or days; click a model for its trend, cache hit rate and cost per million tokens.
+- On a computer, select the session's cost to see the dates, response counts, and estimate for each model. The total includes subagents and earlier work in the same resumed conversation.
 - Cost is an **API estimate**: list prices per million tokens, not what a subscription charges. Set a model's price from its sheet (**Set price**), or all prices from **Model prices…** in the machine menu. Prices apply to every machine and to all past usage. A model with no price (for example a Codex or third-party model) is left out of the cost and named under the info button.
 - Usage is live: it updates as soon as this machine reads new session lines (about once a minute), and other machines' numbers update every minute while the page is open. There is no refresh button. It keeps 90 days.
 
@@ -247,7 +249,7 @@ Search covers prompts, replies, messages between agents and the titles of tool c
 
 The gear button opens Settings (on a phone, the Settings tab):
 
-- **Show finished subagents**: list subagents that finished in the last day too, on this device.
+- **Show idle and finished subagents**: also list idle subagents and those that finished in the last day, on this device.
 - **Notifications**: turn on notifications for this browser. A notification names the agent (and its machine, in a pool) and its project, then says the specific thing: the command or file a prompt asks about ("Run bun test auth?"), the question, the first sentence of a finished turn's last message with how long it took and how many files changed, or a failed turn's error in plain words. Text is redacted (tokens, passwords) and cut short. A newer notification for the same agent replaces the older one (a finish never replaces a prompt that still waits). A prompt you answer elsewhere closes its notification while Pulsar is open on this device. A presence check says what to confirm and who asked. Tapping one opens that agent or prompt. **Show previews on the lock screen** (on by default; shown once this browser has notifications on) turns names and text off: notifications then say only what kind of thing happened.
 - **Agent activity**: what happens when an agent you started, messaged or opened in the last 6 hours finishes its turn or stops with an error (an API error or a refused model, not a failing command): **Off**, **Notifications only**, **Sound only** or **Notifications with sound**. Notifications need this browser's notifications on; Sound only works without them. **In-app notifications** shows a short note in the corner while Pulsar is open, with **Open agent**; it closes when you open that agent. While Pulsar is in the background, the app icon and the tab title count what you missed. Kept on this device, and with its notifications on the machine that served the app. A finish on another machine reaches this browser too.
 - **Usage limits**: warn when a plan usage limit passes a threshold or is reached (on by default, at 80% and 95%). On a computer, type up to three percents; on a phone, pick a set. Kept on the machine that served the app, for every device on it.

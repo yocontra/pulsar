@@ -5,6 +5,7 @@
  */
 import { useState } from "react";
 import type { AgentRow } from "../../api/types.ts";
+import { useChangesPeek } from "../../changes/data.ts";
 import { observer } from "../../lib/signals.ts";
 import { SheetShell } from "../../mobile/ui/SheetShell.tsx";
 import { IssueCard, useAsked } from "./IssueCard.tsx";
@@ -21,6 +22,7 @@ function IssuePhone({ agent, number }: Props) {
 		setOpen(true);
 	};
 	useAsked(agent.id, show);
+	if (!useChangesPeek(agent.id).data?.available) return null;
 	return mounted ? (
 		<SheetShell
 			open={open}

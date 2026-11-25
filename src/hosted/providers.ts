@@ -114,6 +114,7 @@ async function readCursor(
 	path: string,
 	key: string,
 	body?: object,
+	signal = AbortSignal.timeout(TIMEOUT),
 ): Promise<unknown> {
 	const response = await fetch(`https://api.cursor.com/v1/agents${path}`, {
 		headers: {
@@ -121,7 +122,7 @@ async function readCursor(
 			...(body ? { "Content-Type": "application/json" } : {}),
 		},
 		...(body ? { method: "POST", body: JSON.stringify(body) } : {}),
-		signal: AbortSignal.timeout(TIMEOUT),
+		signal,
 		redirect: "error",
 	});
 	if (!response.ok) {
@@ -144,6 +145,72 @@ async function readCursor(
 		return JSON.parse(text + decoder.decode());
 	} finally {
 		await reader.cancel();
+	}
+}
+
+function cursorRepository(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	return (
+		/^(?:https:\/\/)?github\.com\/([\w.-]+\/[\w.-]+)\/?$/i.exec(value)?.[1] ??
+		null
+	);
+}
+
+function cursorRepositories(entries: unknown, field: string): string | null {
+	if (!Array.isArray(entries)) return null;
+	const names = new Set<string>();
+	for (const entry of entries) {
+		const name = cursorRepository(object(entry)?.[field]);
+		if (name) names.add(name);
+	}
+	return str([...names].join(", "));
+}
+
+const CURSOR_RUN_STATUSES = new Set([
+	"CREATING",
+	"RUNNING",
+	"WAITING_FOR_BACKGROUND_WORK",
+	"FINISHED",
+	"ERROR",
+	"CANCELLED",
+	"EXPIRED",
+]);
+
+async function cursorWithLatestRun(
+	task: HostedTask,
+	agent: Data,
+	key: string,
+	signal: AbortSignal,
+) {
+	if (agent.status !== "ACTIVE" || signal.aborted) return task;
+	const runId = hostedId.safeParse(agent.latestRunId);
+	if (!runId.success) return task;
+	try {
+		const run = object(
+			await readCursor(
+				`/${encodeURIComponent(task.id)}/runs/${encodeURIComponent(runId.data)}`,
+				key,
+				undefined,
+				signal,
+			),
+		);
+		if (run?.id !== runId.data || run.agentId !== task.id) return task;
+		const updatedAt =
+			typeof run.updatedAt === "string" ? Date.parse(run.updatedAt) : NaN;
+		return {
+			...task,
+			status:
+				typeof run.status === "string" && CURSOR_RUN_STATUSES.has(run.status)
+					? run.status
+					: task.status,
+			updatedAt: updatedAt >= 0 ? updatedAt : task.updatedAt,
+			context:
+				task.context ??
+				cursorRepositories(object(run.git)?.branches, "repoUrl"),
+		};
+	} catch {
+		// The agent stays visible if this run cannot be read.
+		return task;
 	}
 }
 
@@ -325,18 +392,30 @@ const providers = {
 		listItems: (value) => object(value)?.items,
 		updatedAt: "updatedAt",
 		normalize(row, id) {
+			const url = safeUrl(row.url, "cursor.com", "/agents/");
 			return {
 				title: str(row.name) ?? id,
-				status: str(row.status, 80) ?? "Unknown",
-				context: null,
-				url: safeUrl(row.url, "cursor.com", "/agents/"),
+				status:
+					row.status === "ACTIVE"
+						? row.latestRunId == null
+							? "No run yet"
+							: "Run status unavailable"
+						: (str(row.status, 80) ?? "Unknown"),
+				context: cursorRepositories(row.repos, "url"),
+				url:
+					url === `https://cursor.com/agents/${encodeURIComponent(id)}`
+						? url
+						: null,
 			};
 		},
 		async view(key, id) {
-			return normalize(
-				this,
-				await readCursor(`/${encodeURIComponent(id)}`, key),
+			const signal = AbortSignal.timeout(TIMEOUT);
+			const row = object(
+				await readCursor(`/${encodeURIComponent(id)}`, key, undefined, signal),
 			);
+			if (row?.id !== id) return null;
+			const task = normalize(this, row);
+			return task && cursorWithLatestRun(task, row, key, signal);
 		},
 		async write(key, write) {
 			const prompt = { text: write.prompt };

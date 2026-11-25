@@ -32,7 +32,7 @@
 	background: var(--d-busy, var(--status-busy, oklch(0.72 0.15 150)));
 }
 
-/* One subagent: the agent row's two lines, a smaller avatar. */
+/* Each subagent has a color mark and an optional role. */
 .d-row.d-sub .d-line1 .d-name {
 	flex: 0 1 auto;
 	font-weight: 450;
@@ -44,7 +44,7 @@
 .d-sub-state {
 	white-space: nowrap;
 }
-/* Finished ones (listed only with "Show finished subagents"): dimmed. */
+/* Finished ones (listed only with "Show idle and finished subagents"): dimmed. */
 .d-row.d-sub.s-done,
 .p-sa-row.s-done {
 	opacity: 0.6;

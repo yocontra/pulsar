@@ -2,11 +2,12 @@
 import { FileDiffIcon } from "lucide-react";
 import { navigate } from "../lib/router.ts";
 import { IonButton } from "../mobile/ionic.ts";
-import { useChangesPeek } from "./data.ts";
+import { canOpenChanges, useChangesPeek } from "./data.ts";
 import "./changes-button.css";
 
 export function ChangesButton({ id }: { id: string }) {
 	const peek = useChangesPeek(id).data;
+	if (!canOpenChanges(peek)) return null;
 	const n = peek?.available ? peek.total : 0;
 	return (
 		<IonButton

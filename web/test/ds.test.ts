@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { harnessKey, harnessName } from "../src/components/ui/agent-avatar.tsx";
 import {
+	activityLine,
 	ago,
 	badgeCount,
 	duration,
@@ -18,6 +19,23 @@ import { editTexts } from "../src/session/items.ts";
 import { peerFrom, userAuthor } from "../src/session/messages.ts";
 import { toolKind, toolLabel } from "../src/session/ToolCard.tsx";
 
+test("activity shows session work or context without inventing a claim about the transcript", () => {
+	const row = {
+		activity: null,
+		branch: null,
+		machine: "studio",
+		needsYou: null,
+		project: null,
+		state: "unknown",
+	} as const;
+	expect(activityLine(row)).toBe("Activity unavailable");
+	expect(activityLine({ ...row, project: "earthmark" })).toBe("In earthmark");
+	expect(activityLine({ ...row, branch: "main" })).toBe("On main");
+	expect(activityLine(row, true)).toBe("studio");
+	expect(
+		activityLine({ ...row, activity: "Ran a command", state: "busy" }),
+	).toBe("Ran a command");
+});
 describe("format: counts read like English", () => {
 	test("plural and noun", () => {
 		expect(plural(0, "machine")).toBe("0 machines");

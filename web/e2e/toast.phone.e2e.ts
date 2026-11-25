@@ -1,4 +1,4 @@
 import { toastSuite } from "./toast.shared.ts";
 
-// WebKit (phone layout).
+// iOS and Android phone layouts.
 toastSuite(true);

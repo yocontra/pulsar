@@ -1,4 +1,5 @@
 import type { Agent } from "../types.ts";
+import { antigravity } from "./antigravity.ts";
 import { HARNESSES } from "./catalog.ts";
 import { claude } from "./claude.ts";
 import { codex } from "./codex.ts";
@@ -17,7 +18,7 @@ export {
 } from "./ident.ts";
 export type { HarnessDriver } from "./types.ts";
 
-const native = [claude, codex, opencode, pi, omp];
+const native = [claude, codex, opencode, pi, omp, antigravity];
 export const DRIVERS: HarnessDriver[] = HARNESSES.map((h) => ({
 	...identFor(h.id)!,
 	...native.find((d) => d.id === h.id),

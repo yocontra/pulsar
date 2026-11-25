@@ -217,12 +217,20 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 		}
 	}, [run.confirm]);
 	const offered = can("git") && !!status?.available;
+	const enabled =
+		offered &&
+		!!status &&
+		(run.phase.kind !== "idle" ||
+			!!status.pr ||
+			!commitReason(status) ||
+			!pushReason(status) ||
+			!prReason(status, agent.machine));
 	// The ••• menu offers "Git" on a narrow phone (the button is hidden).
 	useEffect(() => {
-		offerGit(agent.id, offered);
-		return () => offerGit(agent.id, false);
-	}, [agent.id, offered]);
-	const asked = offered && gitAsk.value === agent.id;
+		offerGit(agent.id, offered ? enabled : undefined);
+		return () => offerGit(agent.id, undefined);
+	}, [agent.id, offered, enabled]);
+	const asked = enabled && gitAsk.value === agent.id;
 	useEffect(() => {
 		if (!asked) return;
 		gitAsk.value = null;
@@ -251,6 +259,7 @@ function GitPhoneImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 			<IonButton
 				className="g-phone-btn"
 				aria-label={label}
+				disabled={!enabled}
 				onClick={() => {
 					setView("overview");
 					setMounted(true);

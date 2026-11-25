@@ -27,7 +27,7 @@ import {
 	harnessName,
 } from "../ds/index.ts";
 import { issueOf } from "../features/issues/open.ts";
-import { age, heldFor, num, rollupOf } from "../lib/format.ts";
+import { activityLine, age, heldFor, num, rollupOf } from "../lib/format.ts";
 import { now } from "./clock.ts";
 
 /* ------------------------------------------------------------ shell */
@@ -180,15 +180,6 @@ export function NeedsBadge({ n, label }: { n: number; label?: string }) {
 }
 
 /* ------------------------------------------------------------ rows */
-
-export function activityLine(a: AgentRow, withPlace: boolean): string {
-	if (a.state === "needs-you" && a.needsYou?.detail) return a.needsYou.detail;
-	const place = [a.machine, a.project].filter(Boolean).join(" · ");
-	if (a.activity) return withPlace ? `${a.activity}` : a.activity;
-	if (withPlace && place) return place;
-	if (a.branch) return a.branch;
-	return a.state === "offline" ? "Not running" : "No activity yet";
-}
 
 /** The row's second line, after the issue the agent works on (features/issues). */
 function IssueSub({ a, text }: { a: AgentRow; text: string }) {

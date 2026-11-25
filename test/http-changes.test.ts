@@ -17,7 +17,7 @@ import { PulsarService } from "../src/service/index.ts";
 import { Store } from "../src/store.ts";
 import { HttpTransport } from "../src/transport/http.ts";
 import type { Agent } from "../src/types.ts";
-import { cleanupRepos, gitRepo, tmpFolder } from "./git-repo.ts";
+import { cleanupRepos, g, gitRepo, tmpFolder } from "./git-repo.ts";
 import { until } from "./helpers.ts";
 
 const OWNER = "me@example.com";
@@ -173,6 +173,95 @@ describe("GET /agents/:id/changes", () => {
 		const d = (await f.json()) as FileDiff;
 		expect(d.patch).toContain("+four");
 		expect(d.key).toBe(s.files[0]!.key);
+	});
+
+	test("remembers changes per session, including a branch committed before the first read", async () => {
+		const repo = gitRepo();
+		const agent = addAgent("ch-history", repo);
+		const summary = (id = agent.id) => service.changes.summary(id, "worktree");
+		expect((await summary()).hasChanges).toBe(false);
+		appendFileSync(join(repo, "a.txt"), "edit\n");
+		expect((await summary()).hasChanges).toBe(true);
+		g(repo, "restore", ".");
+		expect(await summary()).toMatchObject({ total: 0, hasChanges: true });
+		const other = addAgent("ch-history-other", repo);
+		expect((await summary(other.id)).hasChanges).toBe(false);
+		g(repo, "checkout", "-qb", "feature");
+		appendFileSync(join(repo, "a.txt"), "committed\n");
+		g(repo, "commit", "-qam", "edit");
+		expect(await summary(other.id)).toMatchObject({
+			total: 0,
+			hasChanges: true,
+		});
+	});
+
+	test("clean worktree history needs a completed in-repo edit and reports truncation", async () => {
+		const repo = gitRepo();
+		const history = (id: string, target: string, result?: boolean) => {
+			const file = files.get(id)!;
+			const message = (data: object) =>
+				`${JSON.stringify({ type: "message", id: crypto.randomUUID(), timestamp: new Date().toISOString(), message: data })}\n`;
+			appendFileSync(
+				file,
+				message({
+					role: "assistant",
+					content: [
+						{
+							type: "toolCall",
+							id: "previous-edit",
+							name: "edit",
+							arguments: { path: target },
+						},
+					],
+				}),
+			);
+			if (result !== undefined)
+				appendFileSync(
+					file,
+					message({
+						role: "toolResult",
+						toolCallId: "previous-edit",
+						toolName: "edit",
+						isError: !result,
+						content: [{ type: "text", text: "Edit result" }],
+					}),
+				);
+		};
+		const read = async (agent: Agent) => {
+			const response = await api(`/api/v1/agents/${enc(agent.id)}/changes`);
+			expect(response.ok).toBe(true);
+			return (await response.json()) as ChangesSummary;
+		};
+		const edited = addAgent("older-edit", repo);
+		history("older-edit", "a.txt", true);
+		expect(await read(edited)).toMatchObject({ total: 0, hasChanges: true });
+		const absolute = addAgent("older-absolute-edit", repo);
+		history("older-absolute-edit", join(repo, "deleted.txt"), true);
+		expect(await read(absolute)).toMatchObject({ total: 0, hasChanges: true });
+
+		for (const [id, target, result] of [
+			["failed-edit", "a.txt", false],
+			["uncompleted-edit", "a.txt", undefined],
+			["outside-edit", "../another-repo/a.txt", true],
+		] as const) {
+			const agent = addAgent(id, repo);
+			history(id, target, result);
+			const summary = await read(agent);
+			expect(summary.hasChanges).toBe(false);
+			expect(summary.changesHistoryIncomplete).toBeUndefined();
+		}
+
+		const truncated = addAgent("truncated-edit", repo);
+		history("truncated-edit", "a.txt", true);
+		appendFileSync(
+			files.get("truncated-edit")!,
+			`${"x".repeat(4 * 1024 * 1024)}\n`,
+		);
+		expect(await read(truncated)).toMatchObject({
+			total: 0,
+			hasChanges: false,
+			changesHistoryIncomplete: true,
+		});
 	});
 
 	test("unlisted paths, traversal, bad modes and unknown agents", async () => {

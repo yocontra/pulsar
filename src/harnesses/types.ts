@@ -298,6 +298,9 @@ export interface HarnessDriver {
 		read(agents: Agent[]): Promise<HarnessName[]>;
 	};
 
+	/** A safe, short fallback activity label for an attached session. */
+	activity?(agent: Agent): Promise<string | null>;
+
 	/**
 	 * Subagents an agent runs. Discovery is lazy and
 	 * incremental: `stamp` is one cheap check the daemon runs on a slow

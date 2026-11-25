@@ -12,9 +12,9 @@ import {
 	UploadIcon,
 } from "lucide-react";
 import { DropdownMenu, Popover, Tooltip } from "radix-ui";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { AgentRow, GitStatus } from "../../api/types.ts";
-import { useChangesPeek } from "../../changes/data.ts";
+import { canShowChanges, useChangesPeek } from "../../changes/data.ts";
 import { toggleChanges } from "../../changes/panel-state.ts";
 import { Layer } from "../../components/desktop/Layer.tsx";
 import { observer } from "../../lib/signals.ts";
@@ -51,7 +51,7 @@ function Tip({ text, children }: { text: string | null; children: ReactNode }) {
 /** "+N −M" with a per-file breakdown on hover. */
 function ChangesStat({ agentId }: { agentId: string }) {
 	const peek = useChangesPeek(agentId).data;
-	if (!peek?.available || peek.total === 0) return null;
+	if (!peek || !canShowChanges(peek) || peek.total === 0) return null;
 	const top = peek.files.slice(0, 12);
 	return (
 		<Tooltip.Root delayDuration={200}>
@@ -147,16 +147,22 @@ function GitDesktopImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 	const status = q.data;
 	const run = useGitRunner(agent, status);
 	const [ask, setAsk] = useState<string | null>(null);
-	if (!can("git")) return null;
-	// Nothing to show for a folder that isn't a repo (or no folder).
-	if (!status || (!status.available && status.reason !== "git_failed"))
-		return null;
-	const quick = quickAction(status, agent.machine);
+	const [menuOpen, setMenuOpen] = useState(false);
 	const reasons: Record<Step, string | null> = {
 		commit: commitReason(status),
 		push: pushReason(status),
 		pr: prReason(status, agent.machine),
 	};
+	const openPrUrl = status && prOpen(status) ? httpsOnly(status.pr?.url) : null;
+	const menuEnabled = !!openPrUrl || Object.values(reasons).some((why) => !why);
+	useEffect(() => {
+		if (!menuEnabled) setMenuOpen(false);
+	}, [menuEnabled]);
+	if (!can("git")) return null;
+	// Nothing to show for a folder that isn't a repo (or no folder).
+	if (!status || (!status.available && status.reason !== "git_failed"))
+		return null;
+	const quick = quickAction(status, agent.machine);
 	const busy = run.phase.kind === "running" || run.phase.kind === "paused";
 	const items: { step: Step; label: string }[] = [
 		{ step: "commit", label: "Commit…" },
@@ -206,13 +212,21 @@ function GitDesktopImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 								</button>
 							)}
 						</Tip>
-						<DropdownMenu.Root>
+						<DropdownMenu.Root
+							open={menuEnabled && menuOpen}
+							onOpenChange={setMenuOpen}
+						>
 							<DropdownMenu.Trigger asChild>
 								<button
 									type="button"
 									className="d-btn sm icon g-more"
 									aria-label="More git actions"
-									title="More git actions"
+									disabled={!menuEnabled}
+									title={
+										menuEnabled
+											? "More git actions"
+											: "No Git actions available"
+									}
 								>
 									<ChevronDownIcon aria-hidden="true" />
 								</button>
@@ -226,16 +240,11 @@ function GitDesktopImpl({ agent }: { agent: AgentRow; mobile: boolean }) {
 									{items.map(({ step, label }) => {
 										const Icon = ICON[step];
 										const why = reasons[step];
-										if (
-											step === "pr" &&
-											status.pr &&
-											prOpen(status) &&
-											httpsOnly(status.pr.url)
-										)
+										if (step === "pr" && status.pr && openPrUrl)
 											return (
 												<DropdownMenu.Item key={step} asChild>
 													<a
-														href={status.pr.url}
+														href={openPrUrl}
 														target="_blank"
 														rel="noopener noreferrer"
 														className="g-menu-item"

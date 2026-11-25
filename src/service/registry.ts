@@ -1,5 +1,9 @@
 import { basename } from "node:path";
 import { cachedGitInfo, type GitInfo, gitInfoAsync, slug } from "../git.ts";
+import {
+	ANTIGRAVITY_SESSION_ID,
+	antigravityMcpHost,
+} from "../harnesses/antigravity-ident.ts";
 import { attachedDriver, DRIVERS, pushFor } from "../harnesses/index.ts";
 import {
 	harnessNameOf,
@@ -12,7 +16,7 @@ import type { HarnessDriver, Scanned } from "../harnesses/types.ts";
 import type { NeedsYou } from "../http/wire.ts";
 import { neutralizeHumanTag, operatorName } from "../human-tag.ts";
 import { daemonLog } from "../log.ts";
-import { pidAlive } from "../processes.ts";
+import { freshProcessSnapshot, pidAlive } from "../processes.ts";
 import { prFromRefs, prFromText, repoOf } from "../prs.ts";
 import { RpcError } from "../rpc.ts";
 import { matches, parseSelector } from "../selector.ts";
@@ -96,6 +100,10 @@ export class Registry {
 	private readonly sessions: Sessions;
 	private readonly events: EventBus;
 	private readonly waiters: Waiters;
+	private readonly activity = new WeakMap<
+		Agent,
+		{ label: string; resumeKey: string | undefined }
+	>();
 	/** Set when the service stops: a scan or refresh still in flight changes nothing. */
 	closed = false;
 	/** This machine's name; every agent carries it and the `machine:` tag. */
@@ -328,6 +336,9 @@ export class Registry {
 	 */
 	view(agent: Agent): PublicAgent {
 		const pub = toPublic(agent);
+		const activity = this.activity.get(agent);
+		if (activity && activity.resumeKey === agent.meta.resumeKey)
+			pub.activity ??= activity.label;
 		if (!agent.meta.machineId) {
 			const driver = attachedDriver(agent);
 			const extension = !!this.sessions.extensionFor(agent.id);
@@ -609,9 +620,53 @@ export class Registry {
 		tracksPid = false,
 	) {
 		const gits = await gitFor(found.map((s) => s.cwd));
+		const provenMcpHosts = new Map<Agent, number>();
+		if (harnesses.has("antigravity") && found.length) {
+			const legacy = [...this.agents.values()].filter(
+				(agent) =>
+					agent.harness === "unknown" &&
+					agent.registered &&
+					!agent.pid &&
+					agent.meta.gen &&
+					agent.cwd,
+			);
+			const table = legacy.length ? await freshProcessSnapshot() : null;
+			if (table)
+				await Promise.all(
+					legacy.slice(0, 32).map(async (agent) => {
+						const pid = await antigravityMcpHost(
+							agent.meta.gen,
+							agent.cwd!,
+							table,
+						);
+						if (pid) provenMcpHosts.set(agent, pid);
+					}),
+				);
+		}
 		if (this.closed) return;
 		const seen = new Set<string>();
 		for (const s of found) {
+			// An unreadable log cannot establish a conversation switch.
+			if (
+				s.harness === "antigravity" &&
+				s.pid &&
+				s.sessionId === `pid:${s.pid}` &&
+				s.meta.processStart
+			) {
+				const prior = [...this.agents.values()].find(
+					(a) =>
+						a.harness === s.harness &&
+						a.pid === s.pid &&
+						a.status !== "gone" &&
+						a.meta.processStart === s.meta.processStart &&
+						ANTIGRAVITY_SESSION_ID.test(a.sessionId ?? ""),
+				);
+				if (prior) {
+					seen.add(prior.id);
+					prior.lastSeen = Date.now();
+					continue;
+				}
+			}
 			const git = (s.cwd && gits.get(s.cwd)) || NO_GIT;
 			const agent = this.upsert({
 				harness: s.harness,
@@ -643,7 +698,22 @@ export class Registry {
 		// still serves them (an OpenCode session that finished its run is idle).
 		// One that appeared while this scan ran is not judged by it.
 		for (const agent of this.agents.values()) {
+			const detected = byPid.get(agent.pid ?? provenMcpHosts.get(agent) ?? 0);
 			if (
+				agent.harness === "unknown" &&
+				agent.registered &&
+				agent.status !== "gone" &&
+				agent.cwd &&
+				detected?.cwd === agent.cwd &&
+				detected.harness === "antigravity" &&
+				!this.needs.has(agent.id)
+			) {
+				this.rememberName(agent.name, detected.id);
+				this.retireSession(agent, detected);
+				continue;
+			}
+			if (
+				agent.meta.acp === "1" ||
 				!harnesses.has(agent.harness) ||
 				seen.has(agent.id) ||
 				agent.status === "gone" ||
@@ -651,6 +721,17 @@ export class Registry {
 			)
 				continue;
 			const current = agent.pid ? byPid.get(agent.pid) : undefined;
+			if (
+				current &&
+				agent.harness === "antigravity" &&
+				agent.meta.processStart &&
+				current.meta.processStart &&
+				agent.meta.processStart !== current.meta.processStart
+			) {
+				// The OS reused the PID. Its new owner must never inherit live mail.
+				if (!this.sessions.forAgent(agent.id).length) this.markGone(agent);
+				continue;
+			}
 			if (current) {
 				// A prompt still pending for that id (its approval card, its
 				// needs-you) keeps it until answered; the next scan folds it in.
@@ -915,6 +996,35 @@ export class Registry {
 				? this.repoUrls.get(cwd)
 				: existing?.repoUrl;
 		return url === undefined ? {} : { repoUrl: url };
+	}
+
+	/** Fallback activity for sessions with no agent-written summary. */
+	async refreshActivity() {
+		for (const agent of this.live()) {
+			const read = attachedDriver(agent)?.activity;
+			if (!read || agent.activity) continue;
+			const resumeKey = agent.meta.resumeKey;
+			let label: string | null;
+			try {
+				label = await read(agent);
+			} catch {
+				continue;
+			}
+			if (this.closed) return;
+			if (
+				this.agents.get(agent.id) !== agent ||
+				agent.status === "gone" ||
+				agent.meta.resumeKey !== resumeKey
+			)
+				continue;
+			const previous = this.activity.get(agent);
+			if (label === previous?.label && resumeKey === previous.resumeKey)
+				continue;
+			if (label === null && !previous) continue;
+			if (label) this.activity.set(agent, { label, resumeKey });
+			else this.activity.delete(agent);
+			this.events.emit("agent", { action: "update", agent: this.view(agent) });
+		}
 	}
 
 	/** Model for harnesses whose scanner does not report it (drivers with a `model` hook). */

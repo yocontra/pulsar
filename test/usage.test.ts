@@ -35,6 +35,7 @@ import {
 } from "./usage-fixtures.ts";
 
 const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 const NOW = Date.now();
 const T = Math.floor((NOW - 2 * HOUR) / HOUR) * HOUR + 60_000;
 
@@ -112,6 +113,35 @@ describe("parsers", () => {
 		expect(parseLine("claude", "{not json", s)).toBeNull();
 	});
 
+	test("pi and omp apply model changes to subsequent usage without a model field", () => {
+		for (const harness of ["pi", "omp"] as const) {
+			const state: FileState = {};
+			for (const [provider, model] of [
+				["splash", "local/heretic"],
+				["anthropic", "claude-opus-5-5"],
+			]) {
+				const change =
+					harness === "pi"
+						? { provider, modelId: model }
+						: { model: `${provider}/${model}` };
+				parseLine(
+					harness,
+					JSON.stringify({ type: "model_change", ...change }),
+					state,
+				);
+				const row = JSON.stringify({
+					type: "message",
+					timestamp: T,
+					message: { role: "assistant", usage: { output: 100 } },
+				});
+				expect(parseLine(harness, row, state)).toMatchObject({
+					model,
+					provider,
+				});
+			}
+		}
+	});
+
 	test("Claude: synthetic replies cost nothing", () => {
 		expect(
 			parseLine(
@@ -120,6 +150,19 @@ describe("parsers", () => {
 				{},
 			),
 		).toBeNull();
+	});
+
+	test("Codex assigns only the new usage to the next model after a switch", () => {
+		const state: FileState = {};
+		const first = codexLines(T, "first", [[100, 20, 10]]);
+		const second = codexLines(T + HOUR, "second", [[140, 30, 15]]);
+		const records = [...first, ...second.slice(1)]
+			.map((line) => parseLine("codex", line, state))
+			.filter(Boolean);
+		expect(records).toMatchObject([
+			{ model: "first", input: 80, cacheRead: 20, output: 10 },
+			{ model: "second", input: 30, cacheRead: 10, output: 5 },
+		]);
 	});
 
 	test("Codex: totals minus the previous totals; repeated events add nothing", () => {
@@ -491,6 +534,37 @@ describe("prices", () => {
 		r = await usage.report("7d", 0, self, null);
 		expect(r.rows[0]!.cost).toBeCloseTo(4, 6);
 		expect(() => usage.setPrice("x", { input: -1 })).toThrow();
+	});
+
+	test("a resumed Claude session prices each response at the model that served it", async () => {
+		write(claudeFile("switched"), [
+			claudeLine({
+				id: "opus",
+				model: "claude-opus-5-5",
+				t: T - DAY,
+				input: 1_000_000,
+				output: 0,
+			}),
+			claudeLine({
+				id: "fable",
+				model: "claude-fable-5-2",
+				t: T,
+				input: 1_000_000,
+				output: 0,
+			}),
+		]);
+		await usage.scanner.scan();
+		const raw = await usage.localAgent(agent("claude", "switched"));
+		const { cost, byModel, period } = usage.priceAgent(
+			"claude:switched",
+			cleanAgentUsage(raw),
+		);
+		expect(cost).toBe(12);
+		expect(byModel).toEqual([
+			{ model: "claude-fable-5-2", cost: 8, records: 1 },
+			{ model: "claude-opus-5-5", cost: 4, records: 1 },
+		]);
+		expect(period!.lastHour - period!.firstHour).toBe(DAY);
 	});
 
 	test("unpriced models have no cost (not zero)", async () => {

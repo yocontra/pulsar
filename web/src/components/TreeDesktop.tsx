@@ -11,6 +11,7 @@ import { useNow } from "../data/clock.ts";
 import { AgentAvatar, AgentStatus, NeedsBadge, Skeleton } from "../ds/index.ts";
 import { issueOf } from "../features/issues/open.ts";
 import {
+	activityLine,
 	age,
 	fullDate,
 	plural,
@@ -319,8 +320,7 @@ function NodeRowImpl({
 			}
 			openNode(n);
 		};
-		const line =
-			a.activity ?? (a.branch ? `On ${a.branch}` : "No activity yet");
+		const line = activityLine(a);
 		const issue = issueOf(a);
 		return (
 			<button

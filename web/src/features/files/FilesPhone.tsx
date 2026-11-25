@@ -25,6 +25,7 @@ import {
 	useTarget,
 	useTree,
 } from "./FilesPage.tsx";
+import { moveFileFocus } from "./file-keys.ts";
 
 /** Copy path, and Open in Changes when the file has uncommitted changes. */
 function Actions({
@@ -108,7 +109,14 @@ function FolderList({ agentId, path }: { agentId: string; path: string }) {
 		);
 	return (
 		<>
-			<List strong inset className="fv-klist" role="group" aria-label="Files">
+			<List
+				strong
+				inset
+				className="fv-klist"
+				role="group"
+				aria-label="Files"
+				onKeyDown={(e) => moveFileFocus(e, "button")}
+			>
 				{t.entries.map((e) => (
 					<ListItem
 						key={e.path}

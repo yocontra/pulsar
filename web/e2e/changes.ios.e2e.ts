@@ -11,14 +11,76 @@ const top = (page: Page) =>
 	page.locator("ion-nav > .ion-page:not(.ion-page-hidden)").last();
 
 test.describe("changes pages", () => {
+	test("the button follows diff history, including on a clean working tree", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=codex@apparish");
+		const match = /\/api\/v1\/agents\/[^/]+\/changes\?mode=worktree$/;
+		let read = page.waitForResponse((response) => match.test(response.url()));
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		await read;
+		const button = page.getByRole("button", { name: /^Changes/ });
+		await expect(button).toHaveCount(0);
+		await page.route(match, async (route) => {
+			const response = await route.fetch();
+			await route.fulfill({
+				response,
+				json: { ...(await response.json()), hasChanges: true },
+			});
+		});
+		read = page.waitForResponse((response) => match.test(response.url()));
+		await page.reload();
+		await read;
+		await expect(button).toHaveAccessibleName("Changes");
+		await button.click();
+		await expect(top(page).locator(".cv-empty")).toContainText("No changes in");
+	});
+
+	test("incomplete history keeps the phone Changes button available", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=codex@apparish");
+		await page.route(
+			/\/api\/v1\/agents\/[^/]+\/changes\?mode=worktree$/,
+			async (route) => {
+				const response = await route.fetch();
+				await route.fulfill({
+					response,
+					json: {
+						...(await response.json()),
+						hasChanges: false,
+						changesHistoryIncomplete: true,
+					},
+				});
+			},
+		);
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		await page.getByRole("button", { name: "Changes", exact: true }).click();
+		await expect(top(page).locator(".cv-empty")).toContainText("No changes in");
+	});
+
 	test("agent → Changes (7) → file list → unified diff → back", async ({
 		page,
 		request,
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
+		// A current count can reach the client with a stale history flag.
+		await page.route(
+			/\/api\/v1\/agents\/[^/]+\/changes\?mode=worktree$/,
+			async (route) => {
+				const response = await route.fetch();
+				await route.fulfill({
+					response,
+					json: { ...(await response.json()), hasChanges: false },
+				});
+			},
+		);
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
 		const button = page.getByRole("button", { name: "Changes (7)" });
 		await expect(button).toBeVisible();
+		await expect(button).toBeInViewport({ ratio: 1 });
 		await button.click();
 		await expect(page).toHaveURL(/#\/changes\//);
 		const list = top(page);

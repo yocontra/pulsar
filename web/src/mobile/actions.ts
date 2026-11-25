@@ -115,6 +115,12 @@ const MODE_HARNESSES = new Set(["claude", "codex", "opencode", "omp"]);
 
 /** Long-press menu for an agent. */
 export async function agentMenu(a: AgentRow) {
+	const inRepo =
+		a.repoUrl || issueOf(a)
+			? await import("../changes/data.ts")
+					.then(({ inRepository }) => inRepository(a.id))
+					.catch(() => false)
+			: false;
 	await showActions({
 		header: a.name,
 		subHeader: [harnessName(a.harness), a.machine, a.project]
@@ -125,7 +131,7 @@ export async function agentMenu(a: AgentRow) {
 				text: "Open Conversation",
 				handler: () => navigate({ view: "agent", id: a.id }),
 			},
-			...agentButtons(a),
+			...agentButtons(a, !!inRepo),
 			{ text: "Cancel", role: "cancel" as const },
 		],
 	});
@@ -135,7 +141,7 @@ export async function agentMenu(a: AgentRow) {
  * An agent's actions after "Open Conversation" (the agent page's ••• menu
  * lists these): files, links, issue, pin, copy, stop.
  */
-export function agentButtons(a: AgentRow): AgentButton[] {
+export function agentButtons(a: AgentRow, inRepo: boolean): AgentButton[] {
 	const node = agentNode(a.id);
 	const pinned = node ? isPinned(node.id) : false;
 	return [
@@ -149,8 +155,8 @@ export function agentButtons(a: AgentRow): AgentButton[] {
 					},
 				]
 			: []),
-		...linkButtons(a),
-		...(issueOf(a)
+		...(inRepo ? linkButtons(a) : []),
+		...(inRepo && issueOf(a)
 			? [
 					{
 						kind: "issue" as const,

@@ -153,6 +153,13 @@
 	min-height: 100dvh;
 	background: var(--ds-bg);
 }
+/* The desktop and phone shells both position their pages inside this root. */
+#app {
+	position: relative;
+	inline-size: 100%;
+	block-size: 100vh;
+	block-size: 100dvh;
+}
 /* A chunk that failed fills its pane; the whole app's chunk, the page. */
 .st-fail {
 	flex: 1;

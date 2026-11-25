@@ -775,7 +775,8 @@ class Watcher {
 		if (source?.kind !== "poll" || this.inFlight) return;
 		this.inFlight = true;
 		try {
-			const page = await source.fetch(null);
+			const page = await (source.poll ? source.poll() : source.fetch(null));
+			if (!page) return;
 			const fresh: TranscriptEvent[] = [];
 			for (const e of page.events) {
 				const json = JSON.stringify(e);

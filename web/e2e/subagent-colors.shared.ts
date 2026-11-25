@@ -43,6 +43,7 @@ export function subagentColorSuite(phone: boolean) {
 			list.locator("[data-subagent]").filter({
 				has: page.getByText(name, { exact: true }),
 			});
+		await expect(list.locator("[data-subagent] .ds-avatar")).toHaveCount(0);
 		const listed = {
 			parser: await colorOf(row("parser").locator(".ds-agent-mark"), "parser"),
 			reviewer: await colorOf(

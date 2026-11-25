@@ -17,7 +17,7 @@ import {
 } from "../diagnostics/client-errors-schema.ts";
 import { isOwner } from "../federation/members.ts";
 import { tailnetRpId } from "../federation/tailnet.ts";
-import { hostedWrite } from "../hosted/wire.ts";
+import { hostedRequest } from "../hosted/wire.ts";
 import { compressJson } from "../http/compress.ts";
 import { EventHub, type HubOptions } from "../http/events.ts";
 import {
@@ -1516,11 +1516,24 @@ export class HttpTransport {
 			return c.json(await svc.send(who(c), body));
 		});
 		api.get("/hosted", async (c) =>
-			c.json(await this.service.hostedTasks(who(c))),
+			c.json(
+				await this.service.hostedTasks(who(c), c.req.query("refresh") === "1"),
+			),
 		);
+		api.get("/hosted/:provider/tasks/:id", async (c) => {
+			c.header("Cache-Control", "no-store");
+			return c.json(
+				await this.service.hostedTask(
+					who(c),
+					c.req.param("provider"),
+					c.req.param("id"),
+					c.req.query("machine"),
+				),
+			);
+		});
 		api.post("/hosted", async (c) => {
 			const body = parse(LaunchBody, await jsonBody(c));
-			parse(hostedWrite, body.params);
+			parse(hostedRequest, body.params);
 			return c.json(
 				await this.service.acting.run(
 					who(c),

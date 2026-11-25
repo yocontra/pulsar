@@ -5,16 +5,28 @@ import { expect, ready, test } from "./fixtures.ts";
  * <style> is stripped at build time and its stylesheet loads as a file, so
  * the toast is styled and the console stays clean (the `errors` fixture
  * fails the test on any CSP violation). Shared by the desktop (Chromium)
- * and iOS (WebKit) suites.
+ * and phone suites.
  */
 export function toastSuite(tap: boolean) {
-	test("a toast with an action renders styled, with no CSP errors", async ({
+	test("a toast overlays the page without shifting it and its action works", async ({
 		page,
 	}) => {
 		await page.addInitScript(() => {
 			(window as { __pulsarE2E?: object }).__pulsarE2E = {};
 		});
 		await ready(page);
+		const layout = page.locator(
+			tap ? "ion-nav, .p-tabbar" : ".d-side, .d-main",
+		);
+		await expect(layout).toHaveCount(2);
+		const rectangles = () =>
+			layout.evaluateAll((elements) =>
+				elements.map((el) => {
+					const { x, y, width, height } = el.getBoundingClientRect();
+					return { x, y, width, height };
+				}),
+			);
+		const before = await rectangles();
 		await page.evaluate(() => {
 			const w = window as unknown as {
 				__pulsarE2E: {
@@ -33,26 +45,41 @@ export function toastSuite(tap: boolean) {
 		await expect(card).toHaveCount(1);
 		await expect(card).toContainText("Archived 2 agents");
 		await expect(card).toContainText("They stay in the list");
+		expect(await rectangles()).toEqual(before);
+		await expect(
+			page.locator("body > .p-toast-overlay [data-sonner-toast]"),
+		).toHaveCount(1);
+		await expect(page.locator(".p-toast-overlay")).toHaveCSS(
+			"position",
+			"fixed",
+		);
 		// Sonner's stylesheet applied (an injected <style> would be refused).
 		expect(await card.evaluate((el) => getComputedStyle(el).position)).toBe(
 			"absolute",
 		);
-		// Our tokens applied (styles/toasts.css): the action uses the primary color.
+		// Material uses a transparent action with a primary-colored label.
 		const undo = card.getByRole("button", { name: "Undo" });
-		const [bg, primary] = await undo.evaluate((el) => [
-			getComputedStyle(el).backgroundColor,
-			getComputedStyle(document.documentElement)
-				.getPropertyValue("--ds-primary")
-				.trim(),
-		]);
-		expect(primary).not.toBe("");
-		expect(bg).not.toBe("rgba(0, 0, 0, 0)");
+		const usesTheme = await undo.evaluate((el) => {
+			const material =
+				document.documentElement.classList.contains("k-material");
+			const styles = getComputedStyle(el);
+			const token = document.createElement("span");
+			token.style.color = material
+				? "var(--ds-primary-soft)"
+				: "var(--ds-primary)";
+			el.append(token);
+			const expected = getComputedStyle(token).color;
+			token.remove();
+			return (material ? styles.color : styles.backgroundColor) === expected;
+		});
+		expect(usesTheme).toBe(true);
 		if (tap) await undo.tap();
 		else await undo.click();
 		await expect
 			.poll(() => page.evaluate(() => (window as { undone?: boolean }).undone))
 			.toBe(true);
 		await expect(card).toHaveCount(0);
+		expect(await rectangles()).toEqual(before);
 		// No <style> element was added at run time.
 		expect(await page.locator("head style").count()).toBe(0);
 	});

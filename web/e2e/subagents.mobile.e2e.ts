@@ -4,7 +4,7 @@ import { agentId, expect, ready, test } from "./fixtures.ts";
  * Subagents on the phone (web/mock/subagents.ts): the agent page lists them
  * in a section, collapsed to a count; tapping one pushes its page (its
  * transcript and a composer that says where a message goes); back pops it.
- * Finished ones are listed only with "Show finished subagents" (Settings).
+ * Finished ones are listed only with "Show idle and finished subagents" (Settings).
  */
 
 test.describe("subagents (phone)", () => {
@@ -17,10 +17,10 @@ test.describe("subagents (phone)", () => {
 		await page.goto(`/#/a/${encodeURIComponent(auth)}`);
 		const section = page.locator(`[data-subs-section="${auth}"]`);
 		const toggle = section.locator(".p-sa-toggle");
-		await expect(toggle).toContainText("2 subagents · 1 running");
+		await expect(toggle).toContainText("1 running subagent");
 		await toggle.click();
 		const rows = section.locator("[data-subagent]");
-		await expect(rows).toHaveCount(2);
+		await expect(rows).toHaveCount(1);
 		await expect(
 			rows.filter({ hasText: "Write the regression test" }),
 		).toHaveCount(0);
@@ -28,7 +28,9 @@ test.describe("subagents (phone)", () => {
 		await page.goto("/#/settings");
 		// A Konsta switch row: a tap on the row flips its checkbox.
 		const sw = page.locator('[data-setting="show-finished-subagents"]');
-		const box = sw.getByRole("checkbox", { name: "Show Finished Subagents" });
+		const box = sw.getByRole("checkbox", {
+			name: "Show Idle and Finished Subagents",
+		});
 		await expect(sw).toBeVisible();
 		await expect(box).not.toBeChecked();
 		await sw.click();
@@ -61,7 +63,7 @@ test.describe("subagents (phone)", () => {
 		const sw = page.locator('[data-setting="show-finished-subagents"]');
 		await sw.click();
 		await expect(
-			sw.getByRole("checkbox", { name: "Show Finished Subagents" }),
+			sw.getByRole("checkbox", { name: "Show Idle and Finished Subagents" }),
 		).toBeChecked();
 		await page.goto(`/#/a/${encodeURIComponent(lead)}`);
 		await expect(

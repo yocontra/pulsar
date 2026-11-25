@@ -8,19 +8,19 @@ import { signal } from "../../lib/signals.ts";
 /** The agent whose git sheet should open next. */
 export const gitAsk = signal<string | null>(null);
 
-/** Agents whose header offers git (a repository, git allowed). */
-export const gitOffered = signal<ReadonlySet<string>>(new Set());
+/** Whether each offered Git sheet can currently be opened. */
+export const gitOffered = signal<ReadonlyMap<string, boolean>>(new Map());
 
 export function showGit(agentId: string) {
 	gitAsk.value = agentId;
 }
 
 /** Marks an agent's git button as shown (or gone). */
-export function offerGit(agentId: string, on: boolean) {
+export function offerGit(agentId: string, enabled: boolean | undefined) {
 	const cur = gitOffered.peek();
-	if (cur.has(agentId) === on) return;
-	const next = new Set(cur);
-	if (on) next.add(agentId);
-	else next.delete(agentId);
+	if (cur.get(agentId) === enabled) return;
+	const next = new Map(cur);
+	if (enabled === undefined) next.delete(agentId);
+	else next.set(agentId, enabled);
 	gitOffered.value = next;
 }

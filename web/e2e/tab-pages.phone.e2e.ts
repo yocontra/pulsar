@@ -154,7 +154,9 @@ test.describe("tab pages", () => {
 		);
 		// A switch row: the row's text names the checkbox; a tap on the row
 		// flips it, and the setting stays on this device.
-		const sub = s.getByRole("checkbox", { name: "Show Finished Subagents" });
+		const sub = s.getByRole("checkbox", {
+			name: "Show Idle and Finished Subagents",
+		});
 		await expect(sub).not.toBeChecked();
 		await s.locator('[data-setting="show-finished-subagents"]').tap();
 		await expect(sub).toBeChecked();
@@ -162,7 +164,7 @@ test.describe("tab pages", () => {
 		await expect(
 			page
 				.getByTestId("settings")
-				.getByRole("checkbox", { name: "Show Finished Subagents" }),
+				.getByRole("checkbox", { name: "Show Idle and Finished Subagents" }),
 		).toBeChecked();
 		// No CSP report from Konsta's rows and switches: the errors fixture.
 	});
@@ -177,7 +179,7 @@ test.describe("tab pages", () => {
 			.getByTestId("settings")
 			.locator('[data-setting="show-finished-subagents"]');
 		await expect(
-			row.getByRole("checkbox", { name: "Show Finished Subagents" }),
+			row.getByRole("checkbox", { name: "Show Idle and Finished Subagents" }),
 		).not.toBeChecked();
 		for (const scheme of ["light", "dark"] as const) {
 			await page.emulateMedia({ colorScheme: scheme });

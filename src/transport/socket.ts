@@ -1,5 +1,11 @@
 import { access, chmod, unlink } from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
+import {
+	antigravityMcpHost,
+	antigravityProcess,
+	legacyMcpGeneration,
+} from "../harnesses/antigravity-ident.ts";
+import { freshProcessSnapshot } from "../processes.ts";
 import { type Frame, RpcError, readFrames, writeFrame } from "../rpc.ts";
 import type { Caller } from "../service/caller.ts";
 import type { PulsarService } from "../service/index.ts";
@@ -140,7 +146,7 @@ export class SocketTransport {
 			const params = (frame.params ?? {}) as Record<string, unknown>;
 			const result =
 				frame.method === "hello"
-					? this.hello(caller, params)
+					? await this.hello(caller, params)
 					: await this.service.handle(caller, frame.method, params);
 			writeFrame(socket, { id: frame.id, result });
 		} catch (e) {
@@ -163,7 +169,7 @@ export class SocketTransport {
 	 * around it: the operator. A CLI run from an agent's shell: that agent,
 	 * borrowed. An MCP server or extension: its agent, registered.
 	 */
-	private hello(caller: Caller, p: Record<string, unknown>) {
+	private async hello(caller: Caller, p: Record<string, unknown>) {
 		this.service.authorize(caller.principal, "hello");
 		const protocol = Number(p.protocol ?? 0);
 		if (protocol > PROTOCOL_VERSION) {
@@ -172,7 +178,38 @@ export class SocketTransport {
 				`client speaks protocol ${protocol}, daemon ${PROTOCOL_VERSION}`,
 			);
 		}
-		const reg = p.registration as Registration | undefined;
+		let reg = p.registration as Registration | undefined;
+		if (
+			reg?.role === "mcp" &&
+			reg.harness === "unknown" &&
+			!reg.pid &&
+			reg.cwd &&
+			legacyMcpGeneration(reg.meta?.gen)
+		) {
+			const table = await freshProcessSnapshot();
+			const pid =
+				table && (await antigravityMcpHost(reg.meta?.gen, reg.cwd, table));
+			if (pid) {
+				const detected = await antigravityProcess(pid);
+				if (detected.cwd === reg.cwd) {
+					reg = {
+						...reg,
+						harness: "antigravity",
+						pid,
+						sessionId: detected.sessionId,
+						tags: [
+							...(reg.tags ?? []).filter((tag) => !tag.startsWith("harness:")),
+							"harness:antigravity",
+						],
+					};
+				}
+			}
+			if (caller.closed.aborted)
+				throw new RpcError(
+					"closed",
+					"MCP connection closed during identification",
+				);
+		}
 		this.service.setRole(caller, reg?.role ?? "cli");
 		// One live MCP connection owns a session id; a second claimant (two Codex
 		// threads in one app-server) is told to pick another thread.

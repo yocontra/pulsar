@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { agentId, expect } from "./fixtures.ts";
 
 /**
@@ -78,4 +78,41 @@ export async function expectCopyOutside(page: Page) {
 	await expect(page.getByText("Path copied")).toBeVisible();
 	expect(await copies(page)).toContain("/tmp/demo-run.log");
 	expect(page.url()).toBe(before);
+}
+
+/** Exercise the read-only viewer with an external keyboard. */
+export async function expectFileKeys(view: Locator) {
+	const code = view
+		.getByRole("region", { name: "File contents: refresh.ts" })
+		.locator("pre");
+	const status = view.getByText(/^Line \d+ of \d+$/);
+	await expect(view.locator(".fv-hl")).toContainText(
+		"export async function refresh",
+	);
+	await code.focus();
+	await code.press("ArrowDown");
+	await expect(status).toHaveText("Line 8 of 12");
+	await code.press("Home");
+	await expect(status).toHaveText("Line 1 of 12");
+	await code.press("End");
+	await expect(status).toHaveText("Line 12 of 12");
+	await code.press("Control+f");
+	const find = view.getByRole("searchbox", { name: "Find in file" });
+	await expect(find).toBeFocused();
+	await find.fill("session");
+	await expect(view.getByText(/^1 of \d+ matching lines$/)).toBeVisible();
+	await find.press("Enter");
+	await expect(view.getByText(/^2 of \d+ matching lines$/)).toBeVisible();
+	await find.press("Shift+Enter");
+	await expect(view.getByText(/^1 of \d+ matching lines$/)).toBeVisible();
+	await find.press("Escape");
+	await expect(code).toBeFocused();
+	await code.press("Control+g");
+	const line = view.getByRole("spinbutton", { name: "Line number" });
+	await expect(line).toBeFocused();
+	await line.fill("4");
+	await line.press("Enter");
+	await expect(code).toBeFocused();
+	await expect(status).toHaveText("Line 4 of 12");
+	await expect(view.locator(".fv-hl")).toContainText("const lock");
 }

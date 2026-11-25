@@ -9,12 +9,13 @@ import type {
 	SubagentRow,
 	SubagentState,
 } from "../api/types.ts";
+import { nameKey } from "./agent-color.ts";
 import { heldFor, plural, stateLabel } from "./format.ts";
 import { signal } from "./signals.ts";
 
 /**
- * "Show finished subagents" (Settings), per device: off by default, so the
- * sidebar and the phone's agent page list only running and idle ones. A
+ * "Show idle and finished subagents" (Settings), per device: off by default, so the
+ * sidebar and the phone's agent page list only running ones. A
  * finished one stays reachable from its parent's transcript card.
  */
 const SHOW_KEY = "pulsar.showFinishedSubagents";
@@ -27,14 +28,14 @@ function readShow(): boolean {
 	}
 }
 
-export const showFinished = signal<boolean>(readShow());
+export const showInactive = signal<boolean>(readShow());
 
-export function setShowFinished(on: boolean) {
+export function setShowInactive(on: boolean) {
 	try {
 		if (on) localStorage.setItem(SHOW_KEY, "1");
 		else localStorage.removeItem(SHOW_KEY);
 	} catch {}
-	showFinished.value = on;
+	showInactive.value = on;
 }
 
 // Another tab on this device changed it.
@@ -42,23 +43,20 @@ if (typeof addEventListener === "function")
 	addEventListener("storage", (e: Event) => {
 		// A StorageEvent (typed loosely: the tests' lib has no DOM).
 		const key = (e as Event & { key?: string | null }).key;
-		if (key === SHOW_KEY || key === null) showFinished.value = readShow();
+		if (key === SHOW_KEY || key === null) showInactive.value = readShow();
 	});
 
-/** The rows to list: all, or without the finished (`done`) ones. */
+/** The rows to list: all, or only those currently running. */
 export function visibleSubagents(
 	rows: SubagentRow[],
 	show: boolean,
 ): SubagentRow[] {
-	return show ? rows : rows.filter((r) => r.state !== "done");
+	return show ? rows : rows.filter((r) => r.state === "running");
 }
 
 /**
  * The disclosure's label for an agent's counts, or null when it shows
- * nothing. With finished ones: "4 subagents · 1 running". Without: what is
- * listed, "2 running subagents", "1 idle subagent" or "3 subagents · 1
- * running". Counts from an older daemon have no `done`: then only running
- * ones are counted.
+ * nothing. The collapsed count and expanded list use the same filter.
  */
 export function subagentsLabel(
 	counts: SubagentCounts | undefined,
@@ -68,12 +66,7 @@ export function subagentsLabel(
 	const { total, running } = counts;
 	if (show)
 		return `${plural(total, "subagent")}${running ? ` · ${running} running` : ""}`;
-	const listed =
-		counts.done === undefined ? running : Math.max(0, total - counts.done);
-	if (listed <= 0) return null;
-	if (running >= listed) return plural(listed, "running subagent");
-	if (running === 0) return plural(listed, "idle subagent");
-	return `${plural(listed, "subagent")} · ${running} running`;
+	return running > 0 ? plural(running, "running subagent") : null;
 }
 
 /** Agents whose subagent rows are open. */
@@ -131,6 +124,12 @@ export function orderSubagents(
 	};
 	for (const r of top) add(r, 0);
 	return out;
+}
+
+/** Show a role only if it adds information to the subagent name. */
+export function subagentRole(sub: SubagentRow): string | null {
+	const role = sub.agentType?.trim();
+	return role && nameKey(role) !== nameKey(sub.name) ? role : null;
 }
 
 export const STATE_WORD: Record<SubagentState, string> = {

@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { lazy } from "../lib/lazy.tsx";
 import { observer } from "../lib/signals.ts";
 import { toasterWanted } from "../lib/toast.ts";
@@ -11,7 +12,14 @@ const ToasterHost = lazy<{ mobile: boolean }>(
 
 /** The one toaster (src/lib/toast.ts), mounted by both layouts. */
 function ToastsImpl({ mobile }: { mobile: boolean }) {
-	return toasterWanted.value ? <ToasterHost mobile={mobile} /> : null;
+	if (!toasterWanted.value) return null;
+	// Sonner's live region wraps its fixed lists in a normal-flow section.
+	return createPortal(
+		<div className="p-toast-overlay">
+			<ToasterHost mobile={mobile} />
+		</div>,
+		document.body,
+	);
 }
 
 export const Toasts = observer(ToastsImpl);

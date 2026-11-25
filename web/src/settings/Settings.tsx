@@ -13,7 +13,7 @@ import { clock, plural } from "../lib/format.ts";
 import { shownSettingsSections } from "../lib/registry.tsx";
 import { observer } from "../lib/signals.ts";
 import { can, hello, securityVersion, showToast } from "../lib/store.ts";
-import { setShowFinished, showFinished } from "../lib/subagents.ts";
+import { setShowInactive, showInactive } from "../lib/subagents.ts";
 import { APPEARANCES, appearance, setAppearance } from "../lib/theme.ts";
 import { disablePush, enablePush, type PushState, pushState } from "./push.ts";
 
@@ -288,23 +288,24 @@ function SettingsImpl({ onClose }: { onClose: () => void }) {
 							</li>
 							<li className="d-set-row">
 								<span className="d-set-text">
-									<span className="d-set-label">Show finished subagents</span>
+									<span className="d-set-label">
+										Show idle and finished subagents
+									</span>
 									<span className="d-set-help">
-										Off: the sidebar lists only running and idle subagents. On:
-										also those that finished in the last day. A finished one
-										stays reachable from its card in the parent's conversation.
-										Saved on this device.
+										Lists normally show running subagents. Turn this on to
+										include idle subagents and those that finished in the last
+										day. Saved on this device.
 									</span>
 								</span>
 								<input
 									type="checkbox"
 									role="switch"
 									className="d-switch"
-									aria-label="Show finished subagents"
-									aria-checked={showFinished.value}
-									checked={showFinished.value}
+									aria-label="Show idle and finished subagents"
+									aria-checked={showInactive.value}
+									checked={showInactive.value}
 									data-setting="show-finished-subagents"
-									onChange={(e) => setShowFinished(e.currentTarget.checked)}
+									onChange={(e) => setShowInactive(e.currentTarget.checked)}
 								/>
 							</li>
 						</ul>

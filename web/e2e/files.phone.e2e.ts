@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import {
 	copies,
 	expectCopyOutside,
+	expectFileKeys,
 	expectRefs,
 	fileUrl,
 	openGallery,
@@ -19,6 +20,23 @@ const top = (page: Page) =>
 test.describe("file viewer", () => {
 	test.beforeEach(async ({ page }) => {
 		await recordCopies(page);
+	});
+
+	test("keyboard controls find text and move between source lines", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "fixture=blocks");
+		await page.goto(
+			`/#/file/${encodeURIComponent(id)}?path=src%2Fauth%2Frefresh.ts&line=7`,
+		);
+		const view = top(page).getByTestId("files-page");
+		await expectFileKeys(view);
+		// The same actions are available without a hardware keyboard.
+		await view.getByRole("button", { name: "Go to line" }).click();
+		await view.getByRole("spinbutton", { name: "Line number" }).fill("7");
+		await view.getByRole("button", { name: "Go", exact: true }).click();
+		await expect(view.getByText("Line 7 of 12")).toBeVisible();
 	});
 
 	test("a file reference pushes the file; an outside path copies", async ({

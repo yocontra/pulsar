@@ -923,6 +923,10 @@ export interface BranchCompare {
 
 /** `GET /agents/:id/changes?mode=` (also the `changes` SSE payload). */
 export interface ChangesSummary {
+	/** This session has had an observed worktree or branch diff. Older peers omit it. */
+	hasChanges?: boolean;
+	/** A bounded check could not establish the session's earlier changes. */
+	changesHistoryIncomplete?: true;
 	agent: string;
 	mode: ChangesMode;
 	/**
@@ -1556,6 +1560,10 @@ export interface UsageReport {
 
 /** `GET /agents/:id/usage`: one agent's session so far. */
 export interface AgentUsage {
+	/** Retained usage buckets of this conversation, including its indexed subagents. */
+	period?: { firstHour: number; lastHour: number };
+	/** Each row uses its own model price. Absent for provider-reported totals. */
+	byModel?: { model: string; cost: number | null; records: number }[];
 	agent: string;
 	tokens: UsageTokens;
 	cost: number | null;

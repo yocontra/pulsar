@@ -3,8 +3,9 @@ import { cleanCounts } from "../src/federation/subagents.ts";
 import type { SubagentRow, SubagentState } from "../src/http/wire.ts";
 import {
 	orderSubagents,
-	setShowFinished,
-	showFinished,
+	setShowInactive,
+	showInactive,
+	subagentRole,
 	subagentStateText,
 	subagentsLabel,
 	visibleSubagents,
@@ -12,7 +13,7 @@ import {
 
 /**
  * "Show finished subagents" (web/src/lib/subagents.ts): off by default, the
- * sidebar and the phone's agent page list only running and idle subagents,
+ * sidebar and the phone's agent page list only running subagents,
  * and the disclosure counts what it lists.
  */
 
@@ -47,11 +48,8 @@ function row(
 describe("visibleSubagents", () => {
 	const rows = [row("a", "running"), row("b", "done"), row("c", "idle")];
 
-	test("hides finished ones unless shown", () => {
-		expect(visibleSubagents(rows, false).map((r) => r.name)).toEqual([
-			"a",
-			"c",
-		]);
+	test("hides idle and finished ones unless shown", () => {
+		expect(visibleSubagents(rows, false).map((r) => r.name)).toEqual(["a"]);
 		expect(visibleSubagents(rows, true)).toBe(rows);
 	});
 
@@ -86,11 +84,9 @@ describe("subagentsLabel", () => {
 		expect(subagentsLabel({ total: 2, running: 1, done: 1 }, false)).toBe(
 			"1 running subagent",
 		);
-		expect(subagentsLabel({ total: 3, running: 0, done: 2 }, false)).toBe(
-			"1 idle subagent",
-		);
+		expect(subagentsLabel({ total: 3, running: 0, done: 2 }, false)).toBeNull();
 		expect(subagentsLabel({ total: 4, running: 1, done: 2 }, false)).toBe(
-			"2 subagents · 1 running",
+			"1 running subagent",
 		);
 	});
 
@@ -111,12 +107,21 @@ describe("subagentsLabel", () => {
 
 describe("the setting", () => {
 	test("off by default; set and cleared per device", () => {
-		expect(showFinished.value).toBe(false);
-		setShowFinished(true);
-		expect(showFinished.value).toBe(true);
-		setShowFinished(false);
-		expect(showFinished.value).toBe(false);
+		expect(showInactive.value).toBe(false);
+		setShowInactive(true);
+		expect(showInactive.value).toBe(true);
+		setShowInactive(false);
+		expect(showInactive.value).toBe(false);
 	});
+});
+
+test("list subtitles show distinct roles only", () => {
+	expect(
+		subagentRole(row("reviewer", "idle", { agentType: " Reviewer " })),
+	).toBeNull();
+	expect(
+		subagentRole(row("reviewer", "running", { agentType: "Explore" })),
+	).toBe("Explore");
 });
 
 describe("state words", () => {

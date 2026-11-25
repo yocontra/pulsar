@@ -129,6 +129,9 @@ html[data-vv] body {
 	max-height: var(--vvh);
 	transform: translate3d(0, var(--vv-top, 0px), 0);
 }
+html[data-vv] #app {
+	block-size: 100%;
+}
 ion-content {
 	--background: var(--p-bg);
 }

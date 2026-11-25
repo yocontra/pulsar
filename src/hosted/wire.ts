@@ -95,7 +95,47 @@ export const hostedWrite = z.union([
 ]);
 export type HostedWrite = z.infer<typeof hostedWrite>;
 
+export const hostedRequest = z.union([
+	hostedWrite,
+	z.strictObject({ action: z.literal("receipt"), nonce }),
+]);
+
 export type HostedWriteReceipt =
+	| { state: "not-found" }
 	| { state: "unknown" }
 	| { state: "rejected"; status: number }
 	| { state: "accepted"; id: string | null; runId?: string; url?: string };
+
+export const hostedDetailParams = z.strictObject({
+	provider: hostedProvider,
+	id: hostedId,
+	machine: z
+		.string()
+		.regex(/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,199}$/)
+		.optional(),
+});
+
+export const hostedTaskDetail = z.discriminatedUnion("state", [
+	z.object({
+		state: z.literal("ready"),
+		provider: hostedProvider,
+		id: hostedId,
+		machineId: z.string().min(1).max(200),
+		detail: z.discriminatedUnion("kind", [
+			z.object({ kind: z.literal("task"), task: hostedTask }),
+			z.object({
+				kind: z.literal("text"),
+				text: z.string().min(1).max(32_000),
+			}),
+		]),
+	}),
+	z.object({
+		state: z.literal("unavailable"),
+		provider: hostedProvider,
+		id: hostedId,
+		machineId: z.string().min(1).max(200),
+		reason: z.enum(["source-unreachable", "read-failed"]),
+	}),
+]);
+
+export type HostedTaskDetail = z.infer<typeof hostedTaskDetail>;

@@ -1,5 +1,24 @@
 import type { AgentRow, ReceiptState, Rollup, Wake } from "../api/types.ts";
 
+/** Session activity, or useful context when the harness has supplied none. */
+export function activityLine(
+	agent: Pick<
+		AgentRow,
+		"activity" | "branch" | "machine" | "needsYou" | "project" | "state"
+	>,
+	withPlace = false,
+): string {
+	if (agent.state === "needs-you" && agent.needsYou?.detail)
+		return agent.needsYou.detail;
+	if (agent.activity) return agent.activity;
+	const place =
+		withPlace && [agent.machine, agent.project].filter(Boolean).join(" · ");
+	if (place) return place;
+	if (agent.branch) return `On ${agent.branch}`;
+	if (agent.project) return `In ${agent.project}`;
+	return "Activity unavailable";
+}
+
 const nf = new Intl.NumberFormat();
 export const num = (n: number) => nf.format(n);
 

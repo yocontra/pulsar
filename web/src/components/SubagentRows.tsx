@@ -1,24 +1,19 @@
 import { ChevronRightIcon } from "lucide-react";
 import type { SubagentRow } from "../api/types.ts";
 import { useNow } from "../data/clock.ts";
-import { AgentAvatar, AgentMark } from "../ds/index.ts";
+import { AgentMark } from "../ds/index.ts";
 import { agentColor } from "../lib/agent-color.ts";
 import { fullDate } from "../lib/format.ts";
 import { navigate } from "../lib/router.ts";
 import {
 	STATE_WORD,
+	subagentRole,
 	subagentStateText,
 	toggleSubagents,
 } from "../lib/subagents.ts";
 import type { Row } from "./treeRows.ts";
 
-/**
- * The desktop sidebar's subagent rows: a disclosure under an agent that has
- * subagents ("2 running subagents"; finished ones only with the "Show
- * finished subagents" setting), and, when open, one indented row per
- * subagent (the agent row's shape, a smaller avatar). Clicking one opens
- * its transcript in the main pane.
- */
+/** Desktop subagent disclosure and its indented transcript links. */
 
 /** Left padding, as TreeDesktop's `indent` (kept here to avoid a cycle). */
 const indent = (depth: number) => 4 + depth * 18;
@@ -64,7 +59,7 @@ export function SubagentTreeRow({
 }) {
 	const now = useNow();
 	const s = row.sub;
-	const line = s.agentType ?? kindWord(s);
+	const line = subagentRole(s);
 	return (
 		<button
 			type="button"
@@ -75,11 +70,6 @@ export function SubagentTreeRow({
 			data-subagent={s.id}
 			onClick={() => navigate({ view: "subagent", id: s.id })}
 		>
-			<AgentAvatar
-				harness={s.harness}
-				size="xs"
-				status={s.state === "running" ? "busy" : undefined}
-			/>
 			<span className="d-lines">
 				<span className="d-line1">
 					<AgentMark color={agentColor(s)} />
@@ -90,7 +80,7 @@ export function SubagentTreeRow({
 						<SubagentStateWord sub={s} now={now} />
 					</span>
 				</span>
-				<span className="d-line2">{line}</span>
+				{line && <span className="d-line2">{line}</span>}
 			</span>
 		</button>
 	);

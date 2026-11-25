@@ -57,6 +57,85 @@ test.describe("git sheet", () => {
 		await mock(request, "realtime", { action: "restore" });
 	});
 
+	test("outside a repository the agent menu offers Files and hides Git", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=omp@apparish");
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		await page.getByRole("button", { name: "More", exact: true }).click();
+		await expect(
+			page.getByRole("menuitem", { name: "Files", exact: true }),
+		).toBeVisible();
+		await expect(
+			page.getByRole("menuitem", {
+				name: /^(Git$|Open Branch|Open Repository|Open Pull Request|Issue #)/,
+			}),
+		).toHaveCount(0);
+		await expect(page.locator(".g-phone-btn, .p-changes-btn")).toHaveCount(0);
+	});
+
+	test("Git opens only when an action is available, including under More", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(
+			request,
+			"name=codex@apparish branch=feat/billing",
+		);
+		let conflicted = 1;
+		let preservePr = false;
+		await page.route("**/git/status", async (route) => {
+			const response = await route.fetch();
+			await route.fulfill({
+				response,
+				json: {
+					...(await response.json()),
+					conflicted,
+					behind: 0,
+					ahead: 1,
+					...(!preservePr && { pr: null }),
+				},
+			});
+		});
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		await expect(page.getByRole("button", { name: /^Git: / })).toBeDisabled();
+		await page.setViewportSize({ width: 350, height: 844 });
+		const more = page.getByRole("button", { name: "More", exact: true });
+		await more.click();
+		const git = page.getByRole("menuitem", { name: "Git", exact: true });
+		await expect(git).toBeDisabled();
+		await git.click({ force: true });
+		await expect(page.getByRole("dialog", { name: "Git" })).toBeHidden();
+		conflicted = 0;
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.reload();
+		await expect(page.getByRole("button", { name: /^Git: / })).toBeEnabled();
+		await page.setViewportSize({ width: 350, height: 844 });
+		await more.click();
+		await expect(git).toBeEnabled();
+		await git.click();
+		const sheet = await sheetNamed(page, "Git");
+		await expect(
+			sheet.getByRole("button", { name: "Push", exact: true }),
+		).toBeEnabled();
+		preservePr = true;
+		conflicted = 1;
+		const withPr = await agentId(request, "name=apparish-auth");
+		await page.goto(`/#/a/${encodeURIComponent(withPr)}`);
+		await more.click();
+		await expect(git).toBeEnabled();
+		await git.click();
+		const prSheet = await sheetNamed(page, "Git");
+		await expect(
+			prSheet.getByRole("button", { name: "Commit", exact: true }).first(),
+		).toBeDisabled();
+		await expect(
+			prSheet.getByRole("button", { name: /PR #1402/ }),
+		).toBeEnabled();
+	});
+
 	test("overview → commit form → confirm → Prove Human → progress → done", async ({
 		page,
 		browserName,

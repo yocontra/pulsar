@@ -3,6 +3,7 @@ import {
 	HOSTED_PROVIDERS,
 	type HostedMachine,
 	type HostedObservation,
+	type HostedProvider,
 	type HostedReport,
 } from "./wire.ts";
 
@@ -11,50 +12,63 @@ const STALE_MS = 24 * 60 * 60_000;
 
 export class HostedCatalog {
 	private readonly last = new Map<string, HostedObservation>();
-	private latest: Promise<HostedObservation[]> | undefined;
-	private completedAt = 0;
-
+	private readonly cache = new Map<
+		HostedProvider,
+		{ expires: number; result: Promise<HostedObservation> }
+	>();
 	private readonly read: typeof readHosted;
-
 	constructor(read = readHosted) {
 		this.read = read;
 	}
 
-	observe(): Promise<HostedObservation[]> {
-		if (this.latest && Date.now() - this.completedAt < CACHE_MS)
-			return this.latest;
-		this.completedAt = Infinity;
-		this.latest = Promise.all(
-			HOSTED_PROVIDERS.map(async (provider): Promise<HostedObservation> => {
-				const previous = this.last.get(provider);
-				const result = await this.read(provider).catch(() => ({
-					state: "unavailable" as const,
-					detail: "read-failed" as const,
-				}));
+	invalidate(provider: HostedProvider) {
+		this.cache.delete(provider);
+	}
+
+	observe(fresh = false): Promise<HostedObservation[]> {
+		return Promise.all(
+			HOSTED_PROVIDERS.map((provider) => this.observeProvider(provider, fresh)),
+		);
+	}
+
+	private observeProvider(
+		provider: HostedProvider,
+		fresh: boolean,
+	): Promise<HostedObservation> {
+		const cached = this.cache.get(provider);
+		if (
+			cached &&
+			(cached.expires === Infinity || (!fresh && cached.expires > Date.now()))
+		)
+			return cached.result;
+		const result = this.read(provider)
+			.catch(() => ({
+				state: "unavailable" as const,
+				detail: "read-failed" as const,
+			}))
+			.then((read): HostedObservation => {
 				const now = Date.now();
-				if (result.state === "ready") {
-					const report = {
-						...result,
-						provider,
-						observedAt: now,
-						detail: null,
-					} as const;
-					this.last.set(provider, report);
+				// A write can invalidate this request while its provider is replying.
+				const current = this.cache.get(provider)?.result === result;
+				if (current)
+					this.cache.set(provider, { expires: now + CACHE_MS, result });
+				if (read.state === "ready") {
+					const report = { ...read, provider, observedAt: now, detail: null };
+					if (current) this.last.set(provider, report);
 					return report;
 				}
+				const previous = this.last.get(provider);
 				if (
-					result.detail === "read-failed" &&
+					read.detail === "read-failed" &&
 					previous?.observedAt &&
 					now - previous.observedAt < STALE_MS
 				)
-					return { ...previous, state: "stale", detail: result.detail };
-				this.last.delete(provider);
-				return { ...result, provider, tasks: [], observedAt: null };
-			}),
-		).finally(() => {
-			this.completedAt = Date.now();
-		});
-		return this.latest;
+					return { ...previous, state: "stale", detail: read.detail };
+				if (current) this.last.delete(provider);
+				return { ...read, provider, tasks: [], observedAt: null };
+			});
+		this.cache.set(provider, { expires: Infinity, result });
+		return result;
 	}
 }
 

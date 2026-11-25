@@ -14,6 +14,11 @@ import { gitInfoAsync } from "../git.ts";
 import { DRIVERS, driverFor } from "../harnesses/index.ts";
 import type { LocalAnswerCheck, PromptRef } from "../harnesses/types.ts";
 import { HostedCatalog, hostedReport } from "../hosted/catalog.ts";
+import {
+	unavailableHostedDetail,
+	viewHostedDetail,
+} from "../hosted/details.ts";
+import { hostedDetailParams } from "../hosted/wire.ts";
 import { HostedWrites } from "../hosted/writes.ts";
 import type {
 	AgentUsage,
@@ -484,7 +489,9 @@ export class PulsarService {
 			onAgent: (id) => this.interest.note(id),
 			...opts.launch,
 		});
-		const hostedWrites = new HostedWrites(this.store);
+		const hostedWrites = new HostedWrites(this.store, undefined, (provider) =>
+			this.hosted.invalidate(provider),
+		);
 		this.acting.register("hosted.write", ({ user, params }) =>
 			hostedWrites.run(user.login, params),
 		);
@@ -542,6 +549,10 @@ export class PulsarService {
 			},
 			{
 				...opts.changes,
+				store: this.store,
+				...(this.scan || opts.transcripts?.resolve
+					? { transcript: resolveTranscript }
+					: {}),
 				// An edit or a command shows in the transcript first: re-read then.
 				activity: (id, fn) => this.transcripts.subscribe(id, () => fn()),
 			},
@@ -637,11 +648,37 @@ export class PulsarService {
 		);
 	}
 
-	async hostedTasks(as: Principal) {
+	async hostedTask(
+		as: Principal,
+		provider: unknown,
+		id: unknown,
+		machine?: unknown,
+	) {
+		authorize(as, "hosted");
+		const parsed = hostedDetailParams.safeParse({ provider, id, machine });
+		if (!parsed.success)
+			throw new RpcError("bad_request", "Invalid hosted task or source");
+		const request = {
+			provider: parsed.data.provider,
+			id: parsed.data.id,
+			machineId: parsed.data.machine ?? this.machineId,
+		};
+		if (request.machineId === this.machineId) return viewHostedDetail(request);
+		return (
+			this.registry.pool?.hosted?.detail(
+				request.provider,
+				request.id,
+				request.machineId,
+				as,
+			) ?? unavailableHostedDetail(request, "source-unreachable")
+		);
+	}
+
+	async hostedTasks(as: Principal, fresh = false) {
 		authorize(as, "hosted");
 		const [providers, remote] = await Promise.all([
-			this.hosted.observe(),
-			this.registry.pool?.hosted?.observe(as) ?? [],
+			this.hosted.observe(fresh),
+			this.registry.pool?.hosted?.observe(as, fresh) ?? [],
 		]);
 		return hostedReport([
 			{
@@ -830,6 +867,10 @@ export class PulsarService {
 					});
 				}
 		jobs.every("sweep", INTERVALS.sweepMs, () => this.registry.sweep());
+		if (this.scan)
+			jobs.every("refresh:activity", INTERVALS.subagentsMs, () =>
+				this.registry.refreshActivity(),
+			);
 		// Token usage: new lines of the harnesses' session files. Never under
 		// a test runner unless a test asks (it would read the real HOME's
 		// session folders); PULSAR_USAGE_SCAN=0 turns it off.

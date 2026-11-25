@@ -26,7 +26,7 @@ import {
 } from "../lib/store.ts";
 import {
 	orderSubagents,
-	showFinished,
+	showInactive,
 	subagentsLabel,
 	subLists,
 	subOpen,
@@ -137,9 +137,9 @@ function subagentRows(rows: Row[], n: TreeNode, depth: number) {
 	const a = n.agent;
 	const counts = a?.subagents;
 	if (!a || !counts) return;
-	// Without "Show finished subagents", an agent with none running or idle
+	// Without "Show idle and finished subagents", an agent with none running
 	// shows no disclosure.
-	const show = showFinished.value;
+	const show = showInactive.value;
 	const label = subagentsLabel(counts, show);
 	if (!label) return;
 	const open = subOpen.value.has(a.id);
@@ -175,7 +175,7 @@ export function buildRows(mobile: boolean): Row[] {
 	mobileWalk = mobile;
 	// Read the version so observers re-render on tree changes. A bare
 	// `treeVersion.value;` statement is dropped by the minifier.
-	// The "Show finished subagents" signal is read in subagentRows, wherever
+	// The "Show idle and finished subagents" signal is read in subagentRows, wherever
 	// it changes the rows.
 	if (treeVersion.value < 0 || subVersion.value < 0) return [];
 	const rows: Row[] = [];

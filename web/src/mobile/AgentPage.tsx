@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentRow, Approval } from "../api/types.ts";
 import { focusPrompt, promptOnScreen } from "../approval/focus.ts";
 import { ChangesButton } from "../changes/ChangesButton.tsx";
+import { useChangesPeek } from "../changes/data.ts";
 import { gitOffered, showGit } from "../features/git/open.ts";
 import { openFind } from "../features/search/state.ts";
 import { shortModel } from "../lib/format.ts";
@@ -33,7 +34,7 @@ import { Slot } from "../lib/registry.tsx";
 import { route } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import { approvalItem, can, findAgent, showToast } from "../lib/store.ts";
-import { showFinished, subagentsLabel } from "../lib/subagents.ts";
+import { showInactive, subagentsLabel } from "../lib/subagents.ts";
 import SessionView from "../session/SessionView.tsx";
 import type { MessageAction } from "../session/Transcript.tsx";
 import { AgentBar, useUnderGlass } from "./AgentBar.tsx";
@@ -121,7 +122,7 @@ function useMessageMenu() {
 
 /**
  * The bar gives its title the room: at 400 px or less Find moves into More,
- * and at 360 px or less git does too (Changes and More always stay).
+ * and at 360 px or less git does too. Changes stays in the bar when available.
  */
 const NARROW_FIND = "(max-width: 400px)";
 const NARROW_GIT = "(max-width: 360px)";
@@ -156,12 +157,14 @@ const menuIcon = (I: LucideIcon) => <I className="size-5" aria-hidden="true" />;
 const MoreMenu = observer(function MoreMenu({ a }: { a: AgentRow | null }) {
 	const [open, setOpen] = useState(false);
 	const btn = useRef<HTMLIonButtonElement | null>(null);
+	const inRepo = !!useChangesPeek(a?.id ?? "").data?.available;
 	const gitInMore = useMedia(NARROW_GIT);
 	const findInMore = useMedia(NARROW_FIND);
 	const items: MenuItem[] = [];
 	if (a && gitInMore && gitOffered.value.has(a.id))
 		items.push({
 			label: "Git",
+			disabled: !gitOffered.value.get(a.id),
 			icon: menuIcon(GitBranchIcon),
 			onSelect: () => showGit(a.id),
 		});
@@ -173,7 +176,7 @@ const MoreMenu = observer(function MoreMenu({ a }: { a: AgentRow | null }) {
 			onSelect: () => openFind(a.id),
 		});
 	if (a)
-		for (const b of agentButtons(a))
+		for (const b of agentButtons(a, inRepo))
 			items.push({
 				label: b.text,
 				icon: menuIcon(ACTION_ICON[b.kind]),
@@ -270,7 +273,7 @@ function AgentPageImpl({ id }: { id: string }) {
 				}
 				below={
 					<>
-						{subagentsLabel(a?.subagents, showFinished.value) && (
+						{subagentsLabel(a?.subagents, showInactive.value) && (
 							<SubagentsSection agentId={id} />
 						)}
 						{banner}

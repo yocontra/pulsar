@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.1 - 2026-11-25
+
+- Running Antigravity sessions show their harness and transcripts. OMP sessions use the active log for activity and usage. Local model inference shows a zero cost.
+- Select a session estimate on desktop to see the dates, models, response counts, and estimated cost for each model. Pi and OMP track model changes across turns.
+- The file viewer supports keyboard navigation, text search, and line navigation. Changes remains accessible for edited sessions, and Git controls follow the actions available in the repository.
+- Subagent lists honor the idle filter and show each name and color once. Short chats fill the viewport and toasts overlay the page.
+- Search hosted tasks, filter by provider, and read task details from a selected machine. The app shows which sources are offline or stale.
+
 ## 2.1.0 - 2026-11-24
 
 - Start managed coding sessions with `pulsar acp <provider>`. Run `pulsar acp --list` to see which executables are installed. Managed sessions can stream replies, relay permission requests, and expose modes, commands, and resume when the provider supports them. See the [provider guide](docs/acp.md) for live test results.

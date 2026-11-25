@@ -330,6 +330,8 @@ export type TranscriptSource =
 			kind: "poll";
 			intervalMs?: number;
 			fetch(cursor: string | null): Promise<TranscriptPage>;
+			/** An optional live read. Null means the source has not changed. */
+			poll?(): Promise<TranscriptPage | null>;
 	  };
 
 /** What a harness driver adds to support live transcripts. */

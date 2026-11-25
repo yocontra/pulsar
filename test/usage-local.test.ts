@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { openFilesSource } from "../src/harnesses/pi-sessions.ts";
 import { Store } from "../src/store.ts";
+import type { Agent } from "../src/types.ts";
 import { Usage } from "../src/usage/index.ts";
 import {
 	isLocalProvider,
@@ -282,6 +284,67 @@ describe("scanner", () => {
 		expect(cost("gemma4:12b[local]")).toBe(0);
 		expect(cost("glm-5.3-flash:cloud")).toBeNull();
 		expect(cost("deepseek-v4.1-flash")).toBeGreaterThan(0);
+	});
+
+	test("OMP PID registrations price the exact native session at $0", async () => {
+		const file = join(dir, ".omp", "agent", "sessions", "-work", "1_a.jsonl");
+		write(file, [piLine("splash", "local/heretic-pure", T, "a1")]);
+		write(join(dir, ".omp", "agent", "sessions", "-work", "2_previous.jsonl"), [
+			piLine("opencode-go", "deepseek-v4.1-flash", T, "previous1"),
+		]);
+		writeFileSync(join(dir, ".omp", "agent", "models.yml"), OMP_YAML);
+		const native = new Usage(store, {
+			roots: () => ({
+				...rootsIn(dir),
+				omp: join(dir, ".omp", "agent", "sessions"),
+			}),
+		});
+		await native.scanner.scan();
+		const agent = {
+			harness: "omp",
+			sessionId: null,
+			pid: 567890,
+			status: "idle",
+			cwd: "/work",
+		} as Agent;
+		const previousFiles = openFilesSource.fn;
+		const previousHome = process.env.HOME;
+		process.env.HOME = dir;
+		openFilesSource.fn = async (pid) => (pid === agent.pid ? [file] : []);
+		try {
+			for (const registration of [
+				agent,
+				{ ...agent, meta: { resumeKey: "omp:a" } },
+				{ ...agent, meta: { resumeKey: "omp:missing" } },
+				{ ...agent, meta: { resumeKey: "omp:previous" } },
+			]) {
+				const priced = native.priceAgent(
+					"omp:pid",
+					await native.localAgent(registration),
+				);
+				expect(priced.cost).toBe(0);
+				expect(priced.costSources).toEqual(["local"]);
+				expect(priced.tokens.records).toBe(1);
+			}
+			const previous = await native.localAgent({
+				...agent,
+				pid: null,
+				meta: { resumeKey: "omp:previous" },
+			});
+			expect(native.priceAgent("omp:previous", previous).cost).toBeGreaterThan(
+				0,
+			);
+			for (const registration of [
+				{ ...agent, pid: null },
+				{ ...agent, status: "gone" as const },
+			]) {
+				expect((await native.localAgent(registration)).tokens.records).toBe(0);
+			}
+		} finally {
+			openFilesSource.fn = previousFiles;
+			if (previousHome === undefined) delete process.env.HOME;
+			else process.env.HOME = previousHome;
+		}
 	});
 
 	test("Codex: the session's model_provider", async () => {

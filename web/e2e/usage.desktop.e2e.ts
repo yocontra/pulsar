@@ -201,6 +201,67 @@ test.describe("usage page", () => {
 		);
 	});
 
+	test("the session header shows a $0 local inference cost", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=codex@apparish");
+		await page.route(/\/api\/v1\/agents\/[^/]+\/usage$/, async (route) => {
+			const response = await route.fetch();
+			await route.fulfill({
+				response,
+				json: {
+					...(await response.json()),
+					cost: 0,
+					costSources: ["local"],
+					tokenSources: ["local"],
+				},
+			});
+		});
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		await expect(page.locator(".d-session-head .usage-agent")).toContainText(
+			"$0 · Local inference",
+		);
+	});
+
+	test("session estimate separates models across a resumed conversation", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=codex@apparish");
+		await page.route(/\/api\/v1\/agents\/[^/]+\/usage$/, async (route) => {
+			const original = await route.fetch();
+			await route.fulfill({
+				response: original,
+				json: {
+					...(await original.json()),
+					cost: 12,
+					costSources: ["estimated"],
+					period: {
+						firstHour: Date.UTC(2026, 10, 9, 18),
+						lastHour: Date.UTC(2026, 10, 23, 18),
+					},
+					byModel: [
+						{ model: "claude-fable-5-2", cost: 8, records: 1 },
+						{ model: "claude-opus-5-5", cost: 4, records: 1 },
+					],
+				},
+			});
+		});
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		await page.getByRole("button", { name: /\$12.00.*estimate/i }).click();
+		const detail = page.getByRole("dialog", { name: "Session usage by model" });
+		await expect(
+			detail.getByRole("row", { name: /claude-fable-5-2/ }),
+		).toContainText("$8.00");
+		await expect(
+			detail.getByRole("row", { name: /claude-opus-5-5/ }),
+		).toContainText("$4.00");
+		await expect(detail).toContainText("subagent");
+		await page.keyboard.press("Escape");
+		await expect(detail).toHaveCount(0);
+	});
+
 	test("the session header shows context and cost", async ({
 		page,
 		request,

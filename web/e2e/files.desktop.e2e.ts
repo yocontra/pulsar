@@ -1,6 +1,7 @@
 import {
 	copies,
 	expectCopyOutside,
+	expectFileKeys,
 	expectRefs,
 	fileUrl,
 	openGallery,
@@ -15,6 +16,35 @@ import { contrastFailures } from "./ui-audit.ts";
 test.describe("file viewer", () => {
 	test.beforeEach(async ({ page }) => {
 		await recordCopies(page);
+	});
+
+	test("keyboard controls find text and move between source lines", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "fixture=blocks");
+		await page.goto(
+			`/#/file/${encodeURIComponent(id)}?path=src%2Fauth%2Frefresh.ts&line=7`,
+		);
+		const view = page.getByRole("main", { name: "Files" });
+		await expectFileKeys(view);
+		const tree = view.getByRole("list", { name: "Folder tree" });
+		const refresh = tree.getByRole("button", { name: "refresh.ts" });
+		const auth = tree.getByRole("button", { name: "auth", exact: true });
+		await refresh.focus();
+		await refresh.press("ArrowLeft");
+		await expect(auth).toBeFocused();
+		await auth.press("ArrowLeft");
+		await expect(auth).toHaveAttribute("aria-expanded", "false");
+		await auth.press("ArrowRight");
+		await expect(refresh).toBeVisible();
+		await auth.press("ArrowRight");
+		await expect(refresh).toBeFocused();
+		await refresh.press("ArrowDown");
+		const session = tree.getByRole("button", { name: "session.ts" });
+		await expect(session).toBeFocused();
+		await session.press("Enter");
+		await expect(page).toHaveURL(fileUrl(id, "src/auth/session.ts"));
 	});
 
 	test("file references in a transcript: open inside, copy outside", async ({

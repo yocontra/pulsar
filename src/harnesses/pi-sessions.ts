@@ -54,18 +54,7 @@ const openByPid = new Map<
 >();
 const PID_CACHE_MS = 5000;
 
-/**
- * The session file a running pi or omp process has open:
- * `~/<dir>/agent/sessions/<folder>/<file>.jsonl` (a file one level deeper
- * is a subagent's). Exact for a live session with no session id.
- */
-export async function openSessionFile(
-	dir: string,
-	pid: number,
-	home = homedir(),
-	openFiles: OpenFiles = openFilesSource.fn,
-): Promise<string | null> {
-	const root = join(home, dir, "agent", "sessions");
+function cachedOpenFiles(pid: number, openFiles: OpenFiles): Promise<string[]> {
 	let hit = openByPid.get(pid);
 	if (!hit || Date.now() - hit.at >= PID_CACHE_MS || hit.list !== openFiles) {
 		if (openByPid.size > 1000) openByPid.clear();
@@ -76,10 +65,26 @@ export async function openSessionFile(
 		};
 		openByPid.set(pid, hit);
 	}
+	return hit.files;
+}
+
+function primarySessionFile(path: string, root: string) {
+	// A file one level deeper belongs to a subagent.
+	return path.endsWith(".jsonl") && dirname(dirname(path)) === root;
+}
+
+/** The most recently updated primary session file open in a pi or omp process. */
+export async function openSessionFile(
+	dir: string,
+	pid: number,
+	home = homedir(),
+	openFiles: OpenFiles = openFilesSource.fn,
+): Promise<string | null> {
+	const root = join(home, dir, "agent", "sessions");
 	let file: string | null = null;
 	let newest = -1;
-	for (const path of await hit.files) {
-		if (!path.endsWith(".jsonl") || dirname(dirname(path)) !== root) continue;
+	for (const path of await cachedOpenFiles(pid, openFiles)) {
+		if (!primarySessionFile(path, root)) continue;
 		const t = (await stat(path).catch(() => null))?.mtimeMs ?? -1;
 		if (t > newest) {
 			newest = t;
@@ -193,17 +198,19 @@ const PI_STYLE = { pi: ".pi", omp: ".omp" } as const;
 /**
  * A pi-style agent's transcript, in this harness's folder or the other
  * pi-style one (an omp session an older extension registered as pi):
- * 1. with a host session id, that session's file;
- * 2. else the session file its process has open (exact while it runs);
- * 3. else the newest file for its cwd (a guess).
+ * Use the sole primary log held by a PID-keyed process before consulting its
+ * resume key. With a durable session ID, look up that ID first. Legacy
+ * transcript callers can fall back to the latest file in the working folder.
  */
 export async function locatePiStyle(
 	harness: keyof typeof PI_STYLE,
 	agent: SessionRef,
 	home = process.env.HOME || homedir(),
 	openFiles: OpenFiles = openFilesSource.fn,
+	exactOnly = false,
 ): Promise<TranscriptSource | null> {
 	const other = harness === "pi" ? "omp" : "pi";
+	const harnesses = [harness, other] as const;
 	const source = (
 		h: keyof typeof PI_STYLE,
 		path: string,
@@ -215,14 +222,36 @@ export async function locatePiStyle(
 		...(guess ? { guess: true } : {}),
 	});
 	const id = hostSessionId(agent);
+	if (!agent.sessionId && agent.pid) {
+		// Extension resume keys can survive a switch. A sole held primary log
+		// identifies the current conversation of a PID-keyed agent directly.
+		const paths = new Set(await cachedOpenFiles(agent.pid, openFiles));
+		const held = harnesses.flatMap((h) => {
+			const root = join(home, PI_STYLE[h], "agent", "sessions");
+			return [...paths]
+				.filter((path) => primarySessionFile(path, root))
+				.map((path) => ({ h, path }));
+		});
+		if (held.length > 0) {
+			const exact =
+				held.length === 1
+					? held
+					: held.filter(({ path }) => id && path.endsWith(`_${id}.jsonl`));
+			const match = exact.length === 1 ? exact[0] : undefined;
+			if (match && (await isFile(match.path)))
+				return source(match.h, match.path);
+			if (exactOnly) return null;
+		}
+	}
 	if (id) {
-		for (const h of [harness, other] as const) {
+		for (const h of harnesses) {
 			const file = await piSessionFileById(PI_STYLE[h], agent.cwd, id, home);
 			if (file) return source(h, file);
 		}
 	}
+	if (exactOnly) return null;
 	if (agent.pid) {
-		for (const h of [harness, other] as const) {
+		for (const h of harnesses) {
 			const file = await openSessionFile(
 				PI_STYLE[h],
 				agent.pid,

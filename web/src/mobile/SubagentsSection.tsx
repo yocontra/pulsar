@@ -3,13 +3,14 @@ import { useState } from "react";
 import { subagentStateText } from "../components/SubagentRows.tsx";
 import { useNow } from "../data/clock.ts";
 import { useSubagents } from "../data/index.ts";
-import { AgentAvatar, AgentMark } from "../ds/index.ts";
+import { AgentMark } from "../ds/index.ts";
 import { agentColor } from "../lib/agent-color.ts";
 import { navigate } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import {
 	orderSubagents,
-	showFinished,
+	showInactive,
+	subagentRole,
 	subagentsLabel,
 	visibleSubagents,
 } from "../lib/subagents.ts";
@@ -18,13 +19,13 @@ import { IonToolbar } from "./ionic.ts";
 /**
  * The phone agent page's Subagents section: collapsed to a count line by
  * default (the conversation stays first); open, one row per subagent.
- * Finished ones are listed only with "Show finished subagents" (Settings).
+ * Finished ones are listed only with "Show idle and finished subagents" (Settings).
  * Tapping one pushes its page.
  */
 function SubagentsSectionImpl({ agentId }: { agentId: string }) {
 	const [open, setOpen] = useState(false);
 	const now = useNow();
-	const show = showFinished.value;
+	const show = showInactive.value;
 	const list = useSubagents(agentId).data;
 	const rows = list ? orderSubagents(visibleSubagents(list.items, show)) : [];
 	if (list && rows.length === 0) return null;
@@ -71,18 +72,13 @@ function SubagentsSectionImpl({ agentId }: { agentId: string }) {
 								data-subagent={sub.id}
 								onClick={() => navigate({ view: "subagent", id: sub.id })}
 							>
-								<AgentAvatar
-									harness={sub.harness}
-									size="sm"
-									status={sub.state === "running" ? "busy" : undefined}
-								/>
 								<span className="p-sa-lines">
 									<span className="p-sa-name">
 										<AgentMark color={agentColor(sub)} />
 										{sub.name}
 									</span>
 									<span className="p-sa-line">
-										{[subagentStateText(sub, now), sub.agentType]
+										{[subagentStateText(sub, now), subagentRole(sub)]
 											.filter(Boolean)
 											.join(" · ")}
 									</span>

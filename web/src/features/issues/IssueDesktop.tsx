@@ -6,6 +6,7 @@ import { CircleDotIcon } from "lucide-react";
 import { Popover } from "radix-ui";
 import { useState } from "react";
 import type { AgentRow } from "../../api/types.ts";
+import { useChangesPeek } from "../../changes/data.ts";
 import { observer } from "../../lib/signals.ts";
 import { IssueCard, useAsked } from "./IssueCard.tsx";
 import "./issues.css";
@@ -15,6 +16,7 @@ type Props = { agent: AgentRow; mobile: boolean; number: string };
 function IssueDesktop({ agent, number }: Props) {
 	const [open, setOpen] = useState(false);
 	useAsked(agent.id, () => setOpen(true));
+	if (!useChangesPeek(agent.id).data?.available) return null;
 	return (
 		<Popover.Root open={open} onOpenChange={setOpen}>
 			<Popover.Trigger asChild>

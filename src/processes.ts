@@ -111,14 +111,17 @@ export function pidAlive(pid: number): boolean {
  * Together with the pid it names one process: pids are reused, start times
  * are not.
  */
-export async function processStart(pid: number): Promise<string | null> {
+export async function processStart(
+	pid: number,
+	lane: Lane = "user",
+): Promise<string | null> {
 	// A fixed zone and locale: lstart is printed in both, and every caller
 	// (a daemon, a client, a shell with its own TZ) must read the same text.
 	// Generous: it runs before the daemon serves, and a timeout reads as
 	// "unknown" (a live lock holder is then trusted by its pid alone).
 	const r = await exec("ps", ["-o", "lstart=", "-p", String(pid)], {
 		timeoutMs: 5000,
-		lane: "user",
+		lane,
 		env: {
 			PATH: process.env.PATH ?? "/usr/bin:/bin",
 			TZ: "UTC",

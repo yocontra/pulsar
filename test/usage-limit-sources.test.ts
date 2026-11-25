@@ -4,7 +4,13 @@
  * OpenCode's database. All samples are synthetic.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -424,8 +430,11 @@ describe("the scanner", () => {
 
 	test("a newer /usage replaces the reading", async () => {
 		writeClaude(claudeState({ fetchedAt: NOW - 30 * MIN, week: 50 }));
+		const path = join(dir, "claude", ".claude.json");
+		utimesSync(path, 100, 100);
 		await usage.scanner.scan(NOW);
 		writeClaude(claudeState({ fetchedAt: NOW - 10 * MIN, week: 60 }));
+		utimesSync(path, 101, 101);
 		await usage.scanner.scan(NOW + MIN);
 		const [l] = usage.limits.local(NOW);
 		expect(l?.usedPercent).toBe(60);

@@ -2,6 +2,8 @@
 
 Open **Hosted agents** from the Agents header. Pulsar reads up to 20 recent tasks per provider from each connected machine. It combines rows with the same provider and task ID. When a machine disconnects or a provider read fails, Pulsar can show its last observation with the corresponding status.
 
+Search tasks by title, ID, or repository, or filter the list by provider. Open a task to read details from a selected machine. **Refresh** requests a new list from reachable machines. Each source shows when it was last checked.
+
 Set up provider access on the Pulsar machine that will make the requests:
 
 | Provider | Access | Hosted actions |
@@ -10,7 +12,9 @@ Set up provider access on the Pulsar machine that will make the requests:
 | Codex Cloud | Sign in with `codex login` using an account with Codex Cloud access. | List, view, start in a configured cloud environment on an explicit branch. |
 | Cursor Cloud | Set `CURSOR_API_KEY` in the Pulsar daemon environment for the machine that will call Cursor. Use an API key with Cloud Agents access. | List, view, start on a GitHub repository and branch, send a follow-up to an idle agent. |
 
-Each machine uses its own provider credentials. The pool exchanges task summaries and request receipts. The selected machine verifies your passkey before it submits a task or follow-up. The prompt goes to the selected provider.
+For a Cursor follow-up, load details from the machine you want to use. The follow-up form appears when that source reports the agent is idle.
+
+Each machine uses its own provider credentials. The pool exchanges task summaries, requested task details, and request receipts. The selected machine verifies your passkey before it submits a task or follow-up. The prompt goes to the selected provider.
 
 For local reads, run:
 

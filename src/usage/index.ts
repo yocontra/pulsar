@@ -1,3 +1,5 @@
+import { basename } from "node:path";
+import { locatePiStyle } from "../harnesses/pi-sessions.ts";
 import type {
 	AgentUsage,
 	LimitState,
@@ -27,6 +29,7 @@ import {
 	priceTable,
 } from "./prices.ts";
 import { type ScanTuning, type UsageRoots, UsageScanner } from "./scan.ts";
+import { usageSources } from "./sources.ts";
 
 export const USAGE_PERIODS: readonly UsagePeriod[] = [
 	"24h",
@@ -58,6 +61,7 @@ export interface LocalUsage {
 
 /** One agent's usage on its home node, unpriced (`act: usage.agent`). */
 export interface LocalAgentUsage {
+	period?: AgentUsage["period"];
 	tokens: UsageTokens;
 	/** Tokens per model, so the asking node prices them. */
 	models: (UsageTokens & { model: string })[];
@@ -164,6 +168,19 @@ export function cleanAgentUsage(v: unknown): LocalAgentUsage {
 	const c = o.context as LocalAgentUsage["context"] | undefined;
 	const cost = o.reportedCost;
 	return {
+		...(o.period &&
+		Number.isSafeInteger(o.period.firstHour) &&
+		Number.isSafeInteger(o.period.lastHour) &&
+		o.period.firstHour >= 0 &&
+		o.period.lastHour >= o.period.firstHour &&
+		o.period.lastHour <= 8.64e15
+			? {
+					period: {
+						firstHour: o.period.firstHour,
+						lastHour: o.period.lastHour,
+					},
+				}
+			: {}),
 		tokens: cleanTokens(o.tokens),
 		models: Array.isArray(o.models)
 			? o.models
@@ -353,9 +370,8 @@ WHERE hour >= ? GROUP BY harness`,
 			context: null,
 			model: null,
 		};
-		if (!agent.sessionId) return none;
 		const acp =
-			agent.meta?.acp === "1"
+			agent.meta?.acp === "1" && agent.sessionId
 				? await loadAcpUsage({
 						harness: agent.harness,
 						sessionId: agent.sessionId,
@@ -366,16 +382,36 @@ WHERE hour >= ? GROUP BY harness`,
 			...(acp?.cost ? { reportedCost: acp.cost } : {}),
 		};
 		if (!USAGE_HARNESSES.has(agent.harness)) return { ...none, ...acpFields };
-		const models = (
-			this.store.db
-				.prepare(
-					`SELECT model, SUM(input) AS input, SUM(cache_read) AS cache_read,
+		let sessionId = agent.sessionId;
+		let harness = agent.harness;
+		if (
+			!sessionId &&
+			agent.meta?.acp !== "1" &&
+			(agent.harness === "pi" || agent.harness === "omp")
+		) {
+			const source = await locatePiStyle(
+				agent.harness,
+				agent.status === "gone" ? { ...agent, pid: null } : agent,
+				undefined,
+				undefined,
+				true,
+			);
+			if (source?.kind === "file") {
+				const native = source.headerLine ? "omp" : "pi";
+				harness = native;
+				sessionId = usageSources[native].session(basename(source.path));
+			}
+		}
+		if (!sessionId) return none;
+		const rows = this.store.db
+			.prepare(
+				`SELECT model, MIN(hour) AS firstHour, MAX(hour) AS lastHour, SUM(input) AS input, SUM(cache_read) AS cache_read,
 	SUM(cache_write_5m) AS cache_write_5m, SUM(cache_write_1h) AS cache_write_1h,
 	SUM(output) AS output, SUM(records) AS records
 FROM usage_hourly WHERE harness = ? AND session = ? GROUP BY model`,
-				)
-				.all(agent.harness, agent.sessionId) as Row[]
-		).map((r) => ({ ...tokens(r), model: String(r.model) }));
+			)
+			.all(harness, sessionId) as Row[];
+		const models = rows.map((r) => ({ ...tokens(r), model: String(r.model) }));
 		// The session's own file (not a subagent's): the newest line read.
 		const file = this.store.db
 			.prepare(
@@ -383,8 +419,16 @@ FROM usage_hourly WHERE harness = ? AND session = ? GROUP BY model`,
 WHERE harness = ? AND session = ? AND context_used IS NOT NULL
 ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 			)
-			.get(agent.harness, agent.sessionId, agent.sessionId) as Row | undefined;
+			.get(harness, sessionId, sessionId) as Row | undefined;
 		return {
+			...(rows.length
+				? {
+						period: {
+							firstHour: Math.min(...rows.map((r) => Number(r.firstHour))),
+							lastHour: Math.max(...rows.map((r) => Number(r.lastHour))),
+						},
+					}
+				: {}),
 			tokens: models.reduce<UsageTokens>(addTokens, ZERO),
 			models,
 			context: file
@@ -488,10 +532,12 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 	priceAgent(address: string, u: LocalAgentUsage): AgentUsage {
 		const price = this.pricer();
 		let cost = 0;
+		const byModel: NonNullable<AgentUsage["byModel"]> = [];
 		const tokenSources = new Set<UsageTokenSource>();
 		const costSources = new Set<UsageCostSource>();
 		for (const m of u.models) {
 			const c = price(m.model, m);
+			byModel.push({ model: m.model, cost: c, records: m.records });
 			const local = isLocalModel(m.model);
 			tokenSources.add(local ? "local" : "reported");
 			costSources.add(
@@ -502,13 +548,25 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 		if (!tokenSources.size)
 			tokenSources.add(u.tokens.records > 0 ? "reported" : "unavailable");
 		if (!costSources.size) costSources.add("unavailable");
-		if (u.reportedCost && !costSources.has("local")) {
-			cost = u.reportedCost.amount;
+		const reported =
+			u.reportedCost && !costSources.has("local") ? u.reportedCost : null;
+		if (reported) {
+			cost = reported.amount;
 			costSources.clear();
-			costSources.add(u.reportedCost.source);
+			costSources.add(reported.source);
 		}
 		return {
 			agent: address,
+			...(u.period ? { period: u.period } : {}),
+			...(!reported && byModel.length
+				? {
+						byModel: byModel.sort(
+							(a, b) =>
+								(b.cost ?? -1) - (a.cost ?? -1) ||
+								a.model.localeCompare(b.model),
+						),
+					}
+				: {}),
 			tokens: u.tokens,
 			cost: costSources.has("unavailable") ? null : cost,
 			tokenSources: [...tokenSources],

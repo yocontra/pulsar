@@ -5,9 +5,16 @@
  * ⌘\ toggles it. Open state and width persist per device.
  */
 import { FileDiffIcon } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { observer } from "../lib/signals.ts";
-import { useChangesPeek } from "./data.ts";
+import { canOpenChanges, canShowChanges, useChangesPeek } from "./data.ts";
 import {
 	changesOpen,
 	isToggleKey,
@@ -19,7 +26,6 @@ import {
 	SHORTCUT_LABEL,
 	setChangesOpen,
 	setPanelWidth,
-	toggleChanges,
 } from "./panel-state.ts";
 import "./changes.css";
 
@@ -89,32 +95,52 @@ function ResizerImpl() {
 }
 const Resizer = observer(ResizerImpl);
 
+export function useChangesPanel(id: string, force: boolean) {
+	const peek = useChangesPeek(id).data;
+	const available = canOpenChanges(peek);
+	const normal = canShowChanges(peek) || force;
+	const [manual, setManual] = useState<string | null>(null);
+	const open = (normal && changesOpen.value) || (available && manual === id);
+	useEffect(() => setManual(null), [id]);
+	useEffect(() => {
+		if (force) setChangesOpen(true, false);
+	}, [force]);
+	const setOpen = useCallback(
+		(next: boolean) => {
+			setManual(!normal && next ? id : null);
+			if (normal) setChangesOpen(next);
+		},
+		[id, normal],
+	);
+	return { available, open, count: peek?.available ? peek.total : 0, setOpen };
+}
+
 function ChangesSplitImpl({
 	id,
-	open: force,
+	open,
+	canToggle,
+	setOpen,
 	file,
 	children,
 }: {
 	id: string;
-	/** The route asks for the panel (`#/changes/<id>`). */
-	open?: boolean;
+	open: boolean;
+	canToggle: boolean;
+	setOpen: (open: boolean) => void;
 	/** The file the route names. */
 	file?: string | null;
 	children: React.ReactNode;
 }) {
 	useEffect(() => {
-		if (force) setChangesOpen(true, false);
-	}, [force]);
-	useEffect(() => {
+		if (!canToggle) return;
 		const onKey = (e: KeyboardEvent) => {
 			if (!isToggleKey(e)) return;
 			e.preventDefault();
-			toggleChanges();
+			setOpen(!open);
 		};
 		addEventListener("keydown", onKey);
 		return () => removeEventListener("keydown", onKey);
-	}, []);
-	const open = changesOpen.value;
+	}, [canToggle, open, setOpen]);
 	return (
 		<div
 			className={`cv-split${open ? " open" : ""}`}
@@ -136,7 +162,7 @@ function ChangesSplitImpl({
 						<ChangesPanel
 							id={id}
 							file={file ?? null}
-							onClose={() => setChangesOpen(false)}
+							onClose={() => setOpen(false)}
 						/>
 					</Suspense>
 				</>
@@ -147,10 +173,15 @@ function ChangesSplitImpl({
 export const ChangesSplit = observer(ChangesSplitImpl);
 
 /** The session header's toggle, with the number of changed files. */
-function ChangesToggleImpl({ id }: { id: string }) {
-	const peek = useChangesPeek(id).data;
-	const open = changesOpen.value;
-	const n = peek?.available ? peek.total : 0;
+export function ChangesToggle({
+	open,
+	count: n,
+	setOpen,
+}: {
+	open: boolean;
+	count: number;
+	setOpen: (open: boolean) => void;
+}) {
 	return (
 		<button
 			type="button"
@@ -158,7 +189,7 @@ function ChangesToggleImpl({ id }: { id: string }) {
 			aria-pressed={open}
 			aria-keyshortcuts="Meta+Backslash Control+Backslash"
 			title={`${open ? "Hide" : "Show"} changes (${SHORTCUT_LABEL})`}
-			onClick={toggleChanges}
+			onClick={() => setOpen(!open)}
 		>
 			<FileDiffIcon aria-hidden="true" />
 			<span className="d-btn-label">Changes</span>
@@ -175,4 +206,3 @@ function ChangesToggleImpl({ id }: { id: string }) {
 		</button>
 	);
 }
-export const ChangesToggle = observer(ChangesToggleImpl);

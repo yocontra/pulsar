@@ -7,10 +7,10 @@ import { agentId, expect, ready, test } from "./fixtures.ts";
  * The sidebar shows them collapsed under the agent; opening one shows its
  * transcript with a breadcrumb back, and the composer says where a message
  * goes (Claude Code subagents can't take messages: the parent, naming it).
- * Finished ones are listed only with "Show finished subagents" (Settings).
+ * Finished ones are listed only with "Show idle and finished subagents" (Settings).
  */
 
-/** Starts with "Show finished subagents" on (this device's setting). */
+/** Starts with "Show idle and finished subagents" on (this device's setting). */
 const showFinished = (page: Page) =>
 	page.addInitScript(() =>
 		localStorage.setItem("pulsar.showFinishedSubagents", "1"),
@@ -31,21 +31,20 @@ test.describe("subagents (desktop)", () => {
 		const auth = await agentId(request, "name=apparish-auth");
 		await openApparish(page);
 		const toggle = page.locator(`[data-subs="${auth}"]`);
-		// Running and idle ones only: the finished task and its nested one hide.
-		await expect(toggle).toHaveText("2 subagents · 1 running");
+		// Only the running task appears while the setting is off.
+		await expect(toggle).toHaveText("1 running subagent");
 		await toggle.click();
 		const rows = page.locator(".tree [data-subagent]");
-		await expect(rows).toHaveCount(2);
+		await expect(rows).toHaveCount(1);
 		await expect(rows.locator(".d-name")).toHaveText([
 			"Find other refresh callers",
-			"reviewer",
 		]);
 
-		// Settings: turn "Show finished subagents" on.
+		// Settings: turn "Show idle and finished subagents" on.
 		await page.getByRole("button", { name: "Settings", exact: true }).click();
 		const settings = page.getByRole("dialog", { name: "Settings" });
 		const sw = settings.getByRole("switch", {
-			name: "Show finished subagents",
+			name: "Show idle and finished subagents",
 		});
 		await expect(sw).not.toBeChecked();
 		await sw.click();
@@ -68,11 +67,11 @@ test.describe("subagents (desktop)", () => {
 		await page.getByRole("button", { name: "Settings", exact: true }).click();
 		await page
 			.getByRole("dialog", { name: "Settings" })
-			.getByRole("switch", { name: "Show finished subagents" })
+			.getByRole("switch", { name: "Show idle and finished subagents" })
 			.click();
 		await page.keyboard.press("Escape");
 		await expect(page.locator(`[data-subs="${auth}"]`)).toHaveText(
-			"2 subagents · 1 running",
+			"1 running subagent",
 		);
 	});
 
@@ -86,14 +85,14 @@ test.describe("subagents (desktop)", () => {
 		await openApparish(page);
 		// The live ones of another agent still show, so the tree has rendered.
 		await expect(page.locator(`[data-subs="${auth}"]`)).toHaveText(
-			"2 subagents · 1 running",
+			"1 running subagent",
 		);
 		await expect(page.locator(`[data-subs="${lead}"]`)).toHaveCount(0);
 		await expect(
 			page.locator(".tree [data-subagent]", { hasText: "stopped-mate" }),
 		).toHaveCount(0);
 
-		// "Show finished subagents" lists them, dimmed.
+		// "Show idle and finished subagents" lists them, dimmed.
 		await showFinished(page);
 		await page.reload();
 		await openApparish(page);

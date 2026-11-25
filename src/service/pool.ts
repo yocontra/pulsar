@@ -161,7 +161,7 @@ export interface PoolView extends ActingRelay {
 	readonly queue?: RemoteQueue;
 	/** Token usage of other machines and their agents (absent before usage existed). */
 	readonly usage?: PoolUsage;
-	readonly hosted?: Pick<RemoteHosted, "observe">;
+	readonly hosted?: Pick<RemoteHosted, "observe" | "detail">;
 	/** Other machines' doctor reports (absent before Diagnostics existed). */
 	readonly diagnostics?: PoolDiagnostics;
 	/**

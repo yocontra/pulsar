@@ -524,13 +524,11 @@ function ComposerImpl({
 							? `${target.agent.name} on ${target.agent.machine}`
 							: target.label}
 					</span>
-					{agentWake && (
+					{agentWake && agentWake !== "wakes" && (
 						<span className={`wake-note w-${agentWake}`}>
-							{agentWake === "wakes"
-								? "Wakes it if idle"
-								: agentWake === "queued"
-									? `Waits: ${target.kind === "agent" ? target.agent.machine : ""} is offline`
-									: `Won't wake it (${WAKE_LABEL[agentWake]})`}
+							{agentWake === "queued"
+								? `Waits: ${target.kind === "agent" ? target.agent.machine : ""} is offline`
+								: `Won't wake it (${WAKE_LABEL[agentWake]})`}
 						</span>
 					)}
 				</div>

@@ -2,11 +2,17 @@ import { readChanges, readFileDiff } from "../changes/read.ts";
 import type { Lane } from "../exec.ts";
 import type { ChangesMode, ChangesSummary, FileDiff } from "../http/wire.ts";
 import { RpcError } from "../rpc.ts";
+import type { Store } from "../store.ts";
+import type { ResolvedTranscript } from "../transcripts/tailer.ts";
 import type { Agent } from "../types.ts";
 import type { Principal } from "./caller.ts";
+import { hasHistoricalEdits } from "./changes-history.ts";
 import type { RemoteChanges } from "./pool.ts";
 
+const HISTORY_RETRY_MS = 60_000;
+
 export interface ChangesOptions {
+	store: Pick<Store, "metaGet" | "metaSet">;
 	/** How often a watched worktree is re-read without activity (ms). */
 	pollMs?: number;
 	/** Quiet time after agent activity before a re-read (ms). */
@@ -16,6 +22,9 @@ export interface ChangesOptions {
 	 * a command); returns the unsubscribe function.
 	 */
 	activity?: (agentId: string, fn: () => void) => () => void;
+	transcript?: (
+		agent: Agent,
+	) => ResolvedTranscript | null | Promise<ResolvedTranscript | null>;
 }
 
 /**
@@ -28,19 +37,51 @@ export interface ChangesOptions {
 export class Changes {
 	/** Agents on other machines, read through their home node. */
 	remote: RemoteChanges | null = null;
+	private readonly store: ChangesOptions["store"];
 	private readonly lookup: (agentId: string) => Agent | undefined;
 	private readonly pollMs: number;
 	private readonly debounceMs: number;
 	private readonly activity: ChangesOptions["activity"];
+	private readonly transcript: ChangesOptions["transcript"];
+	private readonly history = new WeakMap<
+		Agent,
+		{ identity: string; until: number; result: Promise<boolean | null> }
+	>();
 
 	constructor(
 		lookup: (agentId: string) => Agent | undefined,
-		opts: ChangesOptions = {},
+		opts: ChangesOptions,
 	) {
 		this.lookup = lookup;
+		this.store = opts.store;
 		this.pollMs = opts.pollMs ?? 4000;
 		this.debounceMs = opts.debounceMs ?? 400;
 		this.activity = opts.activity;
+		this.transcript = opts.transcript;
+	}
+
+	private historical(
+		agent: Agent,
+		cwd: string,
+		root: string,
+		identity: string,
+	): Promise<boolean | null> {
+		const cached = this.history.get(agent);
+		const now = Date.now();
+		if (cached?.identity === identity && cached.until > now)
+			return cached.result;
+		const result = (async () =>
+			hasHistoricalEdits(
+				(await this.transcript?.(agent)) ?? null,
+				cwd,
+				root,
+			))().catch(() => false);
+		this.history.set(agent, {
+			identity,
+			until: now + HISTORY_RETRY_MS,
+			result,
+		});
+		return result;
 	}
 
 	private remoteId(agentId: string): boolean {
@@ -82,8 +123,38 @@ export class Changes {
 				removed: 0,
 				stamp: "no_cwd",
 			};
-		const { summary } = await readChanges(agent.cwd, mode, lane);
-		return { agent: agentId, ...summary };
+		const cwd = agent.cwd;
+		const key = `changes.seen:${agent.id}:${agent.sessionId ?? agent.meta.gen ?? agent.createdAt}`;
+		const resumeKey = agent.meta.resumeKey;
+		const { summary } = await readChanges(cwd, mode, lane);
+		let hasChanges = this.store.metaGet(key) !== null;
+		let historyIncomplete = false;
+		if (!hasChanges && summary.available) {
+			hasChanges = summary.total > 0;
+			// A clean worktree may already have committed its changes.
+			if (!hasChanges && mode === "worktree" && (summary.base?.ahead ?? 0) > 0)
+				hasChanges = (await readChanges(cwd, "base", lane)).summary.total > 0;
+			if (!hasChanges && this.transcript && summary.root) {
+				const identity = JSON.stringify([key, resumeKey, cwd, summary.root]);
+				const history = await this.historical(
+					agent,
+					cwd,
+					summary.root,
+					identity,
+				);
+				if (agent.cwd === cwd && agent.meta.resumeKey === resumeKey) {
+					hasChanges = history === true;
+					historyIncomplete = history === null;
+				}
+			}
+			if (hasChanges) this.store.metaSet(key, "1");
+		}
+		return {
+			agent: agentId,
+			...summary,
+			hasChanges,
+			...(historyIncomplete ? { changesHistoryIncomplete: true } : {}),
+		};
 	}
 
 	/** One file's diff; not_found unless the current summary lists the path. */
@@ -131,8 +202,9 @@ export class Changes {
 			running = true;
 			try {
 				const s = await this.summary(agentId, mode, undefined, "background");
-				if (!stopped && s.stamp !== last) {
-					last = s.stamp;
+				const stamp = `${s.stamp}:${s.hasChanges ?? ""}:${s.changesHistoryIncomplete ?? ""}`;
+				if (!stopped && stamp !== last) {
+					last = stamp;
 					fn(s);
 				}
 			} catch {

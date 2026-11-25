@@ -35,6 +35,10 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 | pi, omp | The Pulsar extension, inside the session | Yes |
 | Cursor, Gemini CLI, others | Pull only: messages wait in the inbox, and every Pulsar tool result says how many are unread | No |
 
+A native Antigravity CLI session can expose its user messages and assistant replies from its local conversation database. Pulsar matches the database to the running `agy` process. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
+
+When an omp agent has no activity summary, Pulsar uses the latest action from its session log, such as “Ran a command.” The list omits command arguments and message content.
+
 Limits:
 
 - **Claude Code** holds a peer message for approval when the session skips permission prompts. `pulsar setup` asks to set `crossSessionInbound: "accept"` in `~/.claude/settings.json` to deliver these. When the session shows a dialog in the terminal, the app shows the agent as needing you.

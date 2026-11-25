@@ -26,7 +26,7 @@ import { clock } from "../lib/format.ts";
 import { shownSettingsSections } from "../lib/registry.tsx";
 import { observer } from "../lib/signals.ts";
 import { branches, can, hello, nodes, showToast } from "../lib/store.ts";
-import { setShowFinished, showFinished } from "../lib/subagents.ts";
+import { setShowInactive, showInactive } from "../lib/subagents.ts";
 import { APPEARANCES, appearance, setAppearance } from "../lib/theme.ts";
 import { ProvePhoneRow } from "../prove/ProvePhoneRow.tsx";
 import { PUSH_TEXT, useSettings } from "../settings/Settings.tsx";
@@ -136,7 +136,7 @@ function SettingsPageImpl() {
 
 			<GroupedList
 				title="Subagents"
-				footer="Finished subagents stay reachable from their card in the parent's conversation. Saved on this device."
+				footer="Lists normally show running subagents. Turn this on to include idle subagents and those that finished in the last day."
 			>
 				<ToggleRow
 					icon={
@@ -144,9 +144,9 @@ function SettingsPageImpl() {
 							<WorkflowIcon />
 						</RowIcon>
 					}
-					title="Show Finished Subagents"
-					checked={showFinished.value}
-					onChange={setShowFinished}
+					title="Show Idle and Finished Subagents"
+					checked={showInactive.value}
+					onChange={setShowInactive}
 					setting="show-finished-subagents"
 				/>
 			</GroupedList>

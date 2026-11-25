@@ -532,7 +532,7 @@ describe("the pool's reader", () => {
 			},
 		];
 		const hello: Record<string, string> = {
-			"m-new": "2.1.0",
+			"m-new": VERSION,
 			"m-old": "1.9.0",
 			"m-off": "2.0.0",
 		};
@@ -559,7 +559,7 @@ describe("the pool's reader", () => {
 		const { fed, asked } = fakeFed(async (id) => {
 			if (id === "m-old")
 				throw new RpcError("unsupported", "unknown action diag.read");
-			return { ok: true, report: report({ version: "2.1.0" }) };
+			return { ok: true, report: report({ version: VERSION }) };
 		});
 		const local = new LocalDiagnosticsRunner({
 			doctor: async () => ({
@@ -576,17 +576,22 @@ describe("the pool's reader", () => {
 		expect(
 			list.machines.map((m) => [m.name, m.pending, m.error, m.upgrade]),
 		).toEqual([
-			["laptop", true, null, VERSION === "2.1.0" ? null : expect.any(String)],
+			["laptop", true, null, null],
 			["studio", true, null, null],
-			["mbp", true, null, "upgrade pulsar on mbp (1.9.0; newest is 2.1.0)"],
+			[
+				"mbp",
+				true,
+				null,
+				`upgrade pulsar on mbp (1.9.0; newest is ${VERSION})`,
+			],
 			[
 				"box",
 				false,
 				"asleep 14m",
-				"upgrade pulsar on box (2.0.0; newest is 2.1.0)",
+				`upgrade pulsar on box (2.0.0; newest is ${VERSION})`,
 			],
 		]);
-		expect(list.newest).toBe("2.1.0");
+		expect(list.newest).toBe(VERSION);
 
 		const one = (id: string) =>
 			machineDiagnostics(self, local, pool, id, OPERATOR, true);
@@ -606,7 +611,7 @@ describe("the pool's reader", () => {
 		});
 		expect(mine!.report).not.toBeNull();
 		expect(studio).toMatchObject({
-			version: "2.1.0",
+			version: VERSION,
 			error: null,
 			upgrade: null,
 			pending: false,
@@ -615,7 +620,7 @@ describe("the pool's reader", () => {
 			report: null,
 			version: "1.9.0",
 			error: "upgrade pulsar on mbp to see its checks",
-			upgrade: "upgrade pulsar on mbp (1.9.0; newest is 2.1.0)",
+			upgrade: `upgrade pulsar on mbp (1.9.0; newest is ${VERSION})`,
 		});
 		expect(box).toMatchObject({
 			report: null,

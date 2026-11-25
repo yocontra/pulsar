@@ -138,6 +138,37 @@ test.describe("git actions", () => {
 		).toBeVisible();
 	});
 
+	test("More Git Actions is disabled until a menu action is available", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, SELECT["codex@apparish"]!);
+		let conflicted = 1;
+		await page.route("**/git/status", async (route) => {
+			const response = await route.fetch();
+			await route.fulfill({
+				response,
+				json: {
+					...(await response.json()),
+					conflicted,
+					behind: 0,
+					ahead: 1,
+					pr: null,
+				},
+			});
+		});
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		const menu = split(page).getByRole("button", { name: "More git actions" });
+		await expect(menu).toBeDisabled();
+		await menu.click({ force: true });
+		await expect(page.getByRole("menu")).toBeHidden();
+		conflicted = 0;
+		await page.reload();
+		await expect(menu).toBeEnabled();
+		await menu.click();
+		await expect(page.getByRole("menuitem", { name: /^Push/ })).toBeEnabled();
+	});
+
 	test("disabled reasons: tooltip on the quick action, notes in the menu", async ({
 		page,
 		request,
@@ -282,6 +313,15 @@ test.describe("git actions", () => {
 		// The header has loaded its actions (Stop or the model).
 		await expect(page.locator(".d-sh-model")).toBeVisible();
 		await expect(split(page)).toHaveCount(0);
+		await expect(
+			page.locator(".d-sh-branch, .d-sh-pr, a.d-sh-repo, .cv-toggle"),
+		).toHaveCount(0);
+		await expect(
+			page.getByRole("button", { name: "Files", exact: true }),
+		).toBeVisible();
+		await expect(
+			page.getByText("Wakes it if idle", { exact: true }),
+		).toHaveCount(0);
 	});
 
 	test("on another machine each step is one passkey check for exactly its params", async ({

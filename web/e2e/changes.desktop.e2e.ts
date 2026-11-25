@@ -35,6 +35,16 @@ test.describe("changes panel", () => {
 		request,
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
+		// Older peers send a worktree count without the session history flag.
+		await page.route(
+			/\/api\/v1\/agents\/[^/]+\/changes\?mode=worktree$/,
+			async (route) => {
+				const response = await route.fetch();
+				const summary = await response.json();
+				delete summary.hasChanges;
+				await route.fulfill({ response, json: summary });
+			},
+		);
 		await openSession(page, id);
 		// 1440 px wide, no stored choice: closed.
 		await expect(panel(page)).toHaveCount(0);
@@ -109,6 +119,7 @@ test.describe("changes panel", () => {
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
 		await openSession(page, id);
+		await expect(page.getByRole("button", { name: /^Changes/ })).toBeVisible();
 		await page.keyboard.press("ControlOrMeta+Backslash");
 		await expect(panel(page)).toBeVisible();
 		await page.reload();
@@ -117,18 +128,102 @@ test.describe("changes panel", () => {
 		await expect(panel(page)).toHaveCount(0);
 	});
 
-	test("a clean worktree, and no repo", async ({ page, request }) => {
+	test("clean and non-Git sessions hide the controls and automatic panel", async ({
+		page,
+		request,
+	}) => {
 		await page.addInitScript(() =>
 			localStorage.setItem("pulsar.changes.open", "1"),
 		);
-		await openSession(page, await agentId(request, "name=codex@apparish"));
-		await expect(panel(page).locator(".cv-empty")).toHaveText(
-			/^No changes in \S+$/,
+		for (const name of ["codex@apparish", "omp@apparish"]) {
+			const id = await agentId(request, `name=${name}`);
+			const read = page.waitForResponse((response) =>
+				response
+					.url()
+					.includes(`/agents/${encodeURIComponent(id)}/changes?mode=worktree`),
+			);
+			await openSession(page, id);
+			await read;
+			await expect(page.getByRole("button", { name: /^Changes/ })).toHaveCount(
+				0,
+			);
+			await expect(panel(page)).toHaveCount(0);
+			await page.keyboard.press("ControlOrMeta+Backslash");
+			expect(
+				await page.evaluate(() => localStorage.getItem("pulsar.changes.open")),
+			).toBe("1");
+		}
+	});
+
+	test("incomplete history allows manual Changes access without auto-opening", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=codex@apparish");
+		await page.addInitScript(() =>
+			localStorage.setItem("pulsar.changes.open", "1"),
 		);
-		await openSession(page, await agentId(request, "name=omp@apparish"));
-		await expect(panel(page).locator(".cv-empty")).toContainText(
-			"isn't in a git repository",
+		await page.route(
+			/\/api\/v1\/agents\/[^/]+\/changes\?mode=worktree$/,
+			async (route) => {
+				const response = await route.fetch();
+				await route.fulfill({
+					response,
+					json: {
+						...(await response.json()),
+						hasChanges: false,
+						changesHistoryIncomplete: true,
+					},
+				});
+			},
 		);
+		await openSession(page, id);
+		const toggle = page.getByRole("button", { name: "Changes", exact: true });
+		await expect(toggle).toHaveAttribute("aria-pressed", "false");
+		await expect(panel(page)).toHaveCount(0);
+		await toggle.click();
+		await expect(toggle).toHaveAttribute("aria-pressed", "true");
+		await expect(panel(page)).toContainText("No changes in");
+		await page.keyboard.press("ControlOrMeta+Backslash");
+		await expect(panel(page)).toHaveCount(0);
+		await page.keyboard.press("ControlOrMeta+Backslash");
+		await expect(panel(page)).toBeVisible();
+		await page.reload();
+		await expect(toggle).toHaveAttribute("aria-pressed", "false");
+		await expect(panel(page)).toHaveCount(0);
+	});
+
+	test("polling reveals Changes when a clean session gains its first edit", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=codex@apparish");
+		await page.clock.install();
+		const peek = page.waitForResponse((response) =>
+			response
+				.url()
+				.includes(`/agents/${encodeURIComponent(id)}/changes?mode=worktree`),
+		);
+		await openSession(page, id);
+		await peek;
+		const toggle = page.getByRole("button", { name: /^Changes/ });
+		await expect(toggle).toHaveCount(0);
+		try {
+			await mock(request, {
+				action: "changes",
+				id,
+				path: "src/first-edit.ts",
+				line: "first edit",
+			});
+			await page.clock.fastForward(16_000);
+			await expect(toggle).toContainText("1");
+			await toggle.click();
+			await expect(panel(page).locator(".cv-file")).toContainText(
+				"first-edit.ts",
+			);
+		} finally {
+			await mock(request, { action: "restore" });
+		}
 	});
 
 	test("updates live without losing the reader's place", async ({

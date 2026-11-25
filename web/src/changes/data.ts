@@ -1,11 +1,27 @@
 /** Reads for the changes viewer (see docs/app.md, "Changes"). */
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../api/client.ts";
-import type { ChangedFile, ChangesMode } from "../api/types.ts";
+import type { ChangedFile, ChangesMode, ChangesSummary } from "../api/types.ts";
 import { keys, queryClient, useLive } from "../data/hooks.ts";
 
 /** Polling when the stream does not keep the summary live (ms). */
 const POLL_MS = 4000;
+
+/** Current edits are enough to open Changes. The history flag keeps it
+ * accessible after the worktree becomes clean. */
+export function canShowChanges(summary: ChangesSummary | undefined): boolean {
+	return (
+		!!summary?.available && (summary.total > 0 || summary.hasChanges === true)
+	);
+}
+
+/** A bounded history scan can leave the viewer available for manual use. */
+export function canOpenChanges(summary: ChangesSummary | undefined): boolean {
+	return (
+		canShowChanges(summary) ||
+		(summary?.available === true && summary.changesHistoryIncomplete === true)
+	);
+}
 
 /** The worktree summary; the stream keeps the newest mounted one live. */
 export function useChanges(agentId: string, mode: ChangesMode) {
@@ -19,15 +35,26 @@ export function useChanges(agentId: string, mode: ChangesMode) {
 	);
 }
 
+function peekOptions(agentId: string) {
+	return {
+		queryKey: keys.changesPeek(agentId),
+		queryFn: () => api.changes(agentId, "worktree"),
+		staleTime: 10_000,
+		retry: false,
+	};
+}
+
+export async function inRepository(agentId: string) {
+	return (await queryClient.fetchQuery(peekOptions(agentId))).available;
+}
+
 /** The count beside a session: worktree mode, a slow poll, no stream topic. */
 export function useChangesPeek(agentId: string) {
 	return useQuery(
 		{
-			queryKey: keys.changesPeek(agentId),
-			queryFn: () => api.changes(agentId, "worktree"),
+			...peekOptions(agentId),
+			enabled: !!agentId,
 			refetchInterval: 15_000,
-			staleTime: 10_000,
-			retry: false,
 		},
 		queryClient,
 	);

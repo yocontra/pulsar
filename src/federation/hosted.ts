@@ -1,3 +1,8 @@
+import {
+	cleanHostedDetail,
+	unavailableHostedDetail,
+} from "../hosted/details.ts";
+import type { HostedProvider } from "../hosted/wire.ts";
 import { type HostedMachine, hostedObservations } from "../hosted/wire.ts";
 import type { Principal } from "../service/caller.ts";
 import type { Federation } from "./index.ts";
@@ -14,7 +19,36 @@ export class RemoteHosted {
 		this.fed = fed;
 	}
 
-	async observe(as: Principal): Promise<HostedMachine[]> {
+	async detail(
+		provider: HostedProvider,
+		id: string,
+		machineId: string,
+		as: Principal,
+	) {
+		const request = { provider, id, machineId };
+		if (
+			!this.fed
+				.machines()
+				.some(
+					(machine) =>
+						machine.machineId === machineId && machine.link === "tailnet",
+				)
+		)
+			return unavailableHostedDetail(request, "source-unreachable");
+		try {
+			const result = await this.fed.act(
+				`${machineId}/`,
+				{ op: "hosted.detail", provider, id },
+				as,
+				12_000,
+			);
+			return cleanHostedDetail(request, result.detail);
+		} catch {
+			return unavailableHostedDetail(request, "source-unreachable");
+		}
+	}
+
+	async observe(as: Principal, fresh = false): Promise<HostedMachine[]> {
 		const owner = as.kind === "human" ? as.login.toLowerCase() : null;
 		if (owner !== this.owner) {
 			this.owner = owner;
@@ -44,7 +78,7 @@ export class RemoteHosted {
 				try {
 					const result = await this.fed.act(
 						`${machineId}/`,
-						{ op: "hosted.list" },
+						{ op: "hosted.list", ...(fresh ? { fresh: true } : {}) },
 						as,
 						12_000,
 					);

@@ -3,13 +3,17 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RemoteHosted } from "../src/federation/hosted.ts";
-import { hostedReport } from "../src/hosted/catalog.ts";
+import { HostedCatalog, hostedReport } from "../src/hosted/catalog.ts";
 import {
 	decodeHosted,
 	hostedWriter,
 	readHosted,
 } from "../src/hosted/providers.ts";
-import type { HostedObservation, HostedWrite } from "../src/hosted/wire.ts";
+import type {
+	HostedObservation,
+	HostedProvider,
+	HostedWrite,
+} from "../src/hosted/wire.ts";
 import { HostedWrites } from "../src/hosted/writes.ts";
 import type { PoolMachine } from "../src/service/pool.ts";
 import { Store } from "../src/store.ts";
@@ -187,6 +191,66 @@ test("a concurrent retry consults the receipt while one provider request is in f
 	} finally {
 		store.close();
 	}
+});
+
+test("receipt checks never submit work and duplicate requests follow the original receipt", async () => {
+	const store = new Store(":memory:");
+	let credentials = 0;
+	const accepted = { state: "accepted", id: "abc-123" } as const;
+	const done = Promise.withResolvers<typeof accepted>();
+	const started = Promise.withResolvers<void>();
+	const actions: string[] = [];
+	const writes = new HostedWrites(
+		store,
+		async () => {
+			credentials++;
+			return async () => {
+				started.resolve();
+				return done.promise;
+			};
+		},
+		(p) => actions.push(p),
+	);
+	const check = (nonce: string, owner = "owner") =>
+		writes.run(owner, { action: "receipt", nonce });
+	try {
+		expect(await check(create.nonce)).toEqual({ state: "not-found" });
+		expect(credentials).toBe(0);
+		const first = writes.run("owner", create);
+		await started.promise;
+		const duplicate = { ...create, nonce: crypto.randomUUID() };
+		expect(await writes.run("owner", duplicate)).toEqual({ state: "unknown" });
+		expect(await check(duplicate.nonce)).toEqual({ state: "unknown" });
+		done.resolve(accepted);
+		await first;
+		expect(await check(duplicate.nonce)).toEqual(accepted);
+		expect(await check(create.nonce, "other")).toEqual({ state: "not-found" });
+		expect(credentials).toBe(2);
+		expect(actions).toEqual(["copilot"]);
+	} finally {
+		store.close();
+	}
+});
+
+test("accepted writes invalidate one provider even with a catalog read in flight", async () => {
+	const calls: HostedProvider[] = [];
+	const older = Promise.withResolvers<Awaited<ReturnType<typeof readHosted>>>();
+	const tasks = decodeHosted("copilot", copilot)!;
+	const catalog = new HostedCatalog(async (p) => {
+		calls.push(p);
+		if (p === "copilot" && calls.length === 1) return older.promise;
+		return { state: "ready", tasks: p === "copilot" ? tasks : [] };
+	});
+	const first = catalog.observe();
+	catalog.invalidate("copilot");
+	const second = await catalog.observe();
+	expect(second[0]?.tasks).toEqual(tasks);
+	older.resolve({ state: "ready", tasks: [] });
+	await first;
+	expect((await catalog.observe())[0]?.tasks).toEqual(tasks);
+	expect(calls).toEqual(["copilot", "codex", "cursor", "copilot"]);
+	await Promise.all([catalog.observe(true), catalog.observe(true)]);
+	expect(calls.slice(4)).toEqual(["copilot", "codex", "cursor"]);
 });
 
 test("authenticated CLI adapters pass the prompt on stdin and parse provider receipts", async () => {

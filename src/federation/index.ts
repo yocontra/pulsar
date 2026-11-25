@@ -2746,7 +2746,19 @@ export class Federation implements PoolView {
 			}
 			case "hosted.list":
 				authorize(user, "hosted");
-				return { ok: true, providers: await this.service.hosted.observe() };
+				return {
+					ok: true,
+					providers: await this.service.hosted.observe(action.fresh === true),
+				};
+			case "hosted.detail":
+				return {
+					ok: true,
+					detail: await this.service.hostedTask(
+						user,
+						action.provider,
+						action.id,
+					),
+				};
 			case "usage.rows": {
 				authorize(user, "usage");
 				const period = USAGE_PERIODS.includes(action.period)

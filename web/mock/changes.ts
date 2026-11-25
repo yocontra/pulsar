@@ -297,6 +297,7 @@ export function changesSummary(
 	return {
 		...base,
 		available: true,
+		hasChanges: s.length > 0,
 		files,
 		total: files.length,
 		truncated: false,

@@ -14,7 +14,7 @@ import {
 	FileIcon,
 	FolderIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { api } from "../../api/client.ts";
 import type { AgentRow, FileContent, FileEntry } from "../../api/types.ts";
 import { useChangesPeek } from "../../changes/data.ts";
@@ -26,13 +26,10 @@ import type { PageProps } from "../../lib/registry.tsx";
 import { navigate } from "../../lib/router.ts";
 import { findAgent } from "../../lib/store.ts";
 import { toast } from "../../lib/toast.ts";
-import { CodeBlock } from "../../session/CodeBlock.tsx";
-import { langForPath } from "../../session/highlight.tsx";
 import { useGitStatus } from "../git/run.ts";
+import { FileReader } from "./FileReader.tsx";
+import { moveFileFocus } from "./file-keys.ts";
 import "./files.css";
-
-/** Past this, text shows without highlighting. */
-const HIGHLIGHT_MAX = 256 * 1024;
 
 /**
  * Fallback re-read of the open folder and file (ms). `git` notices cover
@@ -88,7 +85,8 @@ const useContent = (agentId: string, path: string, reveal: boolean) =>
 export function useTarget({ arg, params }: PageProps) {
 	const agentId = arg;
 	const path = (params.path ?? "").replace(/^\/+|\/+$/g, "");
-	const line = Number(params.line) > 0 ? Number(params.line) : undefined;
+	const n = Number(params.line);
+	const line = Number.isSafeInteger(n) && n > 0 ? n : undefined;
 	const agent = useAgent(agentId || null).data as AgentRow | undefined;
 	useLiveFiles(agentId);
 	// Show for a secret-looking file: this file only, until the page changes.
@@ -276,7 +274,11 @@ function FolderList({
 		);
 	return (
 		<>
-			<ul className="fv-list" aria-label="Files">
+			<ul
+				className="fv-list"
+				aria-label="Files"
+				onKeyDown={(e) => moveFileFocus(e, ".fv-row")}
+			>
 				{t.entries.map((e) => (
 					<li key={e.path}>
 						<button
@@ -365,17 +367,6 @@ export function FileBody({
 	/** The phone's own Show gate (Konsta), in place of the desktop's. */
 	secret?: (onReveal: () => void) => ReactNode;
 }) {
-	const ref = useRef<HTMLDivElement>(null);
-	const text = content?.kind === "text" ? (content.text ?? "") : null;
-	// Bring the linked line into view once the text is on screen.
-	useEffect(() => {
-		if (!line || text === null) return;
-		const row = ref.current?.querySelectorAll(".ds-code-line")[line - 1];
-		if (!row) return;
-		row.classList.add("fv-hl");
-		row.scrollIntoView({ block: "center" });
-		return () => row.classList.remove("fv-hl");
-	}, [line, text]);
 	if (isError)
 		return (
 			<p className="fv-empty" role="alert">
@@ -423,17 +414,18 @@ export function FileBody({
 			</p>
 		);
 	return (
-		<div ref={ref} className="fv-text">
+		<div className="fv-text">
 			{content.truncated && (
 				<p className="fv-note" role="status">
 					Showing the first 1 MB of {size}.
 				</p>
 			)}
-			<CodeBlock
-				code={text ?? ""}
-				lang={(content.size ?? 0) > HIGHLIGHT_MAX ? null : langForPath(path)}
-				title={nameOf(path)}
-				lineNumbers
+			<FileReader
+				key={`${agentId}:${path}`}
+				path={path}
+				text={content.text ?? ""}
+				size={content.size ?? 0}
+				line={line}
 			/>
 		</div>
 	);
@@ -565,7 +557,10 @@ export function FilesDesktop(props: PageProps) {
 				/>
 			</header>
 			<div className="fv-split">
-				<aside className="fv-side">
+				<aside
+					className="fv-side"
+					onKeyDown={(e) => moveFileFocus(e, ".fv-node", true)}
+				>
 					<TreeFolder
 						agentId={agentId}
 						path=""

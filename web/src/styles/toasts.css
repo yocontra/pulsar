@@ -1,5 +1,10 @@
 /* Sonner's toasts in our tokens (src/lib/toast.ts). Light and dark both come
    from the --ds-* tokens, so the toaster stays on Sonner's light theme. */
+.p-toast-overlay {
+	position: fixed;
+	z-index: 999999999;
+}
+
 [data-sonner-toaster][data-sonner-theme] {
 	--normal-bg: var(--ds-surface);
 	--normal-border: var(--ds-border);
