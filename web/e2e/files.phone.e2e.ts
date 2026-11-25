@@ -51,7 +51,12 @@ test.describe("file viewer", () => {
 		const p = top(page);
 		await expect(p.locator("ion-title")).toContainText("report.html");
 		await expect(p.locator(".ds-code")).toContainText("All checks passed.");
-		await p.getByRole("button", { name: "Back" }).click();
+		await p
+			.getByRole("navigation", { name: "Path" })
+			.getByRole("button", { name: "out", exact: true })
+			.click();
+		await expect(page).toHaveURL(fileUrl(id, "out"));
+		await top(page).getByRole("button", { name: "Close file viewer" }).click();
 		await expect(page).toHaveURL(new RegExp(`#/a/${encodeURIComponent(id)}$`));
 	});
 

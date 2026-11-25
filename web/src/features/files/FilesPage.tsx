@@ -13,6 +13,7 @@ import {
 	FileDiffIcon,
 	FileIcon,
 	FolderIcon,
+	XIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { api } from "../../api/client.ts";
@@ -23,7 +24,7 @@ import { useAgent } from "../../data/index.ts";
 import { humanSize as formatBytes } from "../../lib/attachments.ts";
 import { fileRoute } from "../../lib/file-links.ts";
 import type { PageProps } from "../../lib/registry.tsx";
-import { navigate } from "../../lib/router.ts";
+import { backBy, navigate, stack } from "../../lib/router.ts";
 import { findAgent } from "../../lib/store.ts";
 import { toast } from "../../lib/toast.ts";
 import { useGitStatus } from "../git/run.ts";
@@ -187,6 +188,28 @@ export function Breadcrumb({
 				);
 			})}
 		</nav>
+	);
+}
+
+export function CloseFileViewer({ agentId }: { agentId: string }) {
+	function close() {
+		const pages = stack.value;
+		const origin = pages.findLastIndex(
+			(r) => r.view !== "page" || r.name !== "file" || r.arg !== agentId,
+		);
+		if (origin > 0) backBy(pages.length - 1 - origin);
+		else navigate({ view: "agent", id: agentId }, { replace: true });
+	}
+	return (
+		<button
+			type="button"
+			className="fv-btn fv-close"
+			onClick={close}
+			aria-label="Close file viewer"
+			title="Close file viewer"
+		>
+			<XIcon aria-hidden="true" />
+		</button>
 	);
 }
 
@@ -555,6 +578,7 @@ export function FilesDesktop(props: PageProps) {
 					path={path}
 					content={isDir ? undefined : content.data}
 				/>
+				<CloseFileViewer agentId={agentId} />
 			</header>
 			<div className="fv-split">
 				<aside

@@ -89,6 +89,13 @@
 	font-size: 13px;
 	cursor: pointer;
 }
+.p-bar .fv-close {
+	width: 44px;
+	height: 44px;
+	justify-content: center;
+	background: transparent;
+	border: 0;
+}
 .fv-btn:hover {
 	background: var(--ds-surface-hover);
 }

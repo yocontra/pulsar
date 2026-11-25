@@ -68,7 +68,8 @@ test.describe("file viewer", () => {
 			main.locator(".fv-node.is-current", { hasText: "report.html" }),
 		).toBeVisible();
 
-		await page.goBack();
+		await crumbs.getByRole("button", { name: "out", exact: true }).click();
+		await main.getByRole("button", { name: "Close file viewer" }).click();
 		await ref(page, "refresh.ts").click();
 		await expect(page).toHaveURL(fileUrl(id, "src/auth/refresh.ts"));
 		await expect(main.locator(".ds-code")).toContainText("const lock");

@@ -16,6 +16,7 @@ import { navigate } from "../../lib/router.ts";
 import { PageShell } from "../../mobile/ui/PageShell.tsx";
 import {
 	Breadcrumb,
+	CloseFileViewer,
 	copyPath,
 	EntryIcon,
 	FileBody,
@@ -160,6 +161,7 @@ export default function FilesPhone(props: PageProps) {
 			title={title}
 			route={fileRoute(agentId, path)}
 			large={false}
+			end={<CloseFileViewer agentId={agentId} />}
 			className="p-kit"
 			testId="files-page"
 		>
