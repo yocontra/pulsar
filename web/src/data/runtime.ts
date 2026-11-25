@@ -59,6 +59,7 @@ export const prefetchAgent = createPrefetcher(
 	queryClient,
 	() => live.flush(),
 	watchTranscript,
+	() => live.streamId,
 );
 
 /** How long a hidden tab keeps its stream open. */

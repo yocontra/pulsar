@@ -19,10 +19,27 @@ export function createPrefetcher(
 	client: QueryClient,
 	flush: () => Promise<void>,
 	watch?: Parameters<typeof transcriptDef>[3],
+	stream?: Parameters<typeof transcriptDef>[4],
 ) {
 	let inFlight = 0;
 	const recent = new Map<string, number>();
-	return function prefetchAgent(id: string, now = Date.now()): boolean {
+	const speculative = new Set<string>();
+	return function prefetchAgent(
+		id: string,
+		now = Date.now(),
+		opening = false,
+	): boolean {
+		if (opening) {
+			const transcript = transcriptDef(client, id, flush, watch, stream);
+			// The route needs a stream-attached request, even if hover warmed the cache.
+			if (speculative.delete(id))
+				void client.cancelQueries({
+					queryKey: transcript.queryKey,
+					exact: true,
+				});
+			void client.prefetchQuery({ ...transcript, staleTime: 0 });
+			return true;
+		}
 		if (!id || inFlight >= MAX_IN_FLIGHT) return false;
 		const last = recent.get(id);
 		if (last !== undefined && now - last < PREFETCH_FRESH_MS) return false;
@@ -30,18 +47,24 @@ export function createPrefetcher(
 		if (recent.size > 200) recent.delete(recent.keys().next().value!);
 		inFlight++;
 		const agent = defs.agent(id);
-		const t = transcriptDef(client, id, flush, watch);
+		const t = transcriptDef(client, id, async () => {});
+		const needsTranscript =
+			client.getQueryState(t.queryKey)?.fetchStatus !== "fetching";
+		if (needsTranscript) speculative.add(id);
 		void Promise.allSettled([
 			client.prefetchQuery({
 				queryKey: agent.queryKey,
 				queryFn: agent.queryFn,
 				staleTime: PREFETCH_FRESH_MS,
 			}),
-			client.prefetchQuery({
-				queryKey: t.queryKey,
-				queryFn: t.queryFn,
-				staleTime: PREFETCH_FRESH_MS,
-			}),
+			needsTranscript &&
+				client
+					.prefetchQuery({
+						queryKey: t.queryKey,
+						queryFn: t.queryFn,
+						staleTime: PREFETCH_FRESH_MS,
+					})
+					.finally(() => speculative.delete(id)),
 		]).finally(() => {
 			inFlight--;
 		});

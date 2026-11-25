@@ -263,8 +263,9 @@ export function startBridge(firstHello?: Promise<Hello>) {
 			wanted.set(id, () => {
 				// The transcript starts loading now, while the session's chunks
 				// download, not once its view mounts.
-				prefetchAgent(id);
-				return mount(defs.agent(id));
+				const unmount = mount(defs.agent(id));
+				prefetchAgent(id, undefined, true);
+				return unmount;
 			});
 		sessionMounts(wanted);
 	});

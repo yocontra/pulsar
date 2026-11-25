@@ -230,10 +230,10 @@ export function transcriptDef(
 				// subscription's round trip: both go out at once. No stream yet:
 				// the page alone (the stream's ready re-subscribes).
 				const id = stream?.() ?? null;
-				const [, p] = await Promise.all([
-					id ? flush().catch(() => {}) : flush(),
-					api.transcript(agentId, null, id),
-				]);
+				const subscribed = flush();
+				const page = api.transcript(agentId, null, id);
+				if (id) void subscribed.catch(() => {});
+				const [p] = await Promise.all([page, id ? undefined : subscribed]);
 				const merged = applyTranscriptPage(
 					client.getQueryData<TranscriptData>(queryKey),
 					p,

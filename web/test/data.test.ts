@@ -1170,6 +1170,51 @@ describe("optimistic writes", () => {
 });
 
 describe("prefetch", () => {
+	test("opening bypasses pending hover and paints before the subscription reply", async () => {
+		const { client } = rig();
+		const realFetch = globalThis.fetch;
+		const hover = Promise.withResolvers<Response>();
+		const opening = Promise.withResolvers<Response>();
+		const subscribed = Promise.withResolvers<void>();
+		const calls: string[] = [];
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			const url = String(input);
+			if (!url.includes("/transcript")) return Response.json(row("a"));
+			calls.push(url);
+			return url.includes("stream=attached") ? opening.promise : hover.promise;
+		}) as typeof fetch;
+		try {
+			const key = keys.transcript("a");
+			const prefetch = createPrefetcher(
+				client,
+				() => subscribed.promise,
+				undefined,
+				() => "attached",
+			);
+			expect(prefetch("a")).toBe(true);
+			expect(prefetch("a", undefined, true)).toBe(true);
+			expect(calls).toHaveLength(2);
+			expect(calls[0]).not.toContain("stream=");
+			expect(calls[1]).toContain("stream=attached");
+			const ready = Promise.withResolvers<void>();
+			const off = client.getQueryCache().subscribe(() => {
+				if (client.getQueryData(key)) ready.resolve();
+			});
+			opening.resolve(
+				Response.json({ events: [ev("active", 1)], cursor: null }),
+			);
+			await ready.promise;
+			off();
+			hover.resolve(Response.json({ events: [ev("hover", 2)], cursor: null }));
+			expect(
+				client.getQueryData<TranscriptData>(key)?.events.map((e) => e.id),
+			).toEqual(["active"]);
+		} finally {
+			subscribed.resolve();
+			globalThis.fetch = realFetch;
+		}
+	});
+
 	test("loads the row and transcript once, caps in-flight fetches, adds no observer", async () => {
 		const { client } = rig();
 		const calls: string[] = [];
