@@ -826,6 +826,28 @@ function UserBody({ ev }: { ev: TranscriptEvent }) {
  * terminal), or plain text.
  */
 export function SystemRow({ ev }: { ev: TranscriptEvent }) {
+	if (ev.notice?.type === "background_job") {
+		const title = ev.notice.summary ?? "Background job finished";
+		const label = (
+			<>
+				<BellIcon className="ds-notice-icon" aria-hidden="true" />
+				{title}
+			</>
+		);
+		return ev.text ? (
+			<details className="ev ds-job-result" data-msg-id={ev.id}>
+				<summary>
+					{label}
+					<ChevronRightIcon className="ds-job-chevron" aria-hidden="true" />
+				</summary>
+				<pre>{ev.text}</pre>
+			</details>
+		) : (
+			<div className="ev ds-job-result" role="status" data-msg-id={ev.id}>
+				{label}
+			</div>
+		);
+	}
 	if (hasNotice(ev)) return <NoticeCard ev={ev} />;
 	if (isGap(ev))
 		return (

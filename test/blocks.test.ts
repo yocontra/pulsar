@@ -103,10 +103,12 @@ describe("chat blocks: parsers", () => {
 		).toBe("Benchmarks look good, ship it.");
 		expect(
 			events.find(
-				(e) => e.id.startsWith("omp:") && /^Background job/.test(e.text),
+				(e) => e.id.startsWith("omp:") && e.notice?.type === "background_job",
 			),
 		).toMatchObject({
 			subtype: "task",
+			notice: { summary: "Background job bg_2 completed" },
+			text: "bench <test> passed",
 		});
 		expect(call("view_image")).toBeDefined();
 		expect(

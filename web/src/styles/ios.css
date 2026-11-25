@@ -389,8 +389,7 @@
 }
 
 /* Code blocks: readable on 375px; scroll sideways, never wrap. */
-.session.mobile pre,
-.session.mobile [data-streamdown="code-block"] {
+.session.mobile pre {
 	font-size: 0.706rem;
 	line-height: 1.55;
 }

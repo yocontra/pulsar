@@ -190,13 +190,13 @@
 	--ds-syn-fg: #292524;
 	--ds-syn-comment: #736d68;
 	--ds-syn-keyword: #a626a4;
-	--ds-syn-string: #2f7d32;
+	--ds-syn-string: #286f2c;
 	--ds-syn-number: #b45309;
 	--ds-syn-function: #1d5fc9;
 	--ds-syn-type: #0e7490;
 	--ds-syn-constant: #b45309;
 	--ds-syn-variable: #b42318;
-	--ds-syn-punct: #716a65;
+	--ds-syn-punct: #69625d;
 
 	/* Depth */
 	--ds-shadow-xs: 0 1px 1px rgba(28, 25, 23, 0.04);

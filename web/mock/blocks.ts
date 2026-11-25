@@ -97,7 +97,8 @@ export function claudeLog(): string {
 	assistant([
 		{
 			type: "thinking",
-			thinking: "The test uses a real clock; fake timers will make it stable.",
+			thinking:
+				"The test uses a real clock; fake timers will make it stable.\n\n```typescript\nconst clock = 42;\n```",
 			signature: "sig",
 		},
 	]);
@@ -105,7 +106,7 @@ export function claudeLog(): string {
 	assistant([
 		{
 			type: "text",
-			text: "I'll start with the session module.\n\n- read it\n- fix the race\n- run the tests",
+			text: "I'll start with the session module.\n\n- read it\n- fix the race\n- run the tests\n\n```typescript\nconst clock = 42;\n```",
 		},
 	]);
 	tool(
@@ -310,6 +311,16 @@ export function claudeLog(): string {
 			summary: "Fix ready",
 		},
 		'{"success":true,"message":"Message sent"}',
+	);
+	tool(
+		"send_message",
+		{ target: "inventory", message: `gAAAA${"A".repeat(93)}==` },
+		"",
+	);
+	tool(
+		"send_message",
+		{ target: "reviewer", message: "UmV2aWV3IGlzIHJlYWR5Lg==" },
+		"",
 	);
 	tool("ToolSearch", { query: "select:WebSearch,WebFetch", max_results: 2 }, [
 		{ type: "tool_reference", tool_name: "WebSearch" },
@@ -1063,7 +1074,7 @@ export function ompLog(): string {
 		timestamp: at(),
 		customType: "async-result",
 		content:
-			"<system-notice>\nBackground job bg_2 (bun bench) completed.\n</system-notice>",
+			"<system-notice>\nBackground job bg_2 (python - <<'PY'\\nprint(1)\\nPY) has completed.\nResume your work using the result below.\nbench <test> passed\n</system-notice>",
 		details: { jobs: [] },
 	});
 	out.push({

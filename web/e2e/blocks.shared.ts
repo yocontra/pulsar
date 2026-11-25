@@ -35,6 +35,79 @@ export function blocksSuite(platform: "desktop" | "phone") {
 		});
 	}
 
+	test(`thinking and replies share highlighted, copyable code (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		await page.addInitScript(() => {
+			Object.defineProperty(navigator, "clipboard", {
+				value: {
+					writeText: async (value: string) => {
+						document.body.dataset.copied = value;
+					},
+				},
+			});
+		});
+		const id = await agentId(request, "fixture=blocks");
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		const thought = page.locator(".ds-reason:not(.is-hidden)").first();
+		await thought.locator(".ds-reason-head").click();
+		for (const block of [
+			thought.locator(".ds-code"),
+			page
+				.locator(".ds-prose .ds-code")
+				.filter({ hasText: "const clock = 42;" })
+				.first(),
+		]) {
+			await expect(block.locator(".ds-code-label")).toHaveText(/typescript/i);
+			await expect
+				.poll(() =>
+					block
+						.locator(".ds-lc span")
+						.evaluateAll(
+							(tokens) =>
+								new Set(tokens.map((t) => getComputedStyle(t).color)).size,
+						),
+				)
+				.toBeGreaterThan(1);
+			const copy = block.getByRole("button", { name: "Copy code" });
+			await expect(copy.locator("svg")).toHaveCSS("width", "14px");
+			await copy.click();
+			await expect(page.locator("body")).toHaveAttribute(
+				"data-copied",
+				"const clock = 42;",
+			);
+			await page.locator("body").evaluate((body) => delete body.dataset.copied);
+		}
+	});
+
+	test(`message cards show readable content and center the recipient (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "fixture=blocks");
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		const cards = page.locator('[data-tool="send_message"]');
+		const encrypted = cards.filter({ hasText: "inventory" }).first();
+		await encrypted.locator(".ds-tool-head").click();
+		await expect(encrypted).toContainText(
+			"The transcript stores this message encrypted.",
+		);
+		await expect(encrypted).not.toContainText("gAAAA");
+		const center = async (selector: string) => {
+			const box = await encrypted.locator(selector).boundingBox();
+			return box!.y + box!.height / 2;
+		};
+		expect(
+			Math.abs(
+				(await center(".ds-tool-verb")) - (await center(".ds-tool-target")),
+			),
+		).toBeLessThan(1.5);
+		const encoded = cards.filter({ hasText: "reviewer" }).first();
+		await encoded.locator(".ds-tool-head").click();
+		await expect(encoded.locator(".ds-sent")).toHaveText("Review is ready.");
+	});
+
 	for (const scheme of ["light", "dark"] as const)
 		test(`every chat block has its renderer (${platform}, ${scheme})`, async ({
 			page,
@@ -110,7 +183,7 @@ export function blocksSuite(platform: "desktop" | "phone") {
 			await has(".ds-system-out", 2);
 			await has(".ds-divider.is-interrupted", 2);
 			await has(".ds-divider.is-compacted", 3);
-			await has(".ds-notice", 3);
+			await has(".ds-notice, .ds-job-result", 3);
 			await has(".ds-reason.is-hidden", 2);
 			await has(".ev.peer", 4);
 			// Shell commands, every harness: where they ran, highlighted Bash.
@@ -311,6 +384,13 @@ export function blocksSuite(platform: "desktop" | "phone") {
 		await expect(conv.locator('[data-tool="wait"]')).toBeAttached({
 			timeout: 15_000,
 		});
+		const notice = conv.locator("details.ds-job-result").first();
+		await expect(notice.locator("summary")).toHaveText(
+			"Background job bg_2 completed",
+		);
+		await expect(notice.locator("pre")).toBeHidden();
+		await notice.locator("summary").click();
+		await expect(notice.locator("pre")).toHaveText("bench <test> passed");
 		await openAll(page);
 		const card = (tool: string, text?: string) => {
 			const all = conv.locator(`[data-tool="${tool}"]`);

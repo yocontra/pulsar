@@ -4,6 +4,7 @@
  * questions asked, a JSON tree), never a raw argument dump. Heavy views
  * (notebooks, JSON trees, ANSI colors) load lazily.
  */
+
 import {
 	CheckIcon,
 	CircleCheckIcon,
@@ -34,6 +35,7 @@ import { CodeBlock, TerminalBlock } from "../CodeBlock.tsx";
 import { Diff } from "../Diff.tsx";
 import { langForPath } from "../highlight.tsx";
 import { CommandBody } from "./CommandBody.tsx";
+import { messageContent } from "./message-text.ts";
 import { readCells } from "./notebook.ts";
 
 export { CommandBody } from "./CommandBody.tsx";
@@ -772,10 +774,20 @@ function ResultProse(p: BodyProps) {
 
 export function MessageBody(p: BodyProps) {
 	const a = rec(p.input);
-	const body = str(a.message) || str(a.content) || str(a.text) || str(a.body);
+	const parts = [a.items, a.content, a.message].find(Array.isArray);
+	const recorded =
+		str(a.message) || str(a.content) || str(a.text) || str(a.body);
+	const { text: body, note } = messageContent(
+		recorded ||
+			(parts ?? [])
+				.map((part) => str(rec(part).text))
+				.filter(Boolean)
+				.join("\n"),
+	);
 	const json = rec(asJson(p.output));
 	return (
 		<>
+			{note && <p className="ds-tool-note">{note}</p>}
 			{body && (
 				<div className="ds-sent">
 					<MessageResponse>{body}</MessageResponse>

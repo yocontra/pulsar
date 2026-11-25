@@ -112,3 +112,40 @@
 	margin-right: 7px;
 	color: var(--ds-text-4);
 }
+
+.ds-job-result {
+	min-width: 0;
+	color: var(--ds-text-2);
+	font-size: var(--ds-text-secondary);
+}
+div.ds-job-result,
+.ds-job-result summary {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding-block: 4px;
+}
+.ds-job-result summary {
+	cursor: pointer;
+	width: fit-content;
+	max-width: 100%;
+}
+.ds-job-result summary::-webkit-details-marker {
+	display: none;
+}
+.ds-job-chevron {
+	width: 12px;
+	height: 12px;
+}
+.ds-job-result[open] .ds-job-chevron {
+	transform: rotate(90deg);
+}
+.ds-job-result pre {
+	margin: 4px 0;
+	padding: 8px;
+	max-height: 18rem;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	background: var(--ds-surface-active);
+}

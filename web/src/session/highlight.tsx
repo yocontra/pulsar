@@ -1,6 +1,5 @@
 /**
- * Syntax highlighting for tool cards, diffs and code blocks outside
- * Markdown. One lazy Shiki highlighter (the app's trimmed bundle, see
+ * Syntax highlighting for tool cards, diffs and Markdown code blocks. One lazy Shiki highlighter (the app's trimmed bundle, see
  * lib/shiki.ts) with the CSS-variable "pulsar" theme, so tokens follow the
  * color scheme without re-highlighting. Tokens render as React spans (no
  * innerHTML, CSP-safe). Until Shiki loads, the same text renders plain in

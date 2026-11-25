@@ -17,6 +17,7 @@ import type {
 	ToolDetail,
 	TranscriptEvent,
 } from "../transcripts/types.ts";
+import { NOTICE_TEXT_CAP } from "../transcripts/types.ts";
 import { xdCall, xdResult } from "./omp-xd.ts";
 
 /** Counts omp puts in a result's `details`, over guesses from its text. */
@@ -36,6 +37,55 @@ function ompDetail(
 		return { exitCode: num(d.exitCode) };
 	if (d.interrupted === true) return { interrupted: true };
 	return undefined;
+}
+
+/** OMP embeds its shell preview in the first line, before the actual output. */
+function backgroundResult(
+	rec: Record<string, unknown>,
+	id: string,
+): TranscriptEvent {
+	const raw = contentText(rec.content)
+		.trim()
+		.replace(/^<system-notice>\s*|\s*<\/system-notice>$/g, "");
+	const firstLine = raw.split("\n", 1)[0] ?? "";
+	const header =
+		/^Background job ([\w.-]+)(?: \([^\n]*\))? (?:has )?(completed|failed|cancelled)\.[ \t]*$/im.exec(
+			firstLine,
+		);
+	const batch = /^\d+ background jobs have completed\.[^\n]*/i.test(raw);
+	const jobs = obj(rec.details)?.jobs;
+	const job = Array.isArray(jobs) && jobs.length === 1 ? obj(jobs[0]) : null;
+	const jobId = str(job?.jobId) ?? header?.[1];
+	const status = str(job?.status) ?? header?.[2];
+	const outcome =
+		status === "failed"
+			? "failed"
+			: status === "cancelled" || status === "canceled"
+				? "cancelled"
+				: status === "completed"
+					? "completed"
+					: "finished";
+	const count = Array.isArray(jobs) && jobs.length > 1 ? jobs.length : null;
+	const summary = count
+		? `${count} background jobs finished`
+		: batch
+			? "Background jobs finished"
+			: `Background job${jobId && /^[\w.-]{1,80}$/.test(jobId) ? ` ${jobId}` : ""} ${outcome}`;
+	const body = (header || batch ? raw.slice(firstLine.length).trimStart() : raw)
+		.replace(/^Resume your work using the result below\.\s*/, "")
+		.trim();
+	return {
+		id,
+		ts: toMs(rec.timestamp),
+		role: "system",
+		kind: "system",
+		subtype: "task",
+		notice: { type: "background_job", summary, status: outcome },
+		text:
+			body.length > NOTICE_TEXT_CAP
+				? `${body.slice(0, NOTICE_TEXT_CAP)}\n…`
+				: body,
+	};
 }
 
 /**
@@ -76,17 +126,7 @@ export function parsePi(chunk: string, state: ParseState): TranscriptEvent[] {
 			continue;
 		}
 		if (rec.type === "custom_message" && rec.customType === "async-result") {
-			// omp: a background job finished.
-			const text = stripTags(contentText(rec.content)).trim();
-			if (text)
-				out.push({
-					id,
-					ts: toMs(rec.timestamp),
-					role: "system",
-					kind: "system",
-					subtype: "task",
-					text: text.split("\n")[0]!,
-				});
+			out.push(backgroundResult(rec, id));
 			continue;
 		}
 		if (rec.type === "custom_message") {

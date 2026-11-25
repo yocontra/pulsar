@@ -8,14 +8,15 @@ import {
 } from "react";
 import { harden } from "rehype-harden";
 import {
-	type CodeHighlighterPlugin,
 	type DiagramPlugin,
+	defaultComponents,
 	defaultRehypePlugins,
 	type MathPlugin,
 	type StreamdownProps,
 } from "streamdown";
 import { API_HEADER } from "../api/types.ts";
 import "streamdown/styles.css";
+import { CodeBlock } from "./CodeBlock.tsx";
 import { dollarGuard } from "./dollars.ts";
 import { FileRef, filePath, isFileHref } from "./file-ref.tsx";
 
@@ -140,34 +141,6 @@ const notify = () => {
 const subscribe = (fn: Changed) => {
 	listeners.add(fn);
 	return () => listeners.delete(fn);
-};
-
-/** Shiki: tokens arrive through the callback once the highlighter chunk loads. */
-let realCode: CodeHighlighterPlugin | null = null;
-let codeLoading: Promise<CodeHighlighterPlugin> | null = null;
-const loadCode = () => {
-	codeLoading ??= import("@streamdown/code").then((m) => {
-		realCode = m.code as unknown as CodeHighlighterPlugin;
-		return realCode;
-	});
-	return codeLoading;
-};
-const code: CodeHighlighterPlugin = {
-	name: "shiki",
-	type: "code-highlighter",
-	getSupportedLanguages: () => realCode?.getSupportedLanguages() ?? [],
-	getThemes: () => realCode?.getThemes() ?? ["pulsar", "pulsar"],
-	supportsLanguage: (lang) =>
-		realCode ? realCode.supportsLanguage(lang) : true,
-	highlight(options, callback) {
-		if (realCode) return realCode.highlight(options, callback);
-		void loadCode().then((c) => {
-			if (!c.supportsLanguage(options.language)) return;
-			const r = c.highlight(options, callback);
-			if (r && callback) callback(r);
-		});
-		return null;
-	},
 };
 
 /** Mermaid: the library (and its diagram chunks) loads when a diagram renders. */
@@ -426,20 +399,15 @@ export function useSafeStreamdown(text: unknown): Partial<StreamdownProps> {
 	if (!math && typeof text === "string" && MATH.test(text)) loadMath();
 	return useMemo(
 		() => ({
-			plugins: math ? { code, mermaid, math } : { code, mermaid },
+			plugins: math ? { mermaid, math } : { mermaid },
 			rehypePlugins,
 			components,
 			// Plain links (see externalLinks), not Streamdown's confirm dialog.
 			linkSafety: { enabled: false },
-			// Presentation only: the app's CSS-variable code theme (both schemes),
-			// copy without download, no line numbers in prose code.
-			shikiTheme: ["pulsar", "pulsar"],
 			controls: {
-				code: { copy: true, download: false },
 				table: false,
 				mermaid: { copy: true, download: false, fullscreen: true },
 			},
-			lineNumbers: false,
 		}),
 		[math],
 	);
@@ -593,6 +561,31 @@ function MarkdownImage({
 
 export const components: StreamdownProps["components"] = {
 	img: MarkdownImage,
+	pre: (props) => {
+		const [child] = props.node?.children ?? [];
+		if (child?.type === "element" && child.tagName === "code") {
+			const classes = child.properties.className;
+			const lang = Array.isArray(classes)
+				? classes
+						.find((c) => typeof c === "string" && c.startsWith("language-"))
+						?.toString()
+						.slice(9)
+				: undefined;
+			if (
+				lang !== "mermaid" &&
+				child.children.every((part) => part.type === "text")
+			) {
+				return (
+					<CodeBlock
+						code={child.children.map((part) => part.value).join("")}
+						lang={lang}
+						className="ds-markdown-code"
+					/>
+				);
+			}
+		}
+		return <defaultComponents.pre {...props} />;
+	},
 	// Not an HTML tag: the file references fileLinks makes.
 	...({
 		"file-ref": ({
