@@ -204,12 +204,20 @@ export class SocketTransport {
 					};
 				}
 			}
-			if (caller.closed.aborted)
-				throw new RpcError(
-					"closed",
-					"MCP connection closed during identification",
-				);
+		} else if (
+			reg?.role === "mcp" &&
+			reg.harness === "antigravity" &&
+			reg.meta?.acp !== "1" &&
+			reg.pid &&
+			!reg.sessionId
+		) {
+			// An already-running MCP client may reconnect with only its host PID.
+			const detected = await antigravityProcess(reg.pid);
+			if (detected.sessionId && detected.cwd === reg.cwd)
+				reg = { ...reg, sessionId: detected.sessionId };
 		}
+		if (caller.closed.aborted)
+			throw new RpcError("closed", "Connection closed during identification");
 		this.service.setRole(caller, reg?.role ?? "cli");
 		// One live MCP connection owns a session id; a second claimant (two Codex
 		// threads in one app-server) is told to pick another thread.

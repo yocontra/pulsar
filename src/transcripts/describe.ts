@@ -57,6 +57,7 @@ add(
 	"local_shell",
 	"local_shell_call",
 	"run_terminal_cmd",
+	"run_command",
 	"monitor",
 	"bashoutput",
 	"bash_output",
@@ -68,7 +69,14 @@ add(
 add("code", "exec", "eval");
 add("read", "read", "view", "read_file", "notebookread", "cat");
 add("image", "view_image");
-add("edit", "edit", "multiedit", "str_replace", "str_replace_editor");
+add(
+	"edit",
+	"edit",
+	"edit_file",
+	"multiedit",
+	"str_replace",
+	"str_replace_editor",
+);
 add("patch", "apply_patch", "patch");
 add("write", "write", "create", "write_file");
 add("notebook", "notebookedit", "notebook_edit");
@@ -76,7 +84,7 @@ add("search", "grep", "search", "rg", "codebase_search");
 add("list", "glob", "ls", "find", "list", "list_dir");
 add("websearch", "websearch", "web_search", "web_search_call");
 add("fetch", "webfetch", "web_fetch", "fetch");
-add("todo", "todowrite", "todoread", "update_plan", "todo");
+add("todo", "todowrite", "todoread", "update_steps", "update_plan", "todo");
 add("plan", "exitplanmode", "enterplanmode");
 add("question", "askuserquestion", "ask", "question", "request_user_input");
 add("task", "task", "agent", "spawn_agent");

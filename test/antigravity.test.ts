@@ -39,7 +39,7 @@ test("Antigravity uses only its open conversation databases and own CLI log", ()
 			`fcwd\nn/project\nf1\nn${log}\nf2\nn${log}\nf3\nn${conversations}/${first}.db\nf4\nn${conversations}/${second}.db\nf5\nn/unrelated/${first}.db`,
 			conversations,
 		),
-	).toEqual({ cwd: "/project", sessions: [first, second], log });
+	).toEqual({ cwd: "/project", sessions: [first, second], presence: [], log });
 	expect(
 		antigravityActiveConversation(
 			`${logLine(first)}\n${logLine(second)}\n${logLine(first)} untrusted trailing text`,

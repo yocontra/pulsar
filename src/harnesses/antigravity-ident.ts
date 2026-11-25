@@ -20,6 +20,8 @@ export function antigravityFiles(output: string, directory: string) {
 	let cwd: string | null = null;
 	const sessions = new Set<string>();
 	const logs = new Set<string>();
+	const presence = new Set<string>();
+	const presenceDir = join(dirname(directory), "presence");
 	for (const line of output.split("\n")) {
 		if (line.startsWith("f")) fd = line.slice(1);
 		if (!line.startsWith("n/")) continue;
@@ -31,7 +33,12 @@ export function antigravityFiles(output: string, directory: string) {
 			/^cli-\d{8}_\d{6}\.log$/.test(basename(path))
 		)
 			logs.add(path);
-		if (!/^\d+$/.test(fd) || dirname(path) !== directory) continue;
+		if (!/^\d+$/.test(fd)) continue;
+		if (dirname(path) === presenceDir && path.endsWith(".lock")) {
+			const id = basename(path, ".lock");
+			if (ANTIGRAVITY_SESSION_ID.test(id)) presence.add(id);
+		}
+		if (dirname(path) !== directory) continue;
 		const id = basename(path, ".db");
 		if (path.endsWith(".db") && ANTIGRAVITY_SESSION_ID.test(id))
 			sessions.add(id);
@@ -39,6 +46,7 @@ export function antigravityFiles(output: string, directory: string) {
 	return {
 		cwd,
 		sessions: [...sessions],
+		presence: [...presence],
 		log: logs.size === 1 ? [...logs][0]! : null,
 	};
 }
@@ -62,7 +70,14 @@ export async function antigravitySession(
 	descriptors: string,
 	directory: string,
 ) {
-	const { cwd, sessions, log } = antigravityFiles(descriptors, directory);
+	const { cwd, sessions, log, presence } = antigravityFiles(
+		descriptors,
+		directory,
+	);
+	// The CLI holds the active conversation's lock even when it opens a child's
+	// database or subscribes to that child's updates in the same process.
+	if (presence.length)
+		return { cwd, sessionId: presence.length === 1 ? presence[0]! : null };
 	const hint =
 		log &&
 		antigravityActiveConversation(
