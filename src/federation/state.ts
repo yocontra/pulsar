@@ -10,7 +10,7 @@ import type {
 } from "../http/wire.ts";
 import { cleanRepoUrl } from "../repo-url.ts";
 import { cleanAnswer, cleanPrompt, KINDS } from "../service/interactions.ts";
-import type { PoolMachine } from "../service/pool.ts";
+import { isLocalSubagentId, type PoolMachine } from "../service/pool.ts";
 import { clean as cleanText, clip, SUMMARY_MAX } from "../service/push-copy.ts";
 import type { Agent, AgentStatus, InboundPolicy } from "../types.ts";
 import {
@@ -85,7 +85,14 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 	const id = text(a.id, 300);
 	const name = text(a.name, 200);
 	const harness = text(a.harness, 60);
-	if (!id || id.includes("/") || !name || !harness) return null;
+	if (
+		!id ||
+		!name ||
+		!harness ||
+		(id.includes("/") &&
+			!(id.startsWith(`${harness}:`) && isLocalSubagentId(id)))
+	)
+		return null;
 	const status = STATUSES.has(a.status as AgentStatus)
 		? (a.status as AgentStatus)
 		: "unknown";
@@ -598,7 +605,8 @@ export class PoolState {
 			name: peer.name,
 			link: peer.link,
 			linkSince: peer.linkSince,
-			agents: peer.agents.size,
+			agents: [...peer.agents.keys()].filter((id) => !isLocalSubagentId(id))
+				.length,
 		};
 		if (peer.link === "asleep")
 			return {

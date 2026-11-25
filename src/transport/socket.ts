@@ -214,8 +214,19 @@ export class SocketTransport {
 		// One live MCP connection owns a session id; a second claimant (two Codex
 		// threads in one app-server) is told to pick another thread.
 		if (reg) this.service.checkClaim(caller, reg);
-		const none = { version: VERSION, protocol: PROTOCOL_VERSION, agent: null };
+		const none = {
+			version: VERSION,
+			protocol: PROTOCOL_VERSION,
+			agent: null,
+			ompChildMessaging: true,
+		};
 		if (!reg) return none;
+		if (reg.subagent !== undefined) {
+			const agent = await this.service.registerOmpChild(caller, reg);
+			return { ...none, agent: this.service.publicAgent(agent) };
+		}
+		const child = await this.service.bindNativeChild(caller, reg);
+		if (child) return { ...none, agent: this.service.publicAgent(child) };
 		if (reg.role === "cli") {
 			// `pulsar send` run by an agent's shell speaks as that agent, never as the operator.
 			if (

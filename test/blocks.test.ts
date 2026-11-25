@@ -9,7 +9,7 @@ import {
 	questions,
 	todos,
 } from "../src/transcripts/describe.ts";
-import { toolDetail } from "../src/transcripts/summary.ts";
+import { callEvent, toolDetail } from "../src/transcripts/summary.ts";
 import { newParseState } from "../src/transcripts/types.ts";
 import {
 	claudeLog,
@@ -25,6 +25,26 @@ const call = (name: string, nth = 0) =>
 const summary = (name: string, nth = 0) => call(name, nth)?.tool?.summary;
 
 describe("chat blocks: parsers", () => {
+	test("tool previews omit Pulsar's child identity credential", () => {
+		const state = newParseState();
+		const args = {
+			to: "worker",
+			body: "Check the result",
+			sourceProof: "one-use-token",
+		};
+		for (const name of ["mcp__pulsar__send", "pulsar_send"]) {
+			const event = callEvent(state, { id: name, ts: 1 }, name, name, args);
+			expect(event.tool?.input).toEqual({ to: args.to, body: args.body });
+			expect(JSON.stringify(state.calls.get(name))).not.toContain(
+				args.sourceProof,
+			);
+		}
+		expect(
+			callEvent(state, { id: "foreign", ts: 1 }, "Other", "foreign", args).tool
+				?.input,
+		).toEqual(args);
+	});
+
 	test("Claude markup never reaches a user bubble", () => {
 		const users = events.filter((e) => e.role === "user").map((e) => e.text);
 		for (const t of users) {

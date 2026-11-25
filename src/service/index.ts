@@ -1,5 +1,5 @@
 import { access } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { ClientErrors } from "../diagnostics/client-errors.ts";
 import {
 	type LocalDiagnosticsDeps,
@@ -11,7 +11,9 @@ import { PoolAdmin, type PoolVerb } from "../federation/admin.ts";
 import { PoolMembers } from "../federation/members.ts";
 import { type TailnetStatus, TailscaleTailnet } from "../federation/tailnet.ts";
 import { gitInfoAsync } from "../git.ts";
+import { codexThreadIdentity } from "../harnesses/codex-child-ident.ts";
 import { DRIVERS, driverFor } from "../harnesses/index.ts";
+import { opencodeSessionIdentity } from "../harnesses/opencode-ident.ts";
 import type { LocalAnswerCheck, PromptRef } from "../harnesses/types.ts";
 import { HostedCatalog, hostedReport } from "../hosted/catalog.ts";
 import {
@@ -72,6 +74,7 @@ import {
 } from "./caller.ts";
 import type { CatalogPorts } from "./catalog.ts";
 import { Changes } from "./changes.ts";
+import { ClaudeChildHooks } from "./claude-child-hooks.ts";
 import { type ControlPorts, Controls } from "./controls.ts";
 import { Deliveries, type DeliveryConfig } from "./delivery.ts";
 import { EnrollGate } from "./enroll.ts";
@@ -90,7 +93,7 @@ import { Mailbox } from "./mailbox.ts";
 import { BACKFILL_MS, MessageSearch } from "./message-search.ts";
 import { SqlitePasskeyStore } from "./passkey-store.ts";
 import { Passkeys } from "./passkeys.ts";
-import { isLocalSubagentId, type PoolView } from "./pool.ts";
+import { isLocalSubagentId, type PoolView, SUB_MARK } from "./pool.ts";
 import { PrReviewOps } from "./pr-review.ts";
 import { Presence } from "./presence.ts";
 import { Push, type PushOptions } from "./push.ts";
@@ -229,6 +232,7 @@ export class PulsarService {
 	readonly changes: Changes;
 	/** Agents' subagents: children kept apart from the registry. */
 	readonly subagents: Subagents;
+	private readonly claudeChildHooks: ClaudeChildHooks;
 	/** Stop: interrupting agents' turns. */
 	readonly interrupts: Interrupts;
 	/** Acting ops (attachments, launch, git): Prove Human here, home-node proof for remote agents. */
@@ -326,11 +330,26 @@ export class PulsarService {
 			registry: this.registry,
 			events: this.events,
 		});
+		this.registry.discoveredSubagents = () => this.subagents.addressable();
+		this.registry.discoveredSubagent = (id) => this.subagents.localTarget(id);
+		this.registry.nativeSubagentAliases = () => this.subagents.nativeAliases();
+		this.registry.nativeSubagentTarget = (id) => this.subagents.aliasTarget(id);
+		this.claudeChildHooks = new ClaudeChildHooks({
+			registry: this.registry,
+			store: this.store,
+			agentFor: (id) => this.subagents.agentFor(id),
+			refresh: (id) => this.subagents.refresh(id),
+		});
+		this.subagents.hookCanDeliver = (parent, key) =>
+			this.claudeChildHooks.isActive(parent, key);
+		this.subagents.hookIdentity = (child) =>
+			this.claudeChildHooks.applyIdentity(child);
 		this.router = new Router({
 			store: this.store,
 			registry: this.registry,
 			sessions: this.sessions,
 			waiters: this.waiters,
+			resolveSubagent: (id) => this.subagents.resolveLocalTarget(id),
 		});
 		this.mailbox = new Mailbox({
 			store: this.store,
@@ -338,6 +357,7 @@ export class PulsarService {
 			router: this.router,
 			waiters: this.waiters,
 			events: this.events,
+			resolveSubagent: (id) => this.subagents.resolveLocalTarget(id),
 		});
 		this.deliveries = new Deliveries({
 			store: this.store,
@@ -992,9 +1012,13 @@ export class PulsarService {
 			"abort",
 			() => {
 				const role = this.sessions.role(caller);
+				const id = agentIdOf(caller.principal);
+				const parent = id ? this.registry.get(id)?.meta.subagentOf : undefined;
 				this.sessions.remove(caller);
 				this.touch();
 				this.registry.detach(caller, role);
+				if (parent && !this.registry.closed)
+					void this.subagents.refresh(parent);
 			},
 			{ once: true },
 		);
@@ -1032,6 +1056,11 @@ export class PulsarService {
 	 */
 	borrowAgent(caller: Caller, reg: Registration) {
 		const id = this.registry.agentId(reg.harness, reg.sessionId, reg.pid);
+		if (isLocalSubagentId(id))
+			throw new RpcError(
+				"forbidden",
+				"subagent identity must be proved by its extension",
+			);
 		const agent =
 			this.registry.get(id) ??
 			this.registry.upsert({
@@ -1051,7 +1080,185 @@ export class PulsarService {
 	}
 
 	/** An MCP server or extension registers its session; the caller becomes that agent. */
+	async registerOmpChild(caller: Caller, reg: Registration): Promise<Agent> {
+		const child = reg.subagent;
+		if (
+			reg.role !== "extension" ||
+			reg.harness !== "omp" ||
+			!reg.pid ||
+			!Number.isSafeInteger(reg.pid) ||
+			reg.pid < 2 ||
+			!child ||
+			typeof child.key !== "string" ||
+			!/^[A-Za-z0-9._-]{1,100}$/.test(child.key) ||
+			typeof child.file !== "string" ||
+			child.file.length > 4096 ||
+			!isAbsolute(child.file) ||
+			agentIdOf(caller.principal)
+		)
+			throw new RpcError("bad_request", "invalid OMP subagent registration");
+		const agent = await this.subagents.ompChild(reg.pid, child.key, child.file);
+		if (caller.closed.aborted || !agent)
+			throw new RpcError("not_found", "no live OMP subagent owns that file");
+		if (this.registry.connectedSubagent(agent.id))
+			throw new RpcError(
+				"session_claimed",
+				"this OMP subagent already has a connection",
+			);
+		agent.pid = reg.pid;
+		agent.registered = true;
+		if (reg.capabilities?.includes("acks")) agent.meta.acks = "1";
+		this.registry.registerSubagent(agent);
+		caller.principal = { kind: "agent", agentId: agent.id };
+		this.sessions.bind(caller);
+		this.events.emit("agent", { action: "join", agent: toPublic(agent) });
+		void this.subagents.refresh(agent.meta.subagentOf!);
+		return agent;
+	}
+
+	/** A native MCP connection speaks as a child after the harness verifies its lineage. */
+	async bindNativeChild(
+		caller: Caller,
+		reg: Registration,
+	): Promise<Agent | null> {
+		if (reg.role !== "mcp" || !reg.sessionId || reg.meta?.acp === "1")
+			return null;
+		const lookup =
+			reg.harness === "opencode"
+				? opencodeSessionIdentity
+				: reg.harness === "codex" && reg.meta?.nativeToolContext === "1"
+					? codexThreadIdentity
+					: null;
+		if (!lookup) return null;
+		const child = await lookup(reg.sessionId);
+		if (!child?.parentId) {
+			if (reg.harness !== "codex") return null;
+			if (!child || caller.closed.aborted)
+				throw new RpcError(
+					"not_found",
+					"The invoking Codex thread could not be verified",
+				);
+			const git = await gitInfoAsync(child.cwd, { lane: "user" });
+			if (caller.closed.aborted)
+				throw new RpcError("closed", "The Codex MCP connection closed");
+			return this.registerAgent(caller, {
+				...reg,
+				cwd: child.cwd,
+				project: git.project,
+				branch: git.branch,
+			});
+		}
+		let parentSession = child;
+		const lineage = new Set([child.id]);
+		while (parentSession.parentId) {
+			const id = parentSession.parentId;
+			const parent =
+				lineage.has(id) || lineage.size >= 10 ? null : await lookup(id);
+			if (!parent)
+				throw new RpcError(
+					"not_found",
+					"The harness did not verify a supported root for this child",
+				);
+			lineage.add(id);
+			parentSession = parent;
+		}
+		if (caller.closed.aborted)
+			throw new RpcError("closed", "The child MCP connection closed");
+		const parentId = this.registry.agentId(reg.harness, parentSession.id, null);
+		let parent = this.registry.get(parentId);
+		if (!parent || parent.status === "gone")
+			parent = this.registry.upsert({
+				harness: reg.harness,
+				sessionId: parentSession.id,
+				pid: null,
+				cwd: parentSession.cwd,
+				project: null,
+				branch: null,
+				tags: [],
+				registered: false,
+				meta: parentSession.title
+					? { harnessName: parentSession.title, harnessNameSource: "auto" }
+					: {},
+			});
+		await this.subagents.refresh(parentId);
+		const id = `${parentId}${SUB_MARK}${child.id}`;
+		const discovered = this.subagents.agentFor(id);
+		const agent =
+			this.registry.get(id) ??
+			discovered ??
+			(reg.harness === "codex"
+				? ({
+						...parent,
+						id,
+						name: child.title ?? "Codex subagent",
+						sessionId: child.id,
+						pid: null,
+						tags: [],
+						activity: null,
+						inbound: "accept",
+						createdAt: Date.now(),
+						lastSeen: Date.now(),
+						meta: { subagentOf: parentId, subagentKey: child.id },
+					} satisfies Agent)
+				: null);
+		if (
+			caller.closed.aborted ||
+			!agent ||
+			agent.sessionId !== child.id ||
+			agent.harness !== reg.harness
+		)
+			throw new RpcError(
+				"not_found",
+				"The child could not be verified in its parent's session list",
+			);
+		const oldId = this.registry.agentId(reg.harness, child.id, null);
+		const currentId = agentIdOf(caller.principal);
+		if (currentId && currentId !== oldId && currentId !== id)
+			throw new RpcError(
+				"forbidden",
+				"The MCP connection already has a different session",
+			);
+		if (
+			[id, oldId].some((key) =>
+				this.sessions
+					.forAgent(key)
+					.some((c) => c !== caller && this.sessions.role(c) === "mcp"),
+			)
+		)
+			throw new RpcError(
+				"session_claimed",
+				"The child already has an MCP connection",
+			);
+		agent.cwd = child.cwd;
+		agent.status = "busy";
+		agent.registered = true;
+		agent.meta.subagentNative = "1";
+		if (!discovered) agent.meta.subagentOutboundOnly = "1";
+		else delete agent.meta.subagentOutboundOnly;
+		if (reg.capabilities?.includes("acks")) agent.meta.acks = "1";
+		this.store.reassign(oldId, id);
+		this.waiters.reassign(oldId, id);
+		this.registry.delete(oldId);
+		this.registry.registerSubagent(agent);
+		caller.principal = { kind: "agent", agentId: id };
+		this.sessions.bind(caller);
+		agent.reach = this.registry.reachOf(agent);
+		this.events.emit("agent", { action: "join", agent: toPublic(agent) });
+		void this.deliveries.back(agent).catch(() => {});
+		void this.subagents.refresh(parentId);
+		return agent;
+	}
+
 	registerAgent(caller: Caller, reg: Registration) {
+		if (
+			isLocalSubagentId(
+				this.registry.agentId(reg.harness, reg.sessionId, reg.pid),
+			)
+		)
+			throw new RpcError(
+				"forbidden",
+				"subagent identity must be proved by its extension",
+			);
 		const protectedMeta = this.checkTakeover(caller, reg);
 		// Sticky per agent: an MCP server with the ack tools makes its agent acks-capable.
 		if (reg.capabilities?.includes("acks")) protectedMeta.acks = "1";
@@ -1167,7 +1374,7 @@ export class PulsarService {
 
 	/** An agent as callers see it (no driver meta). */
 	publicAgent(agent: Agent): PublicAgent {
-		return toPublic(agent);
+		return agent.meta.subagentOf ? this.registry.view(agent) : toPublic(agent);
 	}
 
 	/** Runs one request for a caller. `hello` belongs to the transport. */
@@ -1184,6 +1391,7 @@ export class PulsarService {
 			typeof p.agent === "string" ? p.agent : undefined,
 		);
 		const { registry, mailbox } = this;
+		const claudeChild = this.claudeChildHooks.source(caller, method);
 		switch (method) {
 			case "status":
 				return {
@@ -1208,13 +1416,16 @@ export class PulsarService {
 					clientErrors: this.clientErrors.summary(),
 				};
 			case "whoami": {
-				const me = registry.self(caller);
-				return { agent: toPublic(me), unread: this.store.unreadCount(me.id) };
+				const me = claudeChild ?? registry.self(caller);
+				return {
+					agent: this.publicAgent(me),
+					unread: this.store.unreadCount(me.id),
+				};
 			}
 			case "list":
 				return registry.list(String(p.selector ?? "*"), Boolean(p.includeGone));
 			case "send":
-				return await mailbox.send(registry.sender(caller), {
+				return await mailbox.send(claudeChild ?? registry.sender(caller), {
 					to: String(p.to ?? ""),
 					body: String(p.body ?? ""),
 					priority: (p.priority as Priority) ?? "normal",
@@ -1223,19 +1434,28 @@ export class PulsarService {
 				});
 			case "reply":
 				return await mailbox.reply(
-					registry.sender(caller),
+					claudeChild ?? registry.sender(caller),
 					String(p.messageId ?? ""),
 					String(p.body ?? ""),
 					(p.priority as Priority) ?? "normal",
 				);
 			case "inbox":
 				return mailbox.inbox(
-					registry.sender(caller),
+					claudeChild ?? registry.sender(caller),
 					p.markRead !== false,
 					clampInt(p.limit, 20, 1, 100),
 				);
 			case "set_identity": {
-				registry.self(caller);
+				if (!claudeChild) registry.self(caller);
+				const changeIdentity = (params: Record<string, unknown>) => {
+					const result = registry.setIdentity(
+						claudeChild ?? registry.self(caller),
+						params,
+					);
+					if (claudeChild?.meta.subagentOf)
+						void this.subagents.refresh(claudeChild.meta.subagentOf);
+					return result;
+				};
 				// A folder that exists, with its git info warmed for at most 250 ms
 				// (async: other requests go on); a slower answer is applied later.
 				// The agent is looked up again after each wait: a scan may have
@@ -1250,14 +1470,14 @@ export class PulsarService {
 						));
 					if (!exists) {
 						const { cwd: _dropped, ...rest } = p;
-						return registry.setIdentity(registry.self(caller), rest);
+						return changeIdentity(rest);
 					}
 					await Promise.race([
 						gitInfoAsync(cwd, { lane: "user" }),
 						new Promise((r) => setTimeout(r, 250).unref?.()),
 					]);
 				}
-				return registry.setIdentity(registry.self(caller), p);
+				return changeIdentity(p);
 			}
 			case "set_status": {
 				const me = registry.self(caller);
@@ -1268,11 +1488,11 @@ export class PulsarService {
 			}
 			case "msg.ack":
 				return this.deliveries.ack(
-					registry.self(caller),
+					claudeChild ?? registry.self(caller),
 					String(p.messageId ?? ""),
 				);
 			case "msg.done": {
-				const me = registry.sender(caller);
+				const me = claudeChild ?? registry.sender(caller);
 				const id = String(p.messageId ?? "");
 				const result = typeof p.result === "string" ? p.result.trim() : "";
 				// A result is the answer: it goes to the sender as a reply. Done is
@@ -1285,13 +1505,16 @@ export class PulsarService {
 					} catch (e) {
 						unsent = e;
 					}
-				const done = this.deliveries.markDone(registry.self(caller), id);
+				const done = this.deliveries.markDone(
+					claudeChild ?? registry.self(caller),
+					id,
+				);
 				if (unsent) throw unsent;
 				return done;
 			}
 			case "msg.nack":
 				return await this.deliveries.nack(
-					registry.self(caller),
+					claudeChild ?? registry.self(caller),
 					String(p.messageId ?? ""),
 					String(p.reason ?? "no reason given").slice(0, 500),
 					p.retry === true,
@@ -1331,14 +1554,28 @@ export class PulsarService {
 				);
 				return { ok: true };
 			case "wait":
-				return await mailbox.wait(caller, registry.sender(caller), p);
+				return await mailbox.wait(
+					caller,
+					claudeChild ?? registry.sender(caller),
+					p,
+				);
 			case "history":
-				return mailbox.history(registry.sender(caller), p);
+				return mailbox.history(claudeChild ?? registry.sender(caller), p);
 			case "tail":
 				this.tail(caller);
 				return { ok: true };
 			case "transcript.read":
 				return await this.readTranscript(caller, p);
+			case "claude.subagent.bind":
+				return {
+					agent: this.publicAgent(
+						await this.claudeChildHooks.bind(caller, p.proof, p.tool),
+					),
+				};
+			case "claude.subagent.collect":
+				return await this.claudeChildHooks.collect(caller, p);
+			case "claude.subagent.confirm":
+				return this.claudeChildHooks.confirm(caller);
 			case "approval.request": {
 				// Stopping (an upgrade, a restart): the hook asks the next daemon.
 				if (this.approvals.stopping) return { decision: null, retry: true };

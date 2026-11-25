@@ -37,7 +37,13 @@ import {
 	splitSubagentId,
 } from "../src/service/pool.ts";
 import { newParseState } from "../src/transcripts/types.ts";
-import { restoreEnv } from "./helpers.ts";
+import {
+	agentClient,
+	operator,
+	registration,
+	restoreEnv,
+	startDaemon,
+} from "./helpers.ts";
 import {
 	agentRecord,
 	rec,
@@ -429,6 +435,14 @@ describe("omp subagents", () => {
 			`${head("Builder")}${rec({ type: "message", message: { role: "assistant" } })}`,
 		);
 		writeFileSync(join(folder, "1.bash.log"), "not a subagent");
+		writeFileSync(
+			join(folder, "changes.jsonl"),
+			rec({ type: "edit", path: "src/file.ts" }),
+		);
+		writeFileSync(
+			join(folder, "wrong-parent.jsonl"),
+			head("Other").replace(session, "different"),
+		);
 		// Died: no exit record, no result, no write for an hour.
 		writeFileSync(
 			join(folder, "Ghost.jsonl"),
@@ -530,9 +544,9 @@ describe("omp subagents: which session", () => {
 		).toEqual(["MineTask"]);
 	});
 
-	test("nothing exact: the newest session of the folder", async () => {
+	test("nothing exact: do not claim children from another parent", async () => {
 		open = [];
-		expect(await keys({ id: "omp:pid:3", pid: 3 })).toEqual(["OtherTask"]);
+		expect(await keys({ id: "omp:pid:3", pid: 3 })).toEqual([]);
 	});
 
 	test("the session log is the agent's own session", async () => {
@@ -710,6 +724,32 @@ process.stdout.write(JSON.stringify(r[key] ?? {}));
 		writeFileSync(
 			routes,
 			JSON.stringify({
+				"GET /api/session/ses_lead": {
+					data: { id: "ses_lead", directory: "/tmp", parentID: null },
+				},
+				"GET /api/session/ses_kid1": {
+					data: { id: "ses_kid1", directory: "/tmp", parentID: "ses_lead" },
+				},
+				"GET /api/session/ses_kid2": {
+					data: { id: "ses_kid2", directory: "/tmp", parentID: "ses_lead" },
+				},
+				"GET /api/session/ses_grand": {
+					data: { id: "ses_grand", directory: "/tmp", parentID: "ses_kid1" },
+				},
+				"POST /api/session/ses_kid1/prompt": { data: {} },
+				"POST /api/session/ses_kid2/prompt": { data: {} },
+				"GET /api/session?limit=500&order=desc": {
+					data: [
+						{ id: "ses_grand", parentID: "ses_kid1", title: "nested" },
+						{ id: "ses_deep", parentID: "ses_grand", title: "deeper" },
+						{
+							id: "ses_unrelated",
+							parentID: "ses_unrelated_root",
+							title: "other tree",
+						},
+						{ id: "ses_lead", parentID: "ses_deep", title: "invalid cycle" },
+					],
+				},
 				"GET /api/session?parentID=ses_lead": {
 					data: [
 						{
@@ -757,7 +797,15 @@ process.stdout.write(JSON.stringify(r[key] ?? {}));
 			}),
 			1_790_000_010_000 + IDLE_MAX_MS / 2,
 		);
+		expect(found.find((f) => f.key === "ses_deep")?.parentKey).toBe(
+			"ses_grand",
+		);
+		expect(found.find((f) => f.key === "ses_grand")?.parentKey).toBe(
+			"ses_kid1",
+		);
 		expect(found.map((f) => f.key).sort()).toEqual([
+			"ses_deep",
+			"ses_grand",
 			"ses_kid1",
 			"ses_kid2",
 			"ses_kid3",
@@ -774,5 +822,57 @@ process.stdout.write(JSON.stringify(r[key] ?? {}));
 		expect(found.find((f) => f.key === "ses_kid3")?.state).toBe("idle");
 		expect(found.find((f) => f.key === "ses_kid2")?.state).toBe("done");
 		expect(found.find((f) => f.key === "ses_kid4")?.state).toBe("done");
+	});
+
+	test("native MCP child calls use the same identity as direct delivery", async () => {
+		const { daemon, cleanup } = await startDaemon();
+		try {
+			const a = await agentClient(
+				registration({
+					harness: "opencode",
+					role: "mcp",
+					sessionId: "ses_kid1",
+				}),
+			);
+			const b = await agentClient(
+				registration({
+					harness: "opencode",
+					role: "mcp",
+					sessionId: "ses_grand",
+				}),
+			);
+			const issuer = await operator();
+			try {
+				expect(a.agent.id).toBe("opencode:ses_lead/sub:ses_kid1");
+				expect(b.agent.id).toBe("opencode:ses_lead/sub:ses_grand");
+				expect(
+					daemon.service.registry.get("opencode:ses_kid1"),
+				).toBeUndefined();
+				const sent = await issuer.call<{ message: { id: string } }>("send", {
+					to: a.agent.id,
+					body: "one message",
+				});
+				const inbox = await b.client.call<{ messages: unknown[] }>("inbox");
+				expect(inbox.messages).toEqual([]);
+				await expect(
+					b.client.call("reply", {
+						messageId: sent.message.id,
+						body: "wrong child",
+					}),
+				).rejects.toBeDefined();
+				const response = await a.client.call<{ message: { fromId: string } }>(
+					"reply",
+					{ messageId: sent.message.id, body: "right child" },
+				);
+				expect(response.message.fromId).toBe(a.agent.id);
+			} finally {
+				issuer.close();
+				a.client.close();
+				b.client.close();
+			}
+		} finally {
+			await daemon.stop();
+			cleanup();
+		}
 	});
 });

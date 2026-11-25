@@ -45,9 +45,11 @@ export function giveUpMs(hookTimeoutS: number | null): number {
 
 interface HookInput {
 	session_id?: unknown;
+	agent_id?: unknown;
 	prompt_id?: unknown;
 	hook_event_name?: unknown;
 	tool_name?: unknown;
+	tool_use_id?: unknown;
 	tool_input?: unknown;
 	permission_suggestions?: unknown;
 	cwd?: unknown;
@@ -241,6 +243,133 @@ export async function claudePermission(
 	}
 }
 
+const CLAUDE_CHILD_EVENTS = new Set([
+	"SubagentStart",
+	"PreToolUse",
+	"PostToolUse",
+	"SubagentStop",
+]);
+
+/** The next Claude callback can take queued messages for only its exact child id. */
+export async function claudeSubagentHook(
+	raw: string,
+	output: (context: string) => Promise<void>,
+	sockPath?: string,
+	pid = process.ppid,
+) {
+	let input: HookInput;
+	try {
+		input = JSON.parse(raw) as HookInput;
+	} catch {
+		return;
+	}
+	const sessionId = str(input?.session_id);
+	const key = str(input?.agent_id);
+	const event = str(input?.hook_event_name);
+	if (!sessionId || !key || !event || !CLAUDE_CHILD_EVENTS.has(event)) return;
+	const toolName = str(input.tool_name);
+	const pulseTool =
+		event === "PreToolUse" && !!toolName?.startsWith("mcp__pulsar__");
+	const deny = () =>
+		output(
+			JSON.stringify({
+				hookSpecificOutput: {
+					hookEventName: "PreToolUse",
+					permissionDecision: "deny",
+					permissionDecisionReason:
+						"Pulsar could not verify this subagent for that tool. Ask the parent to make this call.",
+				},
+			}),
+		);
+	const path = sockPath ?? (await checkedSocketPath().catch(() => null));
+	const socket = path ? await open(path) : null;
+	if (!socket) {
+		if (pulseTool) await deny();
+		return;
+	}
+	socket.setTimeout(700, () => socket.destroy());
+	socket.on("error", () => {});
+	let seq = 0;
+	const pending = new Map<number, (frame: Frame | null) => void>();
+	socket.on("close", () => {
+		for (const done of pending.values()) done(null);
+		pending.clear();
+	});
+	readFrames(socket, (frame) => {
+		if (!("id" in frame) || "method" in frame) return;
+		pending.get(frame.id)?.(frame);
+		pending.delete(frame.id);
+	});
+	const request = (method: string, params: unknown) =>
+		new Promise<Frame | null>((resolve) => {
+			if (socket.destroyed) return resolve(null);
+			const id = ++seq;
+			pending.set(id, resolve);
+			writeFrame(socket, { id, method, params });
+		});
+	try {
+		const hello = await request("hello", {
+			protocol: PROTOCOL_VERSION,
+			version: "hook",
+			registration: {
+				role: "cli",
+				harness: "claude",
+				sessionId,
+				pid,
+				cwd: str(input.cwd),
+				project: null,
+				branch: null,
+				tags: [],
+			} satisfies Registration,
+		});
+		if (!hello || !("result" in hello)) {
+			if (pulseTool) await deny();
+			return;
+		}
+		const reply = await request("claude.subagent.collect", {
+			sessionId,
+			pid,
+			key,
+			event,
+			...(pulseTool && { toolName, callId: str(input.tool_use_id) }),
+		});
+		const result =
+			reply && "result" in reply
+				? (reply.result as { context?: unknown; sourceProof?: unknown } | null)
+				: null;
+		const context = str(result?.context);
+		const proof = str(result?.sourceProof);
+		if (
+			pulseTool &&
+			(!proof ||
+				!input.tool_input ||
+				typeof input.tool_input !== "object" ||
+				Array.isArray(input.tool_input))
+		) {
+			await deny();
+			return;
+		}
+		if ((!context && !proof) || event === "SubagentStop") return;
+		await output(
+			JSON.stringify({
+				hookSpecificOutput: {
+					hookEventName: event,
+					...(context && { additionalContext: context }),
+					...(proof && {
+						updatedInput: {
+							...(input.tool_input as Record<string, unknown>),
+							sourceProof: proof,
+						},
+					}),
+				},
+			}),
+		);
+		if (context) await request("claude.subagent.confirm", {});
+	} finally {
+		socket.destroy();
+	}
+}
+
 /** The CLI entry: `pulsar hook <name>`. Always exits 0. */
 export async function runHook(
 	name: string | undefined,
@@ -256,8 +385,20 @@ export async function runHook(
 	setInterval(() => {
 		if (process.ppid !== parent) quit();
 	}, PARENT_CHECK_MS).unref();
-	if (name !== "claude-permission") quit();
+	if (name !== "claude-permission" && name !== "claude-subagent") quit();
 	try {
+		if (name === "claude-subagent") {
+			await claudeSubagentHook(
+				await readStdin(),
+				(context) =>
+					new Promise<void>((resolve, reject) => {
+						process.stdout.write(`${context}\n`, (error) =>
+							error ? reject(error) : resolve(),
+						);
+					}),
+			);
+			return quit();
+		}
 		const out = await claudePermission(
 			await readStdin(),
 			undefined,

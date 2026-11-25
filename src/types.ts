@@ -230,6 +230,8 @@ export interface Registration {
 	 * omp ids are the pid). Tracked messages follow it to the new agent.
 	 */
 	resumeKey?: string;
+	/** An OMP extension bound to a child session persisted by its own process. */
+	subagent?: { file: string; key: string };
 }
 
 export interface DeliveredMessage extends Message {

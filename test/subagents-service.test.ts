@@ -13,6 +13,7 @@ import type {
 	SubagentRow,
 	TreeNode,
 } from "../src/http/wire.ts";
+import type { Caller } from "../src/service/caller.ts";
 import { PulsarService } from "../src/service/index.ts";
 import { DONE_KEEP_MS } from "../src/service/subagents.ts";
 import { Store } from "../src/store.ts";
@@ -187,7 +188,9 @@ describe("listing", () => {
 			color: null,
 		});
 		expect(a1.messaging.mode).toBe("parent");
-		expect(a1.messaging.note).toContain("Claude Code subagents can't receive");
+		expect(a1.messaging.note).toContain(
+			"Map the code cannot receive a direct message now",
+		);
 		expect(a1.messaging.note).toContain("lead");
 	});
 
@@ -557,6 +560,39 @@ describe("live over SSE", () => {
 });
 
 describe("messaging", () => {
+	test("an expired hook route cannot queue a new message even with a fresh discovery cache", async () => {
+		const key = "a4feed";
+		writeClaudeSub(sessionDir, key, { name: "Expiring child" });
+		const original = service.subagents.hookCanDeliver;
+		let active = true;
+		service.subagents.hookCanDeliver = (parent, candidate) =>
+			parent.id === lead.id && candidate === key && active;
+		try {
+			await service.subagents.refresh(lead.id);
+			const id = `${lead.id}/sub:${key}`;
+			const stale = service.registry.find(id)!;
+			expect(stale.reach).toBe("pull");
+			active = false;
+			expect(service.registry.list(`id=${id}`)).toEqual([]);
+			const sent = await service.mailbox.send(
+				service.registry.operator(),
+				{
+					to: id,
+					body: "expired proof test",
+					priority: "normal",
+					replyTo: null,
+					expectReply: false,
+				},
+				[stale],
+			);
+			expect(sent.receipts).toMatchObject([{ agentId: id, state: "refused" }]);
+			expect(store.unreadCount(id)).toBe(0);
+		} finally {
+			service.subagents.hookCanDeliver = original;
+			await service.subagents.refresh(lead.id);
+		}
+	});
+
 	test("a Claude subagent can't take a message: refused with where it would go", async () => {
 		const res = await api("/api/v1/send", {
 			method: "POST",
@@ -568,7 +604,7 @@ describe("messaging", () => {
 			parentId: string;
 		};
 		expect(body.error.code).toBe("subagent_unreachable");
-		expect(body.error.message).toContain("goes to the parent agent");
+		expect(body.error.message).toContain("Send via parent delivers it to lead");
 		expect(body.parentId).toBe(lead.id);
 	});
 
@@ -597,6 +633,9 @@ describe("messaging", () => {
 		const sub = oc.subagents!;
 		const realList = sub.list;
 		const realDeliver = oc.push!.deliver;
+		const realCanPush = oc.push!.canPush;
+		const realNow = service.subagents.now;
+		const closed = new AbortController();
 		const delivered: Array<{ sessionId: string | null; text: string }> = [];
 		const kid: FoundSubagent = {
 			key: "ses_kid",
@@ -633,35 +672,143 @@ describe("messaging", () => {
 				status: "busy",
 			});
 			const id = `${parent.id}/sub:ses_kid`;
+			const standalone = service.registry.upsert({
+				...parent,
+				sessionId: "ses_kid",
+				name: "explore",
+			});
+			const sender = service.registry.operator();
+			const send = (to: string) =>
+				service.mailbox.send(sender, {
+					to,
+					body: "native fixture",
+					priority: "normal",
+					replyTo: null,
+					expectReply: false,
+				});
+			// An exact address discovers the child before anyone opens its page.
+			expect((await send(id)).receipts).toMatchObject([
+				{ agentId: id, state: "sent" },
+			]);
+			expect(service.registry.list("name=explore").map((a) => a.id)).toEqual([
+				id,
+			]);
+			expect(service.registry.live().map((a) => a.id)).not.toContain(
+				standalone.id,
+			);
+			expect((await send("name=explore project=oc")).receipts).toMatchObject([
+				{ agentId: id, state: "sent" },
+			]);
+			expect(
+				(await send(`id=${standalone.id} project=oc`)).receipts,
+			).toMatchObject([{ agentId: id, state: "sent" }]);
 			const row = (await (
 				await api(`/api/v1/subagents/${enc(id)}`)
 			).json()) as SubagentRow;
 			expect(row.messaging.mode).toBe("direct");
 			const res = await api("/api/v1/send", {
 				method: "POST",
-				body: JSON.stringify({ ids: [id], body: "look at src/" }),
+				body: JSON.stringify({
+					ids: [id, standalone.id],
+					body: "look at src/",
+				}),
 			});
 			expect(res.status).toBe(200);
 			const sent = (await res.json()) as {
 				receipts: Array<{ agentId: string; state: string; via: string }>;
 			};
 			expect(sent.receipts[0]?.agentId).toBe(id);
-			await until(() => delivered.length === 1, 15_000);
-			expect(delivered[0]?.sessionId).toBe("ses_kid");
-			expect(delivered[0]?.text).toContain("look at src/");
+			expect(sent.receipts).toHaveLength(1);
+			await until(() => delivered.length === 4, 15_000);
+			expect(delivered.every((push) => push.sessionId === "ses_kid")).toBe(
+				true,
+			);
+			expect(delivered[3]?.text).toContain("look at src/");
 			// Still not an agent.
 			expect(service.registry.get(id)).toBeUndefined();
-			// A finished one: refused, not pretended.
-			sub.list = async () => [{ ...kid, state: "done" }];
+
+			// A verified MCP child keeps its own inbox if provider injection is absent.
+			const bound = service.subagents.agentFor(id)!;
+			bound.registered = true;
+			bound.meta.subagentNative = "1";
+			service.registry.registerSubagent(bound);
+			const childCaller: Caller = {
+				principal: { kind: "agent", agentId: id },
+				closed: closed.signal,
+				emit() {},
+			};
+			service.attach(childCaller);
+			service.setRole(childCaller, "mcp");
+			oc.push!.canPush = () => false;
 			await service.subagents.refresh(parent.id);
+			expect((await service.subagents.get(id)).messaging.note).toContain(
+				"own inbox or wait",
+			);
+			expect(service.registry.find(id)?.reach).toBe("pull");
+			const queued = await send(id);
+			expect(queued.receipts).toMatchObject([
+				{
+					agentId: id,
+					state: "queued",
+					detail: expect.stringContaining("own inbox"),
+				},
+			]);
+			expect(
+				await service.handle(childCaller, "inbox", { markRead: false }),
+			).toMatchObject(
+				expect.arrayContaining([
+					expect.objectContaining({ id: queued.message.id }),
+				]),
+			);
+			expect(delivered).toHaveLength(4);
+			closed.abort();
+			await service.subagents.refresh(parent.id);
+			await expect(send(id)).rejects.toMatchObject({ code: "no_recipients" });
+			oc.push!.canPush = realCanPush;
+			await service.subagents.refresh(parent.id);
+			const stale = service.registry.find(id)!;
+			expect(
+				service.registry.resolvePool("*", sender).map((target) => target.id),
+			).not.toContain(id);
+
+			// A finished one offers explicit parent fallback only.
+			sub.list = async () => [{ ...kid, state: "done" }];
+			service.subagents.now = () => realNow() + 3_000;
+			const expired = await service.mailbox.send(
+				sender,
+				{
+					to: id,
+					body: "stale address",
+					priority: "normal",
+					replyTo: null,
+					expectReply: false,
+				},
+				[stale],
+			);
+			expect(expired.receipts).toMatchObject([
+				{ agentId: id, state: "refused" },
+			]);
+			expect(delivered).toHaveLength(4);
 			const gone = await api("/api/v1/send", {
 				method: "POST",
 				body: JSON.stringify({ ids: [id], body: "again" }),
 			});
-			expect(gone.status).toBe(410);
+			expect(gone.status).toBe(409);
+			const rowAfter = (await (
+				await api(`/api/v1/subagents/${enc(id)}`)
+			).json()) as SubagentRow;
+			expect(rowAfter.messaging.mode).toBe("parent");
+			const fallback = await api("/api/v1/send", {
+				method: "POST",
+				body: JSON.stringify({ ids: [id], viaParent: true, body: "again" }),
+			});
+			expect(fallback.status).toBe(200);
 		} finally {
+			closed.abort();
 			sub.list = realList;
 			oc.push!.deliver = realDeliver;
+			oc.push!.canPush = realCanPush;
+			service.subagents.now = realNow;
 		}
 	});
 });

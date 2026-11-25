@@ -32,7 +32,12 @@ import type {
 import { agentIdOf, type Caller, OPERATOR_ID } from "./caller.ts";
 import type { EventBus } from "./events.ts";
 import { LIMITS } from "./limits.ts";
-import { isAddress, type PoolView, splitAddress } from "./pool.ts";
+import {
+	isAddress,
+	isLocalSubagentId,
+	type PoolView,
+	splitAddress,
+} from "./pool.ts";
 import type { Sessions } from "./sessions.ts";
 import { newId, toPublic } from "./util.ts";
 import type { Waiters } from "./waiters.ts";
@@ -120,6 +125,7 @@ export class Registry {
 	private remoteCache: {
 		key: string;
 		list: Agent[];
+		topLevel: Agent[];
 		byId: Map<string, Agent>;
 	} | null = null;
 
@@ -141,19 +147,79 @@ export class Registry {
 		return this.agents.get(id);
 	}
 
+	/** Set by the service to include native addressed child sessions without adding presence. */
+	discoveredSubagents: () => Agent[] = () => [];
+	discoveredSubagent: (id: string) => Agent | undefined = () => undefined;
+	nativeSubagentAliases: () => Set<string> = () => new Set();
+	nativeSubagentTarget: (id: string) => Agent | undefined = () => undefined;
+
+	/** A verified child has its own mailbox and connection, outside the top-level tree. */
+	registerSubagent(agent: Agent) {
+		this.agents.set(agent.id, agent);
+	}
+
+	connectedSubagent(id: string): Agent | undefined {
+		const child = this.agents.get(id);
+		return child?.meta.subagentOf &&
+			child.status !== "gone" &&
+			this.sessions.extensionFor(id)
+			? child
+			: undefined;
+	}
+
+	/** Native child MCP bindings own an inbox even when the harness cannot inject. */
+	verifiedChildInbox(id: string): Agent | undefined {
+		const child = this.agents.get(id);
+		if (
+			!child?.meta.subagentOf ||
+			child.meta.subagentNative !== "1" ||
+			child.status === "gone" ||
+			!this.sessions
+				.forAgent(id)
+				.some((caller) => this.sessions.role(caller) === "mcp")
+		)
+			return undefined;
+		return {
+			...child,
+			reach: "pull",
+			meta: { ...child.meta, subagentPull: "inbox" },
+		};
+	}
+
 	/**
 	 * A local agent by id, or any pool agent by pool address (this machine's
 	 * own addresses resolve to the local agent).
 	 */
 	find(id: string): Agent | undefined {
-		const local = this.agents.get(id);
+		const registered = this.agents.get(id);
+		const local = isLocalSubagentId(id)
+			? (this.discoveredSubagent(id) ?? registered)
+			: registered;
 		if (local || !isAddress(id)) return local;
 		const parts = splitAddress(id);
 		if (!parts) return undefined;
 		if (parts.machineId === this.store.machineId())
-			return this.agents.get(parts.localId);
+			return this.find(parts.localId);
 		this.remoteAgents();
 		return this.remoteCache?.byId.get(id);
+	}
+
+	/** A delivery's legacy standalone ID and canonical child address denote one session. */
+	legacySubagentTarget(id: string): Agent | undefined {
+		const a = splitAddress(id);
+		return this.nativeSubagentTarget(
+			a?.machineId === this.store.machineId() ? a.localId : id,
+		);
+	}
+
+	/** An obsolete standalone child ID cannot bypass an unavailable child route. */
+	deliveryAgent(id: string): Agent | undefined {
+		const address = splitAddress(id);
+		const local =
+			address?.machineId === this.store.machineId() ? address.localId : id;
+		if (this.nativeSubagentAliases().has(local))
+			return this.nativeSubagentTarget(local);
+		return this.find(id);
 	}
 
 	/**
@@ -161,14 +227,17 @@ export class Registry {
 	 * added to a name another agent in the pool also has (a local agent
 	 * keeps its name).
 	 */
-	remoteAgents(): Agent[] {
+	remoteAgents(includeSubagents = false): Agent[] {
 		const pool = this.pool;
 		if (!pool) return [];
 		const localNames = new Set<string>();
 		for (const a of this.agents.values())
 			if (a.status !== "gone") localNames.add(a.name);
 		const key = `${pool.version()}\u0000${[...localNames].sort().join("\u0000")}`;
-		if (this.remoteCache?.key === key) return this.remoteCache.list;
+		if (this.remoteCache?.key === key)
+			return includeSubagents
+				? this.remoteCache.list
+				: this.remoteCache.topLevel;
 		const remotes = pool.agents();
 		const counts = new Map<string, number>();
 		for (const a of remotes) counts.set(a.name, (counts.get(a.name) ?? 0) + 1);
@@ -177,12 +246,16 @@ export class Registry {
 				? { ...a, name: `${a.name}@${a.machine ?? a.meta.machineId}` }
 				: a,
 		);
+		const topLevel = list.filter(
+			(agent) => !isLocalSubagentId(agent.meta.localId ?? ""),
+		);
 		this.remoteCache = {
 			key,
 			list,
+			topLevel,
 			byId: new Map(list.map((a) => [a.id, a])),
 		};
-		return list;
+		return includeSubagents ? list : topLevel;
 	}
 
 	delete(id: string) {
@@ -344,25 +417,29 @@ export class Registry {
 			const extension = !!this.sessions.extensionFor(agent.id);
 			const active = agent.status !== "gone";
 			const acp = agent.meta.acp === "1";
+			const child = isLocalSubagentId(agent.id);
 			pub.capabilities = {
 				surface: acp ? "managed-acp" : "attached",
 				...(agent.meta.host ? { host: agent.meta.host } : {}),
 				inbox:
 					active &&
-					this.sessions
-						.forAgent(agent.id)
-						.some((c) => this.sessions.role(c) === "mcp"),
+					((child && extension && agent.meta.acks === "1") ||
+						this.sessions
+							.forAgent(agent.id)
+							.some((c) => this.sessions.role(c) === "mcp")),
 				wake: active && agent.inbound === "accept" && agent.reach === "push",
-				stop: active && (extension || !!driver?.canInterrupt?.(agent)),
+				stop:
+					!child && active && (extension || !!driver?.canInterrupt?.(agent)),
 				status:
 					active &&
+					!child &&
 					(extension ||
 						agent.status === "busy" ||
 						agent.status === "idle" ||
 						(!!driver?.liveStatus && !!agent.sessionId) ||
 						!!driver?.scan),
 				transcript: acp || !!driver?.transcript,
-				subagents: !!driver?.subagents && !acp,
+				subagents: !!driver?.subagents && !acp && !child,
 				...(acp
 					? {
 							resume: agent.meta.acpResume === "1",
@@ -1058,8 +1135,13 @@ export class Registry {
 	}
 
 	/** Live agents. A session whose process died is dropped here, before the sweep catches it. */
-	live(): Agent[] {
-		return [...this.agents.values()].filter((a) => {
+	live(includeSubagents = false): Agent[] {
+		const alive = [...this.agents.values()].filter((a) => {
+			if (
+				isLocalSubagentId(a.id) &&
+				(!includeSubagents || !this.discoveredSubagent(a.id))
+			)
+				return false;
 			if (a.status === "gone") return false;
 			if (
 				a.pid &&
@@ -1071,12 +1153,47 @@ export class Registry {
 			}
 			return true;
 		});
+		return this.withNativeSubagents(alive, includeSubagents);
+	}
+
+	private withNativeSubagents(
+		agents: Agent[],
+		includeSubagents: boolean,
+	): Agent[] {
+		const aliases = this.nativeSubagentAliases();
+		const children = includeSubagents ? this.discoveredSubagents() : [];
+		if (!aliases.size && !children.length && !includeSubagents) return agents;
+		const unique = new Map(
+			agents
+				.filter((agent) => !aliases.has(agent.id))
+				.map((agent) => [
+					agent.id,
+					isLocalSubagentId(agent.id) && agent.status !== "gone"
+						? (this.discoveredSubagent(agent.id) ?? agent)
+						: agent,
+				]),
+		);
+		for (const child of children) {
+			const current = unique.get(child.id);
+			if (!current || current.status === "gone") unique.set(child.id, child);
+		}
+		return [...unique.values()];
 	}
 
 	list(selectorText: string, includeGone = false): PublicAgent[] {
 		const selector = parseSelector(selectorText);
-		return [...this.agents.values(), ...this.remoteAgents()]
-			.filter((a) => includeGone || a.status !== "gone")
+		const local = [...this.agents.values()].filter(
+			(a) =>
+				includeGone ||
+				(a.status !== "gone" &&
+					(!isLocalSubagentId(a.id) || this.discoveredSubagent(a.id))),
+		);
+		return [
+			...this.withNativeSubagents(local, true),
+			...this.remoteAgents(true).filter(
+				(a) => includeGone || a.status !== "gone",
+			),
+		]
 			.map((a) => this.view(a))
 			.filter((a) => matches(a, selector))
 			.sort(
@@ -1089,7 +1206,7 @@ export class Registry {
 	/** Live agents a `to` selects, never the sender; an exact name wins over a prefix. */
 	resolveTargets(to: string, sender: Agent): Agent[] {
 		const selector = parseSelector(to);
-		const targets = this.live().filter(
+		const targets = this.live(selector.kind !== "all").filter(
 			(a) => a.id !== sender.id && matches(this.view(a), selector),
 		);
 		return selector.kind === "name"
@@ -1105,7 +1222,11 @@ export class Registry {
 	resolvePool(to: string, sender: Agent): Agent[] {
 		if (!this.pool) return this.resolveTargets(to, sender);
 		const selector = parseSelector(to);
-		const targets = [...this.live(), ...this.remoteAgents()].filter(
+		const includeSubagents = selector.kind !== "all";
+		const targets = [
+			...this.live(includeSubagents),
+			...this.remoteAgents(includeSubagents),
+		].filter(
 			(a) =>
 				a.id !== sender.id &&
 				a.status !== "gone" &&
@@ -1292,7 +1413,9 @@ export class Registry {
 	 * machine (a copy a peer delivered: `<machineId>/<id>`), or undefined.
 	 */
 	from(id: string, fromName = "unknown"): Agent | undefined {
-		const local = this.agents.get(id) ?? this.human(id);
+		const local =
+			(isLocalSubagentId(id) ? this.find(id) : this.agents.get(id)) ??
+			this.human(id);
 		if (local) return local;
 		const parts = splitAddress(id);
 		if (!parts || !this.pool) return undefined;

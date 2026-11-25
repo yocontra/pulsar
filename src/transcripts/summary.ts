@@ -8,6 +8,7 @@ import {
 	shortPath,
 	toolKind,
 } from "./describe.ts";
+import { pulsarTool } from "./pulsar.ts";
 import {
 	DETAIL_LINKS,
 	DOCUMENT_MAX_BYTES,
@@ -364,6 +365,13 @@ export function callEvent(
 	callId: string,
 	input: unknown,
 ): TranscriptEvent {
+	// The hook attaches a one-use credential to Pulsar calls. Keep it out of
+	// transcripts, search indexes, and tool previews sent to other devices.
+	const args = obj(input);
+	if (args && Object.hasOwn(args, "sourceProof") && pulsarTool(name)) {
+		const { sourceProof: _proof, ...visible } = args;
+		input = visible;
+	}
 	const event: TranscriptEvent = {
 		...base,
 		role: "assistant",

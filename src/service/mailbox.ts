@@ -1,13 +1,13 @@
 import { neutralizeHumanTag } from "../human-tag.ts";
 import { RpcError } from "../rpc.ts";
-import { isBroadcast, parseSelector } from "../selector.ts";
+import { isBroadcast, matches, parseSelector } from "../selector.ts";
 import type { Store } from "../store.ts";
 import type { Agent, Message, Priority, Receipt } from "../types.ts";
 import { type Caller, OPERATOR_ID } from "./caller.ts";
 import { trackLevel } from "./delivery.ts";
 import type { EventBus } from "./events.ts";
 import { INTERVALS, LIMITS } from "./limits.ts";
-import { isRemote } from "./pool.ts";
+import { isLocalSubagentId, isRemote, splitAddress } from "./pool.ts";
 import { type Registry, USER_PREFIX } from "./registry.ts";
 import type { Router } from "./router.ts";
 import {
@@ -65,6 +65,7 @@ export class Mailbox {
 	private readonly router: Router;
 	private readonly waiters: Waiters;
 	private readonly events: EventBus;
+	private readonly resolveSubagent: (id: string) => Promise<Agent | undefined>;
 	/** Set by the service: tracked messages an inbox read or `wait` handed over. */
 	onRead: (agent: Agent, messages: Message[]) => void = () => {};
 
@@ -74,12 +75,14 @@ export class Mailbox {
 		router: Router;
 		waiters: Waiters;
 		events: EventBus;
+		resolveSubagent?: (id: string) => Promise<Agent | undefined>;
 	}) {
 		this.store = deps.store;
 		this.registry = deps.registry;
 		this.router = deps.router;
 		this.waiters = deps.waiters;
 		this.events = deps.events;
+		this.resolveSubagent = deps.resolveSubagent ?? (async () => undefined);
 	}
 
 	/** The trimmed body, or an error when it is empty or too large. */
@@ -169,8 +172,41 @@ export class Mailbox {
 			);
 		const body = this.checkBody(input.body);
 		const priority = normalPriority(input.priority);
-		const broadcast = isBroadcast(parseSelector(input.to));
-		const targets = resolved ?? this.registry.resolvePool(input.to, sender);
+		const selector = parseSelector(input.to);
+		const broadcast = isBroadcast(selector);
+		const targets = resolved
+			? [...new Map(resolved.map((target) => [target.id, target])).values()]
+			: this.registry.resolvePool(input.to, sender);
+		if (!resolved && !targets.length && selector.kind !== "all") {
+			const exact =
+				selector.kind === "name"
+					? selector.value
+					: selector.terms.find(
+							(term) => term.key === "id" && !/[*|]/.test(term.value),
+						)?.value;
+			const address = exact ? splitAddress(exact) : null;
+			const local =
+				address?.machineId === this.store.machineId() ? address.localId : exact;
+			if (local && local !== sender.id) {
+				const child = isLocalSubagentId(local)
+					? await this.resolveSubagent(local)
+					: this.registry.legacySubagentTarget(local);
+				if (
+					child &&
+					child.id !== sender.id &&
+					(selector.kind === "name" ||
+						matches(this.registry.view(child), {
+							...selector,
+							terms: selector.terms.map((term) =>
+								term.key === "id" && term.value === exact
+									? { ...term, value: child.id }
+									: term,
+							),
+						}))
+				)
+					targets.push(child);
+			}
+		}
 		if (targets.length === 0) {
 			if (!resolved && !this.registry.human(sender.id))
 				return await this.toOperator(sender, input);
@@ -183,6 +219,7 @@ export class Mailbox {
 		this.recordSend(sender, broadcast);
 
 		const parent = input.replyTo ? this.store.getMessage(input.replyTo) : null;
+		if (parent) this.checkChildReply(sender, parent);
 		// The same reply again (a redelivered ask answered twice): the first one stands.
 		if (parent) {
 			const same = this.sameReply(sender, parent.id, body);
@@ -290,9 +327,22 @@ export class Mailbox {
 			: null;
 	}
 
+	private checkChildReply(sender: Agent, original: Message) {
+		if (
+			isLocalSubagentId(sender.id) &&
+			sender.id !== original.fromId &&
+			!this.store.receipt(original.id, sender.id)
+		)
+			throw new RpcError(
+				"forbidden",
+				"that message does not belong to this subagent",
+			);
+	}
+
 	reply(sender: Agent, messageId: string, body: string, priority: Priority) {
 		const original = this.store.getMessage(messageId);
 		if (!original) throw new RpcError("not_found", `no message ${messageId}`);
+		this.checkChildReply(sender, original);
 		const same = this.sameReply(sender, original.id, body.trim());
 		if (same) return same;
 		// A copy a peer delivered: the reply goes back to the sender's machine,
@@ -316,7 +366,7 @@ export class Mailbox {
 				[sender_],
 			);
 		}
-		const target = this.registry.get(original.fromId);
+		const target = this.registry.deliveryAgent(original.fromId);
 		if (target && target.status !== "gone")
 			return this.send(sender, {
 				to: target.id,

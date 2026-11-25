@@ -1,6 +1,7 @@
 import { access, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { lazyCrypto } from "../lazy.ts";
 import { type Action, skillFor } from "../setup/actions.ts";
 import { exists, runCli, setTomlKey, tryCli, which } from "../setup/files.ts";
 import { codexTurnFailed } from "../transcripts/turn-outcome.ts";
@@ -31,7 +32,9 @@ const codexMisses = new Map<string, number>();
 export const codexMissRetry = { ms: 2000 };
 
 /** Codex rollout: `rollout-…-<thread>.jsonl` in the last month of ~/.codex/sessions. */
-async function codexRolloutAsync(threadId: string): Promise<string | null> {
+export async function codexRolloutAsync(
+	threadId: string,
+): Promise<string | null> {
 	const cached = codexFiles.get(threadId);
 	if (
 		cached &&
@@ -100,14 +103,80 @@ const codexWatch = () => {
 	return watch;
 };
 
+/** Only a loaded child that grants direct input can receive this addressed queue submission. */
+async function queueCodexSubagent(threadId: string | null, text: string) {
+	const via = "codex-queue";
+	if (
+		!threadId ||
+		!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(threadId) ||
+		!(await codexControlReady())
+	)
+		return {
+			ok: false,
+			via,
+			detail: "Codex subagent is not on the local app server.",
+		};
+	try {
+		const [result] = (await codexRpc(
+			[["thread/read", { threadId, includeTurns: false }]],
+			{ experimental: true },
+		)) as [
+			{
+				thread?: {
+					id?: string;
+					parentThreadId?: string | null;
+					canAcceptDirectInput?: boolean;
+					status?: { type?: string };
+				};
+			},
+		];
+		const thread = result?.thread;
+		if (
+			thread?.id !== threadId ||
+			!thread.parentThreadId ||
+			thread.canAcceptDirectInput !== true ||
+			!["active", "idle"].includes(thread.status?.type ?? "")
+		)
+			return {
+				ok: false,
+				via,
+				detail: "This Codex subagent no longer accepts direct input.",
+			};
+		const [receipt] = (await codexRpc(
+			[
+				[
+					"thread/queue/add",
+					{
+						threadId,
+						input: [{ type: "text", text, text_elements: [] }],
+						clientUserMessageId: lazyCrypto().randomUUID(),
+					},
+				],
+			],
+			{ experimental: true },
+		)) as [{ queuedSubmission?: { id?: string } }];
+		return receipt?.queuedSubmission?.id
+			? { ok: true, via }
+			: { ok: false, via, detail: "Codex did not return a queue receipt." };
+	} catch (e) {
+		return { ok: false, via, detail: (e as Error).message };
+	}
+}
+
 export const codex: HarnessDriver = {
 	...codexIdent,
 
 	push: {
 		canPush(agent) {
-			return agent.harness === codex.id && !!agent.sessionId;
+			return (
+				agent.harness === codex.id &&
+				!!agent.sessionId &&
+				agent.meta.subagentOutboundOnly !== "1"
+			);
 		},
 		async deliver(agent, text) {
+			if (agent.meta.subagentOf)
+				return queueCodexSubagent(agent.sessionId, text);
 			try {
 				await run("codex", [
 					"queue",

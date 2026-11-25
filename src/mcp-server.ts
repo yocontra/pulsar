@@ -99,7 +99,7 @@ function typeName(v: unknown): string {
  * Every problem with `args` against `s`, one per line in property order
  * (as zod reported them), or null when they fit. `args` must be an object.
  */
-function validate(
+export function validateToolInput(
 	s: InputSchema,
 	args: Record<string, unknown>,
 ): string | null {
@@ -482,7 +482,7 @@ export class McpStdioServer {
 		});
 		if (!tool) return fail(`Tool ${name} not found`);
 		const args = (raw ?? {}) as Record<string, unknown>;
-		const problem = validate(tool.inputSchema, args);
+		const problem = validateToolInput(tool.inputSchema, args);
 		if (problem)
 			return fail(
 				`Input validation error: Invalid arguments for tool ${name}: ${problem}`,

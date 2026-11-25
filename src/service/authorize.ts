@@ -35,6 +35,9 @@ export const OPS = [
 	"shutdown",
 	/** A harness hook asks the user about a permission prompt (blocks until decided). */
 	"approval.request",
+	"claude.subagent.bind",
+	"claude.subagent.collect",
+	"claude.subagent.confirm",
 	/** The pi/omp extension relays a host dialog (blocks until answered), or says it was answered locally. */
 	"interaction.ask",
 	"interaction.local",
@@ -134,6 +137,9 @@ const FED: ReadonlySet<Op> = new Set<Op>(FED_OPS);
 /** Operations that act on the caller's own agent: an agent principal only. */
 const AGENT_ONLY: ReadonlySet<Op> = new Set<Op>([
 	"approval.request",
+	"claude.subagent.bind",
+	"claude.subagent.collect",
+	"claude.subagent.confirm",
 	"interaction.ask",
 	"interaction.local",
 	"whoami",

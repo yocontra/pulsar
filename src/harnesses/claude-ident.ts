@@ -35,7 +35,7 @@ export function claudeSessionsDir(): string {
 	return join(configDir(), "sessions");
 }
 
-async function readClaudeSession(
+export async function readClaudeSession(
 	pid: number,
 ): Promise<ClaudeSessionRecord | null> {
 	try {

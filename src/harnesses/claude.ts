@@ -364,6 +364,44 @@ export const APPROVAL_HOOK_TIMEOUT_S = 86_400;
 const shellQuote = (s: string) =>
 	/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
 
+const CHILD_HOOK_MARKER = " hook claude-subagent";
+const CHILD_HOOKS = [
+	"SubagentStart",
+	"PreToolUse",
+	"PostToolUse",
+	"SubagentStop",
+] as const;
+
+function claudeChildHookActions(ctx: SetupContext): Action[] {
+	const hook = {
+		type: "command",
+		command: `exec ${shellQuote(ctx.node)} ${shellQuote(ctx.cli)}${CHILD_HOOK_MARKER}`,
+		timeout: 2,
+	};
+	return CHILD_HOOKS.map((event) => {
+		const isPreTool = event === "PreToolUse";
+		const entry = {
+			...hook,
+			...(isPreTool && { onFailure: "block" }),
+		};
+		return {
+			client: "claude",
+			describe: `add a ${event} hook for the Claude subagent inbox`,
+			apply: () =>
+				addHook(claudeSettings(), event, CHILD_HOOK_MARKER, {
+					...(isPreTool && { matcher: "^mcp__pulsar__" }),
+					hooks: [entry],
+				}),
+			undo: {
+				type: "hook",
+				file: claudeSettings(),
+				event,
+				marker: CHILD_HOOK_MARKER,
+			},
+		};
+	});
+}
+
 /** The PermissionRequest hook group setup writes. */
 function approvalHookGroup(ctx: Pick<SetupContext, "node" | "cli">) {
 	return {
@@ -610,6 +648,7 @@ export const claude: HarnessDriver = {
 					path: ["crossSessionInbound"],
 				},
 			} satisfies Action,
+			...claudeChildHookActions(ctx),
 			...skillFor("claude", join(homedir(), ".claude", "skills"), ctx),
 		],
 	},

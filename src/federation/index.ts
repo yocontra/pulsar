@@ -477,9 +477,7 @@ export class Federation implements PoolView {
 
 	/** A local subagent that takes messages directly, as a delivery target. */
 	private async subagentTarget(id: string): Promise<Agent | undefined> {
-		if (!isLocalSubagentId(id)) return undefined;
-		const row = await this.service.subagents.row(id);
-		return row ? this.service.subagents.deliveryTarget(row) : undefined;
+		return this.service.subagents.resolveLocalTarget(id);
 	}
 
 	/** A local agent, or a local subagent id (the transcript code finds it or says not_found). */
@@ -2197,7 +2195,7 @@ export class Federation implements PoolView {
 			typeof m.threadId !== "string" ||
 			typeof m.body !== "string" ||
 			typeof m.fromId !== "string" ||
-			m.fromId.includes("/") ||
+			(m.fromId.includes("/") && !isLocalSubagentId(m.fromId)) ||
 			!Array.isArray(f.targets) ||
 			f.targets.length > LIMITS.maxSendIds
 		)
@@ -2337,8 +2335,13 @@ export class Federation implements PoolView {
 		if (parent) store.markReplied(sender.id, parent.id, now);
 		const receipts: Receipt[] = [];
 		const names: string[] = [];
+		const aliases = registry.nativeSubagentAliases();
 		for (const id of targets) {
-			const agent = registry.get(id) ?? (await this.subagentTarget(id));
+			const agent = isLocalSubagentId(id)
+				? await this.subagentTarget(id)
+				: aliases.has(id)
+					? undefined
+					: registry.get(id);
 			if (agent && agent.status !== "gone") {
 				receipts.push(await router.deliver(copy, sender, agent));
 				names.push(agent.name);

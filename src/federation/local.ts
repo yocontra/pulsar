@@ -41,7 +41,7 @@ export class LocalFeed {
 		const { registry, store, turns } = this.service;
 		const views = this.service.app.views;
 		const full = store.fullInboxes(LIMITS.inboxCap);
-		return registry.live().map((agent) => {
+		return registry.live(true).map((agent) => {
 			const row = views.row(agent, "normal", full);
 			return {
 				id: agent.id,

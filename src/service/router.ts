@@ -4,7 +4,7 @@ import { RpcError } from "../rpc.ts";
 import type { Store } from "../store.ts";
 import type { Agent, Message, Receipt } from "../types.ts";
 import { LIMITS } from "./limits.ts";
-import { isRemote } from "./pool.ts";
+import { isLocalSubagentId, isRemote } from "./pool.ts";
 import type { Registry } from "./registry.ts";
 import type { Sessions } from "./sessions.ts";
 import {
@@ -24,6 +24,7 @@ export class Router {
 	private readonly registry: Registry;
 	private readonly sessions: Sessions;
 	private readonly waiters: Waiters;
+	private readonly resolveSubagent: (id: string) => Promise<Agent | undefined>;
 	/** Set by the service: a tracked message reached a session. */
 	onHandoff: (message: Message, agent: Agent, receipt: Receipt) => void =
 		() => {};
@@ -33,11 +34,13 @@ export class Router {
 		registry: Registry;
 		sessions: Sessions;
 		waiters: Waiters;
+		resolveSubagent?: (id: string) => Promise<Agent | undefined>;
 	}) {
 		this.store = deps.store;
 		this.registry = deps.registry;
 		this.sessions = deps.sessions;
 		this.waiters = deps.waiters;
+		this.resolveSubagent = deps.resolveSubagent ?? (async () => undefined);
 	}
 
 	private receipt(
@@ -55,8 +58,22 @@ export class Router {
 		sender: Agent,
 		target: Agent,
 	): Promise<Receipt> {
-		const r = await this.route(message, sender, target);
-		return this.handedOff(message, target, r);
+		const current = isLocalSubagentId(target.id)
+			? await this.resolveSubagent(target.id)
+			: target;
+		if (!current) return this.unavailableSubagent(message.id, target);
+		const r = await this.route(message, sender, current);
+		return this.handedOff(message, current, r);
+	}
+
+	private unavailableSubagent(messageId: string, target: Agent) {
+		return this.receipt(
+			messageId,
+			target,
+			"refused",
+			null,
+			"subagent is no longer available for direct messages",
+		);
 	}
 
 	private async route(
@@ -118,7 +135,7 @@ export class Router {
 				null,
 				"fyi: waits in the inbox",
 			);
-		return this.push(message, sender, target);
+		return this.pushCurrent(message, sender, target);
 	}
 
 	private handedOff(message: Message, target: Agent, r: Receipt): Receipt {
@@ -159,6 +176,19 @@ export class Router {
 		sender: Agent,
 		target: Agent,
 	): Promise<Receipt> {
+		const current = isLocalSubagentId(target.id)
+			? await this.resolveSubagent(target.id)
+			: target;
+		return current
+			? this.pushCurrent(message, sender, current)
+			: this.unavailableSubagent(message.id, target);
+	}
+
+	private async pushCurrent(
+		message: PushMessage,
+		sender: Agent,
+		target: Agent,
+	): Promise<Receipt> {
 		const framing = this.registry.messageFraming(message.id, sender);
 		const text = formatPush(
 			message,
@@ -178,6 +208,30 @@ export class Router {
 			// The extension acks once the message is in the conversation.
 			return this.receipt(message.id, target, "sent", "extension", null);
 		}
+		if (target.meta.subagentPull === "1")
+			return this.receipt(
+				message.id,
+				target,
+				"queued",
+				null,
+				"waiting for this subagent's next supported hook",
+			);
+		if (target.meta.subagentPull === "inbox")
+			return this.receipt(
+				message.id,
+				target,
+				"queued",
+				null,
+				"waiting in this subagent's own inbox",
+			);
+		if (isLocalSubagentId(target.id) && target.meta.subagentNative !== "1")
+			return this.receipt(
+				message.id,
+				target,
+				"refused",
+				null,
+				"subagent is no longer connected",
+			);
 		const adapter = pushFor(target);
 		if (!adapter)
 			return this.receipt(
@@ -206,7 +260,12 @@ export class Router {
 
 	/** True when a message can be pushed into the agent's session now (extension or harness driver). */
 	canPush(target: Agent): boolean {
-		return !!this.sessions.extensionFor(target.id) || !!pushFor(target);
+		if (target.meta.subagentPull) return false;
+		return (
+			!!this.sessions.extensionFor(target.id) ||
+			((!isLocalSubagentId(target.id) || target.meta.subagentNative === "1") &&
+				!!pushFor(target))
+		);
 	}
 
 	/** Pushes what arrived while the session had no pulsar connection. */

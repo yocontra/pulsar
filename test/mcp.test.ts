@@ -10,11 +10,12 @@ import {
 // Each test starts real MCP server processes (about a second each).
 setDefaultTimeout(20_000);
 
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Daemon } from "../src/daemon.ts";
-import { startDaemon } from "./helpers.ts";
+import { restoreEnv, startDaemon } from "./helpers.ts";
 
 const cli = join(import.meta.dir, "..", "src", "cli.ts");
 let daemon: Daemon;
@@ -168,5 +169,65 @@ describe("MCP server", () => {
 		expect(daemon.live().filter((x) => x.harness === "opencode")).toHaveLength(
 			2,
 		);
+		expect(
+			textOf(await oc.callTool({ name: "whoami", arguments: {} })),
+		).toContain("did not identify the calling session");
+	});
+
+	test("Codex: a provider thread ID binds a nested child under its verified root", async () => {
+		const ids = [
+			"00000000-0000-0000-0000-000000000011",
+			"00000000-0000-0000-0000-000000000012",
+			"00000000-0000-0000-0000-000000000013",
+		];
+		const root = join(home, "codex-child-test");
+		const day = join(root, "sessions", "2026", "11", "25");
+		mkdirSync(day, { recursive: true });
+		for (const [i, id] of ids.entries()) {
+			const source = i
+				? { subagent: { thread_spawn: { parent_thread_id: ids[i - 1] } } }
+				: "cli";
+			writeFileSync(
+				join(day, `rollout-2026-11-25T00-00-00-${id}.jsonl`),
+				`${JSON.stringify({
+					type: "session_meta",
+					payload: { id, cwd: "/tmp", source },
+				})}\n`,
+			);
+		}
+		const previousHome = process.env.CODEX_HOME;
+		process.env.CODEX_HOME = root;
+		try {
+			const cx = await mcpClient("codex", "/tmp", ids[0]!);
+			const invoke = (threadId: string) =>
+				cx.callTool({
+					name: "whoami",
+					arguments: {},
+					_meta: { threadId, sessionId: "native-host-session" },
+				});
+			const child = textOf(await invoke(ids[2]!));
+			expect(child).toContain(`codex:${ids[0]}/sub:${ids[2]}`);
+			expect(daemon.service.registry.get(`codex:${ids[2]}`)).toBeUndefined();
+			expect(textOf(await invoke("unverified"))).toContain(
+				"valid invoking thread ID",
+			);
+			const legacy = textOf(
+				await cx.callTool({ name: "whoami", arguments: {} }),
+			);
+			expect(legacy).toContain(`codex:${ids[0]}`);
+			expect(legacy).not.toContain("/sub:");
+		} finally {
+			restoreEnv("CODEX_HOME", previousHome);
+		}
+	});
+
+	test("Claude: invalid injected proof refuses the tool instead of using the parent", async () => {
+		const cx = await mcpClient("claude", "/tmp", "claude-proof-parent");
+		const result = await cx.callTool({
+			name: "whoami",
+			arguments: { sourceProof: "not-a-proof" },
+		});
+		expect(result.isError).toBe(true);
+		expect(textOf(result)).toContain("Invalid Claude child tool proof");
 	});
 });

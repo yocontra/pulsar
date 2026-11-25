@@ -15,6 +15,12 @@ import {
 	type RelayResult,
 	relayUi,
 } from "./extension-interactions.ts";
+import {
+	isOmpChild,
+	type OmpChildApi,
+	type OmpChildContext,
+	ompChildMessaging,
+} from "./extension-omp.ts";
 import { gitInfoAsync } from "./git.ts";
 import { extensionHostFor } from "./harnesses/ident.ts";
 import { daemonLog } from "./log.ts";
@@ -24,7 +30,7 @@ import { PROTOCOL_VERSION } from "./types.ts";
 import { VERSION } from "./version.ts";
 
 /** The part of the context pi and omp pass to event handlers that Stop uses. */
-interface HostContext {
+interface HostContext extends OmpChildContext {
 	/** No agent run (or compaction, on pi) in progress. */
 	isIdle?(): boolean;
 	/** Starts aborting the current run; returns before it finishes. */
@@ -40,6 +46,7 @@ interface HostContext {
 	 */
 	sessionManager?: {
 		getSessionId?(): string | undefined;
+		getSessionFile?(): string | undefined;
 		getSessionName?(): string | undefined;
 		getHeader?(): { titleSource?: string } | null | undefined;
 	};
@@ -132,7 +139,7 @@ const traceStatus = (line: string) => {
 };
 
 /** The subset of the pi / omp ExtensionAPI this extension uses. */
-interface HostApi {
+interface HostApi extends OmpChildApi {
 	on(
 		event: string,
 		handler: (event: unknown, ctx: HostContext | undefined) => unknown,
@@ -268,22 +275,17 @@ export default function pulsarExtension(
 	const jobPollMs = opts.jobPollMs ?? 3000;
 	const continueGraceMs = opts.continueGraceMs ?? 120_000;
 	const bashGraceMs = opts.bashGraceMs ?? 300_000;
-	// omp runs subagents in the host process and binds this extension to each
-	// of them; they share the pid (the agent's identity), so only the main
-	// session may speak for the agent: a subagent's events are ignored.
-	const isSub = (c: HostContext | undefined) => {
-		try {
-			return c?.agent?.kind === "sub";
-		} catch {
-			return false;
-		}
-	};
 	// The executable path too: a host built as one Bun binary (omp) has only
 	// `bun /$bunfs/root/<entry>` in its argv.
 	const host = extensionHostFor(
 		[process.execPath, process.argv0, ...process.argv].join(" "),
 	);
 	const harness = host?.id ?? "unknown";
+	const child = harness === "omp" ? ompChildMessaging(pi) : null;
+	const isSub = isOmpChild;
+	let boundChild = false;
+	let boundParent = false;
+	if (child) pi.on("tool_call", (event, c) => child.blockParentMcp(event, c));
 	const client = new DaemonClient();
 	let stopped = false;
 	// The host session's id: the agent id is the pid, so this is what lets
@@ -336,13 +338,17 @@ export default function pulsarExtension(
 	}
 
 	async function connect() {
+		if (stopped) return;
 		await client.connect(true);
 		try {
+			const reg = await registration();
+			if (stopped) return client.close();
 			await client.call("hello", {
 				protocol: PROTOCOL_VERSION,
 				version: VERSION,
-				registration: await registration(),
+				registration: reg,
 			});
+			if (stopped) return client.close();
 		} catch (e) {
 			// Refused: close this connection, never keep it open while retrying.
 			client.close();
@@ -357,13 +363,15 @@ export default function pulsarExtension(
 	// One reconnect loop at a time, backing off exponentially (with jitter);
 	// a refused hello (session claimed by another process) backs off longer.
 	let reconnecting = false;
+	let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	let failures = 0;
 	function reconnectLater() {
 		if (stopped || reconnecting) return;
 		reconnecting = true;
 		const base = Math.min(500 * 2 ** failures, 30_000);
-		setTimeout(
+		reconnectTimer = setTimeout(
 			() => {
+				reconnectTimer = null;
 				connect()
 					.then(() => {
 						failures = 0;
@@ -453,6 +461,7 @@ export default function pulsarExtension(
 	// omp's plan review: a real API (resolvePlanReview), raced the same way.
 	const reviews = new Map<string, string>();
 	pi.on("plan_review_requested", (event, c) => {
+		if (boundChild || isSub(c)) return;
 		const e = event as PlanReviewEvent;
 		const prompt = planPrompt(e);
 		if (!prompt || !e.reviewId || !c?.resolvePlanReview) return;
@@ -470,7 +479,8 @@ export default function pulsarExtension(
 				});
 			});
 	});
-	pi.on("plan_review_resolved", (event) => {
+	pi.on("plan_review_resolved", (event, c) => {
+		if (boundChild || isSub(c)) return;
 		const e = event as { reviewId?: string; by?: string };
 		const ref = e.reviewId ? reviews.get(e.reviewId) : undefined;
 		if (!ref || !e.reviewId) return;
@@ -488,7 +498,11 @@ export default function pulsarExtension(
 		"agent_end",
 	])
 		pi.on(event, (_e, c) => {
-			if (isSub(c)) return;
+			if (isSub(c)) {
+				child?.observe(c);
+				return;
+			}
+			if (boundChild) return;
 			if (c) ctx = c;
 			relayDialogs(c);
 			if (event === "session_start") noteSession(c);
@@ -497,7 +511,9 @@ export default function pulsarExtension(
 	// Renames: pi announces them; omp's generated title lands mid-turn, so
 	// the name is also read again when a turn ends.
 	for (const event of ["session_info_changed", "session_switch", "turn_end"])
-		pi.on(event, (_e, c) => noteName(c ?? ctx));
+		pi.on(event, (_e, c) => {
+			if (!boundChild && !isSub(c)) noteName(c ?? ctx);
+		});
 
 	/** Reports the host session's name once it is known or changes. */
 	function noteName(c: HostContext | undefined) {
@@ -624,8 +640,15 @@ export default function pulsarExtension(
 	};
 
 	pi.on("session_start", async (_e, c) => {
-		// A subagent's copy of this extension never connects.
-		if (isSub(c)) return;
+		if (isSub(c)) {
+			if (boundParent) return;
+			boundChild = true;
+			// The task loop must start even if the daemon is unavailable.
+			void child?.start(c);
+			return;
+		}
+		if (boundChild) return;
+		boundParent = true;
 		if (pi.registerMcpServer) {
 			try {
 				pi.registerMcpServer("pulsar", {
@@ -641,14 +664,16 @@ export default function pulsarExtension(
 			await connect().catch(() => reconnectLater());
 	});
 	pi.on("agent_start", (_e, c) => {
-		if (isSub(c)) return;
+		if (boundChild && isSub(c)) void child?.start(c);
+		if (boundChild || isSub(c)) return;
 		traceStatus(`${harness} agent_start`);
 		stopWatchingJobs();
 		setStatus("busy");
 	});
 	// Report the model after each reply, so `model=…` selectors find this agent.
 	let lastModel: string | null = null;
-	pi.on("message_end", (event) => {
+	pi.on("message_end", (event, c) => {
+		if (boundChild || isSub(c)) return;
 		const message = (event as { message?: { role?: string; model?: string } })
 			?.message;
 		if (
@@ -662,7 +687,7 @@ export default function pulsarExtension(
 	});
 	for (const event of host?.extension?.idleEvents ?? [])
 		pi.on(event, (e, c) => {
-			if (isSub(c)) return;
+			if (boundChild || isSub(c)) return;
 			if (c) ctx = c;
 			turnEnded(event, e);
 		});
@@ -670,8 +695,14 @@ export default function pulsarExtension(
 	// extension again for the next one (`/new`, `/resume`, `/fork`, `/reload`);
 	// omp emits it only on exit. A connection left open would linger as a
 	// retired one and, once closed, reconnect and take pushes back.
-	pi.on("session_shutdown", () => {
+	pi.on("session_shutdown", (_e, c) => {
+		if (boundChild) {
+			child?.stop();
+			return;
+		}
+		if (isSub(c)) return;
 		stopped = true;
+		if (reconnectTimer) clearTimeout(reconnectTimer);
 		stopWatchingJobs();
 		client.close();
 	});

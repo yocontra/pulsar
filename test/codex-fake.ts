@@ -45,6 +45,7 @@ class Conn {
 }
 
 export class FakeCodex {
+	readonly handlers = new Map<string, (params: Msg) => unknown>();
 	readonly calls: { method: string; params: Msg }[] = [];
 	/** Responses to server requests: [request id, result, which client]. */
 	readonly answers: { id: unknown; result: unknown }[] = [];
@@ -172,6 +173,14 @@ export class FakeCodex {
 			c.send({ jsonrpc: "2.0", id: msg.id, result });
 		const fail = (message: string) =>
 			c.send({ jsonrpc: "2.0", id: msg.id, error: { code: -32600, message } });
+		const handler = this.handlers.get(method);
+		if (handler) {
+			try {
+				return ok(handler(params));
+			} catch (error) {
+				return fail(String(error));
+			}
+		}
 		switch (method) {
 			case "initialize":
 				c.init = params;

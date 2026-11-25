@@ -6,7 +6,7 @@ import {
 	setDefaultTimeout,
 	test,
 } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -19,13 +19,14 @@ import { claudeSessionDir } from "../src/harnesses/claude-subagents.ts";
 import { driverFor } from "../src/harnesses/index.ts";
 import type { FoundSubagent, HarnessDriver } from "../src/harnesses/types.ts";
 import type { AgentRow, SubagentList, SubagentRow } from "../src/http/wire.ts";
+import type { Caller } from "../src/service/caller.ts";
 import { PulsarService } from "../src/service/index.ts";
 import { Store } from "../src/store.ts";
 import type { TranscriptEvent } from "../src/transcripts/types.ts";
 import { HttpTransport } from "../src/transport/http.ts";
-import type { Agent } from "../src/types.ts";
+import type { Agent, Message } from "../src/types.ts";
 import { FakeTailnet } from "./fake-tailnet.ts";
-import { restoreEnv, until } from "./helpers.ts";
+import { registration, restoreEnv, until } from "./helpers.ts";
 import { writeClaudeSub } from "./subagent-fixtures.ts";
 
 /**
@@ -253,6 +254,32 @@ describe("subagents across the pool", () => {
 				5000,
 			);
 			const id = `${parentAddress}/sub:ses_kid`;
+			const duplicate = home.service.registry.upsert({
+				...parent,
+				sessionId: "ses_kid",
+				name: "explore",
+			});
+			await until(() => Boolean(viewer.service.registry.find(id)), 5000);
+			expect(
+				viewer.service.registry.find(
+					`${home.service.machineId}/${duplicate.id}`,
+				),
+			).toBeUndefined();
+			const sender = viewer.service.registry.operator();
+			expect(
+				viewer.service.registry
+					.list("name=explore project=oc")
+					.map((agent) => agent.id),
+			).toEqual([id]);
+			const peerSend = await viewer.service.mailbox.send(sender, {
+				to: "name=explore project=oc",
+				body: "peer selector fixture",
+				priority: "normal",
+				replyTo: null,
+				expectReply: false,
+			});
+			expect(peerSend.receipts.map((receipt) => receipt.agentId)).toEqual([id]);
+			await until(() => delivered.length === 1, 5000);
 			const row = await api<SubagentRow>("viewer", `/subagents/${enc(id)}`);
 			expect(row.body.messaging.mode).toBe("direct");
 			const res = await tailnet.request("phone", "viewer", "/api/v1/send", {
@@ -262,8 +289,10 @@ describe("subagents across the pool", () => {
 			});
 			expect(res.status).toBe(200);
 			const sent = (await res.json()) as { message: { id: string } };
-			await until(() => delivered.length === 1, 5000);
-			expect(delivered[0]?.sessionId).toBe("ses_kid");
+			await until(() => delivered.length === 2, 5000);
+			expect(delivered.every((push) => push.sessionId === "ses_kid")).toBe(
+				true,
+			);
 			// The sender learns it landed.
 			await until(
 				() =>
@@ -275,6 +304,116 @@ describe("subagents across the pool", () => {
 		} finally {
 			sub.list = realList;
 			oc.push!.deliver = realDeliver;
+		}
+	});
+
+	test("OMP child addresses work in both directions between peer agents", async () => {
+		const oldHome = process.env.HOME;
+		process.env.HOME = root;
+		const closing = new AbortController();
+		const push: Message[] = [];
+		const childCaller: Caller = {
+			principal: { kind: "terminal" },
+			closed: closing.signal,
+			emit(event, data) {
+				if (event === "push") push.push((data as { message: Message }).message);
+			},
+		};
+		try {
+			const cwd = join(root, "omp-work");
+			const parentLog = join(
+				root,
+				".omp",
+				"agent",
+				"sessions",
+				"-omp-work",
+				`2026-11-10T10-00-00-000Z_${SESSION}.jsonl`,
+			);
+			const childDir = parentLog.slice(0, -".jsonl".length);
+			const childLog = join(childDir, "Review.jsonl");
+			mkdirSync(childDir, { recursive: true });
+			writeFileSync(parentLog, "{}\n");
+			writeFileSync(
+				childLog,
+				`${JSON.stringify({ type: "session", id: "child-uuid", parentSession: parentLog })}\n`,
+			);
+			const pid = process.pid;
+			const reg = registration({
+				harness: "omp",
+				pid,
+				cwd,
+				project: "omp-peer",
+				resumeKey: `omp:${SESSION}`,
+			});
+			home.service.registry.upsert({
+				...reg,
+				meta: { resumeKey: reg.resumeKey! },
+				registered: true,
+				status: "busy",
+			});
+			home.service.attach(childCaller);
+			home.service.setRole(childCaller, "extension");
+			const child = await home.service.registerOmpChild(childCaller, {
+				...reg,
+				subagent: { file: childLog, key: "Review" },
+			});
+			const sender = viewer.service.registry.upsert({
+				...registration({ name: "review-sender" }),
+				meta: {},
+				registered: true,
+				status: "idle",
+			});
+			const remoteChild = `${home.service.machineId}/${child.id}`;
+			await until(
+				() => Boolean(viewer.service.registry.find(remoteChild)),
+				5000,
+			);
+			await until(
+				() =>
+					Boolean(
+						home.service.registry.find(
+							`${viewer.service.machineId}/${sender.id}`,
+						),
+					),
+				5000,
+			);
+			expect(
+				viewer.service.registry
+					.remoteAgents()
+					.some((a) => a.id === remoteChild),
+			).toBe(false);
+			expect(
+				viewer.service.registry
+					.resolvePool("name=Review project=omp-peer", sender)
+					.map((a) => a.id),
+			).toEqual([remoteChild]);
+			const sent = await viewer.service.mailbox.send(sender, {
+				to: remoteChild,
+				body: "fixture peer request",
+				priority: "normal",
+				replyTo: null,
+				expectReply: true,
+			});
+			await until(() => push.length === 1, 5000);
+			expect(push[0]?.id).toBe(sent.message.id);
+			expect(push[0]?.fromId).toBe(`${viewer.service.machineId}/${sender.id}`);
+			const reply = await home.service.mailbox.reply(
+				child,
+				sent.message.id,
+				"fixture peer reply",
+				"normal",
+			);
+			await until(
+				() => Boolean(viewer.store.getMessage(reply.message.id)),
+				5000,
+			);
+			expect(viewer.store.getMessage(reply.message.id)).toMatchObject({
+				fromId: remoteChild,
+				replyTo: sent.message.id,
+			});
+		} finally {
+			closing.abort();
+			restoreEnv("HOME", oldHome);
 		}
 	});
 

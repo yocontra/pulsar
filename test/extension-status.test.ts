@@ -346,6 +346,7 @@ describe("omp: busy for the whole user turn", () => {
 			await host.fire("session_start", {}, sub);
 			await host.fire("agent_start", {}, sub);
 			await host.fire("agent_end", { messages: [] }, sub);
+			await host.fire("session_shutdown", {}, sub);
 			await settled();
 		});
 		expect(seen).toEqual(["busy"]);
@@ -360,16 +361,22 @@ describe("extension lifecycle", () => {
 		const next = fakeHost();
 		try {
 			await old.fire("session_start");
-			await until(() => daemon.service.sessions.size === 1);
+			const parent = daemon.service.registry
+				.live()
+				.find((a) => a.pid === process.pid)!;
+			const sessions = daemon.service.sessions;
+			const original = sessions.extensionFor(parent.id)!;
+			expect(original).toBeDefined();
 			// pi emits session_shutdown {reason: "new"}, disposes the session and
 			// loads the extension again for the next one. A stale connection
 			// left open is later closed (past MAX_RETIRED) and reconnects,
 			// taking the push role back from the live instance.
 			await old.fire("session_shutdown", { reason: "new" });
 			await next.fire("session_start");
-			await until(() => statusOf(daemon) !== null);
+			await until(() => original.closed.aborted);
 			await pause(300);
-			expect(daemon.service.sessions.size).toBe(1);
+			expect(sessions.forAgent(parent.id)).toHaveLength(1);
+			expect(sessions.extensionFor(parent.id)).not.toBe(original);
 		} finally {
 			await next.quit();
 			await old.quit();

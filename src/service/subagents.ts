@@ -1,4 +1,5 @@
-import { attachedDriver, driverFor } from "../harnesses/index.ts";
+import { realpath } from "node:fs/promises";
+import { attachedDriver, driverFor, pushFor } from "../harnesses/index.ts";
 import type { FoundSubagent, HarnessDriver } from "../harnesses/types.ts";
 import type {
 	SubagentCounts,
@@ -58,6 +59,9 @@ interface Entry {
 	found: FoundSubagent[];
 	/** Every found subagent's row (lookups by id). */
 	rows: SubagentRow[];
+	/** Native direct targets verified by the latest discovery pass. */
+	direct: Map<string, Agent>;
+	aliases: Set<string>;
 	/** The rows lists and counts show: without long-finished ones. */
 	listed: SubagentRow[];
 	/** Found ones still running or idle. */
@@ -75,16 +79,28 @@ interface Entry {
 function messagingFor(
 	driver: HarnessDriver | null | undefined,
 	parentName: string,
+	child: FoundSubagent,
+	mode: "native" | "pull" | "inbox" | "parent",
 ): SubagentMessaging {
 	const label = driver?.label ?? "This harness's";
-	if (driver?.subagents?.direct && driver.push)
+	if (mode === "pull")
+		return {
+			mode: "direct",
+			note: `Queued for ${child.name}. It receives the message at its next supported hook. Pulsar does not wake it.`,
+		};
+	if (mode === "inbox")
+		return {
+			mode: "direct",
+			note: `Queued for ${child.name}. It receives the message in its own inbox or wait call. Pulsar does not wake it.`,
+		};
+	if (mode === "native")
 		return {
 			mode: "direct",
 			note: `Goes straight into this subagent's own ${label} session.`,
 		};
 	return {
 		mode: "parent",
-		note: `${label} subagents can't receive messages from Pulsar. This goes to the parent agent, ${parentName}, naming the subagent.`,
+		note: `${child.name} cannot receive a direct message now. Send via parent delivers it to ${parentName}, with ${child.name} named in the message.`,
 	};
 }
 
@@ -99,6 +115,9 @@ export class Subagents {
 	private entries = new Map<string, Entry>();
 	/** Set by the service when the node joins a pool. */
 	pool: PoolView | null = null;
+	/** A verified Claude hook can collect mail for this exact child. */
+	hookCanDeliver: (parent: Agent, key: string) => boolean = () => false;
+	hookIdentity: (child: Agent) => Agent = (child) => child;
 	/** Set by tests: the clock. */
 	now: () => number = Date.now;
 
@@ -120,6 +139,8 @@ export class Subagents {
 				stamp: null,
 				found: [],
 				rows: [],
+				direct: new Map(),
+				aliases: new Set(),
 				listed: [],
 				live: 0,
 				counts: undefined,
@@ -200,17 +221,39 @@ export class Subagents {
 					: { ...f, state: "done", finishedAt: f.finishedAt ?? f.updatedAt },
 			);
 		const driver = attachedDriver(agent);
-		const messaging = messagingFor(driver, agent.name);
 		const hasTranscript = Boolean(
 			driver?.subagents?.transcript || driver?.transcript,
 		);
 		const idOf = (key: string) => `${agent.id}${SUB_MARK}${key}`;
 		const keys = new Set(found.map((f) => f.key));
 		e.found = found;
+		e.direct = new Map();
+		e.aliases = new Set();
+		for (const sub of found) {
+			const native = sub.direct || driver?.subagents?.direct;
+			if (
+				sub.sessionId &&
+				(native || this.registry.verifiedChildInbox(idOf(sub.key)))
+			)
+				e.aliases.add(
+					this.registry.agentId(agent.harness, sub.sessionId, null),
+				);
+			if (sub.state === "done") continue;
+			let target = this.record(idOf(sub.key), agent, sub);
+			if (this.hookCanDeliver(agent, sub.key)) {
+				target = this.hookIdentity(target);
+				target.meta.subagentPull = "1";
+				target.reach = "pull";
+			} else {
+				if (!native || !pushFor(target)) continue;
+				target.meta.subagentNative = "1";
+			}
+			e.direct.set(target.id, target);
+		}
 		e.rows = found.map((f) => ({
 			id: idOf(f.key),
 			parentId: agent.id,
-			name: f.name,
+			name: e.direct.get(idOf(f.key))?.name ?? f.name,
 			harness: agent.harness,
 			kind: f.kind,
 			color: f.color ?? null,
@@ -225,7 +268,21 @@ export class Subagents {
 				f.parentKey && keys.has(f.parentKey) ? idOf(f.parentKey) : null,
 			hasTranscript:
 				hasTranscript && Boolean(f.file || f.sessionId) && hasSource(driver, f),
-			messaging,
+			messaging: messagingFor(
+				driver,
+				agent.name,
+				f,
+				f.state === "done"
+					? "parent"
+					: e.direct.get(idOf(f.key))?.meta.subagentPull === "1"
+						? "pull"
+						: e.direct.has(idOf(f.key)) ||
+								this.registry.connectedSubagent(idOf(f.key))
+							? "native"
+							: this.registry.verifiedChildInbox(idOf(f.key))
+								? "inbox"
+								: "parent",
+			),
 		}));
 		const cutoff = this.now() - DONE_KEEP_MS;
 		e.listed = e.rows.filter(
@@ -390,14 +447,36 @@ export class Subagents {
 		return parent && sub ? { parent, sub } : undefined;
 	}
 
+	/** Only the primary session's own, currently discovered child file can bind. */
+	async ompChild(pid: number, key: string, file: string) {
+		const parentId = this.registry.agentId("omp", null, pid);
+		const parent = this.parent(parentId);
+		if (!parent?.registered || parent.pid !== pid || parent.status === "gone")
+			return undefined;
+		await this.refresh(parentId);
+		const id = `${parentId}${SUB_MARK}${key}`;
+		const hit = this.found(id);
+		if (hit?.parent !== parent || !hit.sub.file || hit.sub.state === "done")
+			return undefined;
+		if (hit.sub.file !== file) {
+			const [found, claimed] = await Promise.all(
+				[hit.sub.file, file].map((path) => realpath(path).catch(() => null)),
+			);
+			if (!found || found !== claimed) return undefined;
+		}
+		return this.agentFor(id);
+	}
+
 	/**
 	 * A local subagent as an `Agent`-shaped record, for the transcript tailer
 	 * and for direct delivery. Never added to the registry.
 	 */
 	agentFor(id: string): Agent | undefined {
 		const hit = this.found(id);
-		if (!hit) return undefined;
-		const { parent, sub } = hit;
+		return hit ? this.record(id, hit.parent, hit.sub) : undefined;
+	}
+
+	private record(id: string, parent: Agent, sub: FoundSubagent): Agent {
 		return {
 			id,
 			name: sub.name,
@@ -426,6 +505,85 @@ export class Subagents {
 		};
 	}
 
+	/** Native-discovered child addresses, without registering presence or touching disk. */
+	addressable(): Agent[] {
+		const targets: Agent[] = [];
+		const sessions = new Set<string>();
+		for (const [parentId, entry] of this.entries) {
+			const parent = this.registry.get(parentId);
+			if (!parent || parent.status === "gone") continue;
+			for (const target of entry.direct.values()) {
+				const key = target.sessionId
+					? `${target.harness}:${target.sessionId}`
+					: target.id;
+				if (!this.canAddress(parent, target) || sessions.has(key)) continue;
+				sessions.add(key);
+				targets.push(target);
+			}
+		}
+		return targets;
+	}
+
+	/** Standalone scan IDs that are already represented by their parent/child relationship. */
+	nativeAliases(): Set<string> {
+		const ids = new Set<string>();
+		for (const [parentId, entry] of this.entries) {
+			if (entry.aliases.size && this.registry.get(parentId))
+				for (const id of entry.aliases) ids.add(id);
+		}
+		return ids;
+	}
+
+	aliasTarget(id: string): Agent | undefined {
+		for (const entry of this.entries.values()) {
+			if (!entry.aliases.has(id)) continue;
+			for (const target of entry.direct.values())
+				if (
+					target.sessionId &&
+					this.registry.agentId(target.harness, target.sessionId, null) === id
+				)
+					return this.localTarget(target.id);
+		}
+	}
+
+	private canAddress(parent: Agent, child: Agent): boolean {
+		return child.meta.subagentPull === "1"
+			? this.hookCanDeliver(parent, child.meta.subagentKey!)
+			: !!pushFor(child);
+	}
+
+	localTarget(id: string): Agent | undefined {
+		const parts = splitSubagentId(id);
+		if (!parts || !isLocalSubagentId(id)) return undefined;
+		const parent = this.registry.get(parts.parentId);
+		if (!parent || parent.status === "gone") return undefined;
+		const entry = this.entries.get(parts.parentId);
+		const row = entry?.rows.find((row) => row.id === id);
+		if (row?.state === "done") return undefined;
+		const target = entry?.direct.get(id);
+		const connected = this.registry.connectedSubagent(id);
+		if (connected && row) return connected;
+		if (!target || !this.canAddress(parent, target))
+			return this.registry.verifiedChildInbox(id);
+		const registered = this.registry.get(id);
+		return registered?.registered &&
+			registered.status !== "gone" &&
+			registered.sessionId === target.sessionId &&
+			registered.meta.subagentNative === "1"
+			? registered
+			: target;
+	}
+
+	async resolveLocalTarget(id: string): Promise<Agent | undefined> {
+		if (!isLocalSubagentId(id)) return undefined;
+		const { parentId } = splitSubagentId(id)!;
+		const entry = this.entries.get(parentId);
+		if (entry?.inflight) await entry.inflight;
+		else if (!entry || this.now() - entry.listedAt >= FRESH_MS)
+			await this.refresh(parentId);
+		return this.localTarget(id);
+	}
+
 	/**
 	 * Who a direct send to this subagent goes to: the local record (driver
 	 * `push` with its own session id), or a remote one the pool hands to its
@@ -434,7 +592,9 @@ export class Subagents {
 	deliveryTarget(row: SubagentRow): Agent | undefined {
 		if (row.messaging.mode !== "direct" || row.state === "done")
 			return undefined;
-		if (isLocalSubagentId(row.id)) return this.agentFor(row.id);
+		if (isLocalSubagentId(row.id)) return this.localTarget(row.id);
+		const advertised = this.registry.find(row.id);
+		if (advertised && advertised.status !== "gone") return advertised;
 		const slash = row.id.indexOf("/");
 		const parent = this.registry.find(row.parentId);
 		if (!parent || slash <= 0) return undefined;

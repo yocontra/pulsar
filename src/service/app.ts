@@ -349,17 +349,17 @@ export class AppApi {
 		const targets: Agent[] = [];
 		for (const id of ids) {
 			if (!splitSubagentId(id)) {
-				const agent = this.registry.find(id);
+				const agent = this.registry.deliveryAgent(id);
 				if (agent && agent.status !== "gone") targets.push(agent);
 				continue;
 			}
 			const row = await this.subagents.get(id, p);
 			const direct = this.subagents.deliveryTarget(row);
-			if (direct) {
+			if (direct && !viaParent) {
 				targets.push(direct);
 				continue;
 			}
-			if (row.messaging.mode === "direct" && row.state === "done")
+			if (!viaParent && row.messaging.mode === "direct" && row.state === "done")
 				throw new RpcError("gone", `subagent ${row.name} has finished`);
 			if (!viaParent || ids.length !== 1)
 				throw new RpcError("subagent_unreachable", row.messaging.note, {
@@ -371,15 +371,22 @@ export class AppApi {
 				throw new RpcError("no_recipients", "the parent agent is not live");
 			return { targets: [parent], body: forParentBody(row, body) };
 		}
-		return { targets, body };
+		return {
+			targets: [
+				...new Map(targets.map((target) => [target.id, target])).values(),
+			],
+			body,
+		};
 	}
 
 	private resolve(ids: string[] | null, to: string, sender: Agent): Agent[] {
 		if (!ids) return this.registry.resolvePool(to, sender);
-		return ids.flatMap((id) => {
-			const agent = this.registry.find(id);
-			return agent && agent.status !== "gone" ? [agent] : [];
-		});
+		const targets = new Map<string, Agent>();
+		for (const id of ids) {
+			const agent = this.registry.deliveryAgent(id);
+			if (agent && agent.status !== "gone") targets.set(agent.id, agent);
+		}
+		return [...targets.values()];
 	}
 
 	private dryRun(

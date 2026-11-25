@@ -83,10 +83,18 @@ Your own messages need no extra check, as for sending. Another agent's message n
 
 An agent that runs subagents (Claude Code tasks and agent-team members, Codex spawned threads, omp tasks, OpenCode child sessions) shows a collapsed count such as "2 running subagents" under its row in the sidebar. Click it to list them, running ones first; a subagent started by another subagent sits under it. Click one to open its own transcript in the main pane, with the parent's name above it to go back. On a phone, the agent's page has a Subagents line under the title bar; tap it, then tap a subagent to open its page. In a parent's transcript, an expanded subagent card has **Open** to go to that subagent's page.
 
-Subagents are not agents: they are never in the agent list, counts, selectors or broadcasts, and only their own page sends to them. The line above the composer says where a message goes:
+Subagents stay under their parent in the app. General broadcasts skip them. To reach one child, open its conversation or use its exact `/sub:` address. The line above the composer identifies the recipient. A message addressed to a child stays with that child. If the child has finished or has no direct route, the composer names the parent as the recipient and includes the child's name in the message.
 
-- **OpenCode**: into the subagent's own session, while it is running or idle.
-- **Claude Code, Codex, omp**: these harnesses give no way into a subagent, so the message goes to the parent agent, starting `For your subagent "<name>"`. Pulsar never says it reached the subagent.
+| Native harness | How a live child receives a direct message |
+| --- | --- |
+| Claude Code | Run `pulsar setup --client claude` to install the child hooks. Pulsar queues the message for the child's next supported hook. Its receipt changes to delivered when Pulsar hands the message to that hook. |
+| Codex | A loaded thread can receive direct input when its app server permits it. A child with a verified Pulsar tool connection can also receive through its inbox. |
+| OpenCode | Pulsar sends to the child's own session. |
+| OMP | The child receives the message through its Pulsar extension. Resume older sessions in a new OMP process to load the extension. |
+
+A child with a verified Pulsar tool connection can list agents, send messages, check its inbox, and reply under its own ID. Inbox delivery can wait for the child's next read or an active wait.
+
+In managed ACP sessions, child delivery depends on the provider exposing an addressable child. Pulsar cannot direct a prompt to a child through the standard ACP session interface. Native pi has no built-in child-session interface.
 
 Desktop and phone lists show running subagents by default. A parent with no running subagents has no count line. Each listed subagent has a color mark, its name, its state, and a role when that differs from its name. To also list idle and recently finished ones, turn on **Show idle and finished subagents** in Settings (saved per device). A subagent that finished more than a day ago is not listed or counted even then; its parent's transcript card still opens it.
 
@@ -97,7 +105,7 @@ A subagent is running only while it works, and idle only while it is alive and w
 - **omp**: a task with no exit record and no write for 10 minutes is finished.
 - When the parent agent is gone, all its subagents are finished.
 
-Limits: Codex subagents are listed only while Codex's app-server runs, and a Codex subagent with no rollout file has no transcript. OpenCode subagents have no transcript, and only direct children are listed. Claude Code workflow runs are not listed. pi has no subagents.
+Limits: Codex subagents are listed only while Codex's app-server runs, and a Codex subagent with no rollout file has no transcript. OpenCode subagents have no transcript. Pulsar lists direct children and follows parent links in the 500 most recently updated OpenCode sessions to find nested children. Claude Code workflow runs are not listed.
 
 ## Changes
 

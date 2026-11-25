@@ -9,6 +9,15 @@ import type { HarnessIdent } from "./types.ts";
 
 /** Codex process matching and thread discovery (see claude-ident.ts for why apart). */
 
+export const CODEX_THREAD_ID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+export function codexToolThreadId(meta: Record<string, unknown> | undefined) {
+	const value = meta?.threadId;
+	return typeof value === "string" && CODEX_THREAD_ID.test(value)
+		? value
+		: null;
+}
+
 /**
  * Codex threads a codex process is writing, best guess first. Codex does not
  * tell MCP servers their thread id, but it holds each thread's

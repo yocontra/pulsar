@@ -62,6 +62,8 @@ export interface FoundSubagent {
 	sessionId: string | null;
 	/** Its own log file, when it has one (Claude, omp). */
 	file: string | null;
+	/** This specific child exposes a verified addressed delivery path. */
+	direct?: boolean;
 }
 
 /** Where one subagent's transcript is, and how to read it. */
