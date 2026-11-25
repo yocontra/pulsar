@@ -18,6 +18,7 @@ export async function realtime(request: APIRequestContext, body: object) {
 		data: body,
 	});
 	expect(res.ok()).toBe(true);
+	return res;
 }
 
 async function mock(request: APIRequestContext, path: string, body: object) {

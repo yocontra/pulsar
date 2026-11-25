@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { agentId, expect, test } from "./fixtures.ts";
+import { realtime } from "./live.shared.ts";
 
 /**
  * The phone conversation never scrolls sideways (iPhone mini and narrower):
@@ -9,6 +10,10 @@ import { agentId, expect, test } from "./fixtures.ts";
  */
 
 const WIDTHS = [375, 320];
+
+test.afterAll(async ({ request }) => {
+	await realtime(request, { action: "restore" });
+});
 
 /**
  * Long unbroken text in every place Markdown puts it, plus wide blocks;
@@ -159,15 +164,20 @@ for (const width of WIDTHS) {
 			page,
 			request,
 		}) => {
-			// Not the showcase: scrolling its diagrams into view trips a
-			// WebKit ResizeObserver error (open). An agent no other spec reads.
-			const id = await agentId(request, "status=idle machine=edge-18");
-			const tag = `wide${width}x${Date.now().toString(36)}`;
-			const res = await request.post("/api/v1/__mock/realtime", {
-				headers: { "X-Pulsar": "1" },
-				data: { action: "transcript", id, text: diagrams(tag) },
+			// A new Claude fixture has a readable transcript and no prior wide turns.
+			const response = await realtime(request, {
+				action: "add-agent",
+				name: `overflow-diagrams-${width}`,
+				harness: "claude",
+				machine: "edge-18",
 			});
-			expect(res.ok()).toBe(true);
+			const { id } = (await response.json()) as { id: string };
+			const tag = `wide${width}`;
+			await realtime(request, {
+				action: "transcript",
+				id,
+				text: diagrams(tag),
+			});
 			await page.goto(`/#/a/${encodeURIComponent(id)}`);
 			const turn = page.locator(".ds-turn--assistant", {
 				hasText: `Diagrams ${tag}:`,

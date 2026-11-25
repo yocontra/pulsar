@@ -1,5 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { agentId, expect, ready, test } from "./fixtures.ts";
+import { expect, ready, test } from "./fixtures.ts";
+import { realtime } from "./live.shared.ts";
 
 /**
  * Mermaid diagrams on the phone (session/streamdown.tsx) under the
@@ -33,13 +34,19 @@ const REPLY = [
 
 const KINDS = ["flowchart-v2", "pie"];
 
+test.afterAll(async ({ request }) => {
+	await realtime(request, { action: "restore" });
+});
+
 async function diagramReply(page: Page, request: APIRequestContext) {
-	const id = await agentId(request, "status=idle machine=edge-19");
-	const res = await request.post("/api/v1/__mock/realtime", {
-		headers: { "X-Pulsar": "1" },
-		data: { action: "transcript", id, text: REPLY },
+	const response = await realtime(request, {
+		action: "add-agent",
+		name: "diagram-reply",
+		harness: "claude",
+		machine: "edge-19",
 	});
-	expect(res.ok()).toBe(true);
+	const { id } = (await response.json()) as { id: string };
+	await realtime(request, { action: "transcript", id, text: REPLY });
 	await ready(page);
 	await page.evaluate((id) => {
 		location.hash = `#/a/${encodeURIComponent(id)}`;
@@ -90,8 +97,6 @@ test("an inline style from app code still fails, next to Mermaid's (phone)", asy
 	page,
 	request,
 }) => {
-	// The fixture fails this test at teardown: that is the check.
-	test.fail();
 	await diagramReply(page, request);
 	await page.evaluate(() => {
 		const el = document.createElement("div");
@@ -101,4 +106,6 @@ test("an inline style from app code still fails, next to Mermaid's (phone)", asy
 	await expect(
 		page.locator("body > div > span", { hasText: "x" }),
 	).toBeAttached();
+	// The fixture must reject the inline style at teardown.
+	test.fail();
 });
