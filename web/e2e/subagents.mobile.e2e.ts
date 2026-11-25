@@ -131,7 +131,12 @@ test.describe("subagents (phone)", () => {
 		const view = page.locator(`[data-subagent-page="${sub}"]`);
 		await expect(view).toContainText("Waiting for the next task.");
 		await expect(view.locator(".sub-note")).toContainText(
-			"This goes to the parent agent, apparish-auth",
+			"Send via parent delivers it to apparish-auth",
+		);
+		await expect(
+			view.getByRole("textbox", { name: "Message" }),
+		).toHaveAccessibleDescription(
+			/Send via parent delivers it to apparish-auth/,
 		);
 
 		// Back pops to the parent's page.

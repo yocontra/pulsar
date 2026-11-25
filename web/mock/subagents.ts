@@ -2,8 +2,8 @@
  * Mock subagents, shaped like the daemon's: apparish-auth
  * (Claude Code) runs four: an Explore task still running, a finished task
  * that started a nested one, and an idle teammate. The running and the
- * finished task are linked from Task cards in its transcript. Claude Code subagents
- * can't take messages, so the composer offers the parent. The first OpenCode
+ * finished task are linked from Task cards in its transcript. These fixtures have no direct route,
+ * so their composers offer the parent. The first OpenCode
  * agent on studio has one child session that takes messages directly.
  * chat-blocks led an agent team whose 30 teammates were all stopped: every
  * one is done, so by default it shows no subagents at all. The first few
@@ -21,15 +21,15 @@ import { logFor } from "./transcript.ts";
 const subs = new Map<string, SubagentRow[]>();
 const logs = new Map<string, TranscriptEvent[]>();
 
-function note(harness: string, parent: string) {
-	return harness === "opencode"
+function note(harness: string, parent: string, child: string, done: boolean) {
+	return harness === "opencode" && !done
 		? {
 				mode: "direct" as const,
 				note: "Goes straight into this subagent's own OpenCode session.",
 			}
 		: {
 				mode: "parent" as const,
-				note: `Claude Code subagents can't receive messages from Pulsar. This goes to the parent agent, ${parent}, naming the subagent.`,
+				note: `${child} cannot receive a direct message now. Send via parent delivers it to ${parent}, with ${child} named in the message.`,
 			};
 }
 
@@ -51,7 +51,7 @@ function make(
 		callId: null,
 		parentSubId: null,
 		hasTranscript: true,
-		messaging: note(parent.harness, parent.name),
+		messaging: note(parent.harness, parent.name, o.name, o.state === "done"),
 		...o,
 	};
 }

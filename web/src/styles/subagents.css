@@ -109,9 +109,22 @@
 	color: var(--d-fg-3, var(--muted-foreground));
 }
 .sub-note {
-	margin: 0 calc(12px + var(--sar)) 8px calc(12px + var(--sal));
-	font-size: 12px;
+	box-sizing: border-box;
+	flex: none;
+	width: 100%;
+	margin: 0 auto 8px;
+	padding-inline: calc(12px + var(--sal, 0px)) calc(12px + var(--sar, 0px));
+	font-size: var(--ds-text-caption);
+	line-height: var(--ds-text-caption-lh);
+	overflow-wrap: anywhere;
 	color: var(--d-fg-2, var(--muted-foreground));
+}
+.d-main .sub-note {
+	max-width: calc(var(--ds-measure) + 2 * var(--ds-gutter));
+	padding-inline: var(--ds-gutter);
+}
+.sub-note[data-messaging="unavailable"] {
+	margin-bottom: 20px;
 }
 
 /* The phone agent page's Subagents section. */

@@ -177,6 +177,7 @@ interface ComposerProps {
 	target: Target;
 	defaultPriority?: Priority;
 	placeholder?: string;
+	describedBy?: string;
 	/** Header line ("To: apparish-auth @ studio"). */
 	showTo?: boolean;
 	onSent?: (r: SendResult, req: SendRequest) => void;
@@ -203,6 +204,7 @@ function ComposerImpl({
 	target,
 	defaultPriority = "normal",
 	placeholder,
+	describedBy,
 	showTo = true,
 	onSent,
 	autofocus,
@@ -482,6 +484,7 @@ function ComposerImpl({
 						className="composer-input"
 						placeholder={placeholder ?? "Message"}
 						aria-label="Message"
+						aria-describedby={describedBy}
 						enterKeyHint="send"
 						onChange={(e) => setHasText(!!e.currentTarget.value.trim())}
 						onPaste={pasteText}
@@ -545,6 +548,7 @@ function ComposerImpl({
 							className="composer-input"
 							placeholder={placeholder ?? "Message…"}
 							aria-label="Message"
+							aria-describedby={describedBy}
 							onChange={(e) => setHasText(!!e.currentTarget.value.trim())}
 							onPaste={pasteText}
 						/>

@@ -1,5 +1,5 @@
 import { ChevronRightIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { ApiError } from "../api/client.ts";
 import type { SubagentRow } from "../api/types.ts";
 import { Composer } from "../components/Composer.tsx";
@@ -34,6 +34,7 @@ export function SubagentView({
 	mobile: boolean;
 	bare?: boolean;
 }) {
+	const noteId = useId();
 	const q = useSubagent(id);
 	const sub = q.data;
 	const parentId = sub?.parentId ?? null;
@@ -52,6 +53,10 @@ export function SubagentView({
 	);
 	const gone =
 		q.error instanceof ApiError && q.error.code === "not_found" && !sub;
+	const messaging = sub?.messaging;
+	const directFinished = messaging?.mode === "direct" && sub?.state === "done";
+	const viaParent = messaging?.mode === "parent" || directFinished;
+
 	const variant = mobile ? "phone" : "desktop";
 
 	const loadEarlier = async () => {
@@ -113,31 +118,35 @@ export function SubagentView({
 					subagentsOf={parentId}
 				/>
 			</ConversationView>
-			{sub && (
-				<>
-					<p className="sub-note" data-messaging={sub.messaging.mode}>
-						{sub.messaging.note}
-					</p>
-					<Composer
-						key={sub.id}
-						target={{
-							kind: "ids",
-							ids: [sub.id],
-							label:
-								sub.messaging.mode === "direct"
-									? sub.name
-									: `${parentName}, for ${sub.name}`,
-						}}
-						viaParent={sub.messaging.mode === "parent"}
-						showTo={!mobile}
-						compact={mobile}
-						placeholder={
-							sub.messaging.mode === "direct"
-								? `Message ${sub.name}…`
-								: `Message ${parentName} about ${sub.name}…`
-						}
-					/>
-				</>
+			{sub && messaging && (
+				<p
+					id={noteId}
+					className="sub-note"
+					data-messaging={viaParent ? "parent" : "direct"}
+				>
+					{directFinished
+						? `${sub.name} has finished. This message goes to the parent agent, ${parentName}.`
+						: messaging.note}
+				</p>
+			)}
+			{sub && messaging && (
+				<Composer
+					key={sub.id}
+					target={{
+						kind: "ids",
+						ids: [sub.id],
+						label: !viaParent ? sub.name : `${parentName}, for ${sub.name}`,
+					}}
+					viaParent={viaParent}
+					showTo={!mobile}
+					compact={mobile}
+					describedBy={noteId}
+					placeholder={
+						!viaParent
+							? `Message ${sub.name}…`
+							: `Message ${parentName} about ${sub.name}…`
+					}
+				/>
 			)}
 		</section>
 	);

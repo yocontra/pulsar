@@ -171,7 +171,19 @@ test.describe("subagents (desktop)", () => {
 		const note = pageEl.locator(".sub-note");
 		await expect(note).toHaveAttribute("data-messaging", "parent");
 		await expect(note).toContainText(
-			"Claude Code subagents can't receive messages",
+			"Send via parent delivers it to apparish-auth",
+		);
+		await page.setViewportSize({ width: 1720, height: 900 });
+		const textLeft = await note.evaluate(
+			(element) =>
+				element.getBoundingClientRect().left +
+				parseFloat(getComputedStyle(element).paddingLeft),
+		);
+		const prompt = await pageEl.locator(".prompt").boundingBox();
+		expect(prompt).not.toBeNull();
+		expect(Math.abs(textLeft - prompt!.x)).toBeLessThanOrEqual(1);
+		await expect(pageEl.locator(".composer-input")).toHaveAccessibleDescription(
+			/Send via parent delivers it to apparish-auth/,
 		);
 		const sent = page.waitForRequest(
 			(r) => r.url().endsWith("/api/v1/send") && r.method() === "POST",
@@ -299,6 +311,116 @@ test.describe("subagents (desktop)", () => {
 		expect(payload).toMatchObject({ ids: [sub] });
 		expect(payload.viaParent).toBeUndefined();
 		expect((await req.response())?.status()).toBe(200);
+	});
+	test("federated messaging uses the capability reported by the owner", async ({
+		page,
+		request,
+	}) => {
+		const localParent = await agentId(request, "name=apparish-auth");
+		const local = `${localParent}/sub:a2fix`;
+		const remoteParent = `remote-peer/${localParent}`;
+		const remote = `${remoteParent}/sub:a2fix`;
+		const localId = encodeURIComponent(local);
+		const remoteId = encodeURIComponent(remote);
+		let finished = false;
+		let useParent = false;
+		await page.route(`**/api/v1/subagents/${remoteId}`, async (route) => {
+			const response = await route.fetch({
+				url: new URL(`/api/v1/subagents/${localId}`, route.request().url())
+					.href,
+			});
+			await route.fulfill({
+				response,
+				json: {
+					...(await response.json()),
+					id: remote,
+					parentId: remoteParent,
+					state: finished ? "done" : "running",
+					messaging: useParent
+						? {
+								mode: "parent",
+								note: "Goes to the parent on the remote machine.",
+							}
+						: {
+								mode: "direct",
+								note: "Goes directly to this subagent on the remote machine.",
+							},
+				},
+			});
+		});
+		await page.route(
+			`**/api/v1/agents/${encodeURIComponent(remoteParent)}`,
+			async (route) => {
+				await route.fulfill({
+					response: await route.fetch({
+						url: new URL(
+							`/api/v1/agents/${encodeURIComponent(localParent)}`,
+							route.request().url(),
+						).href,
+					}),
+				});
+			},
+		);
+		await page.route(
+			`**/api/v1/agents/${remoteId}/transcript**`,
+			async (route) => {
+				await route.fulfill({
+					response: await route.fetch({
+						url: route.request().url().replace(remoteId, localId),
+					}),
+				});
+			},
+		);
+		await page.route("**/api/v1/send", async (route) => {
+			const send = route.request().postDataJSON();
+			expect(send.ids).toEqual([remote]);
+			expect(send.viaParent).toBe(useParent || finished ? true : undefined);
+			await route.fulfill({
+				response: await route.fetch({
+					postData: { ...send, ids: [local], viaParent: true },
+				}),
+			});
+		});
+		await page.goto(`/#/s/${remoteId}`);
+		const view = page.locator("[data-subagent-page]");
+		const input = view.getByRole("textbox", { name: "Message" });
+		await expect(input).toHaveAccessibleDescription(
+			"Goes directly to this subagent on the remote machine.",
+		);
+		const sent = page.waitForResponse((response) =>
+			response.url().endsWith("/api/v1/send"),
+		);
+		await input.fill("Can you check the result?");
+		await page.keyboard.press("ControlOrMeta+Enter");
+		expect((await sent).ok()).toBe(true);
+		useParent = true;
+		await page.reload();
+		await expect(input).toHaveAccessibleDescription(
+			"Goes to the parent on the remote machine.",
+		);
+		const sentToParent = page.waitForResponse((response) =>
+			response.url().endsWith("/api/v1/send"),
+		);
+		await input.fill("Can the parent check the result?");
+		await page.keyboard.press("ControlOrMeta+Enter");
+		expect((await sentToParent).ok()).toBe(true);
+		useParent = false;
+		finished = true;
+		await page.reload();
+		await expect(view.locator(".sub-note")).toHaveAttribute(
+			"data-messaging",
+			"parent",
+		);
+		await expect(view.locator(".sub-note")).toContainText("has finished");
+		await expect(input).toHaveAccessibleDescription(
+			/has finished.*parent agent/,
+		);
+		const finalSend = page.waitForResponse((r) =>
+			r.url().endsWith("/api/v1/send"),
+		);
+		await input.fill("Please summarize the result.");
+		await page.keyboard.press("ControlOrMeta+Enter");
+		expect((await finalSend).ok()).toBe(true);
 	});
 });
 

@@ -65,6 +65,8 @@ One MCP server runs per agent session and the extension runs inside pi/omp, so t
 
 ## Rules
 
+- Apply bug fixes and improvements across all harnesses. Put shared behavior in the service or UI, and keep native protocol differences in the adapters. Test each affected route, including what the operator sees when a harness lacks a capability.
+
 - Tests for every behavior change (`test/`). Delivery and setup changes need an end-to-end check against the real harness. Say in the PR which version you tested.
 - Never touch a user's real agent configs in tests. `test/setup.test.ts` shows how to use a fake `HOME`.
 - Do not make Pulsar claim things on a harness's behalf, such as a permission mode, that it cannot verify.

@@ -160,8 +160,9 @@ test.describe("real daemon @real", () => {
 			.click();
 		const view = page.locator(`[data-subagent-page="${sub}"]`);
 		await expect(view).toContainText("Found 3 callers of refresh().");
-		await expect(view.locator(".sub-note")).toContainText(
-			"Claude Code subagents can't receive messages",
+		await expect(view.locator(".sub-note")).toHaveAttribute(
+			"data-messaging",
+			"parent",
 		);
 		const sent = page.waitForResponse(
 			(r) =>
