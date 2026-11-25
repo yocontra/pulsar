@@ -174,6 +174,9 @@ function DesktopSessionHeaderImpl({
 					title={`${harnessName(agent.harness)}${agent.model ? ` · ${agent.model}` : ""}`}
 				>
 					{harnessName(agent.harness)}
+					{agent.capabilities?.surface === "managed-acp" && " · ACP"}
+					{agent.capabilities?.host &&
+						` · ${harnessName(agent.capabilities.host)}`}
 					{model && (
 						<>
 							<span className="d-dot-sep" aria-hidden="true" />

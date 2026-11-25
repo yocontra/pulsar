@@ -1,7 +1,6 @@
 import { open, readdir, stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
-import { configDir } from "../harnesses/claude-ident.ts";
+import { usageHarnesses } from "../harnesses/catalog.ts";
 import type { LimitState } from "../http/wire.ts";
 import { lazyCrypto } from "../lazy.ts";
 import type { Store } from "../store.ts";
@@ -19,7 +18,6 @@ import {
 	isLocalProvider,
 	localOnlyModels,
 	type Providers,
-	readProviders,
 	tagLocal,
 } from "./local.ts";
 import {
@@ -29,6 +27,7 @@ import {
 	type UsageRecord,
 } from "./parse.ts";
 import { priceFor, priceTable } from "./prices.ts";
+import { usageSources } from "./sources.ts";
 
 /**
  * Where each harness keeps its session files (null: don't scan it), and
@@ -45,12 +44,10 @@ export type UsageRoots = Record<UsageHarness, string | null> & {
 
 /** The harnesses' own folders, read at call time (tests point HOME elsewhere). */
 export function defaultRoots(): UsageRoots {
-	const home = homedir();
 	return {
-		claude: join(configDir(), "projects"),
-		codex: join(process.env.CODEX_HOME ?? join(home, ".codex"), "sessions"),
-		pi: join(home, ".pi", "agent", "sessions"),
-		omp: join(home, ".omp", "agent", "sessions"),
+		...(Object.fromEntries(
+			usageHarnesses.map((h) => [h, usageSources[h].root()]),
+		) as Record<UsageHarness, string>),
 		claudeState: claudeStatePath(),
 		opencodeDb: opencodeDbPath(),
 		opencodeUsage: askOpencodeUsage,
@@ -108,21 +105,6 @@ async function dir(path: string) {
 	} catch {
 		return [];
 	}
-}
-
-/** `…_<id>.jsonl` (pi/omp) or `rollout-…-<uuid>.jsonl` (Codex): the session id. */
-function idFromName(name: string, harness: UsageHarness): string {
-	const stem = name.replace(/\.jsonl$/, "");
-	if (harness === "codex") {
-		const m =
-			/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(
-				stem,
-			);
-		return m ? m[1]! : stem;
-	}
-	if (harness === "claude") return stem;
-	const us = stem.indexOf("_");
-	return us >= 0 ? stem.slice(us + 1) : stem;
 }
 
 /**
@@ -194,16 +176,15 @@ export class UsageScanner {
 		const since = now - WINDOW_MS;
 		const roots = this.roots();
 		this.providers = {};
-		for (const h of ["codex", "pi", "omp"] as const) {
+		const found: Found[] = [];
+		for (const h of usageHarnesses) {
 			const root = roots[h];
-			if (root) this.providers[h] = await readProviders(h, root);
+			if (!root) continue;
+			const source = usageSources[h];
+			if (source.providers) this.providers[h] = await source.providers(root);
+			found.push(...(await this.find(h, root, since)));
 		}
 		this.retagLocal();
-		const found: Found[] = [];
-		for (const h of ["claude", "codex", "pi", "omp"] as const) {
-			const root = roots[h];
-			if (root) found.push(...(await this.find(h, root, since)));
-		}
 		// Newest first: today's numbers show before the backlog is read.
 		found.sort((a, b) => b.mtime - a.mtime);
 		const known = this.knownFiles();
@@ -442,7 +423,8 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 			} catch {}
 		};
 		const jsonl = (n: string) => n.endsWith(".jsonl");
-		if (harness === "codex") {
+		const source = usageSources[harness];
+		if (source.layout === "calendar") {
 			// sessions/YYYY/MM/DD/rollout-….jsonl; whole days before `since` are skipped.
 			const cutoff = new Date(since - DAY).toISOString().slice(0, 10);
 			for (const y of await dir(root)) {
@@ -455,7 +437,7 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 						const day = join(root, y.name, m.name, d.name);
 						for (const f of await dir(day))
 							if (f.isFile() && jsonl(f.name))
-								await add(join(day, f.name), idFromName(f.name, harness));
+								await add(join(day, f.name), source.session(f.name));
 					}
 				}
 			}
@@ -469,15 +451,12 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 			const fdir = join(root, folder.name);
 			for (const e of await dir(fdir)) {
 				if (e.isFile() && jsonl(e.name)) {
-					await add(join(fdir, e.name), idFromName(e.name, harness));
+					await add(join(fdir, e.name), source.session(e.name));
 					continue;
 				}
 				if (!e.isDirectory()) continue;
-				const parent = idFromName(e.name, harness);
-				const sub =
-					harness === "claude"
-						? join(fdir, e.name, "subagents")
-						: join(fdir, e.name);
+				const parent = source.session(e.name);
+				const sub = join(fdir, e.name, source.children);
 				for (const s of await dir(sub))
 					if (s.isFile() && jsonl(s.name)) await add(join(sub, s.name), parent);
 			}

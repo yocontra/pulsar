@@ -17,6 +17,7 @@ const SOURCE: Record<CommandEntry["source"], string> = {
 	project: "Project",
 	user: "User",
 	plugin: "Plugin",
+	agent: "Agent",
 };
 
 function Row({

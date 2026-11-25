@@ -39,8 +39,8 @@ The source runs directly with Node 22.13+ or Bun (`node src/cli.ts ls`). It uses
 
 ## Adding a harness
 
-1. Write `src/harnesses/<id>.ts` exporting a `HarnessDriver`. `id`, `label` and `matchProcess` are required. Add only the hooks the harness supports: `identify` (session id and folder at start), `lateSession` (the session id appears after start), `toolSessions` (one MCP process for many sessions, named in `_meta`), `scan` (live sessions), `push` (an outside way into a running session), `extension` (hosts Pulsar's extension), `model`, `sessionLog`, `transcript` (where the live transcript is and how to parse it into `TranscriptEvent`s; parsing must not depend on where a chunk starts), `setup`. Without `push` or `extension` the harness is pull-only and still works.
-2. Put its identity part (`id`, `label`, `matchProcess`, and `identify`, `lateSession`, `toolSessions`, `extension` if it has them) in a light module (`src/harnesses/<id>-ident.ts`, or `simple-ident.ts` when it is only a matcher) that imports no setup, transcript or push code, and spread it into the driver. Add the driver to `DRIVERS` in `src/harnesses/index.ts` and its ident to `IDENTS` in `src/harnesses/ident.ts`, at the same position. Lookups take the first match, so a new extension host goes before `pi`.
+1. For an ACP executable, add its ID, installed binary, fixed arguments and protocol source to `src/harnesses/acp-catalog.ts`. Pulsar derives managed launch choices, identity and display names from that entry. Test the installed executable and record its supported operations in [ACP adapters](docs/acp.md).
+2. For an attached MCP client, add a manifest in `src/harnesses/catalog.ts`. A standard JSON stdio config uses the shared setup, detection and uninstall code. A native driver can also supply live discovery, delivery, controls or transcript reading through `HarnessDriver`. Keep native process and session identification in a lightweight identity module. The client process must not load the daemon implementation.
 3. Run `bun run check`. `test/harnesses.test.ts` checks every driver against the contract.
 4. Add the harness to the user docs where its behavior differs: `docs/adapters.md` (delivery, limits, and the Stop and prompts tables) and the README's short harness table. Put what you verified in the PR, not the docs.
 
@@ -68,3 +68,5 @@ One MCP server runs per agent session and the extension runs inside pi/omp, so t
 - Tests for every behavior change (`test/`). Delivery and setup changes need an end-to-end check against the real harness. Say in the PR which version you tested.
 - Never touch a user's real agent configs in tests. `test/setup.test.ts` shows how to use a fake `HOME`.
 - Do not make Pulsar claim things on a harness's behalf, such as a permission mode, that it cannot verify.
+
+After changing the ACP provider catalog, run `bun scripts/acp-guide.ts` to update the public command table.

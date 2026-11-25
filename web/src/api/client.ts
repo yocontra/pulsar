@@ -851,6 +851,7 @@ export class SendCancelled extends ProveCancelled {}
 export type ActingOp =
 	| "attachments.upload"
 	| "agents.launch"
+	| "hosted.write"
 	| "git.commit"
 	| "git.push"
 	| "git.pr"

@@ -31,6 +31,7 @@ import type { Registry } from "./registry.ts";
 export const ACTING_SCOPE: Record<ActingOp, "agent" | "machine"> = {
 	"attachments.upload": "agent",
 	"agents.launch": "machine",
+	"hosted.write": "machine",
 	"git.commit": "agent",
 	"git.push": "agent",
 	"git.pr": "agent",

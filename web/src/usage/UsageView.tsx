@@ -35,6 +35,7 @@ import {
 	processed,
 	series,
 	totals,
+	usageSourceLabel,
 	value,
 } from "./model.ts";
 import { seriesColor, UsageChart } from "./UsageChart.tsx";
@@ -327,11 +328,12 @@ function Body({
 			<section className="usage-top">
 				<div className="usage-summary">
 					<p className="usage-figure" data-testid="usage-total">
-						{fmt(whole)}
+						{metric === "cost" && rows.every((row) => row.cost === null)
+							? "—"
+							: fmt(whole)}
 					</p>
 					<p className="usage-sub">
-						{plural(t.sessions, "session")} ·{" "}
-						{metric === "cost" ? "API estimate" : "processed tokens"}
+						{plural(t.sessions, "session")} · {usageSourceLabel(metric, rows)}
 						{metric === "cost" && t.unpricedRecords > 0 && (
 							<Unpriced records={t.unpricedRecords} models={t.unpricedModels} />
 						)}

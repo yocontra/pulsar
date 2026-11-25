@@ -30,6 +30,8 @@ export interface ExecOptions {
 	timeoutMs?: number;
 	maxBuffer?: number;
 	env?: NodeJS.ProcessEnv;
+	/** Optional standard input for a command running without group mode. */
+	stdin?: string;
 	cwd?: string;
 	lane?: Lane;
 	/**
@@ -159,6 +161,10 @@ export function exec(
 								)
 							: undefined;
 					hard?.unref();
+					if (opts.stdin !== undefined) {
+						child.stdin?.on("error", () => {});
+						child.stdin?.end(opts.stdin);
+					}
 				}),
 	);
 }

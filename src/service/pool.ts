@@ -1,4 +1,5 @@
 import type { PoolDiagnostics } from "../federation/diagnostics.ts";
+import type { RemoteHosted } from "../federation/hosted.ts";
 import type {
 	Approval,
 	ApprovalDecision,
@@ -160,6 +161,7 @@ export interface PoolView extends ActingRelay {
 	readonly queue?: RemoteQueue;
 	/** Token usage of other machines and their agents (absent before usage existed). */
 	readonly usage?: PoolUsage;
+	readonly hosted?: Pick<RemoteHosted, "observe">;
 	/** Other machines' doctor reports (absent before Diagnostics existed). */
 	readonly diagnostics?: PoolDiagnostics;
 	/**

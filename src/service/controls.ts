@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { validAcpModeId } from "../harnesses/acp-controls.ts";
 import { codexControlReady, codexRpc } from "../harnesses/codex-rpc.ts";
 import { driverFor } from "../harnesses/index.ts";
 import {
@@ -15,6 +16,7 @@ import {
 import type {
 	AgentModes,
 	CommandCatalog,
+	CommandEntry,
 	ControlResult,
 	ModeOption,
 } from "../http/wire.ts";
@@ -286,9 +288,10 @@ export class Controls {
 			extension: (agent) => this.askExtension(agent, { kind: "commands" }),
 			...deps.catalog,
 		});
-		deps.acting?.register("agents.mode", async ({ agent, params }) =>
-			this.setMode(this.local(agent!), modeParam(params)),
-		);
+		deps.acting?.register("agents.mode", async ({ agent, params }) => {
+			const local = this.local(agent!);
+			return this.setMode(local, modeParam(params, local.meta.acp === "1"));
+		});
 		deps.acting?.register("agents.command", async ({ agent, params }) =>
 			this.run(this.local(agent!), lineParam(params)),
 		);
@@ -321,6 +324,32 @@ export class Controls {
 			if (this.remote && agentId.includes("/"))
 				return this.remote.commands(agentId, as);
 			throw new RpcError("not_found", `no agent ${agentId}`);
+		}
+		if (agent.meta.acp === "1") {
+			const response = await this.askExtension(agent, { kind: "commands" });
+			const commands = Array.isArray(response?.commands)
+				? (response.commands as CommandEntry[])
+				: [];
+			const runnable =
+				response?.result === "ok" &&
+				response.runnable === true &&
+				commands.length > 0;
+			return {
+				agentId: agent.id,
+				harness: agent.harness,
+				commands,
+				runnable,
+				...(runnable
+					? {}
+					: {
+							reason: response
+								? String(
+										response.detail ??
+											"The session has no advertised ACP commands.",
+									)
+								: NO_EXTENSION,
+						}),
+			};
 		}
 		const commands = await this.catalogs.list(agent);
 		const how = await this.commandPath(agent);
@@ -363,6 +392,34 @@ export class Controls {
 	}
 
 	private async readModes(agent: Agent): Promise<AgentModes> {
+		if (agent.meta.acp === "1") {
+			const response = await this.askExtension(agent, { kind: "mode.get" });
+			const modes = Array.isArray(response?.modes)
+				? (response.modes as ModeOption[])
+				: [];
+			const current = validAcpModeId(response?.mode) ? response.mode : null;
+			const canSwitch =
+				response?.result === "ok" &&
+				response.canSwitch === true &&
+				modes.length > 0;
+			return {
+				agentId: agent.id,
+				modes,
+				current,
+				live: current !== null && response?.result === "ok",
+				canSwitch,
+				...(canSwitch
+					? {}
+					: {
+							reason: String(
+								response?.detail ??
+									(response
+										? "The session has no advertised ACP modes."
+										: NO_EXTENSION),
+							),
+						}),
+			};
+		}
 		const modes = MODES[agent.harness] ?? [];
 		const base = { agentId: agent.id, modes };
 		if (modes.length === 0)
@@ -450,6 +507,10 @@ export class Controls {
 			agentId: agent.id,
 			...r,
 		});
+		if (agent.meta.acp === "1")
+			return done(
+				await this.acpAction(agent, { kind: "mode.set", mode: target }, "mode"),
+			);
 		const modes = MODES[agent.harness] ?? [];
 		if (!modes.some((m) => m.id === target))
 			return done({
@@ -691,6 +752,11 @@ export class Controls {
 				detail: "A command is one line: / and a name, then its arguments.",
 			});
 
+		if (agent.meta.acp === "1")
+			return done(
+				await this.acpAction(agent, { kind: "command", line }, "command"),
+			);
+
 		if (agent.harness === "pi" && this.sessions.extensionFor(agent.id)) {
 			const r = await this.askExtension(agent, { kind: "command", line });
 			return done(extensionOutcome(r, "command"));
@@ -803,7 +869,18 @@ export class Controls {
 			: { result: "failed", via, detail: r.error };
 	}
 
-	// ---- the pulsar extension (pi, omp) ----
+	private async acpAction(
+		agent: Agent,
+		request: Record<string, unknown>,
+		what: "mode" | "command",
+	): Promise<Omit<ControlResult, "agentId">> {
+		if (!this.sessions.extensionFor(agent.id))
+			return { result: "unsupported", via: "acp", detail: NO_EXTENSION };
+		const result = await this.askExtension(agent, request);
+		return { ...extensionOutcome(result, what), via: "acp" };
+	}
+
+	// ---- the pulsar extension ----
 
 	/** Asks the session's pulsar extension; null when none answers in time. */
 	askExtension(
@@ -872,9 +949,12 @@ function extensionOutcome(
 	};
 }
 
-function modeParam(params: unknown): string {
+function modeParam(params: unknown, managed: boolean): string {
 	const m = (params as { mode?: unknown } | null)?.mode;
-	if (typeof m !== "string" || !/^[A-Za-z]{1,40}$/.test(m))
+	if (
+		typeof m !== "string" ||
+		!(managed ? validAcpModeId(m) : /^[A-Za-z]{1,40}$/.test(m))
+	)
 		throw new RpcError("bad_request", "mode must be a mode id");
 	return m;
 }

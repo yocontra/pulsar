@@ -1,4 +1,4 @@
-import { driverFor } from "../harnesses/index.ts";
+import { attachedDriver, driverFor } from "../harnesses/index.ts";
 import type { FoundSubagent, HarnessDriver } from "../harnesses/types.ts";
 import type {
 	SubagentCounts,
@@ -110,7 +110,7 @@ export class Subagents {
 	/** The local agent that can have subagents, or undefined. */
 	private parent(parentId: string): Agent | undefined {
 		const agent = this.registry.get(parentId);
-		return agent && driverFor(agent.harness)?.subagents ? agent : undefined;
+		return agent && attachedDriver(agent)?.subagents ? agent : undefined;
 	}
 
 	private entry(parentId: string): Entry {
@@ -163,7 +163,7 @@ export class Subagents {
 		}
 		const run = (async () => {
 			try {
-				const driver = driverFor(agent.harness)!;
+				const driver = attachedDriver(agent)!;
 				let found: FoundSubagent[] = [];
 				try {
 					found = await driver.subagents!.list(agent);
@@ -199,7 +199,7 @@ export class Subagents {
 					? f
 					: { ...f, state: "done", finishedAt: f.finishedAt ?? f.updatedAt },
 			);
-		const driver = driverFor(agent.harness);
+		const driver = attachedDriver(agent);
 		const messaging = messagingFor(driver, agent.name);
 		const hasTranscript = Boolean(
 			driver?.subagents?.transcript || driver?.transcript,
@@ -257,7 +257,7 @@ export class Subagents {
 		const now = this.now();
 		for (const agent of this.registry.live()) {
 			if (this.registry.closed) return;
-			const sub = driverFor(agent.harness)?.subagents;
+			const sub = attachedDriver(agent)?.subagents;
 			if (!sub) continue;
 			const e = this.entries.get(agent.id);
 			const running = (e?.counts?.running ?? 0) > 0;

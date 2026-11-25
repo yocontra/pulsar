@@ -48,7 +48,8 @@ export interface FileState {
 	context?: { used: number; window: number | null };
 }
 
-export type UsageHarness = "claude" | "codex" | "pi" | "omp";
+export type UsageHarness =
+	typeof import("../harnesses/catalog.ts").usageHarnesses[number];
 
 type Json = Record<string, unknown>;
 

@@ -8,7 +8,9 @@ import {
 	stateLabel,
 } from "../../lib/format.ts";
 
-export type AgentState = "busy" | "idle" | "needs-you" | "offline";
+export type { AgentState } from "../../../../src/http/wire.ts";
+
+import type { AgentState } from "../../../../src/http/wire.ts";
 export type Tone = AgentState | "failed" | "done";
 
 /**
@@ -38,6 +40,14 @@ export function StatusDot({
 			{...a11y}
 		>
 			{label && <title>{label}</title>}
+			{state === "unknown" && (
+				<path
+					d="M2 6h8"
+					stroke="currentColor"
+					strokeWidth="1.5"
+					strokeDasharray="2 1"
+				/>
+			)}
 			{state === "busy" && <circle cx="6" cy="6" r="4" fill="currentColor" />}
 			{state === "idle" && (
 				<circle

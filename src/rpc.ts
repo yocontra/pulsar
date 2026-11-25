@@ -30,36 +30,66 @@ export function writeFrame(socket: Socket, frame: Frame) {
  * many chunks is joined once, not rescanned (and copied) per chunk.
  */
 export function readFrames(socket: Socket, onFrame: (f: Frame) => void) {
-	let parts: string[] = [];
+	let parts: Buffer[] = [];
 	let pending = 0;
 	const handle = (line: string) => {
 		const text = line.trim();
 		if (!text) return;
-		let frame: Frame;
+		let frame: unknown;
 		try {
-			frame = JSON.parse(text) as Frame;
+			frame = JSON.parse(text);
 		} catch {
 			// Ignore malformed lines; the peer is local and same-user.
 			return;
 		}
-		onFrame(frame);
+		if (!frame || typeof frame !== "object" || Array.isArray(frame)) return;
+		if ("event" in frame) {
+			if (typeof frame.event !== "string") return;
+		} else {
+			if (!("id" in frame) || !Number.isSafeInteger(frame.id)) return;
+			if ("method" in frame) {
+				if (typeof frame.method !== "string") return;
+			} else if ("error" in frame) {
+				const error = frame.error;
+				if (
+					!error ||
+					typeof error !== "object" ||
+					!("code" in error) ||
+					typeof error.code !== "string" ||
+					!("message" in error) ||
+					typeof error.message !== "string"
+				)
+					return;
+			} else if (!("result" in frame)) return;
+		}
+		onFrame(frame as Frame);
 	};
-	socket.setEncoding("utf8");
-	socket.on("data", (chunk: string) => {
+
+	socket.on("data", (data: Buffer | string) => {
+		const chunk = typeof data === "string" ? Buffer.from(data) : data;
 		let start = 0;
-		let nl = chunk.indexOf("\n");
+		let nl = chunk.indexOf(10);
 		while (nl !== -1) {
-			const tail = chunk.slice(start, nl);
-			const line = parts.length ? parts.join("") + tail : tail;
+			if (pending + nl - start > MAX_LINE) {
+				parts = [];
+				socket.destroy(new Error("frame too large"));
+				return;
+			}
+			const tail = chunk.subarray(start, nl);
+			const line = (
+				parts.length
+					? Buffer.concat([...parts, tail], pending + tail.length)
+					: tail
+			).toString("utf8");
 			parts = [];
 			pending = 0;
 			handle(line);
 			if (socket.destroyed) return;
 			start = nl + 1;
-			nl = chunk.indexOf("\n", start);
+			nl = chunk.indexOf(10, start);
 		}
 		if (start < chunk.length) {
-			parts.push(start ? chunk.slice(start) : chunk);
+			parts.push(start ? chunk.subarray(start) : chunk);
 			pending += chunk.length - start;
 			if (pending > MAX_LINE) {
 				parts = [];

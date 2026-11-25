@@ -254,6 +254,9 @@ function AgentPageImpl({ id }: { id: string }) {
 								{a.model
 									? ` · ${shortModel(a.model)}`
 									: ` · ${harnessName(a.harness)}`}
+								{a.capabilities?.surface === "managed-acp" && " · ACP"}
+								{a.capabilities?.host &&
+									` · ${harnessName(a.capabilities.host)}`}
 							</span>
 						</>
 					)

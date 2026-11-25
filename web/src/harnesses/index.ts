@@ -1,3 +1,4 @@
+import { HARNESSES } from "../../../src/harnesses/catalog.ts";
 import { claude } from "./claude.ts";
 import { codex } from "./codex.ts";
 import { cursor } from "./cursor.ts";
@@ -20,7 +21,7 @@ export type {
  * The app's harness adapters, one module per harness (like the daemon's
  * DRIVERS in src/harnesses/index.ts). Look one up with `harnessUi`.
  */
-export const HARNESS_UI: readonly HarnessUi[] = [
+const custom: readonly HarnessUi[] = [
 	claude,
 	codex,
 	omp,
@@ -30,6 +31,12 @@ export const HARNESS_UI: readonly HarnessUi[] = [
 	gemini,
 	vscode,
 ];
+
+export const HARNESS_UI: readonly HarnessUi[] = HARNESSES.map((h) => ({
+	name: h.label,
+	id: h.id,
+	...custom.find((ui) => ui.id === h.id),
+}));
 
 const byId = new Map(HARNESS_UI.map((h) => [h.id, h]));
 

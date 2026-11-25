@@ -1,0 +1,80 @@
+.hosted-desktop {
+	min-height: 0;
+	overflow: auto;
+}
+
+.hosted-desktop > h1 {
+	margin: 1.5rem 1.5rem 0;
+	font-size: 1.25rem;
+	font-weight: 600;
+}
+
+.hosted-view {
+	display: grid;
+	gap: 1.25rem;
+	padding: 1.5rem;
+}
+
+.hosted-view h2 {
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+.hosted-view p,
+.hosted-view small {
+	opacity: 0.8;
+}
+
+.hosted-view ul {
+	margin-block: 0.5rem;
+	list-style: none;
+	padding: 0;
+}
+
+.hosted-view li {
+	padding-block: 0.5rem;
+	font-size: 0.875rem;
+	border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+	overflow-wrap: anywhere;
+}
+
+.hosted-task-title {
+	font-size: 1rem;
+	font-weight: 500;
+}
+
+.hosted-task-title a {
+	text-decoration: underline;
+	text-underline-offset: 0.16em;
+}
+
+.hosted-action {
+	margin-block: 0.5rem;
+}
+
+.hosted-action summary {
+	cursor: pointer;
+}
+
+.hosted-action form,
+.hosted-action fieldset,
+.hosted-action label {
+	display: grid;
+	gap: 0.5rem;
+}
+
+.hosted-action form {
+	margin-block-start: 0.75rem;
+	max-width: 28rem;
+}
+
+.hosted-action input,
+.hosted-action select,
+.hosted-action textarea,
+.hosted-action button {
+	padding: 0.4rem 0.6rem;
+	border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+	border-radius: 0.4rem;
+	color: inherit;
+	background: transparent;
+}

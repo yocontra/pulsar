@@ -19,18 +19,6 @@ export type HarnessKey =
 	| "vscode"
 	| "other";
 
-const NAMES: Record<HarnessKey, string> = {
-	claude: "Claude Code",
-	codex: "Codex",
-	opencode: "OpenCode",
-	pi: "pi",
-	omp: "omp",
-	cursor: "Cursor",
-	gemini: "Gemini",
-	vscode: "VS Code",
-	other: "Agent",
-};
-
 /** "claude-code", "Claude", "codex-cli" → a known harness key. */
 export function harnessKey(harness: string | null | undefined): HarnessKey {
 	const h = (harness ?? "").toLowerCase();
@@ -48,7 +36,8 @@ export function harnessKey(harness: string | null | undefined): HarnessKey {
 /** A harness's display name: "Claude Code", "Codex"; unknown ones as given. */
 export function harnessName(harness: string | null | undefined): string {
 	const k = harnessKey(harness);
-	return k === "other" ? harness || NAMES.other : NAMES[k];
+	if (harness === "cli") return "Terminal";
+	return harnessUi(k === "other" ? harness : k).name ?? (harness || "Agent");
 }
 
 export function HarnessGlyph({
@@ -111,7 +100,7 @@ export function AgentAvatar({
 	harness: string | null | undefined;
 	size?: AvatarSize;
 	/** Draws a small status dot on the corner (shape + color). */
-	status?: "busy" | "idle" | "needs-you" | "offline";
+	status?: keyof typeof STATUS_LABEL;
 	label?: string;
 	className?: string;
 }) {

@@ -3,6 +3,8 @@ import { homedir as osHome, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { exec } from "../exec.ts";
 import { runGit, worktreeRoot } from "../git-write.ts";
+import { ACP_PROVIDERS } from "../harnesses/acp-catalog.ts";
+import { launchable } from "../harnesses/catalog.ts";
 import type {
 	LaunchHarness,
 	LaunchOptions,
@@ -46,22 +48,27 @@ import type { Registry } from "./registry.ts";
  */
 
 /** What the app can start, and the fixed command that starts it. */
-export const LAUNCH_HARNESSES: Record<
-	LaunchHarness,
-	{ label: string; bin: string }
-> = {
-	claude: { label: "Claude Code", bin: "claude" },
-	codex: { label: "Codex", bin: "codex" },
-	opencode: { label: "OpenCode", bin: "opencode" },
-	pi: { label: "pi", bin: "pi" },
-	omp: { label: "omp", bin: "omp" },
-};
-
-const HARNESS_IDS = Object.keys(LAUNCH_HARNESSES) as LaunchHarness[];
+export const LAUNCH_HARNESSES = Object.fromEntries(
+	launchable.map((h) => [h.id, h]),
+) as Record<LaunchHarness, (typeof launchable)[number]>;
+const HARNESS_IDS = launchable.map((h) => h.id);
+const ACP_BINARIES = new Map<LaunchHarness, string>(
+	ACP_PROVIDERS.map(({ id, binary }) => [id, binary]),
+);
 
 /** The shell command a harness starts with (a constant: never user input). */
 export function harnessCommand(h: LaunchHarness): string {
-	return `exec ${LAUNCH_HARNESSES[h].bin}`;
+	const entry = LAUNCH_HARNESSES[h];
+	const acp = `exec pulsar acp ${entry.id}`;
+	if ("managed" in entry) return acp;
+	const native = `exec ${entry.bin}`;
+	const binary = ACP_BINARIES.get(h);
+	// Use this pane's PATH so launch remains correct after a cached options
+	// probe or when the login shell chooses a different PATH in this folder.
+	// Keep the selection script portable across login shells.
+	return binary
+		? `exec /bin/sh -c 'case "$(command -v pulsar 2>/dev/null):$(command -v ${binary} 2>/dev/null)" in /*:/*) ${acp} ;; *) ${native} ;; esac'`
+		: native;
 }
 
 /**
@@ -90,26 +97,29 @@ const homedir = () => process.env.HOME || osHome();
 
 /**
  * Lists the harnesses a login shell finds, one marked line each
- * (`PULSAR_BIN:<id>:<path>`), so what rc files print (a banner, a
+ * (`PULSAR_BIN:<executable>:<path>`), so what rc files print (a banner, a
  * terminal's escape codes on the same line) can't hide one. Constant: no
  * input goes in.
  */
-const PROBE_SCRIPT = `for c in ${HARNESS_IDS.map((h) => LAUNCH_HARNESSES[h].bin).join(" ")}; do p=$(command -v "$c" 2>/dev/null) && printf '\\nPULSAR_BIN:%s:%s\\n' "$c" "$p"; done; exit 0`;
+const PROBE_BINARIES = new Set([
+	"pulsar",
+	...HARNESS_IDS.map((h) => LAUNCH_HARNESSES[h].bin),
+	...ACP_BINARIES.values(),
+]);
+const PROBE_SCRIPT = `exec /bin/sh -c 'for c in ${[...PROBE_BINARIES].join(" ")}; do p=$(command -v "$c" 2>/dev/null) && printf "\\nPULSAR_BIN:%s:%s\\n" "$c" "$p"; done; exit 0'`;
 
 /** Terminal escapes: OSC (`ESC ] ... BEL` or `ESC \\`) and CSI sequences. */
 const ESCAPES =
 	// biome-ignore lint/suspicious/noControlCharactersInRegex: escape codes are control characters
 	/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-_]/g;
 
-/** The harnesses a probe's output lists with an absolute path. */
+/** The executables a probe's output lists with an absolute path. */
 export function parseProbe(stdout: string): Set<string> {
 	const ids = new Set<string>();
 	const text = stdout.replace(ESCAPES, "");
-	for (const m of text.matchAll(/PULSAR_BIN:([a-z]+):(\/[^\r\n]*)/g)) {
+	for (const m of text.matchAll(/PULSAR_BIN:([a-z][a-z0-9-]*):(\/[^\r\n]*)/g)) {
 		const bin = m[1]!;
-		for (const h of HARNESS_IDS)
-			if (LAUNCH_HARNESSES[h].bin === bin && isAbsolute(m[2]!.trim()))
-				ids.add(h);
+		if (PROBE_BINARIES.has(bin) && isAbsolute(m[2]!.trim())) ids.add(bin);
 	}
 	return ids;
 }
@@ -670,11 +680,10 @@ export class Launches {
 			const child = candidates.find((a) => a.pid !== null && under(a.pid));
 			if (child) return child;
 		}
-		return (
-			candidates.find(
-				(a) => a.pid === null && a.cwd === s.cwd && a.createdAt >= since,
-			) ?? null
+		const recent = candidates.filter(
+			(a) => a.pid === null && a.cwd === s.cwd && a.createdAt >= since,
 		);
+		return recent.length === 1 ? recent[0]! : null;
 	}
 
 	private set(run: Running, patch: Partial<LaunchState>) {
@@ -897,11 +906,22 @@ export class Launches {
 			home: homedir(),
 			projects,
 			checked: installed !== null,
-			harnesses: HARNESS_IDS.map((id) => ({
-				id,
-				label: LAUNCH_HARNESSES[id].label,
-				installed: installed?.has(id) ?? false,
-			})),
+			harnesses: HARNESS_IDS.map((id) => {
+				const entry = LAUNCH_HARNESSES[id];
+				const binary = ACP_BINARIES.get(id);
+				const acp =
+					binary !== undefined &&
+					installed?.has("pulsar") &&
+					installed.has(binary);
+				const native = !("managed" in entry) && installed?.has(entry.bin);
+				const mode = acp ? "acp" : native ? "native" : undefined;
+				return {
+					id,
+					label: entry.label,
+					installed: mode !== undefined,
+					...(mode ? { mode } : {}),
+				};
+			}),
 		};
 	}
 

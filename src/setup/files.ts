@@ -1,10 +1,13 @@
 import { execFileSync } from "node:child_process";
 import {
+	accessSync,
+	constants,
 	copyFileSync,
 	existsSync,
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
@@ -28,7 +31,13 @@ export function which(
 ): string | null {
 	for (const dir of path.split(delimiter)) {
 		const full = join(dir, cmd);
-		if (dir && existsSync(full)) return full;
+		if (!dir) continue;
+		try {
+			accessSync(full, constants.X_OK);
+			if (statSync(full).isFile()) return full;
+		} catch {
+			// Try the next PATH entry.
+		}
 	}
 	return null;
 }

@@ -12,7 +12,7 @@
 
 </div>
 
-Pulsar connects the coding agents you already run: Claude Code, Codex, OpenCode, pi, omp, Cursor, Gemini CLI, or any MCP client. Each agent can see who else is running and message one agent, a group, or all of them. A message wakes an idle agent in most harnesses.
+Pulsar connects the coding agents you already run: Claude Code, Codex, OpenCode, pi, omp, Cursor, Copilot, Antigravity, or another MCP client. For sessions that Pulsar starts, see the [ACP provider catalog](docs/acp.md). You can also [view and start hosted tasks](docs/hosted.md) on the machine signed in to the provider. Each agent can see who else is running and message one agent, a group, or all of them. A message wakes an idle agent in most harnesses.
 
 Turn on the agent mesh and this works across all your machines. The Pulsar app lets you watch and steer every agent from your phone or another computer. There is no Pulsar server and no account.
 

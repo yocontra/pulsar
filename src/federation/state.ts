@@ -102,6 +102,38 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 				}
 			: null;
 	const repoUrl = cleanRepoUrl(a.repoUrl);
+	const caps = a.capabilities as Record<string, unknown> | null;
+	const capabilities =
+		caps && (caps.surface === "managed-acp" || caps.surface === "attached")
+			? {
+					surface: caps.surface as "managed-acp" | "attached",
+					...(typeof caps.host === "string"
+						? { host: caps.host.slice(0, 64) }
+						: {}),
+					status: caps.status === true,
+					stop: caps.stop === true,
+					inbox: caps.inbox === true,
+					wake: caps.wake === true,
+					transcript: caps.transcript === true,
+					subagents: caps.subagents === true,
+					...(typeof caps.usage === "boolean" ? { usage: caps.usage } : {}),
+					...(typeof caps.attachments === "boolean"
+						? { attachments: caps.attachments }
+						: {}),
+					...(typeof caps.questions === "boolean"
+						? { questions: caps.questions }
+						: {}),
+					...(typeof caps.approvals === "boolean"
+						? { approvals: caps.approvals }
+						: {}),
+					...(typeof caps.skills === "boolean" ? { skills: caps.skills } : {}),
+					...(typeof caps.commands === "boolean"
+						? { commands: caps.commands }
+						: {}),
+					...(typeof caps.modes === "boolean" ? { modes: caps.modes } : {}),
+					...(typeof caps.resume === "boolean" ? { resume: caps.resume } : {}),
+				}
+			: undefined;
 	return {
 		id,
 		name,
@@ -132,6 +164,7 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 			? { statusSince: Number(a.statusSince) }
 			: {}),
 		needsYou,
+		...(capabilities ? { capabilities } : {}),
 		wake: WAKES.has(a.wake as Wake) ? (a.wake as Wake) : "inbox-only",
 		hasTranscript: a.hasTranscript === true,
 		canStop: a.canStop === true,
@@ -248,6 +281,7 @@ function toAgent(peer: Peer, f: FedAgent): Agent {
 		id: `${peer.machineId}/${f.id}`,
 		name: RESERVED_NAMES.has(f.name.toLowerCase()) ? `${f.name}-agent` : f.name,
 		harness: f.harness,
+		...(f.capabilities ? { capabilities: f.capabilities } : {}),
 		sessionId: null,
 		pid: null,
 		cwd: null,

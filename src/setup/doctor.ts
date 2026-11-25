@@ -13,6 +13,7 @@ import {
 	clientErrorNote,
 } from "../diagnostics/client-errors.ts";
 import { exec } from "../exec.ts";
+import { ACP_PROVIDERS } from "../harnesses/acp-catalog.ts";
 import { CLIENTS } from "../harnesses/index.ts";
 import { envPort } from "../http/config.ts";
 import type { DiagFacts, DiagHarness } from "../http/wire.ts";
@@ -101,7 +102,7 @@ export function parseBinLines(stdout: string): {
 	path: string | null;
 } {
 	const bins = new Map<string, string>();
-	for (const m of stdout.matchAll(/PULSAR_BIN:([a-z]+):(\/[^\r\n]*)/g))
+	for (const m of stdout.matchAll(/PULSAR_BIN:([a-z][a-z0-9-]*):(\/[^\r\n]*)/g))
 		bins.set(m[1]!, m[2]!.trim());
 	const path = stdout.match(/PULSAR_PATH:(\/[^\r\n]*)/)?.[1]?.trim();
 	return { bins, path: path || null };
@@ -257,9 +258,12 @@ async function doctorChecks(
 	// For the app (the CLI never asked): the PATH the operator's commands
 	// run with (the service's own PATH is not it), and harness versions.
 	const paths = opts.json
-		? await loginShellPaths(
-				CLIENTS.map((c) => c.id).filter((id) => /^[a-z]+$/.test(id)),
-			)
+		? await loginShellPaths([
+				...new Set([
+					...CLIENTS.map((c) => c.bin),
+					...ACP_PROVIDERS.map((p) => p.binary),
+				]),
+			])
 		: null;
 	const { detected, partial } = detectHarnesses(
 		CLIENTS,
@@ -271,6 +275,15 @@ async function doctorChecks(
 			"harnesses: only those found without your login shell are listed (its PATH couldn't be read)",
 		);
 	const found: Promise<DiagHarness>[] = [];
+	const versions = new Map<string, Promise<string | null>>();
+	function versionOf(bin: string | null) {
+		if (!bin) return Promise.resolve(null);
+		const cached = versions.get(bin);
+		if (cached) return cached;
+		const result = harnessVersion(bin, paths?.path ?? null);
+		versions.set(bin, result);
+		return result;
+	}
 	for (const c of detected) {
 		const configured = c.configured();
 		if (configured) ok(`${c.label}: configured`);
@@ -280,15 +293,30 @@ async function doctorChecks(
 				`run \`pulsar setup --client ${c.id}\``,
 			);
 		found.push(
-			harnessVersion(
-				paths?.bins.get(c.id) ?? which(c.id, paths?.path ?? undefined),
-				paths?.path ?? null,
+			versionOf(
+				paths?.bins.get(c.bin) ?? which(c.bin, paths?.path ?? undefined),
 			).then((version) => ({
 				id: c.id,
 				label: c.label,
 				version,
 				configured,
 			})),
+		);
+	}
+	const acpChecks = await Promise.all(
+		ACP_PROVIDERS.map(async (provider) => {
+			const bin =
+				paths?.bins.get(provider.binary) ??
+				which(provider.binary, paths?.path ?? undefined);
+			if (!bin) return null;
+			return { provider, bin, version: await versionOf(bin) };
+		}),
+	);
+	for (const item of acpChecks) {
+		if (!item) continue;
+		const { provider, bin, version } = item;
+		ok(
+			`${provider.label}: ACP executable ${bin}${version ? ` (${version})` : ""}. Start with pulsar acp ${provider.id}`,
 		);
 	}
 	facts.harnesses = await Promise.all(found);

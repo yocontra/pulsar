@@ -1,4 +1,5 @@
 import { gitInfoAsync } from "./git.ts";
+import { acpRegistration } from "./harnesses/acp-identity.ts";
 import {
 	extensionHostFor,
 	findHarnessAncestor,
@@ -29,6 +30,8 @@ function forcedHarness(): Harness | undefined {
 export async function detectRegistration(
 	role: Registration["role"],
 ): Promise<Registration> {
+	const managed = await acpRegistration(role);
+	if (managed) return managed;
 	const cwd = process.cwd();
 	const forced = forcedHarness();
 	const argv = process.argv.join(" ");
@@ -47,6 +50,8 @@ export async function detectRegistration(
 		forced ?? ancestor?.harness ?? (role === "cli" ? "cli" : "unknown");
 	const pid = ancestor?.pid ?? null;
 	const meta: Record<string, string> = {};
+	if (ancestor && "host" in ancestor && typeof ancestor.host === "string")
+		meta.host = ancestor.host;
 	let sessionId: string | null = process.env.PULSAR_SESSION_ID ?? null;
 	let name: string | undefined;
 	let sessionCwd: string | null = cwd;

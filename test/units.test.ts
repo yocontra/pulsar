@@ -559,6 +559,19 @@ describe("harness detection", () => {
 		});
 	});
 
+	test("reports the editor separately when a native harness runs under it", async () => {
+		const procs = table([
+			[70, 60, "node pulsar mcp"],
+			[60, 50, "codex"],
+			[50, 1, "/Applications/Visual Studio Code.app/Contents/MacOS/Electron"],
+		]);
+		expect(await findHarnessAncestor(70, procs)).toEqual({
+			harness: "codex",
+			pid: 60,
+			host: "vscode",
+		});
+	});
+
 	test("stops at pid 1 and at unknown parents", async () => {
 		const t = table([
 			[1, 0, "claude"],

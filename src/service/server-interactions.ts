@@ -43,7 +43,9 @@ export class ServerInteractions {
 		let pending: ServerPrompt[];
 		try {
 			pending = await source.pending(
-				this.o.registry.all().filter((a) => a.harness === harness),
+				this.o.registry
+					.all()
+					.filter((a) => a.harness === harness && a.meta.acp !== "1"),
 			);
 		} catch {
 			return; // unreadable now: keep what is open

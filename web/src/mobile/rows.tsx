@@ -24,6 +24,7 @@ import {
 	AgentAvatar,
 	AgentStatus as DsAgentStatus,
 	NeedsBadge as DsNeedsBadge,
+	harnessName,
 } from "../ds/index.ts";
 import { issueOf } from "../features/issues/open.ts";
 import { age, heldFor, num, rollupOf } from "../lib/format.ts";
@@ -110,20 +111,7 @@ export function Avatar({ harness }: { harness: string }) {
 	);
 }
 
-export function harnessName(h: string) {
-	const names: Record<string, string> = {
-		claude: "Claude Code",
-		"claude-code": "Claude Code",
-		codex: "Codex",
-		opencode: "OpenCode",
-		pi: "pi",
-		omp: "omp",
-		cursor: "Cursor",
-		gemini: "Gemini",
-		cli: "Terminal",
-	};
-	return names[h] ?? h;
-}
+export { harnessName };
 
 /* ------------------------------------------------------------ status */
 
@@ -157,6 +145,8 @@ export function statusText(a: AgentRow): string {
 			return "needs you";
 		case "busy":
 			return "working";
+		case "unknown":
+			return "status unknown";
 		case "idle": {
 			const held = heldFor(a.stateSince);
 			return held ? `idle for ${held}` : "idle";

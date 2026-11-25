@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0 - 2026-11-24
+
+- Start managed coding sessions with `pulsar acp <provider>`. Run `pulsar acp --list` to see which executables are installed. Managed sessions can stream replies, relay permission requests, and expose modes, commands, and resume when the provider supports them. See the [provider guide](docs/acp.md) for live test results.
+- View hosted Copilot, Codex, and Cursor tasks across connected machines. The machine with provider access handles the request and checks the operator’s passkey before submitting work. See [hosted agents](docs/hosted.md) for setup and verification.
+- The app shows when a session’s activity is unknown. Usage distinguishes agent-reported costs, estimates, and local models. On phones, long names wrap above aligned tracks.
+- The phone keyboard keeps the composer in view. The installed iOS app follows the selected theme, including the status bar.
+
 ## 2.0.1 - 2026-11-23
 
 ### Phone app

@@ -311,6 +311,52 @@ describe("readFrames", () => {
 		expect(socket.destroyed).toBe(false);
 	});
 
+	test("ignores invalid frames and continues reading the same connection", () => {
+		const socket = fakeSocket();
+		const got: unknown[] = [];
+		readFrames(socket as unknown as Socket, (f) => got.push(f));
+		for (const frame of [
+			null,
+			[],
+			true,
+			"text",
+			{ id: 1, error: null },
+			{ id: 1, method: 42 },
+			{ id: 1, result: "ok" },
+		]) {
+			socket.emit("data", `${JSON.stringify(frame)}\n`);
+		}
+		expect(got).toEqual([{ id: 1, result: "ok" }]);
+	});
+
+	test("enforces the byte limit before parsing a complete or fragmented UTF-8 frame", () => {
+		const limit = 2 * 1024 * 1024;
+		const header = '{"event":"x","data":"';
+		const suffix = '"}';
+		const room = limit - header.length - suffix.length;
+		const exact = Buffer.from(
+			header + "é".repeat(Math.floor(room / 2)) + "x".repeat(room % 2) + suffix,
+		);
+		for (const split of [0, 13]) {
+			const socket = fakeSocket();
+			let count = 0;
+			readFrames(socket as unknown as Socket, () => {
+				count++;
+			});
+			socket.emit("data", exact.subarray(0, 13));
+			socket.emit(
+				"data",
+				Buffer.concat([exact.subarray(13), Buffer.from("\n")]),
+			);
+			expect(count).toBe(1);
+			const line = Buffer.concat([exact, Buffer.from(" \n{}\n")]);
+			socket.emit("data", line.subarray(0, split));
+			socket.emit("data", line.subarray(split));
+			expect(socket.destroyed).toBe(true);
+			expect(count).toBe(1);
+		}
+	});
+
 	test("closes the socket on a line over the limit", () => {
 		const socket = fakeSocket();
 		readFrames(socket as unknown as Socket, () => {});

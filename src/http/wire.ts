@@ -44,7 +44,7 @@ export type {
 export type Wake = "wakes" | "inbox-only" | "held" | "refuses" | "queued";
 
 /** The status the app shows: `needs-you` wins over busy/idle; `unknown` shows as idle. */
-export type AgentState = "needs-you" | "busy" | "idle" | "offline";
+export type AgentState = "needs-you" | "busy" | "idle" | "offline" | "unknown";
 
 /** Why an agent waits on the user. */
 export interface NeedsYou {
@@ -175,8 +175,10 @@ export interface StopResult {
  */
 export type Link = "local" | "tailnet" | "asleep" | "daemon-down" | "upgrade";
 
-/** Status counts for a group. The four buckets sum to `agents`. */
+/** Status counts for a group. The buckets sum to `agents`. */
 export interface Rollup {
+	/** Sessions whose harness has yet to report a turn state. */
+	unknown?: number;
 	agents: number;
 	needsYou: number;
 	busy: number;
@@ -253,6 +255,7 @@ export type Feature =
 	| "approvals"
 	| "push"
 	| "subagents"
+	| "hosted"
 	| "usage"
 	/** Attachments and the composer's `@` file list. */
 	| "attachments"
@@ -1499,6 +1502,13 @@ export interface UsageTokens {
 	records: number;
 }
 
+export type UsageTokenSource = "reported" | "local" | "unavailable";
+export type UsageCostSource =
+	| "reported"
+	| "estimated"
+	| "local"
+	| "unavailable";
+
 /** Tokens for one machine, harness and model in one hour (24h) or local day. */
 export interface UsageRow extends UsageTokens {
 	machine: string;
@@ -1508,6 +1518,8 @@ export interface UsageRow extends UsageTokens {
 	t: number;
 	/** API estimate in US dollars; null when the model has no price. */
 	cost: number | null;
+	tokenSource?: UsageTokenSource;
+	costSource?: UsageCostSource;
 }
 
 /** A model price in US dollars per million tokens. */
@@ -1547,6 +1559,8 @@ export interface AgentUsage {
 	agent: string;
 	tokens: UsageTokens;
 	cost: number | null;
+	tokenSources?: UsageTokenSource[];
+	costSources?: UsageCostSource[];
 	/** Tokens in the latest request; `window` when the harness reports it. */
 	context: { used: number; window: number | null } | null;
 	model: string | null;
@@ -1715,7 +1729,7 @@ export interface FileContent {
 // ------------------------------------------------------------------ launch
 
 /** Harnesses the app can start (src/service/launch.ts has their fixed commands). */
-export type LaunchHarness = "claude" | "codex" | "opencode" | "pi" | "omp";
+export type LaunchHarness = import("../harnesses/catalog.ts").Launchable["id"];
 
 /**
  * `POST /agents/launch` params, signed as they are (the acting challenge
@@ -1800,7 +1814,13 @@ export interface LaunchOptions {
 	/** Its home folder (`~`). */
 	home: string;
 	projects: LaunchProject[];
-	harnesses: { id: LaunchHarness; label: string; installed: boolean }[];
+	harnesses: {
+		id: LaunchHarness;
+		label: string;
+		installed: boolean;
+		/** Preferred launch path found on this machine; older peers omit it. */
+		mode?: "acp" | "native";
+	}[];
 	/**
 	 * False while the login shell is still looking (a slow rc file): then
 	 * `installed` means nothing yet. Absent from older daemons.
@@ -2007,7 +2027,7 @@ export interface ControlResult {
 }
 
 /** Where a `/` menu entry comes from. */
-export type CommandSource = "builtin" | "project" | "user" | "plugin";
+export type CommandSource = "builtin" | "project" | "user" | "plugin" | "agent";
 
 /** One entry of the composer's `/` menu. */
 export interface CommandEntry {

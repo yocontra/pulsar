@@ -2,20 +2,24 @@ import type {
 	AgentUsage,
 	LimitState,
 	LimitWarning,
+	UsageCostSource,
 	UsageLimits,
 	UsagePeriod,
 	UsagePrice,
 	UsageReport,
 	UsageRow,
+	UsageTokenSource,
 	UsageTokens,
 } from "../http/wire.ts";
 import { RpcError } from "../rpc.ts";
 import type { Principal } from "../service/caller.ts";
 import type { Store } from "../store.ts";
 import type { Agent } from "../types.ts";
+import { type AcpUsage, loadAcpUsage } from "./acp.ts";
 import { cleanLimits, current, Limits } from "./limits.ts";
 import {
 	costOf,
+	isLocalModel,
 	normalizeModel,
 	PRICE_FIELDS,
 	type Price,
@@ -59,6 +63,8 @@ export interface LocalAgentUsage {
 	models: (UsageTokens & { model: string })[];
 	context: { used: number; window: number | null } | null;
 	model: string | null;
+	/** Optional cumulative ACP amount in USD. */
+	reportedCost?: NonNullable<AcpUsage["cost"]>;
 	/** Its harness's plan limits on its machine. */
 	limits?: LimitState[];
 }
@@ -156,6 +162,7 @@ export function cleanLocalUsage(v: unknown): LocalUsage | null {
 export function cleanAgentUsage(v: unknown): LocalAgentUsage {
 	const o = (v ?? {}) as Partial<LocalAgentUsage>;
 	const c = o.context as LocalAgentUsage["context"] | undefined;
+	const cost = o.reportedCost;
 	return {
 		tokens: cleanTokens(o.tokens),
 		models: Array.isArray(o.models)
@@ -164,13 +171,23 @@ export function cleanAgentUsage(v: unknown): LocalAgentUsage {
 					.map((m) => ({ ...cleanTokens(m), model: text(m?.model) }))
 			: [],
 		context:
-			c && Number(c.used) > 0
+			c && Number.isSafeInteger(c.used) && c.used >= 0
 				? {
-						used: Math.floor(Number(c.used)),
-						window: Number(c.window) > 0 ? Math.floor(Number(c.window)) : null,
+						used: c.used,
+						window:
+							c.window && Number.isSafeInteger(c.window) && c.window > 0
+								? c.window
+								: null,
 					}
 				: null,
 		model: typeof o.model === "string" ? text(o.model) : null,
+		...(cost &&
+		typeof cost.amount === "number" &&
+		Number.isFinite(cost.amount) &&
+		cost.amount >= 0 &&
+		(cost.source === "reported" || cost.source === "estimated")
+			? { reportedCost: { amount: cost.amount, source: cost.source } }
+			: {}),
 		limits: cleanLimits(o.limits),
 	};
 }
@@ -329,14 +346,26 @@ WHERE hour >= ? GROUP BY harness`,
 	}
 
 	/** One local agent's session: tokens per model and its latest context. */
-	localAgent(agent: Agent): LocalAgentUsage {
+	async localAgent(agent: Agent): Promise<LocalAgentUsage> {
 		const none: LocalAgentUsage = {
 			tokens: ZERO,
 			models: [],
 			context: null,
 			model: null,
 		};
-		if (!agent.sessionId || !USAGE_HARNESSES.has(agent.harness)) return none;
+		if (!agent.sessionId) return none;
+		const acp =
+			agent.meta?.acp === "1"
+				? await loadAcpUsage({
+						harness: agent.harness,
+						sessionId: agent.sessionId,
+					})
+				: null;
+		const acpFields = {
+			...(acp?.context ? { context: acp.context } : {}),
+			...(acp?.cost ? { reportedCost: acp.cost } : {}),
+		};
+		if (!USAGE_HARNESSES.has(agent.harness)) return { ...none, ...acpFields };
 		const models = (
 			this.store.db
 				.prepare(
@@ -366,6 +395,7 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 				: null,
 			model: file?.model ? String(file.model) : null,
 			limits: this.limits.forHarness(agent.harness),
+			...acpFields,
 		};
 	}
 
@@ -421,8 +451,21 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 		const rows: UsageRow[] = [];
 		const sessions: UsageReport["sessions"] = [];
 		for (const { machine, usage } of parts) {
-			for (const r of usage.rows)
-				rows.push({ ...r, machine, cost: price(r.model, r) });
+			for (const r of usage.rows) {
+				const cost = price(r.model, r);
+				const local = isLocalModel(r.model);
+				rows.push({
+					...r,
+					machine,
+					cost,
+					tokenSource: local ? "local" : "reported",
+					costSource: local
+						? "local"
+						: cost === null
+							? "unavailable"
+							: "estimated",
+				});
+			}
 			for (const s of usage.sessions) sessions.push({ machine, ...s });
 		}
 		return {
@@ -444,19 +487,32 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 	/** An agent's usage, priced here (a remote one's tokens come from its home node). */
 	priceAgent(address: string, u: LocalAgentUsage): AgentUsage {
 		const price = this.pricer();
-		let cost: number | null = u.models.length ? 0 : null;
+		let cost = 0;
+		const tokenSources = new Set<UsageTokenSource>();
+		const costSources = new Set<UsageCostSource>();
 		for (const m of u.models) {
 			const c = price(m.model, m);
-			if (c === null) {
-				cost = null;
-				break;
-			}
-			cost = (cost ?? 0) + c;
+			const local = isLocalModel(m.model);
+			tokenSources.add(local ? "local" : "reported");
+			costSources.add(
+				local ? "local" : c === null ? "unavailable" : "estimated",
+			);
+			cost += c ?? 0;
+		}
+		if (!tokenSources.size)
+			tokenSources.add(u.tokens.records > 0 ? "reported" : "unavailable");
+		if (!costSources.size) costSources.add("unavailable");
+		if (u.reportedCost && !costSources.has("local")) {
+			cost = u.reportedCost.amount;
+			costSources.clear();
+			costSources.add(u.reportedCost.source);
 		}
 		return {
 			agent: address,
 			tokens: u.tokens,
-			cost,
+			cost: costSources.has("unavailable") ? null : cost,
+			tokenSources: [...tokenSources],
+			costSources: [...costSources],
 			context: u.context,
 			model: u.model,
 			limits: (u.limits ?? []).filter((l) => current(l, Date.now())),

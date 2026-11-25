@@ -12,6 +12,7 @@ import {
 	percent,
 	series,
 	totals,
+	usageSourceLabel,
 } from "../src/usage/model.ts";
 
 const DAY = 86_400_000;
@@ -75,6 +76,28 @@ const report: UsageReport = {
 };
 
 describe("usage model", () => {
+	test("old reports still label API estimates, local inference and unknown cost", () => {
+		const rows = [
+			row({ cost: 4 }),
+			row({
+				model: "llama|local",
+				cost: 0,
+				tokenSource: "local",
+				costSource: "local",
+			}),
+			row({ model: "unknown", cost: null }),
+		];
+		expect(usageSourceLabel("cost", rows)).toBe(
+			"API estimate · Local inference · Cost unavailable",
+		);
+		expect(usageSourceLabel("tokens", rows)).toBe(
+			"reported tokens · local tokens",
+		);
+		expect(
+			usageSourceLabel("cost", [row({ cost: 0.5, costSource: "reported" })]),
+		).toBe("Agent-reported cost");
+	});
+
 	test("totals leave unpriced responses out of the cost and say which", () => {
 		const all = { machine: null, harness: null };
 		const t = totals(report, report.rows, all);

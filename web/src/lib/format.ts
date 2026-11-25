@@ -134,12 +134,19 @@ export function shortModel(model: string | null) {
 	return m.replace(/-(\d+)-(\d+)$/, "-$1.$2");
 }
 
-export type Worst = "needs-you" | "busy" | "idle" | "offline" | "empty";
+export type Worst =
+	| "needs-you"
+	| "busy"
+	| "idle"
+	| "offline"
+	| "unknown"
+	| "empty";
 export function worst(r: Rollup): Worst {
 	if (r.agents === 0) return "empty";
 	if (r.needsYou) return "needs-you";
 	if (r.busy) return "busy";
 	if (r.idle) return "idle";
+	if (r.unknown) return "unknown";
 	return "offline";
 }
 
@@ -209,6 +216,7 @@ export function wakeTotals(rows: { wake: Wake }[]): Record<Wake, number> {
 /** Status as a label for people: "Working", "Idle", "Needs you", "Offline". */
 export const STATUS_LABEL: Record<AgentRow["state"], string> = {
 	"needs-you": "Needs you",
+	unknown: "Status unknown",
 	busy: "Working",
 	idle: "Idle",
 	offline: "Offline",

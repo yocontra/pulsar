@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import { acpTranscript } from "../harnesses/acp-transcript.ts";
 import { driverFor } from "../harnesses/index.ts";
 import { RpcError } from "../rpc.ts";
 import {
@@ -37,7 +38,10 @@ export interface TranscriptPageResult extends TranscriptPage {
 
 /** Why a local agent has no transcript, from its harness driver. */
 export function driverMissing(agent: Agent): TranscriptMissing {
-	const support = driverFor(agent.harness)?.transcript;
+	const support =
+		agent.meta.acp === "1"
+			? acpTranscript
+			: driverFor(agent.harness)?.transcript;
 	if (!support) return "unsupported";
 	if (support.needsSession && !agent.sessionId) return "no_session";
 	return "not_found";
@@ -47,7 +51,10 @@ export function driverMissing(agent: Agent): TranscriptMissing {
 export async function driverTranscript(
 	agent: Agent,
 ): Promise<ResolvedTranscript | null> {
-	const support = driverFor(agent.harness)?.transcript;
+	const support =
+		agent.meta.acp === "1"
+			? acpTranscript
+			: driverFor(agent.harness)?.transcript;
 	const source = await support?.locate(agent);
 	return support && source
 		? {

@@ -4,6 +4,7 @@ import {
 	describe,
 	expect,
 	setDefaultTimeout,
+	spyOn,
 	test,
 } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -11,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Federation } from "../src/federation/index.ts";
 import { PoolMembers } from "../src/federation/members.ts";
+import { HostedWrites } from "../src/hosted/writes.ts";
 import { actDigest } from "../src/service/acting.ts";
 import type { Caller, Principal } from "../src/service/caller.ts";
 import { PulsarService } from "../src/service/index.ts";
@@ -275,7 +277,7 @@ describe("acting ops on another machine: the home node's proof", () => {
 	const address = () => `${home.service.machineId}/${homeAgent}`;
 	/** Options from the home node via the relay; the phone signs on the relay's app. */
 	async function sign(
-		op: "git.commit" | "agents.launch",
+		op: "git.commit" | "agents.launch" | "hosted.write",
 		target: { agent?: string; machine?: string },
 		params: unknown,
 	) {
@@ -331,6 +333,77 @@ describe("acting ops on another machine: the home node's proof", () => {
 			agent: null,
 			params: { h: 1 },
 		});
+	});
+
+	test("hosted reads relay and hosted writes execute on the passkey-verified credential machine", async () => {
+		const mockObservation = (id: string) => [
+			{
+				provider: "copilot" as const,
+				state: "ready" as const,
+				observedAt: Date.now(),
+				detail: null,
+				tasks: [
+					{
+						id,
+						title: "Hosted task",
+						status: "queued",
+						context: null,
+						url: null,
+						updatedAt: null,
+					},
+				],
+			},
+		];
+		const homeRead = spyOn(home.service.hosted, "observe").mockResolvedValue(
+			mockObservation("cloud-1"),
+		);
+		const relayRead = spyOn(relay.service.hosted, "observe").mockResolvedValue(
+			mockObservation("cloud-1"),
+		);
+		let writesOnHome = 0;
+		const writes = new HostedWrites(home.store, async () => async () => {
+			writesOnHome++;
+			return { state: "accepted", id: "cloud-2" };
+		});
+		home.service.acting.unregister("hosted.write");
+		const unregister = home.service.acting.register(
+			"hosted.write",
+			({ user, params }) => writes.run(user.login, params),
+		);
+		try {
+			const report = await relay.service.hostedTasks(USER);
+			expect(report.tasks).toHaveLength(1);
+			expect(report.tasks[0]?.sources).toEqual([
+				{ machineId: relay.service.machineId, state: "reachable" },
+				{ machineId: home.service.machineId, state: "reachable" },
+			]);
+			const target = { machine: home.service.machineId };
+			const params = {
+				provider: "copilot",
+				action: "create",
+				repo: "example/repo",
+				prompt: "Synthetic task",
+				nonce: crypto.randomUUID(),
+			};
+			const assertion = await sign("hosted.write", target, params);
+			expect(
+				await relay.service.acting.run(
+					USER,
+					"hosted.write",
+					target,
+					params,
+					assertion,
+				),
+			).toEqual({ state: "accepted", id: "cloud-2" });
+			expect(writesOnHome).toBe(1);
+			expect(auditOps(home, "hosted.write.relayed").at(-1)).toMatchObject({
+				ok: 1,
+			});
+		} finally {
+			homeRead.mockRestore();
+			relayRead.mockRestore();
+			unregister();
+		}
 	});
 
 	test("without an assertion, nothing reaches the home node", async () => {

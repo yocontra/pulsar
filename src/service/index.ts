@@ -13,6 +13,8 @@ import { type TailnetStatus, TailscaleTailnet } from "../federation/tailnet.ts";
 import { gitInfoAsync } from "../git.ts";
 import { DRIVERS, driverFor } from "../harnesses/index.ts";
 import type { LocalAnswerCheck, PromptRef } from "../harnesses/types.ts";
+import { HostedCatalog, hostedReport } from "../hosted/catalog.ts";
+import { HostedWrites } from "../hosted/writes.ts";
 import type {
 	AgentUsage,
 	AskRequest,
@@ -248,6 +250,7 @@ export class PulsarService {
 	readonly ask: Lookup;
 	/** Token usage read from harness session files, and its API estimate. */
 	readonly usage: Usage;
+	readonly hosted = new HostedCatalog();
 	/** This machine's `pulsar doctor` report for the app (src/diagnostics/). */
 	readonly diagnostics: { local: LocalDiagnosticsRunner };
 	/** App load errors the app reported (`POST /client-errors`; doctor shows them). */
@@ -481,6 +484,10 @@ export class PulsarService {
 			onAgent: (id) => this.interest.note(id),
 			...opts.launch,
 		});
+		const hostedWrites = new HostedWrites(this.store);
+		this.acting.register("hosted.write", ({ user, params }) =>
+			hostedWrites.run(user.login, params),
+		);
 		this.acting.register("agents.launch", ({ user, params }) =>
 			this.launches.start(user, params),
 		);
@@ -630,6 +637,23 @@ export class PulsarService {
 		);
 	}
 
+	async hostedTasks(as: Principal) {
+		authorize(as, "hosted");
+		const [providers, remote] = await Promise.all([
+			this.hosted.observe(),
+			this.registry.pool?.hosted?.observe(as) ?? [],
+		]);
+		return hostedReport([
+			{
+				machineId: this.machineId,
+				name: this.machine,
+				state: "reachable",
+				providers,
+			},
+			...remote,
+		]);
+	}
+
 	/** The pool's token usage, priced on this node (`GET /usage`). */
 	usageReport(
 		period: UsagePeriod,
@@ -663,7 +687,10 @@ export class PulsarService {
 		const agent = this.registry.find(id);
 		if (!agent) throw new RpcError("not_found", `no agent ${id}`);
 		if (!agent.id.includes("/"))
-			return this.usage.priceAgent(agent.id, this.usage.localAgent(agent));
+			return this.usage.priceAgent(
+				agent.id,
+				await this.usage.localAgent(agent),
+			);
 		const pool = this.registry.pool?.usage;
 		if (!pool) throw new RpcError("not_found", `no agent ${id}`);
 		return this.usage.priceAgent(agent.id, await pool.agentUsage(agent.id, as));
@@ -772,7 +799,12 @@ export class PulsarService {
 					jobs.every(`status:${d.id}`, ls.intervalMs, async () => {
 						const live = this.registry
 							.all()
-							.filter((a) => a.harness === d.id && a.status !== "gone");
+							.filter(
+								(a) =>
+									a.harness === d.id &&
+									a.meta.acp !== "1" &&
+									a.status !== "gone",
+							);
 						if (!live.length) return;
 						for (const r of await ls.read(live))
 							this.registry.applyLiveStatus(r.agent, r.status, r.since);
@@ -786,7 +818,12 @@ export class PulsarService {
 					jobs.every(`names:${d.id}`, names.intervalMs, async () => {
 						const live = this.registry
 							.all()
-							.filter((a) => a.harness === d.id && a.status !== "gone");
+							.filter(
+								(a) =>
+									a.harness === d.id &&
+									a.meta.acp !== "1" &&
+									a.status !== "gone",
+							);
 						if (!live.length) return;
 						for (const r of await names.read(live))
 							this.registry.applyHarnessName(r.agent, r.name, r.source);

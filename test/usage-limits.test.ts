@@ -226,8 +226,10 @@ describe("scanner", () => {
 				sessionId: "s",
 				cwd: "/w",
 			}) as unknown as Agent;
-		expect(usage.localAgent(a("codex")).limits?.[0]?.usedPercent).toBe(91);
-		expect(usage.localAgent(a("claude")).limits).toEqual([]);
+		expect((await usage.localAgent(a("codex"))).limits?.[0]?.usedPercent).toBe(
+			91,
+		);
+		expect((await usage.localAgent(a("claude"))).limits).toEqual([]);
 	});
 });
 

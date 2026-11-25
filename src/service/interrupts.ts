@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { driverFor } from "../harnesses/index.ts";
+import { attachedDriver } from "../harnesses/index.ts";
 import type { InterruptOutcome } from "../harnesses/types.ts";
 import type { StopResult } from "../http/wire.ts";
 import { RpcError } from "../rpc.ts";
@@ -37,7 +37,7 @@ export class Interrupts {
 	can(agent: Agent): boolean {
 		if (agent.status === "gone") return false;
 		if (this.sessions.extensionFor(agent.id)) return true;
-		return driverFor(agent.harness)?.canInterrupt?.(agent) ?? false;
+		return attachedDriver(agent)?.canInterrupt?.(agent) ?? false;
 	}
 
 	async stop(principal: Principal, agentId: string): Promise<StopResult> {
@@ -90,7 +90,7 @@ export class Interrupts {
 				ext.emit("interrupt", { requestId });
 			});
 		}
-		const driver = driverFor(agent.harness);
+		const driver = attachedDriver(agent);
 		if (!driver?.interrupt || !driver.canInterrupt?.(agent))
 			return Promise.resolve({
 				result: "unsupported",

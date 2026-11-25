@@ -3,7 +3,7 @@
  * per-harness shares, chart series and the Model/Day breakdowns. Pure, so
  * the page and its tests share it.
  */
-import { priceFor } from "../../../src/usage/prices.ts";
+import { isLocalModel, priceFor } from "../../../src/usage/prices.ts";
 
 export { isLocalModel, modelName } from "../../../src/usage/prices.ts";
 
@@ -11,13 +11,61 @@ export { isLocalModel, modelName } from "../../../src/usage/prices.ts";
 export const LOCAL_LABEL = "Local · $0";
 
 import type {
+	UsageCostSource,
 	UsagePrice,
 	UsageReport,
 	UsageRow,
+	UsageTokenSource,
 	UsageTokens,
 } from "../api/types.ts";
 
 export type Metric = "cost" | "tokens";
+
+const TOKEN_SOURCE_LABELS: Record<UsageTokenSource, string> = {
+	reported: "reported tokens",
+	local: "local tokens",
+	unavailable: "tokens unavailable",
+};
+
+const COST_SOURCE_LABELS: Record<UsageCostSource, string> = {
+	reported: "Agent-reported cost",
+	estimated: "API estimate",
+	local: "Local inference",
+	unavailable: "Cost unavailable",
+};
+
+export function tokenSourcesLabel(sources: readonly UsageTokenSource[]) {
+	return sources.map((source) => TOKEN_SOURCE_LABELS[source]).join(" · ");
+}
+
+export function costSourcesLabel(sources: readonly UsageCostSource[]) {
+	return sources.map((source) => COST_SOURCE_LABELS[source]).join(" · ");
+}
+
+export function usageSourceLabel(metric: Metric, rows: UsageRow[]) {
+	if (metric === "tokens")
+		return tokenSourcesLabel([
+			...new Set(
+				rows.map(
+					(row) =>
+						row.tokenSource ?? (isLocalModel(row.model) ? "local" : "reported"),
+				),
+			),
+		]);
+	return costSourcesLabel([
+		...new Set(
+			rows.map(
+				(row) =>
+					row.costSource ??
+					(isLocalModel(row.model)
+						? "local"
+						: row.cost === null
+							? "unavailable"
+							: "estimated"),
+			),
+		),
+	]);
+}
 
 export interface Filters {
 	/** A machine id, or null for every machine. */

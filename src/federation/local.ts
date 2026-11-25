@@ -65,6 +65,7 @@ export class LocalFeed {
 				needsYou: row.needsYou,
 				wake: row.wake,
 				hasTranscript: row.hasTranscript,
+				capabilities: row.capabilities,
 				canStop: row.canStop,
 				...(row.subagents ? { subagents: row.subagents } : {}),
 				approvals: this.service.approvals.recentFor(

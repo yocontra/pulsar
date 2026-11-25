@@ -30,7 +30,7 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 | Harness | How a message arrives | Busy / idle |
 | --- | --- | --- |
 | Claude Code | Claude's per-session inbox. `urgent` lands between tool calls; `normal` after the turn, and it wakes an idle session | Yes |
-| Codex | `codex queue --resume`: queued on the thread, then run as a turn | No |
+| Codex | `codex queue --resume`: queued on the thread, then run as a turn | Yes, from turn events in the session log |
 | OpenCode | OpenCode's local server, into the session | Yes |
 | pi, omp | The Pulsar extension, inside the session | Yes |
 | Cursor, Gemini CLI, others | Pull only: messages wait in the inbox, and every Pulsar tool result says how many are unread | No |
@@ -38,11 +38,23 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 Limits:
 
 - **Claude Code** holds a peer message for approval when the session skips permission prompts. `pulsar setup` asks to set `crossSessionInbound: "accept"` in `~/.claude/settings.json` to deliver these. When the session shows a dialog in the terminal, the app shows the agent as needing you.
-- **Codex** approvals and questions can be answered from the app for sessions that run in Codex's app-server (the default). A session started with `codex --no-daemon` shows them read-only. "Allow for session" is not offered. Codex reports no busy or idle state, so `wait idle:` never resolves for a Codex agent. A Codex TUI that is not attached to Codex's app-server may not show a message until you resume it. Setup sets `default_tools_approval_mode = "approve"` for Pulsar's tools and `tool_timeout_sec = 1900`, so `ask` and `wait` can block.
+- **Codex** approvals and questions can be answered from the app for sessions that run in Codex's app-server (the default). A session started with `codex --no-daemon` shows them read-only. "Allow for session" is not offered. Pulsar reads turn start, completion and interruption from the Codex session log. An idle wait needs an identifiable thread and a readable log. A Codex TUI that is not attached to Codex's app-server may not show a message until you resume it. Setup sets `default_tools_approval_mode = "approve"` for Pulsar's tools and `tool_timeout_sec = 1900`, so `ask` and `wait` can block.
 - **OpenCode**: an idle TUI with no running session shows its folder's most recent session as "Idle · last session". Pulsar does not push into it until that session loads Pulsar's tools. If the daemon finds an `opencode` older than 2.0 first on its PATH, `pulsar doctor` says so.
 - **pi, omp**: the only harnesses where a receipt reaches "in its conversation".
 
 See [delivery.md](delivery.md) for receipts and redelivery.
+
+### Native harness smoke checks
+
+These checks used separate workspaces and Pulsar state directories on macOS.
+
+| Installed harness | Verified result |
+| --- | --- |
+| Claude Code 2.1.331 | Pulsar found the process and session ID and accepted a local test message. Claude required sign-in before it could reply. |
+| Codex CLI 0.172.0 | Codex stopped at thread creation because it could not synchronize managed preferences. The native reply and idle wait could not run in this environment. |
+| OpenCode 2.2.5 | A standalone native text turn completed. OpenCode read the test configuration, but its standalone MCP list did not expose the configured Pulsar server in this environment. The [ACP smoke check](acp.md#provider-verification) also completed a turn. |
+| pi 1.5.0 | The native RPC process answered its state request. The configured model request was rate-limited before a Pulsar reply. |
+| omp 19.1.1 | Pulsar found the process and accepted a local test message. The native run exited before replying. The separate RPC run stopped during model setup. |
 
 ## Prompts in the app
 

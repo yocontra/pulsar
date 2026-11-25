@@ -27,6 +27,8 @@ function agentLine(a: PublicAgent): string {
 	const bits = [
 		a.name,
 		`[${a.harness}]`,
+		a.capabilities?.surface === "managed-acp" ? "managed ACP" : null,
+		a.capabilities?.host ? `host=${a.capabilities.host}` : null,
 		a.project ? `project=${a.project}` : null,
 		a.branch ? `branch=${a.branch}` : null,
 		worktree ? `worktree=${worktree}` : null,

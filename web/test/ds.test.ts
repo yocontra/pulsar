@@ -38,6 +38,7 @@ describe("format: counts read like English", () => {
 	test("status labels are human words, not enum values", () => {
 		expect(Object.values(STATUS_LABEL)).toEqual([
 			"Needs you",
+			"Status unknown",
 			"Working",
 			"Idle",
 			"Offline",

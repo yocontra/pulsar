@@ -135,7 +135,8 @@ const STATE_RANK: Record<AgentState, number> = {
 	"needs-you": 0,
 	busy: 1,
 	idle: 2,
-	offline: 3,
+	unknown: 3,
+	offline: 4,
 };
 
 function emptyRollup(): Rollup {
@@ -154,6 +155,7 @@ function addToRollup(r: Rollup, row: AgentRow) {
 	if (row.state === "needs-you") r.needsYou++;
 	else if (row.state === "busy") r.busy++;
 	else if (row.state === "offline") r.offline++;
+	else if (row.state === "unknown") r.unknown = (r.unknown ?? 0) + 1;
 	else r.idle++;
 	r.lastActive = Math.max(r.lastActive ?? 0, row.lastSeen);
 }
@@ -264,7 +266,7 @@ export class Views {
 		if (agent.status === "gone") return "offline";
 		if (isRemote(agent) && !this.reachable(agent)) return "offline";
 		if (this.registry.needsYou(agent.id)) return "needs-you";
-		return agent.status === "busy" ? "busy" : "idle";
+		return agent.status;
 	}
 
 	/** A remote agent's machine answers its link now. */
@@ -310,7 +312,8 @@ export class Views {
 			stateSince: this.stateSince(agent, state),
 			needsYou: this.registry.needsYou(agent.id),
 			wake: this.wakeOf(agent, priority, full),
-			hasTranscript: Boolean(driverFor(agent.harness)?.transcript),
+			hasTranscript:
+				agent.meta.acp === "1" || Boolean(driverFor(agent.harness)?.transcript),
 			canStop: this.canStop(agent),
 			...(isPane(agent.meta.tmux) ? { tmux: agent.meta.tmux } : {}),
 			...subagentField(this.subagents(agent.id)),

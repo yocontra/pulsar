@@ -247,6 +247,8 @@ beforeAll(async () => {
 	mkdirSync(project, { recursive: true });
 	mkdirSync(join(HOME, "bin"));
 	writeFileSync(join(HOME, "bin", "codex"), "#!/bin/sh\n", { mode: 0o755 });
+	writeFileSync(join(HOME, "bin", "agy"), "#!/bin/sh\n", { mode: 0o755 });
+	writeFileSync(join(HOME, "bin", "pulsar"), "#!/bin/sh\n", { mode: 0o755 });
 	writeFileSync(
 		join(HOME, ".profile"),
 		'PATH="$HOME/bin:$PATH"; export PATH\n',
@@ -296,14 +298,41 @@ describe("launch params and commands", () => {
 		workspace: "current",
 	};
 
-	test("each harness starts with its fixed command and no flags", () => {
-		for (const h of Object.keys(LAUNCH_HARNESSES) as LaunchHarness[])
-			expect(harnessCommand(h)).toMatch(/^exec [a-z]+$/);
-		expect(harnessCommand("claude")).toBe("exec claude");
-		expect(harnessCommand("codex")).toBe("exec codex");
-		expect(harnessCommand("opencode")).toBe("exec opencode");
-		expect(harnessCommand("pi")).toBe("exec pi");
+	test("new launches prefer installed ACP and preserve native fallback", () => {
+		const bin = mkdtempSync(join(root, "launch-modes-"));
+		const entries = [
+			["claude", "claude-agent-acp"],
+			["codex", "codex-acp"],
+			["opencode", "opencode"],
+			["pi", "pi-acp"],
+		] as const;
+		const shell = (harness: LaunchHarness) =>
+			execFileSync("/bin/sh", ["-c", harnessCommand(harness)], {
+				env: { PATH: bin },
+				encoding: "utf8",
+			}).trim();
+		for (const [id] of entries)
+			writeFileSync(join(bin, id), `#!/bin/sh\nprintf '%s' '${id}'\n`, {
+				mode: 0o755,
+			});
+		writeFileSync(
+			join(bin, "pulsar"),
+			'#!/bin/sh\nprintf \'%s %s\' "$1" "$2"\n',
+			{ mode: 0o755 },
+		);
+		expect(shell("claude")).toBe("claude");
+		expect(shell("codex")).toBe("codex");
+		expect(shell("pi")).toBe("pi");
+		for (const [id, acp] of entries) {
+			if (id !== acp)
+				writeFileSync(join(bin, acp), "#!/bin/sh\n", { mode: 0o755 });
+			expect(shell(id)).toBe(`acp ${id}`);
+		}
+		rmSync(join(bin, "pulsar"));
+		expect(shell("opencode")).toBe("opencode");
 		expect(harnessCommand("omp")).toBe("exec omp");
+		expect(harnessCommand("antigravity")).toBe("exec pulsar acp antigravity");
+		expect(harnessCommand("copilot")).toBe("exec pulsar acp copilot");
 	});
 
 	test("params are checked as they arrive", () => {
@@ -681,7 +710,7 @@ describe("the installed-harness probe", () => {
 		const dir = mkdtempSync(join(root, "probe-"));
 		const bin = join(dir, "bin");
 		mkdirSync(bin);
-		for (const b of ["claude", "codex"])
+		for (const b of ["claude", "codex", "codex-acp", "pulsar"])
 			writeFileSync(join(bin, b), "#!/bin/sh\n", { mode: 0o755 });
 		const count = join(dir, "runs");
 		const slow = join(dir, "slow");
@@ -723,6 +752,8 @@ describe("the installed-harness probe", () => {
 		const o = await launches(f.sh, {}).options();
 		expect(o.checked).toBe(true);
 		expect(installed(o)).toEqual(["claude", "codex"]);
+		expect(o.harnesses.find((h) => h.id === "claude")?.mode).toBe("native");
+		expect(o.harnesses.find((h) => h.id === "codex")?.mode).toBe("acp");
 	});
 
 	test("the marked lines are read anywhere in the output, escapes stripped", () => {
@@ -840,15 +871,14 @@ describe("who may launch", () => {
 		expect(o.machine).toBe("home");
 		expect(o.home).toBe(HOME);
 		expect(o.projects.some((x) => x.path === cwd)).toBe(true);
-		expect(o.harnesses.map((h) => h.id)).toEqual([
-			"claude",
-			"codex",
-			"opencode",
-			"pi",
-			"omp",
-		]);
+		expect(o.harnesses.map((h) => h.id)).toEqual(
+			Object.keys(LAUNCH_HARNESSES) as LaunchHarness[],
+		);
 		// The login shell's PATH (the temp HOME's profile), not the daemon's.
 		expect(o.harnesses.find((h) => h.id === "codex")?.installed).toBe(true);
+		expect(o.harnesses.find((h) => h.id === "antigravity")?.installed).toBe(
+			true,
+		);
 	});
 });
 

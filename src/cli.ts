@@ -18,6 +18,9 @@ Usage:
   pulsar setup [--yes] [--all-detected] [--client <name>]... [--dry-run] [--no-mcp] [--skills-dir <path>] [--no-approvals] [--mesh] [--uninstall]
                                   configure your agents (Claude Code, Codex, OpenCode, pi, omp, Cursor, Gemini);
                                   asks whether to turn on the agent mesh (--mesh: turn it on without asking)
+  pulsar acp --list                 list installed ACP executables and catalog entries
+  pulsar acp <provider> [--resume <session-id>]   start or resume a managed ACP session
+  pulsar hosted <provider> [list|view <id>]        read hosted tasks through this machine
   pulsar ls [selector]            list live agents (selector: name, project=x, harness=codex, tag, *)
   pulsar send <to> <message...>   send as "operator" (to: name, selector, or '*')
         [--priority urgent|normal|fyi] [--expect-reply] [--await-reply [--timeout s]]
@@ -95,6 +98,40 @@ async function main(argv: string[]) {
 		case "-h":
 			console.log(HELP);
 			return;
+		case "hosted": {
+			const { hostedCommand } = await import("./hosted/cli.ts");
+			process.exitCode = await hostedCommand(rest);
+			return;
+		}
+		case "acp": {
+			const { ACP_PROVIDERS } = await import("./harnesses/acp-catalog.ts");
+			if (rest.length === 1 && rest[0] === "--list") {
+				const { which } = await import("./setup/files.ts");
+				for (const p of ACP_PROVIDERS)
+					console.log(
+						`${p.id}\t${p.label}\t${which(p.binary) ?? `Install ${p.binary}`}`,
+					);
+				return;
+			}
+			const provider = ACP_PROVIDERS.find((p) => p.id === rest[0]);
+			if (
+				!provider ||
+				(rest.length !== 1 &&
+					!(rest.length === 3 && rest[1] === "--resume" && rest[2]))
+			)
+				fail(
+					`usage: pulsar acp <${ACP_PROVIDERS.map((p) => p.id).join("|")}> [--resume <session-id>]`,
+				);
+			const { runAcpBridge } = await import("./harnesses/acp.ts");
+			await runAcpBridge({
+				command: [provider.binary, ...provider.args],
+				...("env" in provider ? { env: provider.env } : {}),
+				harness: provider.id,
+				cwd: process.cwd(),
+				sessionId: rest[2],
+			});
+			return;
+		}
 		case "--version":
 		case "-v":
 		case "version":

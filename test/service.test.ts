@@ -100,6 +100,7 @@ describe("authorize matrix", () => {
 		"lookup",
 		"acting.options",
 		...ACTING_OPS,
+		"hosted",
 		"usage",
 		"diagnostics",
 	]);
@@ -110,7 +111,8 @@ describe("authorize matrix", () => {
 	// No target: an agent's transcript.read names no agent, so it is refused.
 	const expected = (kind: Principal["kind"], op: Op): string | null => {
 		// Only the user approves (with a passkey); agents never.
-		if (op === "approve" && kind !== "human") return "forbidden";
+		if ((op === "approve" || op === "hosted") && kind !== "human")
+			return "forbidden";
 		if ((acting.has(op) || op === "acting.options") && kind !== "human")
 			return "forbidden";
 		if (kind === "peer") return fedOps.has(op) ? null : "forbidden";

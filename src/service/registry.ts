@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import { cachedGitInfo, type GitInfo, gitInfoAsync, slug } from "../git.ts";
-import { DRIVERS, driverFor, pushFor } from "../harnesses/index.ts";
+import { attachedDriver, DRIVERS, pushFor } from "../harnesses/index.ts";
 import {
 	harnessNameOf,
 	NAME_KEY,
@@ -328,6 +328,45 @@ export class Registry {
 	 */
 	view(agent: Agent): PublicAgent {
 		const pub = toPublic(agent);
+		if (!agent.meta.machineId) {
+			const driver = attachedDriver(agent);
+			const extension = !!this.sessions.extensionFor(agent.id);
+			const active = agent.status !== "gone";
+			const acp = agent.meta.acp === "1";
+			pub.capabilities = {
+				surface: acp ? "managed-acp" : "attached",
+				...(agent.meta.host ? { host: agent.meta.host } : {}),
+				inbox:
+					active &&
+					this.sessions
+						.forAgent(agent.id)
+						.some((c) => this.sessions.role(c) === "mcp"),
+				wake: active && agent.inbound === "accept" && agent.reach === "push",
+				stop: active && (extension || !!driver?.canInterrupt?.(agent)),
+				status:
+					active &&
+					(extension ||
+						agent.status === "busy" ||
+						agent.status === "idle" ||
+						(!!driver?.liveStatus && !!agent.sessionId) ||
+						!!driver?.scan),
+				transcript: acp || !!driver?.transcript,
+				subagents: !!driver?.subagents && !acp,
+				...(acp
+					? {
+							resume: agent.meta.acpResume === "1",
+							modes: active && extension && agent.meta.acpModes === "1",
+							commands: active && extension && agent.meta.acpCommands === "1",
+							skills: false,
+							approvals: active && extension,
+							questions: false,
+							// Uploads are delivered as local file paths in an ordinary prompt.
+							attachments: active && extension,
+							usage: agent.meta.acpUsage === "1",
+						}
+					: {}),
+			};
+		}
 		return this.needsYou(agent.id)
 			? { ...pub, tags: [...pub.tags, NEEDS_YOU_TAG] }
 			: pub;
@@ -812,7 +851,7 @@ export class Registry {
 			const pr =
 				fromRefs ??
 				prFromText(
-					(await driverFor(agent.harness)?.sessionLog?.(agent)) ?? "",
+					(await attachedDriver(agent)?.sessionLog?.(agent)) ?? "",
 					slug,
 				);
 			if (this.closed) return;
@@ -882,7 +921,7 @@ export class Registry {
 	async refreshModels() {
 		for (const agent of this.live()) {
 			if (!agent.sessionId) continue;
-			const read = driverFor(agent.harness)?.model;
+			const read = attachedDriver(agent)?.model;
 			const model = read ? await read(agent) : null;
 			if (this.closed) return;
 			if (model && model !== agent.model) {
@@ -1244,7 +1283,7 @@ export class Registry {
 			if (
 				!agent.pid ||
 				!pidAlive(agent.pid) ||
-				!driverFor(agent.harness)?.scan?.tracksPid
+				!attachedDriver(agent)?.scan?.tracksPid
 			)
 				this.markGone(agent);
 			agent.registered = false;

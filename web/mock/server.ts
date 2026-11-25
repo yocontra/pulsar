@@ -370,13 +370,14 @@ function rollup(list: MockAgent[]): Rollup {
 		if (a.status === "needs-you") r.needsYou++;
 		else if (a.status === "busy") r.busy++;
 		else if (a.status === "offline") r.offline++;
+		else if (a.status === "unknown") r.unknown = (r.unknown ?? 0) + 1;
 		else r.idle++;
 		r.lastActive = Math.max(r.lastActive ?? 0, a.lastActive);
 	}
 	return r;
 }
 
-const STATE_RANK = { "needs-you": 0, busy: 1, idle: 2, offline: 3 };
+const STATE_RANK = { "needs-you": 0, busy: 1, idle: 2, unknown: 3, offline: 4 };
 function sortAgents(list: MockAgent[], sort: AgentSort = "attention") {
 	const byName = (a: MockAgent, b: MockAgent) =>
 		a.name.localeCompare(b.name) || address(a).localeCompare(address(b));

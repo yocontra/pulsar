@@ -167,7 +167,8 @@ test.describe("usage tab", () => {
 		}) => {
 			await page.setViewportSize({ width, height: 800 });
 			await openUsage(page);
-			const r = await top(page).evaluate((el) => {
+			const usage = top(page);
+			const r = await usage.evaluate((el) => {
 				const card = el
 					.querySelector(".p-usage-chart")!
 					.getBoundingClientRect();
@@ -209,6 +210,22 @@ test.describe("usage tab", () => {
 			expect(r.trackLefts.length).toBeGreaterThan(1);
 			for (const edges of [r.trackLefts, r.trackRights]) {
 				expect(Math.max(...edges) - Math.min(...edges)).toBeLessThanOrEqual(1);
+			}
+			await usage.getByRole("radio", { name: /By day|By hour/ }).click();
+			const timeTracks = await usage
+				.locator(".limits-bar, .usage-breakdown .usage-bar")
+				.evaluateAll((bars) =>
+					bars.map((bar) => {
+						const { left, right } = bar.getBoundingClientRect();
+						return { left, right };
+					}),
+				);
+			expect(timeTracks.length).toBeGreaterThan(1);
+			for (const track of timeTracks) {
+				expect(Math.abs(track.left - r.trackLefts[0]!)).toBeLessThanOrEqual(1);
+				expect(Math.abs(track.right - r.trackRights[0]!)).toBeLessThanOrEqual(
+					1,
+				);
 			}
 		});
 });

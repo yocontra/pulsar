@@ -17,6 +17,7 @@ import {
 } from "../diagnostics/client-errors-schema.ts";
 import { isOwner } from "../federation/members.ts";
 import { tailnetRpId } from "../federation/tailnet.ts";
+import { hostedWrite } from "../hosted/wire.ts";
 import { compressJson } from "../http/compress.ts";
 import { EventHub, type HubOptions } from "../http/events.ts";
 import {
@@ -161,6 +162,7 @@ const STATUS: Record<string, number> = {
 	gone: 410,
 	drift: 409,
 	stale_token: 409,
+	conflict: 409,
 	confirm: 409,
 	decided: 409,
 	no_passkey: 409,
@@ -1512,6 +1514,22 @@ export class HttpTransport {
 			)
 				requireSession(c);
 			return c.json(await svc.send(who(c), body));
+		});
+		api.get("/hosted", async (c) =>
+			c.json(await this.service.hostedTasks(who(c))),
+		);
+		api.post("/hosted", async (c) => {
+			const body = parse(LaunchBody, await jsonBody(c));
+			parse(hostedWrite, body.params);
+			return c.json(
+				await this.service.acting.run(
+					who(c),
+					"hosted.write",
+					{ machine: body.machine ?? null },
+					body.params,
+					body.assertion,
+				),
+			);
 		});
 		// Token usage across the pool, priced here ("API estimate").
 		api.get("/usage", async (c) => {

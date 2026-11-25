@@ -477,6 +477,11 @@ export class Mailbox {
 				throw new RpcError("no_recipients", `no live agent matches "${name}"`);
 			if (agent.status === "idle")
 				return Promise.resolve({ event: "idle", agent: toPublic(agent) });
+			if (this.registry.view(agent).capabilities?.status === false)
+				throw new RpcError(
+					"unsupported",
+					`${agent.name} does not currently report turn status; wait for a reply instead`,
+				);
 			target = agent.id;
 		} else if (forWhat.startsWith("reply:")) {
 			kind = "reply";

@@ -41,7 +41,29 @@ export type AppStatus =
 			retryAt: number;
 	  };
 
+export interface SessionCapabilities {
+	surface: "attached" | "managed-acp";
+	host?: string;
+	inbox: boolean;
+	wake: boolean;
+	stop: boolean;
+	status: boolean;
+	transcript: boolean;
+	subagents: boolean;
+	resume?: boolean;
+	modes?: boolean;
+	commands?: boolean;
+	skills?: boolean;
+	approvals?: boolean;
+	questions?: boolean;
+	/** Uploaded files can be referenced by path on the agent’s machine. */
+	attachments?: boolean;
+	usage?: boolean;
+}
+
 export interface Agent {
+	/** Observed on the owning node. Older peers omit this field. */
+	capabilities?: SessionCapabilities;
 	/** Stable id: `<harness>:<session id>` when known, else `<harness>:pid:<pid>`. */
 	id: string;
 	name: string;

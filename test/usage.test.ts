@@ -1,10 +1,20 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Store } from "../src/store.ts";
 import type { Agent } from "../src/types.ts";
-import { type PoolUsage, range, Usage } from "../src/usage/index.ts";
+import {
+	AcpUsageWriter,
+	loadAcpUsage,
+	saveAcpUsage,
+} from "../src/usage/acp.ts";
+import {
+	cleanAgentUsage,
+	type PoolUsage,
+	range,
+	Usage,
+} from "../src/usage/index.ts";
 import { type FileState, parseLine } from "../src/usage/parse.ts";
 import {
 	costOf,
@@ -12,6 +22,7 @@ import {
 	normalizeModel,
 	priceFor,
 	priceTable,
+	tagLocal,
 } from "../src/usage/prices.ts";
 import {
 	append,
@@ -231,7 +242,7 @@ describe("scanner", () => {
 		expect(totals()).toMatchObject(expected);
 		await resumed.scanner.scan();
 		expect(totals()).toMatchObject(expected);
-		const codex = resumed.localAgent(agent("codex", thread));
+		const codex = await resumed.localAgent(agent("codex", thread));
 		expect(codex.tokens).toMatchObject({
 			input: 16_000,
 			cacheRead: 24_000,
@@ -315,7 +326,7 @@ describe("scanner", () => {
 			[claudeLine({ id: "msg_s", t: T, input: 7 })],
 		);
 		await usage.scanner.scan();
-		const a = usage.localAgent(agent("claude", "parent"));
+		const a = await usage.localAgent(agent("claude", "parent"));
 		expect(a.tokens.input).toBe(12);
 		expect(a.context?.used).toBe(5);
 		expect(usage.local("7d", 0).sessions).toEqual([
@@ -378,14 +389,14 @@ describe("scanner", () => {
 			usage.local("7d", 0).sessions.map((s) => [s.harness, s.count]),
 		);
 		expect(by).toEqual({ codex: 1, pi: 1, omp: 1 });
-		const codex = usage.localAgent(agent("codex", thread));
+		const codex = await usage.localAgent(agent("codex", thread));
 		expect(codex.tokens).toMatchObject({
 			input: 400,
 			cacheRead: 600,
 			output: 50,
 		});
 		expect(codex.context).toEqual({ used: 1050, window: 400_000 });
-		expect(usage.localAgent(agent("omp", "omp1")).tokens.input).toBe(8);
+		expect((await usage.localAgent(agent("omp", "omp1"))).tokens.input).toBe(8);
 	});
 
 	test("lines older than the window are not counted", async () => {
@@ -489,11 +500,112 @@ describe("prices", () => {
 		await usage.scanner.scan();
 		const r = await usage.report("7d", 0, { id: "m1", name: "studio" }, null);
 		expect(r.rows[0]!.cost).toBeNull();
+		expect(r.rows[0]).toMatchObject({
+			tokenSource: "reported",
+			costSource: "unavailable",
+		});
 		const a = usage.priceAgent(
 			"claude:np",
-			usage.localAgent(agent("claude", "np")),
+			await usage.localAgent(agent("claude", "np")),
 		);
 		expect(a.cost).toBeNull();
+		expect(a.costSources).toEqual(["unavailable"]);
+	});
+});
+
+test("managed ACP usage records context and a cumulative amount without charging it twice", async () => {
+	const old = process.env.PULSAR_HOME;
+	process.env.PULSAR_HOME = dir;
+	try {
+		mkdirSync(join(dir, "acp"));
+		const session = agent("antigravity", "managed");
+		session.meta = { acp: "1" };
+		const ref = { harness: session.harness, sessionId: "managed" };
+		expect(
+			usage.priceAgent(session.id, await usage.localAgent(session)),
+		).toMatchObject({
+			tokenSources: ["unavailable"],
+			cost: null,
+			costSources: ["unavailable"],
+		});
+		const writer = new AcpUsageWriter(ref, () => {});
+		writer.add({
+			used: 52,
+			size: 1000,
+			cost: { amount: 0.1, currency: "USD" },
+		});
+		writer.add({
+			used: 58,
+			size: 1000,
+			cost: { amount: 0.4, currency: "USD" },
+		});
+		writer.add({ used: 60, size: 1000 });
+		await writer.finish();
+		const fromPeer = cleanAgentUsage(await usage.localAgent(session));
+		const priced = usage.priceAgent(session.id, fromPeer);
+		expect(priced).toMatchObject({
+			cost: 0.4,
+			context: { used: 60, window: 1000 },
+			tokenSources: ["unavailable"],
+			costSources: ["reported"],
+		});
+		expect(usage.local("24h", 0).rows).toHaveLength(0);
+		await saveAcpUsage(ref, {
+			used: 0,
+			size: 1000,
+			cost: { amount: 99, currency: "credits" },
+		});
+		expect(await loadAcpUsage(ref)).toEqual({
+			context: { used: 0, window: 1000 },
+			cost: null,
+		});
+		const adapter = { harness: "amp", sessionId: "adapter" };
+		await saveAcpUsage(adapter, {
+			used: 5,
+			size: 1000,
+			cost: { amount: 0.2, currency: "USD" },
+		});
+		expect((await loadAcpUsage(adapter))?.cost).toEqual({
+			amount: 0.2,
+			source: "reported",
+		});
+		await saveAcpUsage(ref, {
+			used: 0,
+			size: 0,
+			cost: { amount: 0, currency: "USD" },
+		});
+		expect(await loadAcpUsage(ref)).toEqual({
+			context: { used: 0, window: 1000 },
+			cost: { amount: 0, source: "reported" },
+		});
+	} finally {
+		if (old === undefined) delete process.env.PULSAR_HOME;
+		else process.env.PULSAR_HOME = old;
+	}
+});
+
+test("old peers retain native estimates, local inference and partial cost", () => {
+	const tokens = {
+		input: 100,
+		cacheRead: 0,
+		cacheWrite5m: 0,
+		cacheWrite1h: 0,
+		output: 3,
+		records: 1,
+	};
+	const u = cleanAgentUsage({
+		tokens,
+		models: [
+			{ ...tokens, model: "claude-sonnet-5-5" },
+			{ ...tokens, model: tagLocal("llama") },
+			{ ...tokens, model: "unknown" },
+		],
+		reportedCost: { amount: -1, source: "reported" },
+	});
+	expect(usage.priceAgent("peer/claude:old", u)).toMatchObject({
+		cost: null,
+		tokenSources: ["reported", "local"],
+		costSources: ["estimated", "local", "unavailable"],
 	});
 });
 
@@ -546,6 +658,10 @@ describe("pool report", () => {
 		]);
 		const cost = r.rows.reduce((n, x) => n + (x.cost ?? 0), 0);
 		expect(cost).toBeCloseTo(4 + 2, 6);
+		expect(r.rows.map((r) => [r.tokenSource, r.costSource])).toEqual([
+			["reported", "estimated"],
+			["reported", "estimated"],
+		]);
 		expect(r.sessions).toEqual([
 			{ machine: "m1", harness: "claude", count: 1 },
 			{ machine: "m2", harness: "codex", count: 2 },

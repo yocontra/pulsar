@@ -60,6 +60,7 @@ export const OPS = [
 export const ACTING_OPS = [
 	"attachments.upload",
 	"agents.launch",
+	"hosted.write",
 	"git.commit",
 	"git.push",
 	"git.pr",
@@ -100,6 +101,7 @@ export const HTTP_OPS = [
 	"acting.options",
 	...ACTING_OPS,
 	/** Token usage and model prices (reading, and editing a price). */
+	"hosted",
 	"usage",
 	/** Every machine's `pulsar doctor` report (read-only). */
 	"diagnostics",
@@ -185,6 +187,7 @@ const USER_OPS: ReadonlySet<Op> = new Set<Op>([
 	"lookup",
 	"acting.options",
 	...ACTING_OPS,
+	"hosted",
 	"usage",
 	"diagnostics",
 ]);
@@ -237,6 +240,11 @@ export function authorize(principal: Principal, op: Op, target?: string) {
 		throw new RpcError(
 			"forbidden",
 			`only the human operator may call ${op}, from the app after Prove Human`,
+		);
+	if (op === "hosted" && principal.kind !== "human")
+		throw new RpcError(
+			"forbidden",
+			"only the pool operator can read hosted tasks",
 		);
 	if (op === "approve" && principal.kind !== "human")
 		throw new RpcError(

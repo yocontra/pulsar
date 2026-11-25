@@ -4,6 +4,7 @@ import { DaemonClient } from "./client.ts";
 import { agentsText, askText, messageText, receiptsText } from "./format.ts";
 import { idleCompactor } from "./gc.ts";
 import { gitInfoAsync } from "./git.ts";
+import { ACP_IDENTITY_ENV, acpRegistration } from "./harnesses/acp-identity.ts";
 import { IDENTS, identFor } from "./harnesses/ident.ts";
 import type { AskResponse } from "./http/wire.ts";
 import { detectRegistration } from "./identity.ts";
@@ -136,7 +137,8 @@ export class Session {
 			this.me = r.agent;
 		} catch (e) {
 			const reg = this.registration;
-			const late = identFor(reg.harness)?.lateSession;
+			const late =
+				reg.meta?.acp === "1" ? null : identFor(reg.harness)?.lateSession;
 			if (
 				(e as { code?: string }).code !== "session_claimed" ||
 				!late ||
@@ -187,6 +189,7 @@ export class Session {
 	 */
 	async refresh() {
 		const reg = this.registration;
+		if (reg.meta?.acp === "1") return;
 		const ident = identFor(reg.harness);
 		// The process moved to another session (Claude's /resume, /clear).
 		if (reg.sessionId && reg.role === "mcp" && ident?.currentSession) {
@@ -268,12 +271,13 @@ const IDLE_GC_MS = 30_000;
 export async function runMcp() {
 	leanJit();
 	const active = idleCompactor(IDLE_GC_MS);
-	const base = await detectRegistration("mcp");
+	const managed = !!process.env[ACP_IDENTITY_ENV];
+	const base = managed ? null : await detectRegistration("mcp");
 	const server = new McpStdioServer(
 		{ name: "pulsar", version: VERSION },
 		INSTRUCTIONS,
 	);
-	server.cliArgs = identFor(base.harness)?.cliArgs === true;
+	server.cliArgs = identFor(base?.harness ?? "unknown")?.cliArgs === true;
 
 	const onMessage = (m: DeliveredMessage) => {
 		active();
@@ -285,7 +289,7 @@ export async function runMcp() {
 		);
 	};
 
-	const baseSession = new Session(base, onMessage);
+	let baseSession = base ? new Session(base, onMessage) : null;
 	const perSession = new Map<string, Session>();
 	// OpenCode keeps one MCP process for all its sessions (`toolSessions`). A session that has not
 	// called pulsar for a while lets go of its connection, so finished sessions
@@ -306,6 +310,13 @@ export async function runMcp() {
 	/** The session a tool call belongs to. Some harnesses (OpenCode) name it in `_meta`. */
 	async function sessionFor(meta: Meta): Promise<Session> {
 		debug(`call meta=${JSON.stringify(meta ?? null)}`);
+		if (!base) {
+			const registration = await acpRegistration("mcp");
+			if (!registration)
+				throw new Error("The managed ACP session is unavailable");
+			baseSession ??= new Session(registration, onMessage);
+			return baseSession;
+		}
 		for (const driver of IDENTS) {
 			const tool = driver.toolSessions;
 			if (!tool || (base.harness !== driver.id && base.harness !== "unknown"))
@@ -340,7 +351,7 @@ export async function runMcp() {
 			}
 			return pending;
 		}
-		return baseSession;
+		return baseSession!;
 	}
 
 	/** Appends a short note when messages are waiting, so pull-only harnesses notice them. */
@@ -1021,10 +1032,9 @@ export async function runMcp() {
 		description: "Messages waiting for this agent",
 		mimeType: "text/plain",
 		read: async () => {
-			const r = await baseSession.call<{ messages: DeliveredMessage[] }>(
-				"inbox",
-				{ markRead: false },
-			);
+			const r = await (await sessionFor(undefined)).call<{
+				messages: DeliveredMessage[];
+			}>("inbox", { markRead: false });
 			return r.messages.length
 				? r.messages.map(messageText).join("\n")
 				: "No unread messages.";
@@ -1032,8 +1042,8 @@ export async function runMcp() {
 	});
 
 	// A shared server (OpenCode) is not an agent itself; its sessions register on first use.
-	if (!identFor(base.harness)?.toolSessions) {
-		await baseSession.ensure().catch((e) => {
+	if (base && !identFor(base.harness)?.toolSessions) {
+		await baseSession?.ensure().catch((e) => {
 			process.stderr.write(
 				`pulsar: could not reach the daemon yet (${(e as Error).message}); retrying on first use\n`,
 			);
@@ -1042,7 +1052,7 @@ export async function runMcp() {
 
 	// The harness owns this process: when it closes stdin, exit (the daemon keeps running).
 	const exit = () => {
-		baseSession.close();
+		baseSession?.close();
 		for (const s of perSession.values()) s.close();
 		process.exit(0);
 	};

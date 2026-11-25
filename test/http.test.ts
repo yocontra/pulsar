@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
@@ -9,6 +9,7 @@ import {
 	gunzipSync,
 	gzipSync,
 } from "node:zlib";
+import { HostedWrites } from "../src/hosted/writes.ts";
 import { EventHub } from "../src/http/events.ts";
 import { IdentityUnavailable, StaticIdentity } from "../src/http/identity.ts";
 import type {
@@ -783,7 +784,8 @@ describe("pool views on 2,000 agents", () => {
 			agents: TOTAL,
 			needsYou: 0,
 			busy: 0,
-			idle: TOTAL,
+			idle: TOTAL - 1,
+			unknown: 1,
 			offline: 0,
 		});
 		// Generous: a loaded machine (a parallel build) must not fail it; the
@@ -1040,7 +1042,8 @@ describe("pool views on 2,000 agents", () => {
 			const tree = await json<{ items: TreeNode[] }>("/api/v1/tree");
 			expect(tree.body.items[0]!.rollup).toMatchObject({
 				needsYou: 1,
-				idle: TOTAL - 1,
+				idle: TOTAL - 2,
+				unknown: 1,
 			});
 			// The tag is pulsar's: never stored, never claimable by an agent.
 			expect(agent.tags).not.toContain("needs:you");
@@ -1075,6 +1078,62 @@ describe("hardening", () => {
 });
 
 describe("app contract", () => {
+	test("hosted task summaries reach the owner and writes require a passkey", async () => {
+		const observation = spyOn(service.hosted, "observe").mockResolvedValue([
+			{
+				provider: "copilot",
+				state: "ready",
+				observedAt: Date.now(),
+				detail: null,
+				tasks: [
+					{
+						id: "cloud-1",
+						title: "Fixture",
+						status: "queued",
+						context: null,
+						url: null,
+						updatedAt: null,
+					},
+				],
+			},
+		]);
+		let submitted = 0;
+		const writes = new HostedWrites(store, async () => async () => {
+			submitted++;
+			return { state: "accepted", id: "cloud-2" };
+		});
+		const params = {
+			provider: "copilot",
+			action: "create",
+			nonce: crypto.randomUUID(),
+			prompt: "Fixture",
+			repo: "example/repo",
+		};
+		service.acting.unregister("hosted.write");
+		const unregister = service.acting.register(
+			"hosted.write",
+			({ user, params }) => writes.run(user.login, params),
+		);
+		try {
+			expect((await json("/api/v1/hosted")).body).toMatchObject({
+				tasks: [{ provider: "copilot", id: "cloud-1" }],
+			});
+			expect((await post("/api/v1/hosted", { params })).status).toBe(401);
+			expect(submitted).toBe(0);
+			const accepted = { state: "accepted", id: "cloud-2" };
+			expect((await postAs("/api/v1/hosted", { params })).body).toEqual(
+				accepted,
+			);
+			expect((await postAs("/api/v1/hosted", { params })).body).toEqual(
+				accepted,
+			);
+			expect(submitted).toBe(1);
+		} finally {
+			observation.mockRestore();
+			unregister();
+		}
+	});
+
 	test("hello names the app URL, the login, totals and features", async () => {
 		const r = await json<Hello>("/api/v1/hello");
 		expect(r.body).toMatchObject({

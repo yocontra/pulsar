@@ -60,7 +60,11 @@ export const cursorIdent = {
 	label: "Cursor",
 
 	matchProcess(args: string) {
-		return exe(args) === "cursor" || args.includes("Cursor.app");
+		return (
+			exe(args) === "cursor-agent" ||
+			exe(args) === "cursor" ||
+			args.startsWith("/Applications/Cursor.app/Contents/")
+		);
 	},
 } satisfies HarnessIdent;
 
@@ -78,6 +82,9 @@ export const vscodeIdent = {
 	label: "VS Code",
 
 	matchProcess(args: string) {
-		return args.includes("Visual Studio Code.app") || exe(args) === "code";
+		return (
+			args.startsWith("/Applications/Visual Studio Code.app/Contents/") ||
+			exe(args) === "code"
+		);
 	},
 } satisfies HarnessIdent;

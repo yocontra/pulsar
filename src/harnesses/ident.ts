@@ -1,4 +1,5 @@
 import { type ProcessInfo, processTable } from "../processes.ts";
+import { HARNESSES } from "./catalog.ts";
 import { claudeIdent } from "./claude-ident.ts";
 import { codexIdent } from "./codex-ident.ts";
 import { opencodeIdent } from "./opencode-ident.ts";
@@ -17,7 +18,7 @@ import type { HarnessIdent } from "./types.ts";
  * one MCP server runs per agent, and the full drivers bring scanning, push,
  * transcript parsing and setup code it never runs.
  */
-export const IDENTS: readonly HarnessIdent[] = [
+const native = [
 	claudeIdent,
 	codexIdent,
 	opencodeIdent,
@@ -27,6 +28,16 @@ export const IDENTS: readonly HarnessIdent[] = [
 	geminiIdent,
 	vscodeIdent,
 ];
+export const IDENTS: readonly HarnessIdent[] = HARNESSES.map((h) => {
+	const impl = native.find((i) => i.id === h.id);
+	return {
+		matchProcess: (args: string) =>
+			args.split(/\s+/, 1)[0]?.split("/").pop() === h.bin,
+		...impl,
+		id: h.id,
+		label: h.label,
+	};
+});
 
 /** Harness ids with no driver: a plain terminal, and no harness found. */
 export const PSEUDO_HARNESSES = ["cli", "unknown"] as const;
@@ -54,15 +65,27 @@ export function extensionHostFor(argv: string): HarnessIdent | null {
 export async function findHarnessAncestor(
 	pid: number,
 	given?: Map<number, ProcessInfo>,
-): Promise<{ harness: string; pid: number } | null> {
+): Promise<{ harness: string; pid: number; host?: string } | null> {
 	const table = given ?? (await processTable());
 	let current = table.get(pid);
+	let runtime: { harness: string; pid: number } | null = null;
 	for (let depth = 0; current && depth < 16; depth++) {
 		const parent = table.get(current.ppid);
-		if (!parent || parent.pid <= 1) return null;
+		if (!parent || parent.pid <= 1) break;
 		const found = identForProcess(parent.args);
-		if (found) return { harness: found.id, pid: parent.pid };
+		if (!runtime && found) runtime = { harness: found.id, pid: parent.pid };
+		const host = editorHost(parent.args);
+		if (host && runtime) return { ...runtime, host };
 		current = parent;
 	}
-	return null;
+	return runtime;
+}
+
+function editorHost(args: string): string | undefined {
+	if (args.startsWith("/Applications/Cursor.app/Contents/")) return "cursor";
+	if (args.startsWith("/Applications/Visual Studio Code.app/Contents/"))
+		return "vscode";
+	if (args.startsWith("/Applications/Antigravity IDE.app/Contents/"))
+		return "antigravity";
+	return undefined;
 }

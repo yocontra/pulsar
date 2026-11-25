@@ -36,6 +36,7 @@ import { RemoteAttachmentsRelay } from "./attachments.ts";
 import { RemoteChangesReader } from "./changes.ts";
 import { RemoteControlsRelay } from "./controls.ts";
 import { RemoteDiagnostics } from "./diagnostics.ts";
+import { RemoteHosted } from "./hosted.ts";
 import { LocalFeed } from "./local.ts";
 import { isOwner, type PoolMembers } from "./members.ts";
 import {
@@ -232,6 +233,7 @@ export class Federation implements PoolView {
 	readonly transcripts: RemoteTranscriptReader;
 	readonly changes: RemoteChangesReader;
 	readonly usage: RemoteUsage;
+	readonly hosted: RemoteHosted;
 	readonly diagnostics: RemoteDiagnostics;
 	readonly attachments: RemoteAttachmentsRelay;
 	readonly controls: RemoteControlsRelay;
@@ -342,6 +344,7 @@ export class Federation implements PoolView {
 		this.transcripts = new RemoteTranscriptReader(this);
 		this.changes = new RemoteChangesReader(this);
 		this.usage = new RemoteUsage(this);
+		this.hosted = new RemoteHosted(this);
 		this.diagnostics = new RemoteDiagnostics(this);
 		this.attachments = new RemoteAttachmentsRelay(this);
 		this.controls = new RemoteControlsRelay(this);
@@ -2741,6 +2744,9 @@ export class Federation implements PoolView {
 				);
 				return { ok: true, response };
 			}
+			case "hosted.list":
+				authorize(user, "hosted");
+				return { ok: true, providers: await this.service.hosted.observe() };
 			case "usage.rows": {
 				authorize(user, "usage");
 				const period = USAGE_PERIODS.includes(action.period)
@@ -2754,7 +2760,7 @@ export class Federation implements PoolView {
 				authorize(user, "usage");
 				if (!agent)
 					return fail("not_found", `no agent ${String(action.agent)}`);
-				return { ok: true, usage: this.service.usage.localAgent(agent) };
+				return { ok: true, usage: await this.service.usage.localAgent(agent) };
 			}
 			case "diag.read": {
 				authorize(user, "diagnostics");

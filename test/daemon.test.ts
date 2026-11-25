@@ -50,6 +50,26 @@ describe("presence (goal 1)", () => {
 		expect(all.map((a) => a.harness).sort()).toEqual(["codex", "omp", "pi"]);
 	});
 
+	test("a pull-only session reports its inbox and explains an unobservable idle wait", async () => {
+		const { agent } = await spawnAgent({ harness: "copilot", role: "mcp" });
+		const source = await spawnAgent();
+		const entries = await source.client.call<PublicAgent[]>("list", {
+			selector: agent.id,
+		});
+		expect(entries[0]?.capabilities).toMatchObject({
+			surface: "attached",
+			inbox: true,
+			wake: false,
+			status: false,
+		});
+		await expect(
+			source.client.call("wait", {
+				for: `idle:${agent.name}`,
+				timeoutSeconds: 30,
+			}),
+		).rejects.toThrow("does not currently report turn status");
+	});
+
 	test("names are unique and readable", async () => {
 		const a = await spawnAgent({ harness: "pi", project: "apparish" });
 		const b = await spawnAgent({ harness: "pi", project: "apparish" });

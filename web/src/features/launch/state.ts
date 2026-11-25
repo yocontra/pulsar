@@ -1,3 +1,4 @@
+import { launchable } from "../../../../src/harnesses/catalog.ts";
 import { ApiError, api, request } from "../../api/client.ts";
 import type {
 	LaunchHarness,
@@ -139,13 +140,9 @@ export function launchError(e: unknown, machine: string): string {
 	return (e as Error)?.message || "Something went wrong.";
 }
 
-export const HARNESS_LABEL: Record<LaunchHarness, string> = {
-	claude: "Claude Code",
-	codex: "Codex",
-	opencode: "OpenCode",
-	pi: "pi",
-	omp: "omp",
-};
+export const HARNESS_LABEL = Object.fromEntries(
+	launchable.map((h) => [h.id, h.label]),
+) as Record<LaunchHarness, string>;
 
 /** What a launch is doing, in a few words. */
 export function stepText(s: LaunchState): string {

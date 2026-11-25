@@ -55,6 +55,7 @@ const SOURCE: Record<CommandEntry["source"], string> = {
 	project: "project",
 	user: "user",
 	plugin: "plugin",
+	agent: "agent",
 };
 
 function Badge({ c }: { c: CommandEntry }) {
