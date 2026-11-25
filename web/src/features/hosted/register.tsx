@@ -31,6 +31,8 @@ registerCommand({
 });
 registerSlot("sidebar.header", {
 	id: "hosted.open",
+	// Keep the desktop buttons to the right in place on older servers.
+	order: -1,
 	component: observer(({ mobile }: SlotProps["sidebar.header"]) => {
 		if (!offered()) return null;
 		if (mobile) return <PhoneButton open={open} />;

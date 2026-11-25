@@ -1,4 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
+import type { Hello } from "../src/api/types.ts";
 import { agentId, expect, test } from "./fixtures.ts";
 
 /**
@@ -43,49 +44,79 @@ async function measure(page: Page) {
 }
 
 test.describe("desktop skeletons", () => {
-	test("the shell skeleton matches the loaded sidebar within 1 px", async ({
-		page,
-	}) => {
-		// Nothing waits on you, and no stream adds rows mid-measure.
-		await page.route("**/api/v1/attention**", (r) =>
-			r.fulfill({ json: { items: [], total: 0 } }),
-		);
-		await page.route("**/api/v1/events**", (r) =>
-			r.fulfill({ status: 200, contentType: "text/event-stream", body: "" }),
-		);
-		// Hold hello: the skeleton stays up until we let it through.
-		let release!: () => void;
-		const held = new Promise<void>((res) => {
-			release = res;
-		});
-		await page.route("**/api/v1/hello", async (r) => {
-			await held;
-			await r.continue();
-		});
-		await page.goto("/");
-		const skel = page.locator('.d-app[aria-busy="true"]');
-		await expect(skel).toBeVisible();
-		const before = await measure(page);
-		const skelRows = await boxes(page.locator(".d-side .vrow .d-skel-row"), 6);
-		const skelIcon = await boxes(
-			page.locator(".d-side .d-skel-row .d-skel-ico"),
-			1,
-		);
+	for (const hosted of [true, false]) {
+		test(`the shell skeleton matches the loaded sidebar within 1 px (${hosted ? "with Hosted" : "without Hosted"})`, async ({
+			page,
+		}) => {
+			// Nothing waits on you, and no stream adds rows mid-measure.
+			await page.route("**/api/v1/attention**", (r) =>
+				r.fulfill({ json: { items: [], total: 0 } }),
+			);
+			await page.route("**/api/v1/events**", (r) =>
+				r.fulfill({ status: 200, contentType: "text/event-stream", body: "" }),
+			);
+			// Hold hello: the skeleton stays up until we let it through.
+			let release!: () => void;
+			const held = new Promise<void>((res) => {
+				release = res;
+			});
+			await page.route("**/api/v1/hello", async (r) => {
+				await held;
+				const response = await r.fetch();
+				const hello: Hello = await response.json();
+				hello.features = hello.features.filter(
+					(feature) => feature !== "hosted",
+				);
+				if (hosted) hello.features.push("hosted");
+				await r.fulfill({ response, json: hello });
+			});
+			await page.goto("/");
+			const skel = page.locator('.d-app[aria-busy="true"]');
+			await expect(skel).toBeVisible();
+			const before = await measure(page);
+			const placeholders = await boxes(page.locator(".d-brand .d-skel-slot"));
+			const skelRows = await boxes(
+				page.locator(".d-side .vrow .d-skel-row"),
+				6,
+			);
+			const skelIcon = await boxes(
+				page.locator(".d-side .d-skel-row .d-skel-ico"),
+				1,
+			);
 
-		release();
-		await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
-		await expect(skel).toHaveCount(0);
-		const after = await measure(page);
-		for (const k of Object.keys(before) as (keyof typeof before)[])
-			near(before[k], after[k], k);
-		const rows = await boxes(page.locator(".d-side .vrow .d-row.node"), 6);
-		near(skelRows, rows, "tree row");
-		near(
-			skelIcon,
-			await boxes(page.locator('[data-node="m:studio"] .d-ico')),
-			"row icon",
-		);
-	});
+			release();
+			await expect(page.locator('[data-node="m:studio"]')).toBeVisible();
+			await expect(skel).toHaveCount(0);
+			const after = await measure(page);
+			const controls = page.locator(".d-brand button");
+			expect(
+				await controls.evaluateAll((items) =>
+					items.map((item) => item.getAttribute("aria-label")),
+				),
+			).toEqual([
+				...(hosted ? ["Hosted agents"] : []),
+				"New agent",
+				"Usage",
+				"Open on phone",
+			]);
+			const controlBoxes = await boxes(controls);
+			expect(controlBoxes.length).toBe(placeholders.length - (hosted ? 0 : 1));
+			near(
+				placeholders.slice(-controlBoxes.length),
+				controlBoxes,
+				"header controls",
+			);
+			for (const k of Object.keys(before) as (keyof typeof before)[])
+				near(before[k], after[k], k);
+			const rows = await boxes(page.locator(".d-side .vrow .d-row.node"), 6);
+			near(skelRows, rows, "tree row");
+			near(
+				skelIcon,
+				await boxes(page.locator('[data-node="m:studio"] .d-ico')),
+				"row icon",
+			);
+		});
+	}
 
 	test("tree placeholder rows have the loaded rows' boxes", async ({
 		page,
