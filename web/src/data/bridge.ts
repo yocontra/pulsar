@@ -38,6 +38,8 @@ import { live, prefetchAgent, queryClient, startLive } from "./runtime.ts";
 import { startUpdates } from "./update.ts";
 
 const mounts = new Map<string, Observed>();
+// Live cache updates must keep the more row busy until its page settles.
+const paginating = new Set<string>();
 /** Compares /hello's build with this page's (data/update.ts). */
 let checkUpdate = () => {};
 
@@ -90,7 +92,8 @@ function onCacheEvent(key: readonly unknown[]) {
 	if (!q) return;
 	const data = q?.state.data;
 	const loading =
-		q?.state.status === "pending" && q.state.fetchStatus === "fetching";
+		paginating.has(hashKey(key)) ||
+		(q.state.status === "pending" && q.state.fetchStatus === "fetching");
 	if (name === "tree") {
 		if (
 			a !== store.TREE_GROUP ||
@@ -329,20 +332,17 @@ export async function loadMore(branchId: string) {
 	const f = store.filter.peek();
 	const s = store.sort.peek();
 	const key = branchId === "" ? treeKey() : keys.children(branchId, f, s);
-	const b = store.branches.get(branchId);
-	if (b) {
-		b.loading = true;
-		store.bumpTree();
-	}
+	const hash = hashKey(key);
+	if (paginating.has(hash)) return;
+	paginating.add(hash);
+	onCacheEvent(key);
 	try {
 		await fetchMoreTree(queryClient, key);
 	} catch (err) {
 		store.handleError(err, true);
-	}
-	const after = store.branches.get(branchId);
-	if (after) {
-		after.loading = false;
-		store.bumpTree();
+	} finally {
+		paginating.delete(hash);
+		onCacheEvent(key);
 	}
 }
 

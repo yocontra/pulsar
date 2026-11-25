@@ -32,33 +32,37 @@ async function openSession(page: Page) {
 
 test.describe("mobile", () => {
 	test("home keeps loading machine pages as it scrolls", async ({ page }) => {
-		// Smaller pages than the app asks for: 200 machines take 5 pages.
-		const pages: string[] = [];
+		// Keep offset order stable as mock agent statuses change, and ask for
+		// smaller HTTP pages so scrolling has to fetch several.
+		await page.addInitScript(() =>
+			localStorage.setItem("pulsar.sort", '"name"'),
+		);
+		const cursors = new Set<string>();
 		await page.route(/\/api\/v1\/tree\?/, (r) => {
 			const u = new URL(r.request().url());
 			if (u.searchParams.get("group") && !u.searchParams.get("parent")) {
 				u.searchParams.set("limit", "40");
-				if (u.searchParams.get("cursor")) pages.push(u.search);
+				const cursor = u.searchParams.get("cursor");
+				if (cursor) cursors.add(cursor);
 			}
 			return r.continue({ url: u.toString() });
 		});
 		await ready(page);
 		const content = page.locator("ion-content").first();
-		// Each next page loads once the last one shows: scroll to the bottom
-		// until its request comes, page by page (no fixed number of tries).
-		for (let n = 1; n <= 4; n++)
-			await expect
-				.poll(async () => {
-					await content.evaluate((el) =>
-						(
-							el as HTMLElement & {
-								scrollToBottom: (ms: number) => Promise<void>;
-							}
-						).scrollToBottom(0),
-					);
-					return pages.length;
-				})
-				.toBeGreaterThanOrEqual(n);
+		// Live updates can insert rows into the loaded window. The complete
+		// tree matters here, regardless of how many page requests it takes.
+		const footer = page.getByTestId("pool-footer");
+		await expect
+			.poll(async () => {
+				await content.evaluate((el) =>
+					(
+						el as HTMLElement & { scrollToBottom(ms: number): Promise<void> }
+					).scrollToBottom(0),
+				);
+				return footer.textContent();
+			})
+			.toMatch(/^\S+ agents on 200 machines$/);
+		expect(cursors.size).toBeGreaterThan(0);
 	});
 
 	test("home is search-first; a group row expands in place", async ({

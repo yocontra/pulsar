@@ -217,8 +217,13 @@ test.describe("subagents (desktop)", () => {
 		const cards = page.locator(".ds-task");
 		const sub = `${auth}/sub:a2fix`;
 		const link = page.locator(`[data-subagent-link="${sub}"]`);
-		// Earlier tests add newer task cards: open cards from the newest back
-		// until this subagent's link shows.
+		// New mock turns can push the finished subagent's parent call onto
+		// the previous page, even when its result is on the newest page.
+		await expect(cards.first()).toBeVisible();
+		const newestCount = await cards.count();
+		await page.getByRole("button", { name: "Load earlier messages" }).click();
+		await expect.poll(() => cards.count()).toBeGreaterThan(newestCount);
+		// Open cards from the newest back until this subagent's link shows.
 		for (let i = (await cards.count()) - 1; i >= 0; i--) {
 			if (await link.count()) break;
 			await cards.nth(i).locator(".ds-tool-head").click();
