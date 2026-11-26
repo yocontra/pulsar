@@ -15,7 +15,7 @@ import type { EventBus } from "./events.ts";
 import { LIMITS } from "./limits.ts";
 import { isRemote, type RemoteQueueAct, splitAddress } from "./pool.ts";
 import type { Registry } from "./registry.ts";
-import type { Router } from "./router.ts";
+import { type Router, URGENT_HANDOFF } from "./router.ts";
 import type { PushMessage } from "./util.ts";
 
 export type QueueAction = RemoteQueueAct["action"];
@@ -435,11 +435,19 @@ export class Queue {
 
 	/**
 	 * True while a message the harness has waits for the current turn to
-	 * end: it was handed over during this busy stretch and was not urgent
-	 * (an urgent one lands between tool calls).
+	 * end. Codex queues native messages and ACP serializes provider prompts,
+	 * including urgent ones. Other transports can steer a busy turn.
 	 */
 	private waitsForIdle(agent: Agent, message: Message, r: Receipt): boolean {
-		if (message.priority === "urgent" || agent.status !== "busy") return false;
+		if (agent.status !== "busy") return false;
+		const queuedTurn =
+			r.via === "codex-queue" ||
+			(r.via === "extension" && agent.meta.acp === "1");
+		if (
+			(message.priority === "urgent" || r.detail === URGENT_HANDOFF) &&
+			!queuedTurn
+		)
+			return false;
 		const since = this.busySince.get(agent.id) ?? this.started;
 		return r.updatedAt >= since;
 	}
@@ -497,7 +505,7 @@ export class Queue {
 			from: { id: message.fromId, name: mine ? "You" : message.fromName },
 			mine,
 			body: message.body,
-			priority: message.priority,
+			priority: receipt.detail === URGENT_HANDOFF ? "urgent" : message.priority,
 			createdAt: message.createdAt,
 			state: o.state,
 			detail: receipt.detail,

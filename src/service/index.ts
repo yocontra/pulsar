@@ -1316,7 +1316,7 @@ export class PulsarService {
 		void (async () => {
 			try {
 				await this.deliveries.back(agent);
-				if (role === "extension" && !this.registry.closed)
+				if ((role === "extension" || role === "wake") && !this.registry.closed)
 					await this.router.flushQueued(
 						agent,
 						this.deliveries.config.maxAttempts,
@@ -1630,6 +1630,8 @@ export class PulsarService {
 					},
 					caller.principal,
 				);
+			case "wake_result":
+				return this.router.wakeResult(caller, p);
 			case "interrupt_result":
 				return this.interrupts.answer(registry.self(caller).id, p);
 			case "control_result":

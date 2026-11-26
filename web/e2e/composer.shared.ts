@@ -59,6 +59,38 @@ export async function plusMenu(page: Page, composer: Locator) {
 export function composerSuite(platform: "desktop" | "phone") {
 	const phone = platform === "phone";
 
+	test(`explains how to wake an inbox-only native conversation (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const selector = "name=apparish-auth";
+		const id = await agentId(request, selector);
+		await page.route(
+			(url) => decodeURIComponent(url.pathname) === `/api/v1/agents/${id}`,
+			async (route) => {
+				const response = await route.fetch();
+				const row = await response.json();
+				await route.fulfill({
+					response,
+					json: {
+						...row,
+						harness: "antigravity",
+						wake: "inbox-only",
+						capabilities: {
+							...row.capabilities,
+							surface: "attached",
+							wake: false,
+						},
+					},
+				});
+			},
+		);
+		const composer = await openAgent(page, request, selector);
+		await expect(
+			composer.getByText(/run pulsar antigravity-bind/),
+		).toBeVisible();
+	});
+
 	test(`attach from the picker, send, and the bubble shows the files (${platform})`, async ({
 		page,
 		request,

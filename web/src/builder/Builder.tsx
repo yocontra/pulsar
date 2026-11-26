@@ -31,6 +31,7 @@ import { CloseX } from "../components/CloseX.tsx";
 import {
 	ConfirmDialog,
 	confirmTier,
+	PRIORITY_HINT,
 	PriorityPicker,
 	Receipts,
 	reconfirmText,
@@ -114,13 +115,6 @@ function facetLabel(facet: string, value: string) {
 	if (facet === "harness") return harnessName(value);
 	return value;
 }
-
-/** What each priority does, in one line under the control. */
-const PRIORITY_HINT: Record<Priority, string> = {
-	urgent: "Lands mid-turn: agents read it right away.",
-	normal: "Arrives when each agent finishes its turn; wakes idle agents.",
-	fyi: "Waits in each inbox; no agent is woken.",
-};
 
 /** Wake glyphs: always a shape and a word (tokens.css rule). */
 const WAKE = {

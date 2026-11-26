@@ -1,14 +1,17 @@
 import { access, chmod, unlink } from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
+import { gitInfoAsync } from "../git.ts";
 import {
 	antigravityMcpHost,
 	antigravityProcess,
 	legacyMcpGeneration,
 } from "../harnesses/antigravity-ident.ts";
+import { driverFor } from "../harnesses/index.ts";
 import { freshProcessSnapshot } from "../processes.ts";
 import { type Frame, RpcError, readFrames, writeFrame } from "../rpc.ts";
 import type { Caller } from "../service/caller.ts";
 import type { PulsarService } from "../service/index.ts";
+import { autoTags } from "../tags.ts";
 import { PROTOCOL_VERSION, type Registration } from "../types.ts";
 import { VERSION } from "../version.ts";
 
@@ -216,6 +219,43 @@ export class SocketTransport {
 			if (detected.sessionId && detected.cwd === reg.cwd)
 				reg = { ...reg, sessionId: detected.sessionId };
 		}
+		if (reg?.role === "wake") {
+			const verify = driverFor(reg.harness)?.verifyWakeHost;
+			if (
+				!verify ||
+				typeof reg.sessionId !== "string" ||
+				!reg.sessionId ||
+				!Number.isSafeInteger(reg.pid) ||
+				!reg.pid ||
+				reg.pid < 2 ||
+				reg.subagent ||
+				reg.meta?.acp ||
+				this.service.registry.get(
+					this.service.registry.agentId(reg.harness, reg.sessionId, reg.pid),
+				)?.meta.acp === "1"
+			)
+				throw new RpcError(
+					"forbidden",
+					"Native wake requires an attached conversation.",
+				);
+			const host = await verify(reg.pid, reg.sessionId);
+			if (!host)
+				throw new RpcError(
+					"forbidden",
+					"The CLI is no longer running this conversation.",
+				);
+			const git = await gitInfoAsync(host.cwd, { lane: "user" });
+			reg = {
+				role: "wake",
+				harness: reg.harness,
+				sessionId: reg.sessionId,
+				pid: reg.pid,
+				cwd: host.cwd,
+				project: git.project,
+				branch: git.branch,
+				tags: autoTags(reg.harness, git),
+			};
+		}
 		if (caller.closed.aborted)
 			throw new RpcError("closed", "Connection closed during identification");
 		this.service.setRole(caller, reg?.role ?? "cli");
@@ -250,11 +290,13 @@ export class SocketTransport {
 				agent: this.service.publicAgent(agent),
 			};
 		}
+		if (reg.role === "wake") this.service.checkClaim(caller, reg);
 		const agent = this.service.registerAgent(caller, reg);
 		return {
 			version: VERSION,
 			protocol: PROTOCOL_VERSION,
 			agent: this.service.publicAgent(agent),
+			...(reg.role === "wake" ? { nativeWake: true } : {}),
 		};
 	}
 }

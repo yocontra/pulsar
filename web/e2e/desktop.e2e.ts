@@ -326,7 +326,7 @@ test.describe("desktop", () => {
 			.first()
 			.click();
 		await expect(page.locator(".composer-to")).toContainText("on studio");
-		await page.getByRole("radio", { name: "Interrupt now" }).click();
+		await page.getByRole("radio", { name: "Urgent" }).click();
 		await page.locator(".composer-input").fill("hold refresh() for 10 minutes");
 		await page.keyboard.press("ControlOrMeta+Enter");
 		// The delivery state sits under the sent bubble, not under the composer.
@@ -491,7 +491,7 @@ test.describe("desktop", () => {
 			"to inbox",
 		);
 		await page.getByRole("radio", { name: "Next turn" }).click();
-		await expect(page.locator(".bc-hint")).toContainText("wakes idle agents");
+		await expect(page.locator(".bc-hint")).toContainText("if it supports push");
 		await page.getByRole("radio", { name: "Don't wake" }).click();
 		await page.screenshot({ path: `${SHOTS}desktop-builder.png` });
 

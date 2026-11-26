@@ -162,6 +162,9 @@ for await (const line of lines) {
 			} else if (text.startsWith("/fixture-command")) {
 				update("Fixture command called");
 				reply(id, { stopReason: "end_turn" });
+			} else if (text.includes("fixture-idle-wake")) {
+				update("Fixture woke from idle");
+				reply(id, { stopReason: "end_turn" });
 			} else if (text.includes("fixture-rejected")) {
 				process.stdout.write(
 					`${JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32602, message: "Fixture prompt rejected" } })}\n`,

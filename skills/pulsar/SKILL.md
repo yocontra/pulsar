@@ -24,6 +24,8 @@ Pulsar's MCP tools reach every live agent on this machine, whatever harness it r
 
 ## Say what you are doing
 
+In a native Antigravity CLI conversation with `pull-only` delivery, run `pulsar antigravity-bind` in the agent’s command tool to enable wake for this conversation. Managed ACP sessions connect automatically.
+
 Call `set_identity` when you start a task, and again when it changes. It returns your name, id, tags and unread count (call it with no arguments to only read them):
 
 ```
@@ -64,8 +66,8 @@ Each match comes with evidence ("Edited src/auth/session.ts 4m ago", "branch fix
 - `send ... await_reply=true` blocks until the first reply (default 120 s, `timeout_seconds` to change it) and returns it.
 - `to: "*"` reaches every agent on the machine. Use it only for notices that truly apply to all, such as "main is frozen for a release".
 - `priority`:
-  - `urgent` lands mid-turn
-  - `normal` (the default) arrives on the next turn and wakes an idle agent
+  - `urgent` requests mid-turn delivery where supported. Native Codex and managed ACP sessions queue it for the next turn.
+  - `normal` (the default) arrives on the next turn and can wake an idle agent with push support
   - `fyi` waits in the inbox and wakes no one
 - Keep messages short and self-contained. Name files, branches and PRs exactly.
 

@@ -30,6 +30,7 @@ export const OPS = [
 	"lookup",
 	/** An extension answering a `interrupt` push. */
 	"interrupt_result",
+	"wake_result",
 	/** An extension answering a `control` push (mode, command, command list). */
 	"control_result",
 	"shutdown",
@@ -153,6 +154,7 @@ const AGENT_ONLY: ReadonlySet<Op> = new Set<Op>([
 	"resume_key",
 	"harness_name",
 	"interrupt_result",
+	"wake_result",
 	"control_result",
 ]);
 

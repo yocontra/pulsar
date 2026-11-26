@@ -446,6 +446,28 @@ describe("needs-you", () => {
 });
 
 describe("wakeability", () => {
+	test("a child with an inbox only cannot advertise native wake", () => {
+		const t = setup();
+		try {
+			const { agent: parent } = t.connect({ harness: "codex", sessionId: "p" });
+			const child = {
+				...parent,
+				id: `${parent.id}/sub:c`,
+				sessionId: "c",
+				meta: { subagentPull: "inbox", subagentNative: "1" },
+			};
+			child.reach = t.service.registry.reachOf(child);
+			expect(t.service.app.views.row(child).wake).toBe("inbox-only");
+			expect(t.service.registry.view(child).capabilities?.wake).toBe(false);
+			expect(t.service.registry.reachOf({ ...child, meta: {} })).toBe("pull");
+			expect(
+				t.service.registry.reachOf({ ...child, meta: { subagentNative: "1" } }),
+			).toBe("push");
+		} finally {
+			t.done();
+		}
+	});
+
 	test("mirrors delivery: policy, full inbox, fyi, push path", () => {
 		const t = setup();
 		const a = t.connect({ sessionId: "w1" });

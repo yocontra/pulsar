@@ -27,6 +27,7 @@ test("Antigravity uses only its open conversation databases and own CLI log", ()
 	for (const args of [
 		"agy models",
 		"agy acp",
+		"agy agentapi send-message",
 		"agy remote-control start",
 		"agy mic-serve",
 	])

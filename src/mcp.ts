@@ -5,6 +5,7 @@ import { messageText } from "./format.ts";
 import { idleCompactor } from "./gc.ts";
 import { gitInfoAsync } from "./git.ts";
 import { ACP_IDENTITY_ENV, acpRegistration } from "./harnesses/acp-identity.ts";
+import { nativeWakeCommand } from "./harnesses/catalog.ts";
 import { codexToolThreadId } from "./harnesses/codex-ident.ts";
 import { IDENTS, identFor } from "./harnesses/ident.ts";
 import { detectRegistration } from "./identity.ts";
@@ -237,9 +238,13 @@ export async function runMcp() {
 	const active = idleCompactor(IDLE_GC_MS);
 	const managed = !!process.env[ACP_IDENTITY_ENV];
 	const base = managed ? null : await detectRegistration("mcp");
+	const wakeCommand = nativeWakeCommand(base?.harness);
+	const instructions = wakeCommand
+		? `${PULSAR_TOOL_INSTRUCTIONS}\n- If set_identity reports reach: pull, run ${wakeCommand} once in your command tool so messages can wake this conversation.`
+		: PULSAR_TOOL_INSTRUCTIONS;
 	const server = new McpStdioServer(
 		{ name: "pulsar", version: VERSION },
-		PULSAR_TOOL_INSTRUCTIONS,
+		instructions,
 	);
 	server.cliArgs = identFor(base?.harness ?? "unknown")?.cliArgs === true;
 

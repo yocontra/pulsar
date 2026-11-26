@@ -184,7 +184,7 @@ describe("describePulsar", () => {
 		const running = describePulsar("send", input, { done: false });
 		expect(running).toMatchObject({
 			verb: "Sending to",
-			label: "Interrupt now",
+			label: "Urgent",
 			facts: ["waiting for reply"],
 		});
 		expect(running.chips[0]!.label).toBe("everyone on apparish");

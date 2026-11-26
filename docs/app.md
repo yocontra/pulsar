@@ -44,8 +44,8 @@ A turn that edited files ends with "Changed 3 files +42 −7". Open it to list t
 
 The composer at the bottom sends to this agent. Choose how urgent it is:
 
-- **Interrupt now** (`urgent`): lands mid-turn where the harness supports it.
-- **Next turn** (`normal`): waits for the current turn, wakes an idle agent.
+- **Urgent** (`urgent`) requests delivery during the current turn. Native Codex and managed ACP sessions queue the message for their next turn.
+- **Next turn** (`normal`) queues the message for the next turn. It can wake an idle session with push support.
 - **Don't wake** (`fyi`): waits in the agent's inbox.
 
 Receipts follow each send: handed over, in its conversation, read, replied. Replies show under the message.

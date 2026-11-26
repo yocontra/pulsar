@@ -233,7 +233,7 @@ test.describe("real daemon @real", () => {
 		await page.goto(`/#/a/${encodeURIComponent(reviewer)}`);
 		await expect(page.locator(".session-header h1")).toHaveText("reviewer");
 		const text = `check the lock ${Date.now()}`;
-		await page.getByRole("radio", { name: "Interrupt now" }).click();
+		await page.getByRole("radio", { name: "Urgent" }).click();
 		await page.locator(".composer-input").fill(text);
 		await page.keyboard.press("ControlOrMeta+Enter");
 		// pi keeps no transcript (no bubble): its receipt line stays.
@@ -264,7 +264,7 @@ test.describe("real daemon @real", () => {
 			else await route.fulfill({ response: res });
 		});
 		// The reviewer is busy: interrupt, so the push goes now.
-		await page.getByRole("radio", { name: "Interrupt now" }).click();
+		await page.getByRole("radio", { name: "Urgent" }).click();
 		await page.locator(".composer-input").fill(text);
 		await page.keyboard.press("ControlOrMeta+Enter");
 		const count = async () =>
@@ -369,7 +369,7 @@ test.describe("real daemon @real", () => {
 		}
 		await expect(nav).toHaveAccessibleName(/^Prove Human: Proven/);
 		const body = `tighten the refresh lock ${Date.now()}`;
-		await page.getByRole("radio", { name: "Interrupt now" }).click();
+		await page.getByRole("radio", { name: "Urgent" }).click();
 		await page.locator(".composer-input").fill(body);
 		const sent = page.waitForResponse(
 			(r) =>

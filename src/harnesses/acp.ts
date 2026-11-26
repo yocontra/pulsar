@@ -147,11 +147,13 @@ class Bridge {
 		});
 		this.daemon.on("push", (data) => {
 			const { message, text } = data as {
-				message?: { id?: string };
+				message?: { id?: string; priority?: string };
 				text?: string;
 			};
 			const messageId = message?.id;
 			if (typeof messageId !== "string" || typeof text !== "string") return;
+			// FYI messages belong to the inbox and must never start a provider turn.
+			if (message?.priority === "fyi") return;
 			if (this.received.has(messageId)) return;
 			if (this.receipts.get(messageId)?.method === "ack") {
 				void this.flushReceipt(messageId);

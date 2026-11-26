@@ -12,7 +12,7 @@ import { sentHere } from "../lib/sent.ts";
 import { onReceipts, watchReceipts } from "../lib/store.ts";
 
 const WORD: Record<string, string> = {
-	queued: "Sent",
+	queued: "Queued",
 	sent: "Sent",
 	delivered: "Delivered",
 	read: "Read",

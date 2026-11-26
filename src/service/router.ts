@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { pushFor } from "../harnesses/index.ts";
 import { neutralizeHumanTag } from "../human-tag.ts";
 import { RpcError } from "../rpc.ts";
 import type { Store } from "../store.ts";
 import type { Agent, Message, Receipt } from "../types.ts";
+import type { Caller } from "./caller.ts";
 import { LIMITS } from "./limits.ts";
 import { isLocalSubagentId, isRemote } from "./pool.ts";
 import type { Registry } from "./registry.ts";
@@ -14,6 +16,9 @@ import {
 	writeReceipt,
 } from "./util.ts";
 import type { Waiters } from "./waiters.ts";
+
+/** Stored per recipient because Send now promotes only that recipient's delivery. */
+export const URGENT_HANDOFF = "sent with urgent priority";
 
 /**
  * Local delivery: inbound policy, inbox cap, waiting `ask`/`wait` calls, live
@@ -28,6 +33,67 @@ export class Router {
 	/** Set by the service: a tracked message reached a session. */
 	onHandoff: (message: Message, agent: Agent, receipt: Receipt) => void =
 		() => {};
+
+	private readonly waking = new Map<string, Promise<Receipt>>();
+	private readonly wakeRequests = new Map<
+		string,
+		{ caller: Caller; finish: (ok: boolean) => void }
+	>();
+
+	/** Replies belong to the specific relay connection that received the request. */
+	wakeResult(caller: Caller, params: Record<string, unknown>) {
+		const request = this.wakeRequests.get(String(params.requestId));
+		if (!request || request.caller !== caller) return { ok: false };
+		request.finish(params.ok === true);
+		return { ok: true };
+	}
+
+	private wake(
+		caller: Caller,
+		target: Agent,
+		message: PushMessage,
+		text: string,
+	) {
+		const key = JSON.stringify([target.id, message.id]);
+		const pending = this.waking.get(key);
+		if (pending) return pending;
+		const requestId = randomUUID();
+		const result = new Promise<Receipt>((resolve) => {
+			const finish = (ok: boolean) => {
+				clearTimeout(timeout);
+				caller.closed.removeEventListener("abort", cancel);
+				this.wakeRequests.delete(requestId);
+				resolve(
+					this.receipt(
+						message.id,
+						target,
+						ok ? "delivered" : "queued",
+						"native-wake",
+						ok
+							? message.priority === "urgent"
+								? URGENT_HANDOFF
+								: null
+							: "The native conversation could not take the message.",
+					),
+				);
+			};
+			const cancel = () => finish(false);
+			const timeout = setTimeout(cancel, 15_000);
+			this.wakeRequests.set(requestId, { caller, finish });
+			caller.closed.addEventListener("abort", cancel, { once: true });
+			if (caller.closed.aborted) cancel();
+			else
+				caller.emit("wake", {
+					requestId,
+					messageId: message.id,
+					attempt: message.attempt ?? 1,
+					sessionId: target.sessionId,
+					text,
+				});
+		}).finally(() => this.waking.delete(key));
+		this.waking.set(key, result);
+		return result;
+	}
 
 	constructor(deps: {
 		store: Store;
@@ -199,6 +265,7 @@ export class Router {
 					? { kind: "unverified" }
 					: { kind: "agent" },
 		);
+		const detail = message.priority === "urgent" ? URGENT_HANDOFF : null;
 		const ext = this.sessions.extensionFor(target.id);
 		if (ext) {
 			ext.emit("push", {
@@ -206,8 +273,10 @@ export class Router {
 				text,
 			});
 			// The extension acks once the message is in the conversation.
-			return this.receipt(message.id, target, "sent", "extension", null);
+			return this.receipt(message.id, target, "sent", "extension", detail);
 		}
+		const relay = this.sessions.wakeFor(target.id);
+		if (relay) return this.wake(relay, target, message, text);
 		if (target.meta.subagentPull === "1")
 			return this.receipt(
 				message.id,
@@ -248,7 +317,7 @@ export class Router {
 			neutralizeHumanTag(sender.name),
 		);
 		return result.ok
-			? this.receipt(message.id, target, "sent", result.via, null)
+			? this.receipt(message.id, target, "sent", result.via, detail)
 			: this.receipt(
 					message.id,
 					target,
@@ -260,18 +329,18 @@ export class Router {
 
 	/** True when a message can be pushed into the agent's session now (extension or harness driver). */
 	canPush(target: Agent): boolean {
-		if (target.meta.subagentPull) return false;
-		return (
-			!!this.sessions.extensionFor(target.id) ||
-			((!isLocalSubagentId(target.id) || target.meta.subagentNative === "1") &&
-				!!pushFor(target))
-		);
+		return this.registry.reachOf(target) === "push";
 	}
 
 	/** Pushes what arrived while the session had no pulsar connection. */
 	async flushQueued(agent: Agent, maxAttempts?: number) {
 		for (const msg of this.store.unread(agent.id)) {
-			if (msg.priority === "fyi") continue;
+			if (
+				msg.priority === "fyi" ||
+				(this.sessions.wakeFor(agent.id) &&
+					this.store.receipt(msg.id, agent.id)?.state !== "queued")
+			)
+				continue;
 			const sender = this.registry.senderOf(msg);
 			// A redelivery that waited in the inbox keeps its attempt number.
 			const attempt = this.store.receipt(msg.id, agent.id)?.attempt ?? 1;

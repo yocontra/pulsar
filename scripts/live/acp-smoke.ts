@@ -1,10 +1,11 @@
 // Run from the terminal signed in to the provider. Use an isolated Pulsar
 // daemon and workspace while leaving the vendor's normal login available.
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { ACP_PROVIDERS } from "../../src/harnesses/acp-catalog.ts";
 
 const provider = ACP_PROVIDERS.find((p) => p.id === process.argv[2]);
@@ -36,6 +37,8 @@ const timeout = setTimeout(() => child.kill("SIGTERM"), 90_000);
 const token = "PULSAR_ACP_OK";
 let ready = false;
 let received = false;
+let send: Promise<void> | undefined;
+let delivery = "";
 let diagnostics = "";
 let output = "";
 try {
@@ -44,7 +47,29 @@ try {
 		if (!ready && /^ACP session .+$/m.test(diagnostics)) {
 			ready = true;
 			if (sessionOnly) child.kill("SIGTERM");
-			else child.stdin.write(`Reply with exactly ${token}. Use no tools.\n`);
+			else {
+				// This daemon contains only the smoke session. Use the operator's
+				// normal delivery path to wake it without writing to its terminal.
+				send = promisify(execFile)(
+					process.execPath,
+					[
+						cli,
+						"send",
+						`harness=${provider.id}`,
+						`Reply with exactly ${token}. Use no tools.`,
+					],
+					{ env, cwd, timeout: 15_000 },
+				).then(
+					({ stdout }) => {
+						delivery = stdout.trim();
+						if (!/sent via extension/.test(delivery)) child.kill("SIGTERM");
+					},
+					(error) => {
+						delivery = error.message;
+						child.kill("SIGTERM");
+					},
+				);
+			}
 		}
 	});
 	child.stdout.setEncoding("utf8").on("data", (chunk) => {
@@ -55,14 +80,18 @@ try {
 		}
 	});
 	await ended;
-	if (!ready || (!sessionOnly && !received))
+	await send;
+	if (
+		!ready ||
+		(!sessionOnly && (!received || !/sent via extension/.test(delivery)))
+	)
 		throw new Error(
-			`${provider.label} did not complete the smoke test. ${diagnostics.slice(-500)}`,
+			`${provider.label} did not complete the smoke test. ${delivery} ${diagnostics.slice(-500)}`,
 		);
 	console.log(
 		sessionOnly
 			? `${provider.label}: managed session opened`
-			: `${provider.label}: managed session opened and returned ${token}`,
+			: `${provider.label}: idle managed session woke and returned ${token}`,
 	);
 } finally {
 	clearTimeout(timeout);

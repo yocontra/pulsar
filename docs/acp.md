@@ -16,7 +16,7 @@ Use `pulsar acp <provider> --resume <session-id>` when the provider supports reo
 
 When an ACP agent or adapter reports its context window or a cumulative amount in US dollars, the session header shows those values. The cost label identifies the amount reported through ACP. An invoice comes from the provider. The Usage page groups token records from supported session logs by the time of each response. ACP context counters and cumulative session cost stay in the session header.
 
-To check a local installation from this checkout, use `bun scripts/live/acp-smoke.ts <provider> --session-only`. Omit `--session-only` to send a short prompt and verify the reply.
+To check a local installation from this checkout, use `bun scripts/live/acp-smoke.ts <provider> --session-only`. Omit `--session-only` to send a normal Pulsar message to the idle session and verify its reply.
 
 ## Provider commands
 

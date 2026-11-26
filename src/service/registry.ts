@@ -681,7 +681,13 @@ export class Registry {
 	}
 
 	reachOf(agent: Agent): Agent["reach"] {
-		if (this.sessions.extensionFor(agent.id)) return "push";
+		if (this.sessions.extensionFor(agent.id) || this.sessions.wakeFor(agent.id))
+			return "push";
+		if (
+			agent.meta.subagentPull ||
+			(isLocalSubagentId(agent.id) && agent.meta.subagentNative !== "1")
+		)
+			return "pull";
 		return pushFor(agent) ? "push" : "pull";
 	}
 
@@ -888,6 +894,10 @@ export class Registry {
 	retireSession(old: Agent, current: Agent) {
 		if (old.id === current.id) return;
 		for (const c of this.sessions.forAgent(old.id)) {
+			if (this.sessions.role(c) === "wake") {
+				c.close?.("The native conversation changed.");
+				continue;
+			}
 			c.principal = { kind: "agent", agentId: current.id };
 			this.sessions.bind(c);
 		}
@@ -1490,12 +1500,12 @@ export class Registry {
 
 	/** One MCP connection owns a session id; a second claimant is refused. */
 	checkClaim(caller: Caller, reg: Registration) {
-		if (reg.role !== "mcp" || !reg.sessionId) return;
+		if ((reg.role !== "mcp" && reg.role !== "wake") || !reg.sessionId) return;
 		const id = this.agentId(reg.harness, reg.sessionId, reg.pid);
 		if (
 			this.sessions
 				.forAgent(id)
-				.some((c) => c !== caller && this.sessions.role(c) === "mcp")
+				.some((c) => c !== caller && this.sessions.role(c) === reg.role)
 		) {
 			throw new RpcError(
 				"session_claimed",
@@ -1521,7 +1531,14 @@ export class Registry {
 				this.markGone(agent);
 			agent.registered = false;
 		}
+		const previousReach = agent.reach;
 		agent.reach = this.reachOf(agent);
+		if (
+			agent.reach !== previousReach &&
+			agent.status !== "gone" &&
+			!this.closed
+		)
+			this.events.emit("agent", { action: "update", agent: toPublic(agent) });
 	}
 
 	setIdentity(me: Agent, p: Record<string, unknown>) {

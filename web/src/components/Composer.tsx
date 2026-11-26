@@ -1,5 +1,6 @@
 import { ArrowUpIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { nativeWakeCommand } from "../../../src/harnesses/catalog.ts";
 import { ApiError, api, ProveCancelled } from "../api/client.ts";
 import type {
 	AgentRow,
@@ -80,14 +81,22 @@ export function targetRequest(t: Target): Pick<SendRequest, "to" | "ids"> {
 	return { to: t.selector };
 }
 
+export const PRIORITY_HINT: Record<Priority, string> = {
+	urgent:
+		"Requests mid-turn delivery where supported. Other sessions queue the message.",
+	normal:
+		"Queues for the next turn. Wakes an idle session if it supports push.",
+	fyi: "Waits in the inbox without waking the session.",
+};
+
 const PRIORITIES: { value: Priority; label: string; hint: string }[] = [
-	{ value: "urgent", label: "Interrupt now", hint: "Lands mid-turn" },
+	{ value: "urgent", label: "Urgent", hint: PRIORITY_HINT.urgent },
 	{
 		value: "normal",
 		label: "Next turn",
-		hint: "Arrives on the next turn; wakes an idle agent",
+		hint: PRIORITY_HINT.normal,
 	},
-	{ value: "fyi", label: "Don't wake", hint: "Waits in the inbox" },
+	{ value: "fyi", label: "Don't wake", hint: PRIORITY_HINT.fyi },
 ];
 
 function PriorityPickerImpl({
@@ -198,6 +207,28 @@ interface ComposerProps {
 	 * carries Delivered / Read / Replied, and the composer only failures.
 	 */
 	bubbleReceipts?: boolean;
+}
+
+function deliveryNote(agent: AgentRow, priority: Priority, viaParent: boolean) {
+	const wake = wakeFor(agent, priority);
+	if (wake === "wakes") return null;
+	if (wake === "queued")
+		return { wake, text: `Waits until ${agent.machine} is online` };
+	const command = nativeWakeCommand(agent.harness);
+	if (
+		wake === "inbox-only" &&
+		priority !== "fyi" &&
+		command &&
+		agent.capabilities?.surface === "attached" &&
+		!viaParent &&
+		!agent.id.includes("/sub:")
+	) {
+		return {
+			wake,
+			text: `Inbox only. To enable wake, ask this agent in its terminal to run ${command}.`,
+		};
+	}
+	return { wake, text: `Won't wake it (${WAKE_LABEL[wake]})` };
 }
 
 function ComposerImpl({
@@ -430,8 +461,10 @@ function ComposerImpl({
 	};
 
 	const tier = dry ? confirmTier(dry, drift, everyone) : null;
-	const agentWake =
-		target.kind === "agent" ? wakeFor(target.agent, priority) : null;
+	const wakeNote =
+		target.kind === "agent"
+			? deliveryNote(target.agent, priority, viaParent)
+			: null;
 	const status: ChatStatus =
 		phase === "checking" || phase === "sending"
 			? "submitted"
@@ -511,12 +544,8 @@ function ComposerImpl({
 
 	return (
 		<div className={`composer${compact ? " m-composer" : ""}`}>
-			{compact && agentWake && agentWake !== "wakes" && (
-				<p className={`m-wake-note w-${agentWake}`}>
-					{agentWake === "queued"
-						? `${target.kind === "agent" ? target.agent.machine : ""} is offline: this waits until it's back`
-						: `Won't wake it: ${WAKE_LABEL[agentWake]}`}
-				</p>
+			{compact && wakeNote && (
+				<p className={`m-wake-note w-${wakeNote.wake}`}>{wakeNote.text}</p>
 			)}
 			{form}
 			{!compact && showTo && (
@@ -527,11 +556,9 @@ function ComposerImpl({
 							? `${target.agent.name} on ${target.agent.machine}`
 							: target.label}
 					</span>
-					{agentWake && agentWake !== "wakes" && (
-						<span className={`wake-note w-${agentWake}`}>
-							{agentWake === "queued"
-								? `Waits: ${target.kind === "agent" ? target.agent.machine : ""} is offline`
-								: `Won't wake it (${WAKE_LABEL[agentWake]})`}
+					{wakeNote && (
+						<span className={`wake-note w-${wakeNote.wake}`}>
+							{wakeNote.text}
 						</span>
 					)}
 				</div>

@@ -1,6 +1,6 @@
 /**
  * The one-line head of a Pulsar tool call's card: "Sent to [reviewer]
- * Interrupt now · delivered to 1", "Replied to [builder]", "Waited for a
+ * Urgent · delivered to 1", "Replied to [builder]", "Waited for a
  * message · timed out after 5 min". Plain chips only: the head is the
  * card's toggle button, so links live in the expanded body (PulsarBody).
  */

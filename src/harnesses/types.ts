@@ -329,6 +329,12 @@ export interface HarnessDriver {
 		direct?: boolean;
 	};
 
+	/** Prove a native wake relay names the session its host process currently owns. */
+	verifyWakeHost?(
+		pid: number,
+		sessionId: string,
+	): Promise<{ cwd: string | null } | null>;
+
 	/** Pushes text into a running session from outside it. */
 	push?: {
 		/** True when this driver can reach the agent. False for other harnesses. */

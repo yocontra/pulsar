@@ -1,0 +1,263 @@
+import { fork } from "node:child_process";
+import { access } from "node:fs/promises";
+import { dirname, isAbsolute, join } from "node:path";
+import { DaemonClient } from "../client.ts";
+import { exec } from "../exec.ts";
+import { pidAlive, processStart, processTable } from "../processes.ts";
+import { PROTOCOL_VERSION, type Registration } from "../types.ts";
+import {
+	ANTIGRAVITY_SESSION_ID,
+	antigravityConversations,
+	antigravityProcess,
+	nativeAntigravityProcess,
+} from "./antigravity-ident.ts";
+import { findHarnessAncestor } from "./ident.ts";
+
+type Binding = { pid: number; birth: string; sessionId: string; cwd: string };
+
+async function binding(): Promise<Binding> {
+	if (!process.env.ANTIGRAVITY_LS_ADDRESS)
+		throw new Error(
+			"Run pulsar antigravity-bind from the native Antigravity agent’s command tool.",
+		);
+	const table = await processTable();
+	const ancestor = await findHarnessAncestor(process.pid, table);
+	const supplied = process.env.ANTIGRAVITY_CONVERSATION_ID;
+	const hosts = [...table.values()].filter(
+		(p) =>
+			nativeAntigravityProcess(p.args) &&
+			(ancestor?.harness === "antigravity"
+				? p.pid === ancestor.pid
+				: supplied && ANTIGRAVITY_SESSION_ID.test(supplied)),
+	);
+	const matches = (
+		await Promise.all(
+			hosts.map(async ({ pid }) => {
+				const [{ sessionId, cwd }, birth] = await Promise.all([
+					antigravityProcess(pid),
+					processStart(pid),
+				]);
+				return sessionId &&
+					cwd &&
+					birth &&
+					(!supplied || sessionId === supplied)
+					? { pid, birth, sessionId, cwd }
+					: null;
+			}),
+		)
+	).filter((b) => b !== null);
+	if (matches.length !== 1)
+		throw new Error(
+			"Could not identify the native Antigravity conversation that ran this command.",
+		);
+	return matches[0]!;
+}
+
+/** The host supplies agentapi and its credentials. They stay in this process tree. */
+async function antigravityAgentApi(args: string[]) {
+	const binary = process.env.ANTIGRAVITY_AGENTAPI_EXE;
+	const native = binary && isAbsolute(binary);
+	const installed = join(
+		dirname(antigravityConversations()),
+		"bin",
+		"agentapi",
+	);
+	const command = native
+		? binary
+		: await access(installed).then(
+				() => installed,
+				() => "agentapi",
+			);
+	const result = await exec(command, native ? ["agentapi", ...args] : args, {
+		timeoutMs: 8000,
+		maxBuffer: 512 * 1024,
+		lane: "user",
+	});
+	if (!result.ok) return false;
+	try {
+		const reply = JSON.parse(result.stdout);
+		if (reply?.error) return false;
+		if (args[0] === "send-message")
+			return reply?.response?.sendMessage?.recipientId === args[1];
+		const metadata = reply?.response?.conversationMetadata?.metadata;
+		return (
+			!!metadata &&
+			typeof metadata === "object" &&
+			!Array.isArray(metadata) &&
+			Object.keys(metadata).length > 0 &&
+			(metadata.conversationId === undefined ||
+				metadata.conversationId === args[1])
+		);
+	} catch {
+		return false;
+	}
+}
+
+/** Register only after the vendor client can read this exact conversation. */
+async function connectAntigravityRelay(
+	client: DaemonClient,
+	b: Binding,
+	current: () => Promise<boolean>,
+) {
+	if (
+		!(await current()) ||
+		!(await antigravityAgentApi(["get-conversation-metadata", b.sessionId]))
+	)
+		throw new Error("Antigravity could not verify this native conversation.");
+	await client.connect(true);
+	try {
+		const reg: Registration = {
+			harness: "antigravity",
+			role: "wake",
+			pid: b.pid,
+			sessionId: b.sessionId,
+			cwd: b.cwd,
+			project: null,
+			branch: null,
+			tags: [],
+		};
+		const reply = await client.call<{ nativeWake?: boolean }>("hello", {
+			protocol: PROTOCOL_VERSION,
+			registration: reg,
+		});
+		if (!reply.nativeWake)
+			throw new Error("Update the Pulsar daemon to enable native wake.");
+	} catch (error) {
+		client.close();
+		throw error;
+	}
+}
+
+function handleAntigravityWake(
+	client: DaemonClient,
+	sessionId: string,
+	current: () => Promise<boolean>,
+) {
+	// A daemon reconnect can replay a queued request whose vendor acknowledgement
+	// arrived after the socket closed. Keep successful attempts in this relay.
+	const attempts = new Map<string, Promise<boolean>>();
+	client.on("wake", async (event) => {
+		const req = event as {
+			requestId: string;
+			messageId: string;
+			attempt: number;
+			sessionId: string;
+			text: string;
+		};
+		let ok = false;
+		if (req.sessionId === sessionId && typeof req.text === "string") {
+			const key = JSON.stringify([req.messageId, req.attempt]);
+			let send = attempts.get(key);
+			if (!send) {
+				send = current()
+					.then(
+						(valid) =>
+							valid &&
+							antigravityAgentApi(["send-message", sessionId, req.text]),
+					)
+					.catch(() => false);
+				attempts.set(key, send);
+			}
+			ok = await send;
+			if (!ok) attempts.delete(key);
+			if (attempts.size > 1000) attempts.delete(attempts.keys().next().value!);
+		}
+		await client
+			.call("wake_result", { requestId: req.requestId, ok })
+			.catch(() => {});
+	});
+}
+
+async function serve(b: Binding) {
+	const client = new DaemonClient();
+	const state = async () => {
+		if (!pidAlive(b.pid)) return "gone";
+		const birth = await processStart(b.pid);
+		if (!birth) return "unavailable";
+		if (birth !== b.birth) return "gone";
+		const { sessionId } = await antigravityProcess(b.pid);
+		if (!sessionId) return "unavailable";
+		return sessionId === b.sessionId ? "active" : "gone";
+	};
+	const current = async () => (await state()) === "active";
+	handleAntigravityWake(client, b.sessionId, current);
+	const connect = () => connectAntigravityRelay(client, b, current);
+	await connect();
+	process.send?.({ ready: true });
+	process.disconnect?.();
+	// The relay lives exactly as long as this conversation and reconnects after daemon upgrades.
+	let checking = false;
+	setInterval(async () => {
+		if (checking) return;
+		checking = true;
+		try {
+			const status = await state();
+			if (status === "gone") process.exit(0);
+			if (status === "unavailable") client.close();
+			else if (!client.connected) await connect();
+		} catch (error) {
+			if ((error as { code?: string }).code === "session_claimed")
+				process.exit(0);
+		} finally {
+			checking = false;
+		}
+	}, 10_000);
+}
+
+export async function antigravityBind(args: string[]) {
+	if (args.length === 1 && args[0] === "--worker" && process.send) {
+		const b = await new Promise<Binding>((resolve) =>
+			process.once("message", resolve),
+		);
+		try {
+			await serve(b);
+		} catch (error) {
+			process.send?.({
+				ready: false,
+				detail: (error as Error).message,
+				already: (error as { code?: string }).code === "session_claimed",
+			});
+			process.disconnect?.();
+		}
+		return;
+	}
+	if (args.length) throw new Error("Usage: pulsar antigravity-bind");
+	const b = await binding();
+	const worker = fork(process.argv[1]!, ["antigravity-bind", "--worker"], {
+		detached: true,
+		stdio: ["ignore", "ignore", "ignore", "ipc"],
+		execArgv: [],
+	});
+	await new Promise<void>((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			worker.kill();
+			reject(new Error("The native Antigravity wake relay timed out."));
+		}, 20_000);
+		worker.once("error", (error) => {
+			clearTimeout(timeout);
+			reject(error);
+		});
+		worker.once("exit", () => {
+			clearTimeout(timeout);
+			reject(new Error("The native Antigravity wake relay exited."));
+		});
+		worker.once("message", (response) => {
+			clearTimeout(timeout);
+			const result = response as {
+				ready: boolean;
+				already?: boolean;
+				detail?: string;
+			};
+			if (result.ready || result.already) resolve();
+			else
+				reject(
+					new Error(
+						result.detail ?? "Antigravity could not bind this session.",
+					),
+				);
+		});
+		worker.send(b);
+	});
+	worker.unref();
+	console.log("Pulsar wake is enabled for this Antigravity conversation.");
+}

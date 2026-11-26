@@ -33,9 +33,11 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 | Codex | `codex queue --resume`: queued on the thread, then run as a turn | Yes, from turn events in the session log |
 | OpenCode | OpenCode's local server, into the session | Yes |
 | pi, omp | The Pulsar extension, inside the session | Yes |
-| Cursor, Gemini CLI, others | Pull only: messages wait in the inbox, and every Pulsar tool result says how many are unread | No |
+| Native Antigravity CLI | Run `pulsar antigravity-bind` from the agent’s command tool once per conversation. A normal message can then wake that conversation. | Yes, from the native session |
+| Managed ACP providers, including Antigravity | A normal message starts a turn on the connected session. FYI stays in the inbox. | Yes, from the bridge |
+| Other native sessions with only an MCP connection | Messages wait in the inbox. Pulsar tool results report unread messages. | Depends on the native driver |
 
-A native Antigravity CLI session can expose its user messages and assistant replies from its local conversation database. Pulsar matches the database to the running `agy` process. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
+To connect an existing Antigravity conversation, ask the agent in its terminal: “Run `pulsar antigravity-bind` so I can wake this conversation from Pulsar.” The command uses the connection Antigravity supplies to its own command tool. Check for `push` in `pulsar list`. Pulsar reads the native transcript from the conversation database. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
 
 When an omp agent has no activity summary, Pulsar uses the latest action from its session log, such as “Ran a command.” The list omits command arguments and message content.
 
@@ -44,7 +46,7 @@ Limits:
 - **Claude Code** holds a peer message for approval when the session skips permission prompts. `pulsar setup` asks to set `crossSessionInbound: "accept"` in `~/.claude/settings.json` to deliver these. When the session shows a dialog in the terminal, the app shows the agent as needing you.
 - **Codex** approvals and questions can be answered from the app for sessions that run in Codex's app-server (the default). A session started with `codex --no-daemon` shows them read-only. "Allow for session" is not offered. Pulsar reads turn start, completion and interruption from the Codex session log. An idle wait needs an identifiable thread and a readable log. A Codex TUI that is not attached to Codex's app-server may not show a message until you resume it. Setup sets `default_tools_approval_mode = "approve"` for Pulsar's tools and `tool_timeout_sec = 1900`, so `ask` and `wait` can block.
 - **OpenCode**: an idle TUI with no running session shows its folder's most recent session as "Idle · last session". Pulsar does not push into it until that session loads Pulsar's tools. If the daemon finds an `opencode` older than 2.0 first on its PATH, `pulsar doctor` says so.
-- **pi, omp**: the only harnesses where a receipt reaches "in its conversation".
+- **pi, omp and managed ACP sessions** confirm when a message reaches the conversation. Native Codex and managed ACP sessions queue urgent messages for the next turn.
 
 See [delivery.md](delivery.md) for receipts and redelivery.
 

@@ -46,9 +46,7 @@ export function pulsarCardsSuite(platform: "desktop" | "phone") {
 			const head = send.locator(".ds-tool-head");
 			await expect(head).toContainText("Sent to");
 			await expect(head.locator(".ds-pulsar-chip")).toHaveText("reviewer");
-			await expect(head.locator(".ds-pulsar-label")).toHaveText(
-				"Interrupt now",
-			);
+			await expect(head.locator(".ds-pulsar-label")).toHaveText("Urgent");
 			// The head stays one line inside the card.
 			const fits = await head.evaluate(
 				(el) => el.scrollWidth <= el.clientWidth + 1,

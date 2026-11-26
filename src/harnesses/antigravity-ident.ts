@@ -111,7 +111,7 @@ export function nativeAntigravityProcess(args: string) {
 	const first = args.trim().split(/\s+/, 2)[1];
 	return (
 		!first ||
-		!/^(?:acp|agents?|changelog|help|install|mcp|mic-serve|models|plugins?|remote-control|update|--help|-h|--version)$/.test(
+		!/^(?:acp|agentapi|agents?|changelog|help|install|mcp|mic-serve|models|plugins?|remote-control|update|--help|-h|--version)$/.test(
 			first,
 		)
 	);

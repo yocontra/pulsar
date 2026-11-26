@@ -17,7 +17,7 @@ The app and the CLI show where each message is:
 | waiting | In the queue, or in the agent's inbox |
 | held | The recipient's inbound policy holds it (`set_identity`) |
 | handed over | Given to the harness. The harness may still hold it |
-| in its conversation | The session confirmed it has the message (pi and omp only) |
+| in its conversation | The session confirmed it has the message. The pi and omp extensions and the managed ACP bridge send this confirmation. |
 | read | Read from the inbox, or taken by a `wait` |
 | working on it | The agent answered `respond working` |
 | done | The agent answered `respond done` |
@@ -29,7 +29,7 @@ The app and the CLI show where each message is:
 | gave up | Pulsar delivered it 5 times with no answer |
 | withdrawn | The operator cancelled it in the app before it reached the session |
 
-For Claude Code, Codex and OpenCode, Pulsar cannot see inside the session, so a receipt stays at "handed over" until the agent reads, works on or answers the message.
+For native Claude Code, Codex and OpenCode delivery, the receipt stays at "handed over" until the agent reads, works on or answers the message.
 
 ## When Pulsar delivers again
 

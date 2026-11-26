@@ -80,6 +80,10 @@ export class Sessions {
 		return undefined;
 	}
 
+	wakeFor(agentId: string): Caller | undefined {
+		return this.forAgent(agentId).find((c) => this.role(c) === "wake");
+	}
+
 	/**
 	 * An agent's old extension connection, replaced by a newer one from the
 	 * same process: it stays open (a 1.x client may still read from it) as an

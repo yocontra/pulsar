@@ -77,6 +77,7 @@ describe("authorize matrix", () => {
 		"resume_key",
 		"harness_name",
 		"interrupt_result",
+		"wake_result",
 		"control_result",
 	]);
 	// What the tailnet user may do: read the pool, send, and approve with a passkey.

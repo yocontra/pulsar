@@ -12,6 +12,7 @@ export interface HarnessManifest {
 	label: string;
 	bin: string;
 	launch?: true;
+	wakeCommand?: string;
 	usage?: "claude" | "codex" | "pi" | "omp";
 	mcp?: McpConfig;
 }
@@ -54,6 +55,7 @@ const builtins = [
 		id: "antigravity",
 		label: "Google Antigravity",
 		bin: "agy",
+		wakeCommand: "pulsar antigravity-bind",
 		mcp: {
 			directory: ".gemini/antigravity-cli",
 			file: ".gemini/config/mcp_config.json",
@@ -82,3 +84,9 @@ export type Launchable = (typeof launchable)[number];
 export const usageHarnesses = builtins.flatMap((h) =>
 	"usage" in h ? [h.usage] : [],
 );
+
+/** Command the agent can run inside its native session to accept wake requests. */
+export function nativeWakeCommand(harness: string | undefined) {
+	const manifest = builtins.find((h) => h.id === harness);
+	return manifest && "wakeCommand" in manifest ? manifest.wakeCommand : null;
+}

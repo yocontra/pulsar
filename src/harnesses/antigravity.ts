@@ -130,6 +130,14 @@ export function antigravitySource(path: string, sessionId: string) {
 
 export const antigravity: HarnessDriver = {
 	...antigravityIdent,
+	async verifyWakeHost(pid, sessionId) {
+		if (!ANTIGRAVITY_SESSION_ID.test(sessionId)) return null;
+		const table = await freshProcessSnapshot(0, "user");
+		const host = table?.get(pid);
+		if (!host || !nativeAntigravityProcess(host.args)) return null;
+		const actual = await antigravityProcess(pid);
+		return actual.sessionId === sessionId ? { cwd: actual.cwd } : null;
+	},
 	scan: {
 		intervalMs: 20_000,
 		tracksPid: true,

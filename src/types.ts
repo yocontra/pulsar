@@ -218,8 +218,8 @@ export interface Registration {
 	model?: string | null;
 	/** Adapter hints, e.g. claude socket path. */
 	meta?: Record<string, string>;
-	/** "mcp" | "extension" | "cli". An extension can push into its own session. */
-	role: "mcp" | "extension" | "cli";
+	/** An extension controls its session. A wake relay only delivers prompts. */
+	role: "mcp" | "extension" | "cli" | "wake";
 	/**
 	 * What the client can do. `acks`: its agent has the `ack`/`done`/`nack`
 	 * tools, so an unacked tracked message may be redelivered on a timer.

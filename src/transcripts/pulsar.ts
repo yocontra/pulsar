@@ -126,7 +126,7 @@ export function recipients(to: string): Recipient[] {
 export function priorityLabel(p: string | undefined): string | undefined {
 	switch (p) {
 		case "urgent":
-			return "Interrupt now";
+			return "Urgent";
 		case "normal":
 			return "Next turn";
 		case "fyi":

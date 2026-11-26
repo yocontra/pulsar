@@ -300,7 +300,7 @@ export function registerPulsarTools(
 
 	const priority = $.oneOf(
 		["urgent", "normal", "fyi"],
-		"urgent: lands mid-turn. normal (default): next turn, wakes an idle agent. fyi: no wake, waits in the inbox.",
+		"urgent requests mid-turn delivery where supported. Native Codex and managed ACP sessions queue it. normal (default) queues for the next turn and can wake idle agents with push support. fyi waits in the inbox without waking the agent.",
 	);
 
 	tool<{ selector?: string; include_gone?: boolean; question?: string }>(

@@ -20,6 +20,7 @@ Usage:
                                   asks whether to turn on the agent mesh (--mesh: turn it on without asking)
   pulsar acp --list                 list installed ACP executables and catalog entries
   pulsar acp <provider> [--resume <session-id>]   start or resume a managed ACP session
+  pulsar antigravity-bind          enable wake from inside a native Antigravity conversation
   pulsar hosted <provider> [list|view <id>]        read hosted tasks through this machine
   pulsar ls [selector]            list live agents (selector: name, project=x, harness=codex, tag, *)
   pulsar send <to> <message...>   send as "operator" (to: name, selector, or '*')
@@ -150,6 +151,13 @@ async function main(argv: string[]) {
 			} finally {
 				client.close();
 			}
+			return;
+		}
+		case "antigravity-bind": {
+			const { antigravityBind } = await import(
+				"./harnesses/antigravity-bind.ts"
+			);
+			await antigravityBind(rest);
 			return;
 		}
 		case "mcp": {

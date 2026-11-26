@@ -89,7 +89,7 @@ describe("Pulsar cards in the gallery", () => {
 
 	test("send: recipients, priority, result summary", () => {
 		expect(head(pick("mcp__pulsar__send"))).toBe(
-			"Sent to reviewer Interrupt now reply from reviewer",
+			"Sent to reviewer Urgent reply from reviewer",
 		);
 		expect(head(pick("mcp__pulsar__send", 1))).toBe(
 			"Sent to everyone on demo Don't wake delivered to 2 1 queued",

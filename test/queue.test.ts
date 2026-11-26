@@ -132,6 +132,38 @@ describe("what the queue lists", () => {
 		}
 	});
 
+	test("urgent queued turns remain visible until the session accepts them", async () => {
+		const t = setup();
+		try {
+			for (const via of ["extension", "codex-queue"]) {
+				const ext = t.connect("extension", {
+					sessionId: via,
+					meta: via === "extension" ? { acp: "1" } : {},
+				});
+				const agent = t.service.registry.get(ext.agent.id)!;
+				t.service.registry.setStatus(agent, "busy");
+				const message = await t.userSend(
+					agent.id,
+					"while busy",
+					USER,
+					"urgent",
+				);
+				// Native Codex confirms queue submission with its own transport name.
+				if (via === "codex-queue") {
+					const receipt = t.store.receipt(message.id, agent.id)!;
+					t.store.setReceipt({ ...receipt, via });
+				}
+				expect(await t.list(agent.id)).toMatchObject([
+					{ messageId: message.id, state: "idle", canPromote: false },
+				]);
+				t.service.mailbox.ack(agent, message.id, via);
+				expect(await t.list(agent.id)).toEqual([]);
+			}
+		} finally {
+			t.done();
+		}
+	});
+
 	test("held messages are listed as held; another agent's message is not editable", async () => {
 		const t = setup();
 		try {
@@ -242,7 +274,9 @@ describe("send now", () => {
 		const t = setup();
 		try {
 			const ext = t.connect("extension");
-			t.service.registry.get(ext.agent.id)!.inbound = "hold";
+			const agent = t.service.registry.get(ext.agent.id)!;
+			t.service.registry.setStatus(agent, "busy");
+			agent.inbound = "hold";
 			const m = await t.userSend(ext.agent.id, "this one matters");
 			expect(ext.pushes).toHaveLength(0);
 			const r = await t.service.queue.act(USER, ext.agent.id, m.id, "promote");
@@ -264,6 +298,22 @@ describe("send now", () => {
 			expect(item).toMatchObject({ state: "next-turn", canPromote: true });
 			await t.service.queue.act(USER, ext.agent.id, m.id, "promote");
 			expect(ext.pushes).toHaveLength(1);
+		} finally {
+			t.done();
+		}
+	});
+
+	test("a promoted ACP message shows its urgent priority while the session is busy", async () => {
+		const t = setup();
+		try {
+			const ext = t.connect("extension", { meta: { acp: "1" } });
+			const agent = t.service.registry.get(ext.agent.id)!;
+			t.service.registry.setStatus(agent, "busy");
+			const m = await t.userSend(agent.id, "queued", USER, "fyi");
+			await t.service.queue.act(USER, agent.id, m.id, "promote");
+			expect(await t.list(agent.id)).toMatchObject([
+				{ messageId: m.id, state: "idle", priority: "urgent" },
+			]);
 		} finally {
 			t.done();
 		}

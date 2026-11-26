@@ -112,6 +112,40 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 	try {
 		bridge = launch();
 		await session();
+		await until(async () => (await current())?.status === "idle");
+		const sendIdle = (body: string, priority: "normal" | "fyi") =>
+			op.call<{
+				message: { id: string };
+				receipts: { state: string; via: string | null }[];
+			}>("send", { to: agentId, body, priority });
+		const fyi = await sendIdle("fixture-fyi-idle", "fyi");
+		expect(fyi.receipts).toMatchObject([{ state: "queued", via: null }]);
+		// Even a push dispatched by an older daemon must not turn an FYI into a prompt.
+		daemon.service.sessions.extensionFor(agentId)?.emit("push", {
+			message: { id: fyi.message.id, priority: "fyi" },
+			text: "fixture-fyi-idle",
+		});
+		const normal = await sendIdle("fixture-idle-wake", "normal");
+		expect(normal.receipts).toMatchObject([
+			{ state: "sent", via: "extension" },
+		]);
+		await until(
+			() =>
+				daemon.store.receipt(normal.message.id, agentId)?.state === "delivered",
+		);
+		const idleTranscript = await daemon.service.transcripts.page(agentId, null);
+		expect(
+			idleTranscript.events.some((event) =>
+				event.text.includes("fixture-idle-wake"),
+			),
+		).toBe(true);
+		expect(
+			idleTranscript.events.some((event) =>
+				event.text.includes("fixture-fyi-idle"),
+			),
+		).toBe(false);
+		expect(daemon.store.receipt(fyi.message.id, agentId)?.state).toBe("queued");
+		await until(async () => (await current())?.status === "idle");
 		const caps = {
 			surface: "managed-acp",
 			modes: true,
