@@ -80,7 +80,7 @@ export class Daemon {
 	/** Failed tries since the app was last served. */
 	private attempt = 0;
 	private app: AppStatus = { state: "off" };
-	private stopped = false;
+	private stopping: Promise<void> | null = null;
 	/** One daemon per socket (see DaemonLock). */
 	private readonly lock: DaemonLock;
 	private watch: ReturnType<typeof setInterval> | null = null;
@@ -169,12 +169,12 @@ export class Daemon {
 		const ino = await inodeOf(this.transport.path);
 		let checking = false;
 		this.watch = setInterval(async () => {
-			if (this.stopped || checking) return;
+			if (this.stopping || checking) return;
 			checking = true;
 			try {
 				const owns = await this.lock.owns();
 				if (owns && (await inodeOf(this.transport.path)) === ino) return;
-				if (this.stopped) return;
+				if (this.stopping) return;
 				daemonLog(
 					`daemon ${process.pid}: lost ${owns ? "its socket" : "its lock"} to another daemon; stopping`,
 				);
@@ -202,7 +202,7 @@ export class Daemon {
 	 * Tailscale logged out, the daemon often starts before Tailscale is up.
 	 */
 	private serveApp(): void {
-		if (this.stopped || this.remote.mode === "off") return;
+		if (this.stopping || this.remote.mode === "off") return;
 		if (this.http || this.httpStarting) return;
 		if (this.retryTimer) clearTimeout(this.retryTimer);
 		this.retryTimer = null;
@@ -219,7 +219,7 @@ export class Daemon {
 			const http = await this.startRemoteFn(this.service, cfg, {
 				onAddressesChanged: (ips) => void this.listenAgain(ips),
 			});
-			if (this.stopped) {
+			if (this.stopping) {
 				await http.close();
 				return;
 			}
@@ -233,11 +233,11 @@ export class Daemon {
 				hosts: http.hosts,
 			};
 		} catch (e) {
-			if (this.stopped) return;
+			if (this.stopping) return;
 			const delay = this.retryMs(this.attempt);
 			const error = (e as Error).message;
 			const { TailscaleNotReady } = await import("./http/start.ts");
-			if (this.stopped) return;
+			if (this.stopping) return;
 			const since = this.app.state === "retrying" ? this.app.since : Date.now();
 			this.attempt++;
 			this.app = {
@@ -263,7 +263,7 @@ export class Daemon {
 		// Off the caller's stack (the pool's status poll, which closing stops).
 		await Promise.resolve();
 		const http = this.http;
-		if (this.stopped || !http || this.httpStarting) return;
+		if (this.stopping || !http || this.httpStarting) return;
 		daemonLog(
 			`app: Tailscale addresses changed (${http.hosts.join(", ")} to ${ips.join(", ")}); listening again`,
 		);
@@ -280,9 +280,12 @@ export class Daemon {
 	}
 
 	/** `orphaned`: another daemon owns the socket now; leave its files alone. */
-	async stop(opts: { orphaned?: boolean } = {}) {
-		if (this.stopped) return;
-		this.stopped = true;
+	stop(opts: { orphaned?: boolean } = {}): Promise<void> {
+		this.stopping ??= Promise.resolve().then(() => this.shutdown(opts));
+		return this.stopping;
+	}
+
+	private async shutdown(opts: { orphaned?: boolean }) {
 		if (this.watch) clearInterval(this.watch);
 		if (this.retryTimer) clearTimeout(this.retryTimer);
 		this.service.stop();

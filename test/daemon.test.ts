@@ -39,6 +39,40 @@ async function spawnAgent(over: Parameters<typeof registration>[0] = {}) {
 	return a;
 }
 
+describe("client connection lifecycle", () => {
+	test("a reconnect rejects old requests and simultaneous reconnects share one socket", async () => {
+		const { client } = await spawnAgent();
+		let closed = 0;
+		client.onClose(() => {
+			closed++;
+		});
+		const waiting = client
+			.call("wait", { timeoutSeconds: 30 }, 0)
+			.catch((e: Error) => e.message);
+		await roundTrip(client);
+
+		const first = client.connect(false);
+		expect(client.connect(false)).toBe(first);
+		await first;
+		await client.call("hello", { registration: { role: "cli" } });
+		await roundTrip(client);
+		expect(await waiting).toBe("daemon connection closed");
+		expect(closed).toBe(0);
+		client.close();
+		expect(client.connected).toBe(false);
+		await until(() => closed === 1 && daemon.service.sessions.size === 0);
+	});
+
+	test("closing during connect does not reopen the client", async () => {
+		const client = await operator();
+		clients.push(client);
+		const connecting = client.connect(false);
+		client.close();
+		await expect(connecting).rejects.toThrow("daemon connection closed");
+		expect(client.connected).toBe(false);
+	});
+});
+
 describe("presence (goal 1)", () => {
 	test("one list across harnesses", async () => {
 		await spawnAgent({ harness: "pi", project: "apparish" });

@@ -154,6 +154,31 @@ describe("serving the app when Tailscale is not up yet", () => {
 		expect(ts.open).toBe(1);
 	});
 
+	test("all shutdown callers wait for the in-flight app startup and close", async () => {
+		const ts = fakeTailscale();
+		ts.up = true;
+		const start = Promise.withResolvers<void>();
+		const { daemon, cleanup } = await startDaemon({
+			remote: { mode: "tailscale", port: 7337 },
+			startRemote: async (...args) => {
+				await start.promise;
+				return ts.startRemote(...args);
+			},
+		});
+		try {
+			const stopping = daemon.stop();
+			expect(daemon.stop()).toBe(stopping);
+			start.resolve();
+			await stopping;
+			expect(ts.tries).toBe(1);
+			expect(ts.open).toBe(0);
+		} finally {
+			start.resolve();
+			await daemon.stop();
+			cleanup();
+		}
+	});
+
 	test("a stopped daemon stops retrying", async () => {
 		const { daemon, ts } = await daemonWith(true);
 		await until(() => ts.tries >= 2);

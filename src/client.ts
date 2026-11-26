@@ -110,34 +110,58 @@ async function connectDaemon(autoStart = true): Promise<Socket> {
 /** A connection to the daemon with request/response and pushed events. */
 export class DaemonClient {
 	private socket: Socket | null = null;
+	private connecting: Promise<this> | null = null;
 	private nextId = 1;
 	private pending = new Map<number, Pending>();
 	private listeners = new Map<string, Set<(data: unknown) => void>>();
 	private closeHandlers = new Set<() => void>();
 
-	async connect(autoStart = true) {
-		const socket = await connectDaemon(autoStart);
-		// Never leak a connection: a reconnect closes the one it replaces
-		// (whose close then notifies nobody; this one is current).
+	connect(autoStart = true): Promise<this> {
+		if (this.connecting) return this.connecting;
+		const attempt = connectDaemon(autoStart)
+			.then((socket) => {
+				if (this.connecting !== attempt) {
+					socket.destroy();
+					throw new Error("daemon connection closed");
+				}
+				this.attach(socket);
+				return this;
+			})
+			.finally(() => {
+				if (this.connecting === attempt) this.connecting = null;
+			});
+		this.connecting = attempt;
+		return attempt;
+	}
+
+	private rejectPending() {
+		for (const p of this.pending.values())
+			p.reject(new Error("daemon connection closed"));
+		this.pending.clear();
+	}
+
+	private attach(socket: Socket) {
+		// Calls made on the replaced socket cannot receive a reply on this one.
+		this.rejectPending();
 		const old = this.socket;
 		this.socket = socket;
-		if (old && !old.destroyed) old.destroy();
+		old?.destroy();
 		readFrames(socket, (frame) => {
-			if (this.socket === socket) this.onFrame(frame);
+			if (this.socket === socket && !socket.writableEnded) this.onFrame(frame);
 		});
 		socket.on("close", () => {
-			if (this.socket !== socket && this.socket !== null) return;
-			for (const p of this.pending.values())
-				p.reject(new Error("daemon connection closed"));
-			this.pending.clear();
+			if (this.socket !== socket) return;
+			this.socket = null;
+			this.rejectPending();
 			for (const h of this.closeHandlers) h();
 		});
 		socket.on("error", () => {});
-		return this;
 	}
 
 	get connected() {
-		return !!this.socket && !this.socket.destroyed;
+		return (
+			!!this.socket && !this.socket.destroyed && !this.socket.writableEnded
+		);
 	}
 
 	private onFrame(frame: Frame) {
@@ -145,7 +169,7 @@ export class DaemonClient {
 			for (const fn of this.listeners.get(frame.event) ?? []) fn(frame.data);
 			return;
 		}
-		if (!("id" in frame)) return;
+		if ("method" in frame) return;
 		const p = this.pending.get(frame.id);
 		if (!p) return;
 		this.pending.delete(frame.id);
@@ -156,7 +180,7 @@ export class DaemonClient {
 
 	call<T>(method: string, params?: unknown, timeoutMs = 30_000): Promise<T> {
 		const socket = this.socket;
-		if (!socket || socket.destroyed)
+		if (!socket || socket.destroyed || socket.writableEnded)
 			return Promise.reject(new Error("not connected to the Pulsar daemon"));
 		const id = this.nextId++;
 		return new Promise<T>((resolve, reject) => {
@@ -181,7 +205,13 @@ export class DaemonClient {
 					reject(e);
 				},
 			});
-			writeFrame(socket, { id, method, params });
+			try {
+				writeFrame(socket, { id, method, params });
+			} catch (e) {
+				if (timer) clearTimeout(timer);
+				this.pending.delete(id);
+				reject(e);
+			}
 		});
 	}
 
@@ -199,7 +229,8 @@ export class DaemonClient {
 	}
 
 	close() {
+		this.connecting = null;
+		this.rejectPending();
 		this.socket?.end();
-		this.socket = null;
 	}
 }
