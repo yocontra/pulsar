@@ -17,22 +17,9 @@ export function stateDir(): string {
 	);
 }
 
-const made = new Map<string, Promise<void>>();
-
-/** Creates a private folder once per process (later calls share the first). */
-export function ensureDir(dir: string): Promise<void> {
-	let p = made.get(dir);
-	if (!p) {
-		p = mkdir(dir, { recursive: true, mode: 0o700 }).then(
-			() => {},
-			(e) => {
-				made.delete(dir);
-				throw e;
-			},
-		);
-		made.set(dir, p);
-	}
-	return p;
+/** Recreate private state directories if they have been removed since the last use. */
+export async function ensureDir(dir: string): Promise<void> {
+	await mkdir(dir, { recursive: true, mode: 0o700 });
 }
 
 /** The state folder, created when missing. */

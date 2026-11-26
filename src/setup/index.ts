@@ -1,21 +1,11 @@
-import {
-	cpSync,
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	readlinkSync,
-	renameSync,
-	rmSync,
-	symlinkSync,
-} from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { CLIENTS } from "../harnesses/index.ts";
 import { meshIsOn } from "../http/config.ts";
-import { installRoot, retainedBuilds } from "../paths.ts";
+import { installRoot } from "../paths.ts";
 import { VERSION } from "../version.ts";
 import {
 	type Action,
@@ -23,6 +13,7 @@ import {
 	type Undo,
 	undoAction,
 } from "./actions.ts";
+import { installBuild } from "./build.ts";
 import { loadJsonc } from "./jsonc.ts";
 import { MESH_ON_FLAGS, meshOnOptions } from "./mesh-cli.ts";
 import { binDir, onPath, pathAdvice, shimPath, writeShim } from "./shim.ts";
@@ -46,56 +37,6 @@ function packageRoot(): string {
 		dir = dirname(dir);
 	}
 	throw new Error("could not find the Pulsar package folder");
-}
-
-/**
- * Copies this version to a stable folder, so agent configs never depend on an
- * npx cache or a network fetch at session start.
- */
-async function installStableCopy(): Promise<string> {
-	const root = packageRoot();
-	const dist = join(root, "dist", "cli.js");
-	if (!existsSync(dist))
-		throw new Error(`no build found at ${dist}. Run \`bun run build\` first.`);
-	const dir = join(installRoot(), VERSION);
-	if (resolve(dir) !== resolve(root)) {
-		rmSync(dir, { recursive: true, force: true });
-		mkdirSync(dir, { recursive: true });
-		for (const entry of [
-			"package.json",
-			"dist",
-			"skills",
-			"README.md",
-			"LICENSE",
-		]) {
-			if (existsSync(join(root, entry)))
-				cpSync(join(root, entry), join(dir, entry), { recursive: true });
-		}
-	}
-	// Agent configs point at `current`, so an upgrade only moves this link.
-	const current = join(installRoot(), "current");
-	let previous: string | null = null;
-	try {
-		previous = readlinkSync(current);
-	} catch {}
-	const tmp = `${current}.${process.pid}`;
-	rmSync(tmp, { force: true });
-	symlinkSync(VERSION, tmp);
-	renameSync(tmp, current);
-	// Running agents and the service still load code from the folder `current`
-	// pointed to, and this process from its own: keep both. Keep the newest
-	// builds too: the daemon serves their app files to pages that still run
-	// them (src/paths.ts retainedBuilds). Drop the rest.
-	const keep = new Set([
-		VERSION,
-		previous,
-		basename(root),
-		...(await retainedBuilds()),
-	]);
-	for (const old of readdirSync(installRoot()))
-		if (/^\d/.test(old) && !keep.has(old))
-			rmSync(join(installRoot(), old), { recursive: true, force: true });
-	return current;
 }
 
 async function uninstall(yes: boolean, dryRun: boolean): Promise<number> {
@@ -328,7 +269,7 @@ export async function runSetup(argv: string[]): Promise<number> {
 		if (!(await confirm("\nApply these changes?"))) return 1;
 	}
 
-	await installStableCopy();
+	await installBuild(packageRoot(), installRoot(), VERSION);
 	const previous = loadState();
 	const state: SetupState = { version: VERSION, installDir, undo: [] };
 	let failures = 0;

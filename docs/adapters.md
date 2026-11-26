@@ -103,7 +103,7 @@ Built-in commands in the `/` menu come from a list kept per CLI version (src/har
 
 ## Setup options
 
-`pulsar setup` copies Pulsar to `~/.local/share/pulsar/<version>` and puts a `pulsar` command in `~/.local/bin`. It also sets Claude Code's `crossSessionInbound` and Codex's tool approval, which plugin installs can't.
+`pulsar setup` copies Pulsar to `~/.local/share/pulsar/<version>-<build hash>` and puts a `pulsar` command in `~/.local/bin`. It also sets Claude Code's `crossSessionInbound` and Codex's tool approval, which plugin installs can't.
 
 | Flag | Does |
 | --- | --- |
