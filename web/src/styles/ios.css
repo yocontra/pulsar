@@ -656,12 +656,6 @@
 	background: var(--m-fill-3);
 }
 
-.m-wake-note {
-	margin: 0 4px 6px;
-	font-size: 0.765rem;
-	color: var(--m-label-2);
-}
-
 .m-composer .receipt-line,
 .m-composer > .muted,
 .m-composer > .error {

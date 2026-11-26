@@ -1746,17 +1746,6 @@
 	color: var(--d-fg-2);
 	font-weight: 500;
 }
-.d-main .composer-to .wake-note {
-	margin-left: auto;
-	font-family: inherit;
-	font-size: 12px;
-	color: var(--d-fg-3);
-}
-.d-main .composer-to .wake-note.w-held,
-.d-main .composer-to .wake-note.w-refuses,
-.d-main .composer-to .wake-note.w-queued {
-	color: var(--d-needs-fg);
-}
 .d-main .load-earlier {
 	align-self: center;
 	height: 28px;

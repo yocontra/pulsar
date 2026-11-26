@@ -1,6 +1,5 @@
 import { ArrowUpIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { nativeWakeCommand } from "../../../src/harnesses/catalog.ts";
 import { ApiError, api, ProveCancelled } from "../api/client.ts";
 import type {
 	AgentRow,
@@ -23,14 +22,7 @@ import {
 	ComposerActionsProvider,
 	useComposerActions,
 } from "../lib/composer-menu.tsx";
-import {
-	num,
-	plural,
-	RECEIPT_WORDS,
-	sentence,
-	WAKE_LABEL,
-	wakeFor,
-} from "../lib/format.ts";
+import { num, plural, RECEIPT_WORDS, sentence } from "../lib/format.ts";
 import { useInFlight } from "../lib/inflight.ts";
 import { lazy } from "../lib/lazy.tsx";
 import { type ComposerSlotProps, Slot } from "../lib/registry.tsx";
@@ -223,28 +215,6 @@ interface ComposerProps {
 	 * carries Delivered / Read / Replied, and the composer only failures.
 	 */
 	bubbleReceipts?: boolean;
-}
-
-function deliveryNote(agent: AgentRow, priority: Priority, viaParent: boolean) {
-	const wake = wakeFor(agent, priority);
-	if (wake === "wakes") return null;
-	if (wake === "queued")
-		return { wake, text: `Waits until ${agent.machine} is online` };
-	const command = nativeWakeCommand(agent.harness);
-	if (
-		wake === "inbox-only" &&
-		priority !== "fyi" &&
-		command &&
-		agent.capabilities?.surface === "attached" &&
-		!viaParent &&
-		!agent.id.includes("/sub:")
-	) {
-		return {
-			wake,
-			text: `Inbox only. To enable wake, ask this agent in its terminal to run ${command}.`,
-		};
-	}
-	return { wake, text: `Won't wake it (${WAKE_LABEL[wake]})` };
 }
 
 function ComposerImpl({
@@ -484,10 +454,6 @@ function ComposerImpl({
 	};
 
 	const tier = dry ? confirmTier(dry, drift, everyone) : null;
-	const wakeNote =
-		target.kind === "agent"
-			? deliveryNote(target.agent, priority, viaParent)
-			: null;
 	const status: ChatStatus =
 		phase === "checking" || phase === "sending"
 			? "submitted"
@@ -578,9 +544,6 @@ function ComposerImpl({
 
 	return (
 		<div className={`composer${compact ? " m-composer" : ""}`}>
-			{compact && wakeNote && (
-				<p className={`m-wake-note w-${wakeNote.wake}`}>{wakeNote.text}</p>
-			)}
 			{compact && showTiming && (
 				<PriorityPicker
 					value={priority}
@@ -597,11 +560,6 @@ function ComposerImpl({
 							? `${target.agent.name} on ${target.agent.machine}`
 							: target.label}
 					</span>
-					{wakeNote && (
-						<span className={`wake-note w-${wakeNote.wake}`}>
-							{wakeNote.text}
-						</span>
-					)}
 				</div>
 			)}
 			{!compact && (

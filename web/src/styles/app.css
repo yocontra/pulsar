@@ -1099,12 +1099,6 @@ button.row:hover,
 	font-size: 0.9rem;
 }
 
-.wake-note {
-	margin-left: auto;
-	color: var(--fg-2);
-	font-size: 0.9rem;
-}
-
 .empty-state {
 	padding: 32px;
 }

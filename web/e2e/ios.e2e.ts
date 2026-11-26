@@ -113,7 +113,24 @@ async function openSession(page: Page) {
 
 test.describe("ios gestures", () => {
 	test("Send now is visible for a busy Codex session", async ({ page }) => {
+		await page.setViewportSize({ width: 375, height: 812 });
 		await openSession(page);
+		const picker = page.getByRole("radiogroup", { name: "Priority" });
+		expect(
+			await picker.evaluate((el) => {
+				const group = el.getBoundingClientRect();
+				return [...el.querySelectorAll("button")].every((b) => {
+					const box = b.getBoundingClientRect();
+					return (
+						box.height >= 44 &&
+						box.top >= group.top &&
+						box.bottom <= group.bottom &&
+						box.left >= 0 &&
+						box.right <= innerWidth
+					);
+				});
+			}),
+		).toBe(true);
 		const now = page.getByRole("radio", { name: "Send now" });
 		await now.tap();
 		await expect(now).toHaveAttribute("aria-checked", "true");

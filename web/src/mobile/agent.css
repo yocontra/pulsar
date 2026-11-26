@@ -133,13 +133,16 @@ html.md .p-agent .m-composer {
 	backdrop-filter: none;
 }
 .p-agent .m-composer > .seg {
-	display: flex;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	height: auto;
 	width: 100%;
 	margin-bottom: 4px;
 }
 .p-agent .m-composer > .seg button {
-	flex: 1;
-	min-height: 36px;
+	height: auto;
+	min-height: 44px;
+	white-space: normal;
 	border-radius: 16px;
 	color: var(--m-label-2);
 }

@@ -59,7 +59,7 @@ export async function plusMenu(page: Page, composer: Locator) {
 export function composerSuite(platform: "desktop" | "phone") {
 	const phone = platform === "phone";
 
-	test(`explains how to wake an inbox-only native conversation (${platform})`, async ({
+	test(`an inbox-only conversation has no wake notice above the input (${platform})`, async ({
 		page,
 		request,
 	}) => {
@@ -87,8 +87,8 @@ export function composerSuite(platform: "desktop" | "phone") {
 		);
 		const composer = await openAgent(page, request, selector);
 		await expect(
-			composer.getByText(/run pulsar antigravity-bind/),
-		).toBeVisible();
+			composer.getByText(/Won.t wake it|Inbox only\.|enable wake/),
+		).toHaveCount(0);
 	});
 
 	test(`attach from the picker, send, and the bubble shows the files (${platform})`, async ({
