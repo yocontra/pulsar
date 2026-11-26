@@ -273,6 +273,35 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		expect(
 			history.events.some((event) => event.subtype === "interrupted"),
 		).toBe(true);
+		await prompt("fixture-long-result");
+		await until(
+			async () =>
+				(await current())?.status === "idle" &&
+				bridge!.output().includes("end-of-reply"),
+		);
+		const extended = await op.call<TranscriptPageResult>("transcript.read", {
+			agent: agentId,
+		});
+		const blocks = new Map(
+			extended.events
+				.filter(
+					(e) =>
+						e.role === "assistant" && /(?:AAAA|BBBB|end-of-reply)/.test(e.text),
+				)
+				.map((e) => [e.id, e.text]),
+		);
+		expect([...blocks.values()].join("")).toBe(
+			`${"A".repeat(32 * 1024 - 1)}🚀${"B".repeat(40 * 1024)}end-of-reply`,
+		);
+		expect(
+			extended.events.filter((e) => e.kind === "tool_result"),
+		).toMatchObject([
+			{ text: "file contents", tool: { name: "Read file", callId: "read" } },
+			{
+				text: "file.ts\n---\nold\n+++\nnew",
+				tool: { name: "Edit file", callId: "write" },
+			},
+		]);
 		bridge.child.kill("SIGTERM");
 		expect(await bridge.exit).toBe(0);
 		await until(async () => (await current())?.status !== "idle");

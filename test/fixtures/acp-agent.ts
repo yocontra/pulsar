@@ -185,6 +185,43 @@ for await (const line of lines) {
 					},
 					permissionId,
 				);
+			} else if (text.includes("fixture-long-result")) {
+				update("A".repeat(32 * 1024 - 1));
+				update(`🚀${"B".repeat(40 * 1024)}`);
+				update("end-of-reply");
+				const tool = (update: unknown) =>
+					emit("session/update", { sessionId, update });
+				tool({
+					sessionUpdate: "tool_call",
+					toolCallId: "read",
+					title: "Read file",
+				});
+				tool({
+					sessionUpdate: "tool_call_update",
+					toolCallId: "read",
+					status: "in_progress",
+					content: [
+						{
+							type: "content",
+							content: { type: "text", text: "file contents" },
+						},
+					],
+				});
+				tool({
+					sessionUpdate: "tool_call_update",
+					toolCallId: "read",
+					status: "completed",
+				});
+				tool({
+					sessionUpdate: "tool_call",
+					toolCallId: "write",
+					title: "Edit file",
+					status: "completed",
+					content: [
+						{ type: "diff", path: "file.ts", oldText: "old", newText: "new" },
+					],
+				});
+				reply(id, { stopReason: "end_turn" });
 			} else if (text.includes("fixture-tools")) {
 				mcpResult = (message) => {
 					update(message);

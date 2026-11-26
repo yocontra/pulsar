@@ -31,6 +31,7 @@ import { AcpUsageWriter, loadAcpUsage } from "../usage/acp.ts";
 import { VERSION } from "../version.ts";
 import { AcpSessionControls } from "./acp-controls.ts";
 import { ACP_IDENTITY_ENV } from "./acp-identity.ts";
+import { AcpToolResults } from "./acp-tool-results.ts";
 import { acpTranscriptPath } from "./acp-transcript.ts";
 
 export interface AcpBridgeOptions {
@@ -61,6 +62,7 @@ type Turn = {
 	delivered: boolean;
 	printed: boolean;
 	permissions: Map<string, () => void>;
+	tools: AcpToolResults;
 	block?: {
 		id: string;
 		messageId?: string | null;
@@ -430,6 +432,7 @@ class Bridge {
 				delivered: false,
 				printed: false,
 				permissions: new Map(),
+				tools: new AcpToolResults(MAX_TEXT),
 			};
 			this.turn = turn;
 			this.notify("set_status", { status: "busy" });
@@ -708,16 +711,20 @@ class Bridge {
 			this.confirmDelivery(turn);
 			if (update.content.type !== "text") return;
 			const kind = type === "agent_message_chunk" ? "text" : "thinking";
-			if (kind === "text") {
-				turn.printed = true;
-				this.print(update.content.text);
-			}
+			if (kind === "text") turn.printed = true;
 			if (
 				turn.block?.kind !== kind ||
 				turn.block.messageId !== update.messageId
 			) {
 				this.writeBlock(turn);
-				turn.block = {
+				turn.block = undefined;
+			}
+			// Keep streaming replacements bounded while retaining the whole reply.
+			// A JSON character may need six bytes when escaped in the transcript.
+			const limit = MAX_TEXT / 2;
+			let offset = 0;
+			while (offset < update.content.text.length) {
+				turn.block ??= {
 					id: randomUUID(),
 					kind,
 					messageId: update.messageId,
@@ -725,51 +732,52 @@ class Bridge {
 					lastWrite: 0,
 					written: 0,
 				};
+				const block = turn.block;
+				let end = Math.min(
+					update.content.text.length,
+					offset + limit - block.text.length,
+				);
+				if (
+					end < update.content.text.length &&
+					/[\uD800-\uDBFF]/.test(update.content.text[end - 1] ?? "")
+				)
+					end--;
+				const part = update.content.text.slice(offset, end);
+				if (kind === "text") this.print(part);
+				block.text += part;
+				offset = end;
+				if (
+					offset < update.content.text.length ||
+					block.text.length === limit
+				) {
+					this.writeBlock(turn);
+					turn.block = undefined;
+				} else if (Date.now() - block.lastWrite >= TRANSCRIPT_UPDATE_MS) {
+					this.writeBlock(turn);
+				}
 			}
-			const block = turn.block;
-			block.text += update.content.text.slice(0, MAX_TEXT - block.text.length);
-			if (Date.now() - block.lastWrite >= TRANSCRIPT_UPDATE_MS)
-				this.writeBlock(turn);
 			return;
 		}
+		if (type !== "tool_call" && type !== "tool_call_update") return;
+		this.confirmDelivery(turn);
 		if (type === "tool_call") {
 			this.writeBlock(turn);
 			turn.block = undefined;
-			this.confirmDelivery(turn);
 			const { title, toolCallId, rawInput, status } = update;
 			this.record({
 				role: "tool",
 				kind: "tool_call",
 				text: title,
 				tool: {
-					name: title.slice(0, 200),
+					name: (update.name ?? title).slice(0, 200),
 					callId: toolCallId.slice(0, 500),
 					input: rawInput,
 					done: status === "completed" || status === "failed",
 				},
 			});
 		}
-		if (
-			type === "tool_call_update" &&
-			(update.status === "completed" || update.status === "failed")
-		) {
-			this.confirmDelivery(turn);
-			const { title, toolCallId, rawOutput, status } = update;
-			const text =
-				typeof rawOutput === "string"
-					? rawOutput
-					: (JSON.stringify(rawOutput) ?? "");
-			this.record({
-				role: "tool",
-				kind: "tool_result",
-				text,
-				tool: {
-					name: title?.slice(0, 200) ?? "ACP tool",
-					callId: toolCallId.slice(0, 500),
-					isError: status === "failed",
-				},
-			});
-		}
+		const result = turn.tools.apply(update);
+		if (result) this.record(result);
 	}
 
 	private writeBlock(turn: Turn) {
