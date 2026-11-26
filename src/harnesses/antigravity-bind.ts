@@ -196,7 +196,7 @@ async function serve(b: Binding) {
 			if (status === "unavailable") client.close();
 			else if (!client.connected) await connect();
 		} catch (error) {
-			if ((error as { code?: string }).code === "session_claimed")
+			if ((error as { code?: string }).code === "native_wake_bound")
 				process.exit(0);
 		} finally {
 			checking = false;
@@ -215,7 +215,7 @@ export async function antigravityBind(args: string[]) {
 			process.send?.({
 				ready: false,
 				detail: (error as Error).message,
-				already: (error as { code?: string }).code === "session_claimed",
+				already: (error as { code?: string }).code === "native_wake_bound",
 			});
 			process.disconnect?.();
 		}

@@ -1508,7 +1508,7 @@ export class Registry {
 				.some((c) => c !== caller && this.sessions.role(c) === reg.role)
 		) {
 			throw new RpcError(
-				"session_claimed",
+				reg.role === "wake" ? "native_wake_bound" : "session_claimed",
 				`${id} is already served by another connection`,
 			);
 		}
