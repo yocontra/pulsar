@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IDENTS } from "../src/harnesses/ident.ts";
@@ -20,12 +20,17 @@ import type { Agent } from "../src/types.ts";
 
 // Drivers read their configs under $HOME when they plan; give them an empty one
 // for this file only (bun runs every test file in one process).
-const realHome = process.env.HOME;
+let realHome: string | undefined;
+let fakeHome: string;
 beforeAll(() => {
-	process.env.HOME = mkdtempSync(join(tmpdir(), "pulsar-contract-home-"));
+	realHome = process.env.HOME;
+	fakeHome = mkdtempSync(join(tmpdir(), "pulsar-contract-home-"));
+	process.env.HOME = fakeHome;
 });
 afterAll(() => {
-	process.env.HOME = realHome;
+	if (realHome === undefined) delete process.env.HOME;
+	else process.env.HOME = realHome;
+	rmSync(fakeHome, { recursive: true, force: true });
 });
 
 const UNRELATED = [

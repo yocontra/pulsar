@@ -37,18 +37,20 @@ export async function startDaemon(opts: DaemonOptions = {}) {
 		restoreEnv("PULSAR_HOME", previous);
 		rmSync(home, { recursive: true, force: true });
 	};
-	const daemon = new Daemon({
-		socket: join(home, "bus.sock"),
-		db: join(home, "pulsar.db"),
-		scan: false,
-		remote: { mode: "off" },
-		...opts,
-	});
-	if (!(await daemon.start())) {
+	try {
+		const daemon = new Daemon({
+			socket: join(home, "bus.sock"),
+			db: join(home, "pulsar.db"),
+			scan: false,
+			remote: { mode: "off" },
+			...opts,
+		});
+		if (!(await daemon.start())) throw new Error("daemon did not start");
+		return { daemon, home, cleanup };
+	} catch (error) {
 		cleanup();
-		throw new Error("daemon did not start");
+		throw error;
 	}
-	return { daemon, home, cleanup };
 }
 
 let pidCounter = 900_000;

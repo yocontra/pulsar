@@ -41,7 +41,7 @@ The source runs directly with Node 22.13+ or Bun (`node src/cli.ts ls`). It uses
 
 1. For an ACP executable, add its ID, installed binary, fixed arguments and protocol source to `src/harnesses/acp-catalog.ts`. Pulsar derives managed launch choices, identity and display names from that entry. Test the installed executable and record its supported operations in [ACP adapters](docs/acp.md).
 2. For an attached MCP client, add a manifest in `src/harnesses/catalog.ts`. A standard JSON stdio config uses the shared setup, detection and uninstall code. A native driver can also supply live discovery, delivery, controls or transcript reading through `HarnessDriver`. Keep native process and session identification in a lightweight identity module. The client process must not load the daemon implementation.
-3. Run `bun run check`. `test/harnesses.test.ts` checks every driver against the contract.
+3. Add the provider’s SVG symbol to `web/public/harness-marks.svg` using its catalog ID, or supply its mark in its web harness adapter. Run `bun run check`. `test/harnesses.test.ts` checks every driver against the contract.
 4. Add the harness to the user docs where its behavior differs: `docs/adapters.md` (delivery, limits, and the Stop and prompts tables) and the README's short harness table. Put what you verified in the PR, not the docs.
 
 Nothing else should need to change.
