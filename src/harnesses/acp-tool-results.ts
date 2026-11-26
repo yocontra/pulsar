@@ -45,6 +45,10 @@ export class AcpToolResults {
 		this.limit = limit;
 	}
 
+	has(id: string): boolean {
+		return this.pending.has(id.slice(0, 500));
+	}
+
 	apply(update: Update): Omit<TranscriptEvent, "ts"> | null {
 		const id = update.toolCallId.slice(0, 500);
 		const state = this.pending.get(id) ?? {

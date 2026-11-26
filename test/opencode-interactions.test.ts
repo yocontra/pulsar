@@ -17,16 +17,18 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type RequestListener } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { opencode } from "../src/harnesses/opencode.ts";
 import {
 	opencodePending,
 	opencodeReply,
 } from "../src/harnesses/opencode-interactions.ts";
 import type { ServerPrompt, ServerReply } from "../src/harnesses/types.ts";
 import { processSnapshot } from "../src/processes.ts";
+import { agentRecord } from "./subagent-fixtures.ts";
 
 /**
  * A fake `opencode` first on PATH: it logs each call's argv (one JSON array
@@ -273,7 +275,7 @@ describe("opencodePending (fake opencode on PATH)", () => {
 
 describe("opencodePending over the service's HTTP API", () => {
 	/** A stand-in OpenCode service: the routes above, behind Basic auth. */
-	async function service(password: string) {
+	async function service(password: string, onPrompt?: RequestListener) {
 		// node:http, not Bun.serve: other test files replace the global Response.
 		const server = createServer((req, res) => {
 			const want = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
@@ -284,6 +286,7 @@ describe("opencodePending over the service's HTTP API", () => {
 			if (req.headers.authorization !== want)
 				return send(401, '{"_tag":"UnauthorizedError"}');
 			const path = new URL(req.url ?? "/", "http://x").pathname;
+			if (req.method === "POST" && onPrompt) return onPrompt(req, res);
 			const r = JSON.parse(readFileSync(routesFile, "utf8"));
 			const key =
 				path === "/api/session/active" ? "session.active" : `GET ${path}`;
@@ -307,6 +310,56 @@ describe("opencodePending over the service's HTTP API", () => {
 			server.closeAllConnections();
 			rmSync(join(stateDir, "opencode"), { recursive: true, force: true });
 		};
+	}
+
+	for (const reply of [
+		"confirmed",
+		"wrong session",
+		"wrong prompt",
+		"lost response",
+		"server error",
+	]) {
+		test(`a submitted OpenCode prompt handles a ${reply} acknowledgement once`, async () => {
+			let submitted = 0;
+			const close = await service("pw", async (req, res) => {
+				let body = "";
+				for await (const chunk of req) body += chunk;
+				const prompt = JSON.parse(body);
+				submitted++;
+				if (reply === "lost response") return req.socket.destroy();
+				if (reply === "server error") {
+					res.writeHead(500);
+					return res.end();
+				}
+				res.end(
+					JSON.stringify({
+						data: {
+							id: reply === "wrong prompt" ? "msg_other" : prompt.id,
+							sessionID: reply === "wrong session" ? "ses_other" : "ses_test",
+							type: "user",
+						},
+					}),
+				);
+			});
+			try {
+				const target = agentRecord({
+					harness: "opencode",
+					sessionId: "ses_test",
+				});
+				const result = await opencode.push!.deliver(
+					target,
+					"Read this",
+					"urgent",
+					"Operator",
+				);
+				expect(result.ok).toBe(reply === "confirmed");
+				if (!result.ok) expect(result.uncertain).toBe(true);
+				expect(submitted).toBe(1);
+				expect(calls().filter((args) => args[1] === "POST")).toEqual([]);
+			} finally {
+				close();
+			}
+		});
 	}
 
 	test("reads from the service directly: same prompts, no `opencode` process", async () => {

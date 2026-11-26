@@ -173,7 +173,9 @@ function DesktopSessionHeaderImpl({
 			</div>
 			<div className="d-sh-actions">
 				{extra}
-				<Slot name="session.header" agent={agent} mobile={false} />
+				{!agent.archived && (
+					<Slot name="session.header" agent={agent} mobile={false} />
+				)}
 				<span
 					className="d-sh-model"
 					title={`${harnessName(agent.harness)}${agent.model ? ` · ${agent.model}` : ""}`}

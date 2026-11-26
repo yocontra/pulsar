@@ -3,7 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { antigravitySource } from "../src/harnesses/antigravity.ts";
+import {
+	antigravitySource,
+	readAntigravitySession,
+} from "../src/harnesses/antigravity.ts";
 import {
 	antigravityActiveConversation,
 	antigravityFiles,
@@ -20,6 +23,57 @@ const second = "22222222-2222-4222-8222-222222222222";
 const root = "/home/test/.gemini/antigravity-cli";
 const logLine = (id: string) =>
 	`I1124 22:01:02.345678 122 server.go:1287] Starting conversation update stream for ${id}`;
+
+test("closed native sessions can be looked up by their exact conversation id", async () => {
+	const root = mkdtempSync(join(tmpdir(), "pulsar-agy-history-"));
+	const conversations = join(root, "conversations");
+	mkdirSync(conversations);
+	const { DatabaseSync } = createRequire(import.meta.url)(
+		"node:sqlite",
+	) as typeof import("node:sqlite");
+	const db = new DatabaseSync(join(conversations, `${first}.db`));
+	try {
+		db.exec("CREATE TABLE trajectory_meta(cascade_id TEXT)");
+		db.prepare("INSERT INTO trajectory_meta VALUES (?)").run(second);
+		expect(await readAntigravitySession(first, conversations)).toBeNull();
+		expect(
+			await readAntigravitySession(`../${first}`, conversations),
+		).toBeNull();
+		db.prepare("UPDATE trajectory_meta SET cascade_id = ?").run(first);
+		expect(await readAntigravitySession(first, conversations)).toEqual({
+			cwd: null,
+			lastSeen: expect.any(Number),
+		});
+		const summaries = new DatabaseSync(join(root, "conversation_summaries.db"));
+		try {
+			summaries.exec(
+				"CREATE TABLE conversation_summaries(conversation_id TEXT, workspace_uris TEXT, title TEXT, last_modified_time TEXT)",
+			);
+			summaries
+				.prepare("INSERT INTO conversation_summaries VALUES (?,?,?,?)")
+				.run(
+					first,
+					JSON.stringify([
+						"https://example.com",
+						"file:///workspace/my%20project",
+					]),
+					"Saved work",
+					"2026-11-25 05:52:41.955703+00:00",
+				);
+			expect(await readAntigravitySession(first, conversations)).toEqual({
+				cwd: "/workspace/my project",
+				name: "Saved work",
+				lastSeen: 1795585961955,
+			});
+			expect(await readAntigravitySession(second, conversations)).toBeNull();
+		} finally {
+			summaries.close();
+		}
+	} finally {
+		db.close();
+		rmSync(root, { recursive: true, force: true });
+	}
+});
 
 test("Antigravity uses only its open conversation databases and own CLI log", () => {
 	expect(antigravityIdent.matchProcess("/opt/bin/agy --continue")).toBe(true);

@@ -142,3 +142,19 @@ Built-in commands in the `/` menu come from a list kept per CLI version (src/har
 | `PULSAR_NO_MESH` | unset | `pulsar mesh on` refuses to run (tests, sandboxes) |
 | `PULSAR_NO_SEARCH` | unset | No message search: the daemon keeps no copy of transcript text and deletes the copy it has |
 | `PULSAR_DEBUG` | unset | Log the MCP server to `mcp-debug.log` |
+
+## Session links and saved conversations
+
+On the machine that owns a conversation, a session link can open its transcript after the process exits or Pulsar restarts. Pulsar remembers the provider and stable session ID when you open a supported transcript. The live agent list still shows current sessions. A native Antigravity link from an older installation also works when the ID inside its conversation database matches the link.
+
+A saved conversation shows **Session closed**. Another terminal in the same project can have a different conversation open. Pulsar links to open sessions in the same project. **Resume session** opens the saved ID in its original workspace for native Antigravity and managed ACP providers that reported resume or load support.
+
+### Comparison with T3 Code
+
+| Area | What T3 Code does | How Pulsar handles it |
+| --- | --- | --- |
+| Session identity | Stores a thread-to-provider-session binding in SQLite and checks the session ID on resume. [Bindings](https://github.com/pingdotgg/t3code/blob/37d3d199/apps/server/src/persistence/Migrations/OrchestrationV2/ProviderSessionBindings.ts) · [Antigravity adapter](https://github.com/pingdotgg/t3code/blob/37d3d199/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.ts) | A saved transcript reference survives loss of live presence. Pulsar reads the original provider transcript and checks native Antigravity databases by conversation ID. |
+| Questions | Translates ACP elicitation forms and Antigravity’s older question requests into user input. [ACP forms](https://github.com/pingdotgg/t3code/blob/37d3d199/packages/provider-acp/src/server/elicitationForm.ts) · [Antigravity protocol](https://github.com/pingdotgg/t3code/blob/37d3d199/apps/server/src/provider/acp/AntigravityProtocol.ts) | Managed providers can ask supported structured questions in the app. The answer goes to the requesting ACP session. |
+| Background replies | Antigravity can send updates after the prompt returns. [Antigravity adapter](https://github.com/pingdotgg/t3code/blob/37d3d199/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.ts) | Pulsar retains late replies, tool results and questions for the same session. Stop cancels an outstanding background reply. |
+| OpenCode delivery | Tracks the individual inbox submission when steering a turn. [OpenCode adapter](https://github.com/pingdotgg/t3code/blob/37d3d199/packages/provider-opencode/src/server/v2/adapter.ts) | The native driver checks the returned message ID, session ID and role. If the connection drops after submission, Pulsar reports uncertainty and prevents a second submission. |
+| Codex steering | Addresses the expected active turn. [Codex adapter](https://github.com/pingdotgg/t3code/blob/37d3d199/apps/server/src/orchestration-v2/Adapters/CodexAdapterV2.ts) | Native Codex already uses the expected turn ID. A confirmed turn change permits a queue fallback. |

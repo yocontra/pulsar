@@ -5,13 +5,17 @@ import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Daemon } from "../src/daemon.ts";
 import { cleanFedAgent } from "../src/federation/state.ts";
-import type { AttachmentUpload } from "../src/http/wire.ts";
+import type { AttachmentUpload, InteractionAnswer } from "../src/http/wire.ts";
 import type { TranscriptPageResult } from "../src/service/transcripts.ts";
 import type { PublicAgent } from "../src/types.ts";
 import { operator, startDaemon, until } from "./helpers.ts";
+import { SoftAuthenticator } from "./webauthn.ts";
 
 test("managed ACP sends prompts, renders transcript, binds MCP tools, denies permission, stops, and resumes", async () => {
-	const env = await startDaemon();
+	let answerable = false;
+	const env = await startDaemon({
+		approvals: { answerable: () => answerable },
+	});
 	let daemon = env.daemon;
 	let op = await operator();
 	const agy = join(env.home, "agy");
@@ -154,7 +158,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			resume: true,
 			approvals: true,
 			skills: false,
-			questions: false,
+			questions: true,
 			attachments: true,
 			usage: false,
 		};
@@ -233,6 +237,132 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		await until(() => Boolean(bridge?.output().includes(agentId)));
 		await prompt("fixture-permission");
 		await until(() => Boolean(bridge?.output().includes("Permission deny")));
+		expect((await current())?.capabilities?.questions).toBe(true);
+		answerable = true;
+		const origin = "http://localhost:4100";
+		const rp = { rpId: "localhost", origins: [origin] };
+		const authenticator = new SoftAuthenticator({ origin, rpId: rp.rpId });
+		const approvals = daemon.service.approvals;
+		const registration = await approvals.passkeys.registrationOptions(
+			user.login,
+			rp,
+			{ label: "Fixture" },
+		);
+		await approvals.passkeys.verifyRegistration(
+			user.login,
+			rp,
+			authenticator.register(registration),
+		);
+		const pending = () => approvals.pendingFor(agentId)[0];
+		const answerQuestion = async (answer: InteractionAnswer) => {
+			await until(() => pending()?.kind === "question");
+			const requestId = pending()!.requestId;
+			const options = (await approvals.options(user, rp, requestId, "answer", {
+				answer,
+			})) as { options: { challenge: string } };
+			const result = await approvals.decide(user, rp, requestId, {
+				decision: "answer",
+				answer,
+				assertion: authenticator.assert(options.options),
+			});
+			expect(result.won).toBe(true);
+		};
+		await prompt("fixture-legacy-question");
+		await answerQuestion({
+			kind: "question",
+			answers: { choice: ["Preview"] },
+		});
+		await until(() =>
+			Boolean(bridge?.output().includes("Question selected b")),
+		);
+		await prompt("fixture-form-question");
+		await answerQuestion({
+			kind: "question",
+			answers: {
+				env: ["Production"],
+				reason: ["Test run"],
+				repeats: ["2"],
+				confirm: ["Yes"],
+				extra: ["Skip this field"],
+				flags: ["trace", "profile"],
+			},
+		});
+		await until(() =>
+			Boolean(
+				bridge
+					?.output()
+					.includes(
+						'Form selected {"env":"prod","reason":"Test run","repeats":2,"confirm":true,"flags":["trace","profile"]}',
+					),
+			),
+		);
+		await prompt("fixture-form-question");
+		await until(() => pending()?.kind === "question");
+		expect(await op.call("stop", { agent: agentId })).toMatchObject({
+			result: "interrupted",
+		});
+		await until(
+			() =>
+				!pending() &&
+				Boolean(bridge?.output().includes("Fixture elicitation cancel")),
+		);
+		await prompt("fixture-detached");
+		await until(
+			async () =>
+				pending()?.kind === "question" && (await current())?.status === "busy",
+		);
+		expect(await control().modes(agentId)).toMatchObject({ canSwitch: false });
+		const behindDetached = await op.call<{ message: { id: string } }>("send", {
+			to: agentId,
+			body: "fixture-normal-while-busy-detached",
+			priority: "normal",
+		});
+		const detachedFollower = () =>
+			daemon.store.receipt(behindDetached.message.id, agentId);
+		expect(detachedFollower()?.state).toBe("queued");
+		await answerQuestion({ kind: "question", answers: { choice: ["Yes"] } });
+		await until(
+			async () =>
+				(await current())?.status === "idle" &&
+				Boolean(bridge?.output().includes("Detached says hello.")),
+		);
+		await until(() => detachedFollower()?.state === "delivered");
+		const detached = await op.call<TranscriptPageResult>("transcript.read", {
+			agent: agentId,
+		});
+		expect(detached.events).toContainEqual(
+			expect.objectContaining({
+				kind: "tool_result",
+				text: "Buffered background result",
+				tool: expect.objectContaining({ name: "Background watcher" }),
+			}),
+		);
+		expect(detached.events).toContainEqual(
+			expect.objectContaining({
+				role: "assistant",
+				text: "Detached says hello.",
+			}),
+		);
+		expect(
+			detached.events.some((event) =>
+				event.text.includes("Foreign detached content"),
+			),
+		).toBe(false);
+		await prompt("fixture-detached-request-only");
+		await until(
+			async () =>
+				pending()?.kind === "question" && (await current())?.status === "busy",
+		);
+		expect(await op.call("stop", { agent: agentId })).toMatchObject({
+			result: "interrupted",
+		});
+		await until(
+			async () =>
+				!pending() &&
+				(await current())?.status === "idle" &&
+				Boolean(bridge?.output().includes("Detached question cancelled")),
+		);
+		answerable = false;
 		const held = await op.call<{ message: { id: string } }>("send", {
 			to: agentId,
 			body: "fixture-hold",
@@ -416,7 +546,9 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			`${"A".repeat(32 * 1024 - 1)}🚀${"B".repeat(40 * 1024)}end-of-reply`,
 		);
 		expect(
-			extended.events.filter((e) => e.kind === "tool_result"),
+			extended.events.filter(
+				(e) => e.kind === "tool_result" && e.tool?.callId !== "late-tool",
+			),
 		).toMatchObject([
 			{ text: "file contents", tool: { name: "Read file", callId: "read" } },
 			{
@@ -444,6 +576,11 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			expect(await bridge.exit).toBe(0);
 		}
 
+		for (const mode of ["wrong-resume", "wrong-load"]) {
+			bridge = launch(sessionId, mode);
+			expect(await bridge.exit).toBe(1);
+			expect(bridge.output()).toContain("returned a different session ID");
+		}
 		bridge = launch(sessionId, "unsupported");
 		expect(await bridge.exit).toBe(1);
 		expect(bridge.output()).toContain(

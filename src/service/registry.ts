@@ -484,7 +484,7 @@ export class Registry {
 							commands: active && extension && agent.meta.acpCommands === "1",
 							skills: false,
 							approvals: active && extension,
-							questions: false,
+							questions: active && extension && agent.meta.acpQuestions === "1",
 							// Uploads are delivered as local file paths in an ordinary prompt.
 							attachments: active && extension,
 							usage: agent.meta.acpUsage === "1",

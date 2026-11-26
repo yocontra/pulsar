@@ -113,12 +113,14 @@ const LISTS: Record<string, unknown[]> = {
 const ACTIVE = { ses_busy: { type: "running" }, ses_kid: { type: "running" } };
 
 /** What the service answers for a path; used by the HTTP stub and the CLI stub. */
-function answer(path: string): unknown {
+function answer(path: string, prompt?: { id: string }): unknown {
 	const url = new URL(path, "http://x");
 	if (url.pathname === "/api/session/active") return { data: ACTIVE };
 	if (url.pathname === "/api/session")
 		return { data: LISTS[url.searchParams.get("directory") ?? ""] ?? [] };
 	const id = url.pathname.split("/")[3] ?? "";
+	if (prompt && url.pathname.endsWith("/prompt"))
+		return { data: { id: prompt.id, sessionID: id, type: "user" } };
 	return { data: SESSIONS[id] ?? null };
 }
 
@@ -131,7 +133,8 @@ const args = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(cliLog)}, JSON.stringify(args) + "\\n");
 const answer = ${answer.toString()};
 const ACTIVE = ${JSON.stringify(ACTIVE)}, SESSIONS = ${JSON.stringify(SESSIONS)}, LISTS = ${JSON.stringify(LISTS)};
-process.stdout.write(JSON.stringify(answer(args[2])));
+const prompt = args[1] === "POST" ? JSON.parse(args[4]) : undefined;
+process.stdout.write(JSON.stringify(answer(args[2], prompt)));
 `,
 );
 
@@ -156,9 +159,13 @@ beforeAll(async () => {
 			let body = "";
 			req.on("data", (c) => (body += c));
 			req.on("end", () => {
-				posts.push({ path: req.url ?? "", body: JSON.parse(body || "null") });
-				if (postStatus !== 200) res.writeHead(postStatus);
-				res.end("{}");
+				const path = req.url ?? "";
+				const prompt = JSON.parse(body);
+				posts.push({ path, body: prompt });
+				res.writeHead(postStatus);
+				res.end(
+					postStatus === 200 ? JSON.stringify(answer(path, prompt)) : "{}",
+				);
 			});
 			return;
 		}
@@ -278,7 +285,12 @@ describe("OpenCode push over the service's HTTP API", () => {
 		expect(posts).toEqual([
 			{
 				path: "/api/session/ses_busy/prompt",
-				body: { text: "hello", delivery: "steer", resume: true },
+				body: {
+					id: expect.stringMatching(/^msg_pulsar_/),
+					text: "hello",
+					delivery: "steer",
+					resume: true,
+				},
 			},
 		]);
 		expect(existsSync(cliLog)).toBe(false);
@@ -287,7 +299,7 @@ describe("OpenCode push over the service's HTTP API", () => {
 	test("a 5xx is not sent again through the CLI (it may have landed)", async () => {
 		postStatus = 500;
 		const r = await opencode.push!.deliver(agent, "once", "normal", "x");
-		expect(r.ok).toBe(false);
+		expect(r).toMatchObject({ ok: false, uncertain: true });
 		expect(posts).toHaveLength(1);
 		expect(existsSync(cliLog)).toBe(false);
 	});
@@ -297,9 +309,15 @@ describe("OpenCode push over the service's HTTP API", () => {
 		const r = await opencode.push!.deliver(agent, "via cli", "normal", "x");
 		expect(r.ok).toBe(true);
 		expect(posts).toHaveLength(0);
-		const call = JSON.parse(
-			readFileSync(cliLog, "utf8").trim().split("\n")[0]!,
-		);
+		const lines = readFileSync(cliLog, "utf8").trim().split("\n");
+		expect(lines).toHaveLength(1);
+		const call = JSON.parse(lines[0]!);
+		expect(JSON.parse(call[4])).toMatchObject({
+			id: expect.stringMatching(/^msg_pulsar_/),
+			text: "via cli",
+			delivery: "queue",
+			resume: true,
+		});
 		expect(call.slice(0, 3)).toEqual([
 			"api",
 			"POST",

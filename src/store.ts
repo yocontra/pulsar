@@ -372,6 +372,12 @@ CREATE TABLE IF NOT EXISTS search_state (
 				);
 		},
 	},
+	{
+		ensure: (db) =>
+			db.exec(
+				"CREATE TABLE IF NOT EXISTS session_history (id TEXT PRIMARY KEY, binding TEXT NOT NULL)",
+			),
+	},
 ];
 
 /** The schema version this pulsar writes. */

@@ -1,6 +1,7 @@
-import { stat } from "node:fs/promises";
+import { lstat, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { freshProcessSnapshot, processStart } from "../processes.ts";
 import type { TranscriptEvent, TranscriptPage } from "../transcripts/types.ts";
 import {
@@ -128,8 +129,90 @@ export function antigravitySource(path: string, sessionId: string) {
 	};
 }
 
+function savedWorkspace(uris: unknown): string | null {
+	if (typeof uris !== "string") return null;
+	try {
+		const values: unknown = JSON.parse(uris);
+		if (Array.isArray(values)) {
+			for (const value of values) {
+				if (typeof value !== "string") continue;
+				try {
+					const url = new URL(value);
+					if (url.protocol === "file:" && !url.hostname)
+						return fileURLToPath(url);
+				} catch {
+					// Another workspace in the list can still identify the local project.
+				}
+			}
+		}
+	} catch {
+		// Some older summaries do not have a workspace list.
+	}
+	return null;
+}
+
+export async function readAntigravitySession(
+	sessionId: string,
+	directory = antigravityConversations(),
+) {
+	if (!ANTIGRAVITY_SESSION_ID.test(sessionId)) return null;
+	const path = join(directory, `${sessionId}.db`);
+	const info = await lstat(path).catch(() => null);
+	if (!info?.isFile()) return null;
+	const { DatabaseSync } = createRequire(import.meta.url)(
+		"node:sqlite",
+	) as typeof import("node:sqlite");
+	let db: InstanceType<typeof DatabaseSync> | undefined;
+	try {
+		db = new DatabaseSync(path, { readOnly: true });
+		if (
+			!db
+				.prepare("SELECT 1 FROM trajectory_meta WHERE cascade_id = ? LIMIT 1")
+				.get(sessionId)
+		)
+			return null;
+	} catch {
+		return null;
+	} finally {
+		db?.close();
+	}
+	let summaries: InstanceType<typeof DatabaseSync> | undefined;
+	try {
+		summaries = new DatabaseSync(
+			join(dirname(directory), "conversation_summaries.db"),
+			{ readOnly: true },
+		);
+		const summary = summaries
+			.prepare(
+				"SELECT workspace_uris, title, last_modified_time FROM conversation_summaries WHERE conversation_id = ?",
+			)
+			.get(sessionId);
+		if (summary) {
+			const name =
+				typeof summary.title === "string" ? summary.title.trim() : "";
+			const time =
+				typeof summary.last_modified_time === "string"
+					? Date.parse(summary.last_modified_time)
+					: NaN;
+			return {
+				cwd: savedWorkspace(summary.workspace_uris),
+				...(name ? { name } : {}),
+				lastSeen: Number.isFinite(time) ? time : info.mtimeMs,
+			};
+		}
+	} catch {
+		// The conversation database can outlive its summary.
+	} finally {
+		summaries?.close();
+	}
+	return { cwd: null, lastSeen: info.mtimeMs };
+}
+
 export const antigravity: HarnessDriver = {
 	...antigravityIdent,
+	readSession: readAntigravitySession,
+	resumeArgs: (id) =>
+		ANTIGRAVITY_SESSION_ID.test(id) ? ["agy", "--conversation", id] : null,
 	async verifyWakeHost(pid, sessionId) {
 		if (!ANTIGRAVITY_SESSION_ID.test(sessionId)) return null;
 		const table = await freshProcessSnapshot(0, "user");

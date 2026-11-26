@@ -56,6 +56,8 @@ export async function driverTranscript(
 			? acpTranscript
 			: driverFor(agent.harness)?.transcript;
 	const source = await support?.locate(agent);
+	if (agent.status === "gone" && source?.kind === "file" && source.guess)
+		return null;
 	return support && source
 		? {
 				source,
@@ -88,10 +90,12 @@ export class Transcripts {
 	/** Agents on other machines (pool addresses), read through their home node. */
 	remote: RemoteTranscripts | null = null;
 	/** True when an id belongs to another machine: the local lookup misses and it is a pool address. */
+	private readonly isHomeAddress: (id: string) => boolean;
 	private remoteId(agentId: string): boolean {
 		return (
 			Boolean(this.remote) &&
 			agentId.includes("/") &&
+			!this.isHomeAddress(agentId) &&
 			!isLocalSubagentId(agentId) &&
 			!this.lookup(agentId)
 		);
@@ -111,10 +115,12 @@ export class Transcripts {
 			resolve?: (
 				agent: Agent,
 			) => ResolvedTranscript | null | Promise<ResolvedTranscript | null>;
+			isHomeAddress?: (agentId: string) => boolean;
 			ensure?: (agentId: string) => Promise<unknown>;
 		} = {},
 	) {
 		this.lookup = lookup;
+		this.isHomeAddress = opts.isHomeAddress ?? (() => false);
 		this.ensure = opts.ensure ?? (async () => {});
 		const resolve = opts.resolve ?? driverTranscript;
 		// A custom resolver (tests, subagents) knows no harness: not found yet.
@@ -193,8 +199,7 @@ export class Transcripts {
 				available: false,
 				missing: "unsupported",
 			};
-		if (isLocalSubagentId(agentId) && !this.lookup(agentId))
-			await this.ensure(agentId);
+		if (!this.lookup(agentId)) await this.ensure(agentId);
 		const agent = this.agent(agentId);
 		// Subscribe first, then page: a live watcher's offset is set first, so
 		// nothing falls between the page and the stream.
@@ -227,8 +232,7 @@ export class Transcripts {
 		as?: Principal,
 	): Promise<{ mediaType: MediaType; data: Buffer }> {
 		if (this.remoteId(agentId)) return this.remote!.image(agentId, imageId, as);
-		if (isLocalSubagentId(agentId) && !this.lookup(agentId))
-			await this.ensure(agentId);
+		if (!this.lookup(agentId)) await this.ensure(agentId);
 		this.agent(agentId);
 		const r = await this.tailer.image(agentId, imageId);
 		if (r.ok) return { mediaType: r.mediaType, data: r.data };
@@ -248,14 +252,18 @@ export class Transcripts {
 	/** Live events for an agent; returns the unsubscribe function. */
 	subscribe(agentId: string, fn: TranscriptListener): () => void {
 		if (this.remoteId(agentId)) return this.remote!.subscribe(agentId, fn);
-		if (isLocalSubagentId(agentId) && !this.lookup(agentId)) {
-			// Not listed yet (a fresh daemon): list its parent, then follow.
+		if (!this.lookup(agentId)) {
+			// Resolve a saved conversation or discover a child before following it.
 			let off: (() => void) | null = null;
 			let closed = false;
-			void this.ensure(agentId).then(() => {
-				if (!closed && this.lookup(agentId))
-					off = this.tailer.subscribe(agentId, fn);
-			});
+			void this.ensure(agentId)
+				.then(() => {
+					if (!closed && this.lookup(agentId))
+						off = this.tailer.subscribe(agentId, fn);
+				})
+				.catch(() => {
+					/* The transcript page reports lookup errors. */
+				});
 			return () => {
 				closed = true;
 				off?.();

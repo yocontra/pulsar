@@ -393,6 +393,12 @@ export interface HarnessDriver {
 	 * `TranscriptEvent`s (the shared tailer in src/transcripts/ does the rest).
 	 */
 	transcript?: TranscriptSupport<SessionRef>;
+	/** Look up an exact saved native session without starting it or claiming presence. */
+	readSession?(
+		sessionId: string,
+	): Promise<{ cwd: string | null; name?: string; lastSeen: number } | null>;
+	/** The native CLI argv that reopens this exact session. Never use latest or fork. */
+	resumeArgs?(sessionId: string): string[] | null;
 
 	/**
 	 * Permission prompts relayed by the harness's hook (approvals): how the

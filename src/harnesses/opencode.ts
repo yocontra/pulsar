@@ -2,6 +2,7 @@ import { readlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { exec } from "../exec.ts";
+import { lazyCrypto } from "../lazy.ts";
 import { type ProcessInfo, processSnapshot } from "../processes.ts";
 import { jsonAction, skillFor } from "../setup/actions.ts";
 import { exists, getPath, readJsonc, which } from "../setup/files.ts";
@@ -251,12 +252,14 @@ export const opencode: HarnessDriver = {
 					via: "opencode-api",
 					detail: "OpenCode service is not running",
 				};
+			const id = `msg_pulsar_${lazyCrypto().randomUUID()}`;
 			const r = await opencodeRequest(
 				table,
 				"POST",
 				`/api/session/${encodeURIComponent(agent.sessionId!)}/prompt`,
 				{
 					body: {
+						id,
 						text,
 						delivery: priority === "urgent" ? "steer" : "queue",
 						resume: true,
@@ -265,9 +268,25 @@ export const opencode: HarnessDriver = {
 					lane: "user",
 				},
 			);
-			return r.ok
-				? { ok: true, via: "opencode-api" }
-				: { ok: false, via: "opencode-api", detail: r.error };
+			const via = "opencode-api";
+			if (!r.ok)
+				return { ok: false, via, detail: r.error, uncertain: r.uncertain };
+			type PromptReceipt = { id?: string; sessionID?: string; type?: string };
+			const body = r.body as (PromptReceipt & { data?: PromptReceipt }) | null;
+			const receipt = body?.data ?? body;
+			if (
+				receipt?.id === id &&
+				receipt.sessionID === agent.sessionId &&
+				receipt.type === "user"
+			)
+				return { ok: true, via };
+			return {
+				ok: false,
+				via,
+				uncertain: true,
+				detail:
+					"OpenCode did not confirm the submitted prompt on this session.",
+			};
 		},
 	},
 

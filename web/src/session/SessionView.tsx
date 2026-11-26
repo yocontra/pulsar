@@ -13,6 +13,7 @@ import type { AgentRow } from "../api/types.ts";
 import { PromptInline, promptCallId } from "../approval/PromptInline.tsx";
 import { Composer } from "../components/Composer.tsx";
 import { useAgent, useLiveEvent, useTranscript } from "../data/index.ts";
+import { hrefFor } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import {
 	approvalItem,
@@ -280,7 +281,8 @@ function SessionViewImpl({
 				)}
 				{inline}
 			</ConversationView>
-			{agent && (
+			{agent?.archived && <ArchivedSession key={id} agent={agent} />}
+			{agent && !agent.archived && (
 				<Composer
 					key={agent.id}
 					target={{ kind: "agent", agent }}
@@ -292,6 +294,28 @@ function SessionViewImpl({
 				/>
 			)}
 		</section>
+	);
+}
+
+const ResumeSession = lazy(
+	() => import("../features/launch/ResumeSession.tsx"),
+);
+
+function ArchivedSession({ agent }: { agent: AgentRow }) {
+	return (
+		<div className="ds-banner" role="status">
+			<span>Saved conversation · Session closed</span>
+			{agent.openSessions?.map((open) => (
+				<p key={open.id}>
+					<a href={hrefFor({ view: "agent", id: open.id })}>Open {open.name}</a>
+				</p>
+			))}
+			{agent.capabilities?.resume && (
+				<Suspense fallback={null}>
+					<ResumeSession agent={agent} />
+				</Suspense>
+			)}
+		</div>
 	);
 }
 

@@ -17,6 +17,7 @@
  *   bun web/e2e/real/daemon.ts   # app on PULSAR_REAL_PORT (47392), control on +1
  */
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
 	appendFileSync,
 	copyFileSync,
@@ -388,6 +389,8 @@ async function ask(login: string, asTerminal: boolean) {
 	);
 }
 
+let archiveFixture: Awaited<ReturnType<typeof agent>> | undefined;
+
 const control = createServer(async (req, res) => {
 	const url = new URL(req.url ?? "/", "http://x");
 	// Which daemon this is (e2e/infra.ts): the worker's token, and the
@@ -401,6 +404,36 @@ const control = createServer(async (req, res) => {
 				machineId: daemon.service.machineId,
 			}),
 		);
+		return;
+	}
+	if (url.pathname === "/archive-fixture" && req.method === "POST") {
+		const sessionId = randomUUID();
+		const marker = "Keep this conversation after the session closes.";
+		writeFileSync(
+			join(projectDir, `${sessionId}.jsonl`),
+			`${JSON.stringify({
+				type: "user",
+				uuid: randomUUID(),
+				sessionId,
+				cwd: CWD,
+				timestamp: new Date().toISOString(),
+				message: { role: "user", content: marker },
+			})}\n`,
+		);
+		archiveFixture = await agent({
+			name: "archive-reader",
+			harness: "claude",
+			sessionId,
+			cwd: CWD,
+		});
+		res.writeHead(200, { "content-type": "application/json" });
+		res.end(JSON.stringify({ id: archiveFixture.id, marker }));
+		return;
+	}
+	if (url.pathname === "/archive-fixture" && req.method === "DELETE") {
+		archiveFixture?.client.close();
+		archiveFixture = undefined;
+		res.writeHead(204).end();
 		return;
 	}
 	if (url.pathname === "/presence") {

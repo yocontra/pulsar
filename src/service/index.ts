@@ -106,6 +106,7 @@ import { Queue } from "./queue.ts";
 import { Registry } from "./registry.ts";
 import { Router } from "./router.ts";
 import { ServerInteractions } from "./server-interactions.ts";
+import { SessionHistory } from "./session-history.ts";
 import { Sessions } from "./sessions.ts";
 import { Subagents } from "./subagents.ts";
 import {
@@ -480,7 +481,9 @@ export class PulsarService {
 			keyFile: opts.push?.keyFile ?? (() => join(stateDir(), "vapid.json")),
 			...(opts.push?.send ? { send: opts.push.send } : {}),
 		});
+		const history = new SessionHistory(this.store, this.registry.machine);
 		this.app = new AppApi({
+			history,
 			registry: this.registry,
 			store: this.store,
 			mailbox: this.mailbox,
@@ -504,6 +507,7 @@ export class PulsarService {
 			for (const id of ids) this.interest.note(id);
 		};
 		this.launches = new Launches({
+			savedSession: (id) => history.get(id),
 			registry: this.registry,
 			events: this.events,
 			store: this.store,
@@ -550,15 +554,17 @@ export class PulsarService {
 				// A local subagent: a record made from its parent, never registered.
 				if (isLocalSubagentId(id)) return this.subagents.agentFor(id);
 				const agent = this.registry.find(id);
-				return agent && !agent.id.includes("/") ? agent : undefined;
+				return agent && !agent.id.includes("/") ? agent : history.get(id);
 			},
 			{
 				...opts.transcripts,
+				isHomeAddress: (id) => id.startsWith(`${this.machineId}/`),
 				resolve: (agent) =>
 					agent.meta.subagentOf
 						? this.subagents.transcript(agent)
 						: resolveTranscript(agent),
-				ensure: (id) => this.subagents.row(id),
+				ensure: (id) =>
+					isLocalSubagentId(id) ? this.subagents.row(id) : history.recover(id),
 				missing: (agent) =>
 					opts.transcripts?.missing?.(agent) ??
 					(agent.meta.subagentOf

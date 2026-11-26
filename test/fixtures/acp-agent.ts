@@ -23,6 +23,9 @@ let mcp: ReturnType<typeof spawn> | undefined;
 let mcpResult: ((text: string) => void) | undefined;
 let promptId: number | undefined;
 const permissionId = 987;
+const questionPermissionId = 988;
+const elicitationId = 989;
+const detachedPermissionId = 990;
 let currentMode = "ask";
 const modes = () => ({
 	currentModeId: currentMode,
@@ -55,6 +58,8 @@ for await (const line of lines) {
 	const { id, method, params, result } = JSON.parse(line);
 	switch (method) {
 		case "initialize":
+			if (!params.clientCapabilities.elicitation?.form)
+				throw new Error("Fixture expected form capability");
 			reply(id, {
 				protocolVersion: 1,
 				...(mode === "steer"
@@ -70,9 +75,11 @@ for await (const line of lines) {
 					mode === "unsupported"
 						? {}
 						: {
-								loadSession: mode === "load",
+								loadSession: mode === "load" || mode === "wrong-load",
 								sessionCapabilities:
-									mode === "load" ? {} : { resume: {}, close: {} },
+									mode === "load" || mode === "wrong-load"
+										? {}
+										: { resume: {}, close: {} },
 							},
 			});
 			break;
@@ -85,6 +92,15 @@ for await (const line of lines) {
 				throw new Error("Fixture expected session/resume");
 			if (mode === "load" && method !== "session/load")
 				throw new Error("Fixture expected session/load");
+			if (mode === "wrong-resume" || mode === "wrong-load") {
+				if (
+					method !==
+					(mode === "wrong-resume" ? "session/resume" : "session/load")
+				)
+					throw new Error("A saved session must not start a new conversation");
+				reply(id, { sessionId: "another-session" });
+				break;
+			}
 			const spec = params.mcpServers.find(
 				(item: { name: string }) => item.name === "pulsar",
 			);
@@ -180,6 +196,105 @@ for await (const line of lines) {
 				);
 			} else if (text.includes("fixture-hold")) {
 				update("Holding");
+			} else if (text.includes("fixture-detached")) {
+				emit("session/update", {
+					sessionId,
+					update: {
+						sessionUpdate: "tool_call",
+						toolCallId: "late-tool",
+						title: "Background watcher",
+						status: "in_progress",
+					},
+				});
+				emit("session/update", {
+					sessionId,
+					update: {
+						sessionUpdate: "tool_call_update",
+						toolCallId: "late-tool",
+						rawOutput: "Buffered background result",
+					},
+				});
+				reply(id, { stopReason: "end_turn" });
+				promptId = undefined;
+				setTimeout(() => {
+					emit("session/update", {
+						sessionId: "unrelated-session",
+						update: {
+							sessionUpdate: "agent_message_chunk",
+							content: { type: "text", text: "Foreign detached content" },
+						},
+					});
+					emit("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "tool_call_update",
+							toolCallId: "late-tool",
+							status: "completed",
+						},
+					});
+					if (!text.includes("request-only")) update("Detached says ");
+					emit(
+						"session/request_permission",
+						{
+							sessionId,
+							toolCall: {
+								toolCallId: "interaction_detached",
+								title: "Choose after the turn",
+							},
+							options: [
+								{ optionId: "late-yes", name: "Yes", kind: "allow_once" },
+								{ optionId: "late-no", name: "No", kind: "reject_once" },
+							],
+						},
+						detachedPermissionId,
+					);
+				}, 60);
+			} else if (text.includes("fixture-legacy-question")) {
+				emit(
+					"session/request_permission",
+					{
+						sessionId,
+						toolCall: {
+							toolCallId: "interaction_fixture",
+							title: "Which branch?",
+						},
+						options: [
+							{ optionId: "a", name: "Stable", kind: "allow_once" },
+							{ optionId: "b", name: "Preview", kind: "reject_once" },
+						],
+					},
+					questionPermissionId,
+				);
+			} else if (text.includes("fixture-form-question")) {
+				emit(
+					"elicitation/create",
+					{
+						sessionId,
+						mode: "form",
+						message: "Pick the environment and a reason",
+						requestedSchema: {
+							type: "object",
+							properties: {
+								env: {
+									type: "string",
+									title: "Environment",
+									oneOf: [{ const: "prod", title: "Production" }],
+								},
+								reason: { type: "string", title: "Reason" },
+								repeats: { type: "integer", title: "Repeats", minimum: 1 },
+								confirm: { type: "boolean", title: "Confirm" },
+								extra: { type: "string", title: "Extra notes" },
+								flags: {
+									type: "array",
+									title: "Flags",
+									items: { type: "string", enum: ["trace", "profile"] },
+								},
+							},
+							required: ["env", "reason", "repeats", "confirm"],
+						},
+					},
+					elicitationId,
+				);
 			} else if (text.includes("fixture-next-turn")) {
 				update("Queued turn ran");
 				reply(id, { stopReason: "end_turn" });
@@ -297,6 +412,28 @@ for await (const line of lines) {
 			reply(id, {});
 			break;
 		default:
+			if (id === detachedPermissionId) {
+				if (result?.outcome?.outcome === "cancelled")
+					process.stderr.write("Detached question cancelled\n");
+				else
+					update(result?.outcome?.optionId === "late-yes" ? "hello." : "bye.");
+				emit("session/update", {
+					sessionId,
+					update: { sessionUpdate: "usage_update", used: 121, size: 4096 },
+				});
+			}
+			if (id === elicitationId && promptId !== undefined) {
+				if (result?.action === "accept") {
+					update(`Form selected ${JSON.stringify(result.content)}`);
+					reply(promptId, { stopReason: "end_turn" });
+				} else {
+					process.stderr.write(`Fixture elicitation ${result?.action}\n`);
+				}
+			}
+			if (id === questionPermissionId && promptId !== undefined) {
+				update(`Question selected ${result?.outcome?.optionId}`);
+				reply(promptId, { stopReason: "end_turn" });
+			}
 			if (id === permissionId && promptId !== undefined) {
 				update(
 					`Permission ${result.outcome.optionId ?? result.outcome.outcome}`,

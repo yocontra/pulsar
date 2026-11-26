@@ -4,6 +4,7 @@ import {
 	describe,
 	expect,
 	setDefaultTimeout,
+	spyOn,
 	test,
 } from "bun:test";
 import { execFileSync } from "node:child_process";
@@ -17,10 +18,12 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Federation } from "../src/federation/index.ts";
 import { PoolMembers } from "../src/federation/members.ts";
+import { driverFor } from "../src/harnesses/index.ts";
 import { StaticIdentity } from "../src/http/identity.ts";
 import type {
 	LaunchHarness,
@@ -39,6 +42,7 @@ import {
 	parseProbe,
 	terminalDialog,
 } from "../src/service/launch.ts";
+import { SessionHistory } from "../src/service/session-history.ts";
 import { Store } from "../src/store.ts";
 import { HttpTransport } from "../src/transport/http.ts";
 import { FakeTailnet } from "./fake-tailnet.ts";
@@ -74,6 +78,7 @@ const VERIFIED = { ...USER, verified: true as const };
 let mode: "plain" | "trust" | "exit" = "plain";
 let logN = 0;
 const logs: string[] = [];
+const resumedArgs: string[][] = [];
 const sends: { node: string; agentId: string; body: string }[] = [];
 
 writeFileSync(
@@ -117,7 +122,8 @@ async function startNode(name: string): Promise<Node> {
 		launch: {
 			tmux: { socket: SOCKET },
 			shell: "/bin/sh",
-			command: () => {
+			command: (_h, resumeArgs) => {
+				if (resumeArgs) resumedArgs.push(resumeArgs);
 				const log = join(root, `typed-${logN++}.txt`);
 				writeFileSync(log, "");
 				logs.push(log);
@@ -183,7 +189,13 @@ function git(cwd: string, ...args: string[]) {
 }
 
 /** Plays the harness connecting to Pulsar from the pane's process. */
-function register(n: Node, s: LaunchState, harness: LaunchHarness = "pi") {
+function register(
+	n: Node,
+	s: LaunchState,
+	harness: LaunchHarness = "pi",
+	sessionId?: string,
+	managed = false,
+) {
 	const pid = Number(
 		tmux("display-message", "-p", "-t", `=${s.session}:`, "#{pane_pid}").trim(),
 	);
@@ -206,7 +218,14 @@ function register(n: Node, s: LaunchState, harness: LaunchHarness = "pi") {
 	n.service.setRole(caller, "extension");
 	const agent = n.service.registerAgent(
 		caller,
-		registration({ harness, pid, cwd: s.cwd, project: "demo" }),
+		registration({
+			harness,
+			pid,
+			cwd: s.cwd,
+			project: "demo",
+			...(sessionId ? { sessionId } : {}),
+			...(managed ? { meta: { acp: "1", acpResume: "1" } } : {}),
+		}),
 	);
 	agentId = agent.id;
 	return { agent, close: () => controller.abort() };
@@ -382,6 +401,144 @@ describe("launch params and commands", () => {
 });
 
 describe.skipIf(!HAS_TMUX)("launching on this node", () => {
+	test("an archived native session resumes once, by exact ID and workspace", async () => {
+		using scan = spyOn(
+			driverFor("antigravity")!.scan!,
+			"sessions",
+		).mockReturnValue([]);
+		const id = "66220000-0000-4000-8000-000000000001";
+		const dir = join(HOME, ".gemini/antigravity-cli/conversations");
+		mkdirSync(dir, { recursive: true });
+		const { DatabaseSync } = createRequire(import.meta.url)(
+			"node:sqlite",
+		) as typeof import("node:sqlite");
+		const db = new DatabaseSync(join(dir, `${id}.db`));
+		db.exec("CREATE TABLE trajectory_meta(cascade_id TEXT)");
+		db.prepare("INSERT INTO trajectory_meta VALUES (?)").run(id);
+		db.close();
+		const summary = new DatabaseSync(join(dir, "../conversation_summaries.db"));
+		summary.exec(
+			"CREATE TABLE conversation_summaries(conversation_id TEXT, workspace_uris TEXT, title TEXT, last_modified_time TEXT)",
+		);
+		summary
+			.prepare("INSERT INTO conversation_summaries VALUES (?, ?, ?, ?)")
+			.run(
+				id,
+				JSON.stringify([`file://${project}`]),
+				"Saved",
+				new Date().toISOString(),
+			);
+		summary.close();
+		const params = {
+			nonce: nonce(),
+			cwd: project,
+			workspace: "current",
+			harness: "antigravity",
+			resumeSessionId: id,
+		};
+		expect(
+			await code(
+				home.service.launches.start(VERIFIED, { ...params, cwd: HOME }),
+			),
+		).toBe("bad_request");
+		scan.mockReturnValueOnce([
+			{
+				harness: "antigravity",
+				sessionId: id,
+				pid: 123,
+				cwd: project,
+				status: "idle",
+				meta: {},
+			},
+		]);
+		expect(await code(home.service.launches.start(VERIFIED, params))).toBe(
+			"conflict",
+		);
+		const s = await home.service.launches.start(VERIFIED, params);
+		await until(() => now(home, s.id).step === "waiting", 5000);
+		expect(resumedArgs.at(-1)).toEqual(["agy", "--conversation", id]);
+		const duplicate = await home.service.launches.start(VERIFIED, {
+			...params,
+			nonce: nonce(),
+		});
+		await until(() => now(home, duplicate.id).step === "failed", 5000);
+		expect(duplicate.session).toBe(s.session);
+		const exact = register(home, s, "antigravity", id);
+		try {
+			await until(() => now(home, s.id).step === "done", 5000);
+			expect(now(home, s.id).agentId).toBe(exact.agent.id);
+			expect(
+				await code(
+					home.service.launches.start(VERIFIED, { ...params, nonce: nonce() }),
+				),
+			).toBe("conflict");
+		} finally {
+			exact.close();
+		}
+	});
+
+	test("the login shell passes an opaque provider session id as one literal argument", () => {
+		const id = "space and 'quotes' + $(uname) + `pwd`";
+		const command = harnessCommand("cursor", ["/usr/bin/printf", "%s", id]);
+		expect(execFileSync("/bin/sh", ["-c", command], { encoding: "utf8" })).toBe(
+			id,
+		);
+	});
+
+	test("an ACP archive uses only its negotiated provider's exact resume command", async () => {
+		const id = "space and 'quote/subsession";
+		const history = new SessionHistory(home.store, home.name);
+		const key = home.service.registry.agentId("cursor", id, null);
+		const original = home.service.registry.upsert({
+			harness: "cursor",
+			sessionId: id,
+			pid: null,
+			cwd: project,
+			project: "demo",
+			branch: null,
+			tags: [],
+			registered: false,
+			meta: { acp: "1" },
+		});
+		original.status = "gone";
+		const params = {
+			nonce: nonce(),
+			cwd: project,
+			workspace: "current",
+			harness: "cursor",
+			resumeSessionId: id,
+		};
+		history.remember(original);
+		expect(await code(home.service.launches.start(VERIFIED, params))).toBe(
+			"bad_request",
+		);
+		original.meta.acpResume = "1";
+		history.remember(original);
+		const s = await home.service.launches.start(VERIFIED, params);
+		await until(() => now(home, s.id).step === "waiting", 5000);
+		expect(resumedArgs.at(-1)).toEqual([
+			"pulsar",
+			"acp",
+			"cursor",
+			"--resume",
+			id,
+		]);
+		const wrong = register(home, s, "cursor", "fresh", true);
+		try {
+			await new Promise((resolve) => setTimeout(resolve, 120));
+			expect(now(home, s.id).agentId).toBeNull();
+			const exact = register(home, s, "cursor", id, true);
+			try {
+				await until(() => now(home, s.id).step === "done", 5000);
+				expect(now(home, s.id).agentId).toBe(key);
+			} finally {
+				exact.close();
+			}
+		} finally {
+			wrong.close();
+		}
+	});
+
 	test("starts in tmux, waits until ready, then sends the first message", async () => {
 		mode = "plain";
 		const before = sends.length;
@@ -434,7 +591,9 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 				"#{pane_id}",
 			).trim();
 			expect(agent.meta.tmux).toBe(pane);
-			expect(home.service.app.agent(VERIFIED, agent.id).tmux).toBe(pane);
+			expect((await home.service.app.agent(VERIFIED, agent.id)).tmux).toBe(
+				pane,
+			);
 			expect(agent.name).toBe("login-fixer");
 			// The operator started it: its finished and failed turns notify.
 			expect(home.service.interest.has(agent.id)).toBe(true);

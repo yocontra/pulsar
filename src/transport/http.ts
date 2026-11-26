@@ -1009,7 +1009,9 @@ export class HttpTransport {
 			const q = parse(Q.agents, c.req.query());
 			return c.json(svc.agents(who(c), q));
 		});
-		api.get("/agents/:id", (c) => c.json(svc.agent(who(c), c.req.param("id"))));
+		api.get("/agents/:id", async (c) =>
+			c.json(await svc.agent(who(c), c.req.param("id"))),
+		);
 		// Subagents: children of one agent, never in /agents.
 		api.get("/agents/:id/subagents", async (c) => {
 			this.service.authorize(who(c), "agents");

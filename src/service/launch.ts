@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { homedir as osHome, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative } from "node:path";
@@ -5,6 +6,7 @@ import { exec } from "../exec.ts";
 import { runGit, worktreeRoot } from "../git-write.ts";
 import { ACP_PROVIDERS } from "../harnesses/acp-catalog.ts";
 import { launchable } from "../harnesses/catalog.ts";
+import { driverFor } from "../harnesses/index.ts";
 import type {
 	LaunchHarness,
 	LaunchOptions,
@@ -56,8 +58,14 @@ const ACP_BINARIES = new Map<LaunchHarness, string>(
 	ACP_PROVIDERS.map(({ id, binary }) => [id, binary]),
 );
 
-/** The shell command a harness starts with (a constant: never user input). */
-export function harnessCommand(h: LaunchHarness): string {
+/** The program run by the login shell in a new tmux pane. */
+export function harnessCommand(
+	h: LaunchHarness,
+	resumeArgs?: string[],
+): string {
+	// A provider session ID is opaque. Quote each argument for the login shell.
+	if (resumeArgs)
+		return `exec ${resumeArgs.map((arg) => `'${arg.replaceAll("'", "'\\''")}'`).join(" ")}`;
 	const entry = LAUNCH_HARNESSES[h];
 	const acp = `exec pulsar acp ${entry.id}`;
 	if ("managed" in entry) return acp;
@@ -159,6 +167,7 @@ export function parseLaunchParams(raw: unknown): LaunchParams {
 		"cwd",
 		"harness",
 		"workspace",
+		"resumeSessionId",
 		"branch",
 		"base",
 		"prompt",
@@ -194,11 +203,28 @@ export function parseLaunchParams(raw: unknown): LaunchParams {
 			throw new RpcError("bad_request", `launch: bad branch name ${ref}`);
 	const prompt = str(o, "prompt", LIMITS.maxBody);
 	const name = str(o, "name", 80)?.trim() || undefined;
+	const resumeSessionId = str(o, "resumeSessionId", 200);
+	if (
+		resumeSessionId !== undefined &&
+		(workspace !== "current" ||
+			prompt ||
+			name ||
+			!resumeSessionId ||
+			resumeSessionId.includes("%2F") ||
+			/\p{Cc}/u.test(resumeSessionId) ||
+			(!ACP_BINARIES.has(harness as LaunchHarness) &&
+				!driverFor(harness)?.resumeArgs?.(resumeSessionId)))
+	)
+		throw new RpcError(
+			"bad_request",
+			"Cannot resume this session with the requested launch options",
+		);
 	return {
 		nonce,
 		cwd,
 		harness: harness as LaunchHarness,
 		workspace,
+		...(resumeSessionId ? { resumeSessionId } : {}),
 		...(branch ? { branch } : {}),
 		...(base ? { base } : {}),
 		...(prompt?.trim() ? { prompt } : {}),
@@ -266,11 +292,18 @@ export interface LaunchDeps {
 	/** Tests: the login shell (default: the operator's, from the passwd entry). */
 	shell?: string;
 	/** Tests: the command a harness starts with (default `exec <bin>`). */
-	command?: (h: LaunchHarness) => string;
+	command?: (h: LaunchHarness, resumeArgs?: string[]) => string;
+	savedSession?: (id: string) => Agent | undefined;
 	timing?: Partial<LaunchTiming>;
 }
 
+interface Resume {
+	args: string[];
+	acp: boolean;
+}
+
 interface Running {
+	resume?: Resume;
 	state: LaunchState;
 	params: LaunchParams;
 	nonce: string;
@@ -314,8 +347,10 @@ export class Launches {
 		return sh && isAbsolute(sh) ? sh : "/bin/sh";
 	}
 
-	private command(h: LaunchHarness): string {
-		return this.d.command?.(h) ?? harnessCommand(h);
+	private command(h: LaunchHarness, resumeArgs?: string[]): string {
+		if (this.d.command) return this.d.command(h, resumeArgs);
+
+		return harnessCommand(h, resumeArgs);
 	}
 
 	/**
@@ -395,6 +430,63 @@ export class Launches {
 		return started;
 	}
 
+	private async prepareResume(
+		harness: LaunchHarness,
+		id: string,
+		cwd: string,
+	): Promise<Resume> {
+		const key = this.d.registry.agentId(harness, id, null);
+		const active = this.d.registry.get(key);
+		if (active && active.status !== "gone")
+			throw new RpcError("conflict", "This session is already open");
+		const known = this.d.savedSession?.(key);
+		let original = known?.cwd;
+		let resume: Resume;
+		if (known?.meta.acp === "1") {
+			if (
+				known.sessionId !== id ||
+				known.harness !== harness ||
+				known.meta.acpResume !== "1" ||
+				!ACP_BINARIES.has(harness)
+			)
+				throw new RpcError(
+					"bad_request",
+					"This provider did not advertise ACP resume or load",
+				);
+			resume = { args: ["pulsar", "acp", harness, "--resume", id], acp: true };
+		} else {
+			const driver = driverFor(harness);
+			const args = driver?.resumeArgs?.(id);
+			if (!args || !driver?.scan)
+				throw new RpcError(
+					"bad_request",
+					"This session cannot resume with its native CLI",
+				);
+			const saved = await driver.readSession?.(id);
+			if (!saved)
+				throw new RpcError(
+					"not_found",
+					"The native session is no longer available",
+				);
+			original = saved.cwd ?? original;
+			const rows = await driver.scan.sessions();
+			if (rows.some((row) => row.sessionId === id))
+				throw new RpcError("conflict", "This session is already open");
+			if (rows.some((row) => row.sessionId.startsWith("pid:")))
+				throw new RpcError(
+					"conflict",
+					"The harness has an open session whose identity is still unknown",
+				);
+			resume = { args, acp: false };
+		}
+		if (!original || (await this.folder(original)) !== cwd)
+			throw new RpcError(
+				"bad_request",
+				"Resume this session in its original folder",
+			);
+		return resume;
+	}
+
 	private async startOnce(
 		user: VerifiedUser,
 		p: LaunchParams,
@@ -403,6 +495,9 @@ export class Launches {
 		this.prune();
 
 		const cwd = await this.folder(p.cwd);
+		const resume = p.resumeSessionId
+			? await this.prepareResume(p.harness, p.resumeSessionId, cwd)
+			: undefined;
 		let dir = cwd;
 		let worktree: {
 			root: string;
@@ -461,13 +556,18 @@ export class Launches {
 			detail: null,
 			error: null,
 			agentId: null,
-			session: `pulsar-${id}`,
+			session: p.resumeSessionId
+				? `pulsar-resume-${createHash("sha256")
+						.update(JSON.stringify([p.harness, p.resumeSessionId]))
+						.digest("hex")
+						.slice(0, 32)}`
+				: `pulsar-${id}`,
 			prompt: !!p.prompt,
 			sent: false,
 			startedAt: now,
 			updatedAt: now,
 		};
-		const run: Running = { state, params: p, nonce: p.nonce };
+		const run: Running = { state, params: p, nonce: p.nonce, resume };
 		this.runs.set(id, run);
 		this.nonces.set(key, id);
 		this.emit(run);
@@ -534,7 +634,7 @@ export class Launches {
 		const started = await newSession(
 			s.session!,
 			s.cwd,
-			[this.shell(), "-lic", this.command(s.harness)],
+			[this.shell(), "-lic", this.command(s.harness, run.resume?.args)],
 			this.d.tmux,
 		);
 		if (!started.ok)
@@ -563,7 +663,13 @@ export class Launches {
 			}
 			quiet = text === last ? quiet + 1 : 0;
 			last = text;
-			const agent = await this.match(s, shellPid, t0);
+			const agent = await this.match(
+				s,
+				shellPid,
+				t0,
+				run.params.resumeSessionId,
+				run.resume?.acp,
+			);
 			if (agent) {
 				// The launcher knows the pane: Stop and typing reach it.
 				if (agent.meta.tmux !== pane) agent.meta.tmux = pane;
@@ -659,10 +765,19 @@ export class Launches {
 		s: LaunchState,
 		shellPid: number | null,
 		since: number,
+		resumeSessionId?: string,
+		managed?: boolean,
 	): Promise<Agent | null> {
 		const candidates = this.d.registry
 			.all()
-			.filter((a) => a.harness === s.harness && a.status !== "gone");
+			.filter(
+				(a) =>
+					a.harness === s.harness &&
+					a.status !== "gone" &&
+					(!resumeSessionId ||
+						(a.sessionId === resumeSessionId &&
+							(a.meta.acp === "1") === managed)),
+			);
 		if (candidates.length === 0) return null;
 		if (shellPid) {
 			const direct = candidates.find((a) => a.pid === shellPid);
@@ -680,6 +795,7 @@ export class Launches {
 			const child = candidates.find((a) => a.pid !== null && under(a.pid));
 			if (child) return child;
 		}
+		if (resumeSessionId) return null;
 		const recent = candidates.filter(
 			(a) => a.pid === null && a.cwd === s.cwd && a.createdAt >= since,
 		);

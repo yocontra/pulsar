@@ -590,8 +590,8 @@ describe("locate", () => {
 			const missing = register("missing");
 			const row = (id: string) => service.app.agent({ kind: "terminal" }, id);
 			await service.registry.refreshActivity();
-			expect(row(own.id).activity).toBe("Requested a command");
-			expect(row(missing.id).activity).toBeNull();
+			expect((await row(own.id)).activity).toBe("Requested a command");
+			expect((await row(missing.id)).activity).toBeNull();
 			appendFileSync(
 				file,
 				line({
@@ -601,10 +601,10 @@ describe("locate", () => {
 				}),
 			);
 			await service.registry.refreshActivity();
-			expect(row(own.id).activity).toBe("Ran a command");
+			expect((await row(own.id)).activity).toBe("Ran a command");
 			service.registry.setIdentity(own, { activity: "Reviewing the plan" });
 			await service.registry.refreshActivity();
-			expect(row(own.id).activity).toBe("Reviewing the plan");
+			expect((await row(own.id)).activity).toBe("Reviewing the plan");
 		} finally {
 			service.stop();
 			store.close();
@@ -1292,6 +1292,53 @@ describe("service transcripts", () => {
 		await until(() => got.length === 1, 2000);
 		off();
 		expect(service.transcripts.tailer.watching).toBe(0);
+	});
+
+	test("saved session links survive restart and cannot receive live messages", async () => {
+		const original = add("with-log");
+		const principal = { kind: "terminal" } as const;
+		await service.app.agent(principal, original.id);
+		service.stop();
+		service = new PulsarService({
+			store,
+			scan: false,
+			machine: "t",
+			transcripts: {
+				resolve: (agent) =>
+					agent.sessionId === original.sessionId
+						? {
+								source: { kind: "file", path: file },
+								parse: support("pi").parse,
+							}
+						: null,
+			},
+		});
+		for (const id of [original.id, `${store.machineId()}/${original.id}`]) {
+			const saved = await service.app.agent(principal, id);
+			expect(saved).toMatchObject({
+				id: original.id,
+				archived: true,
+				name: original.name,
+				state: "offline",
+				canStop: false,
+				wake: "refuses",
+				pid: null,
+			});
+			expect(
+				(await service.transcripts.page(id)).events.map((e) => e.id),
+			).toContain("cm000001");
+		}
+		expect(service.registry.deliveryAgent(original.id)).toBeUndefined();
+		expect(service.registry.live()).toHaveLength(0);
+		const sibling = add("second-session");
+		add("pid:8123");
+		expect(
+			(await service.app.agent(principal, original.id)).openSessions,
+		).toEqual([{ id: sibling.id, name: sibling.name }]);
+		add("with-log");
+		expect(
+			(await service.app.agent(principal, original.id)).archived,
+		).toBeUndefined();
 	});
 
 	test("agents without a transcript, unknown agents, bad cursors", async () => {

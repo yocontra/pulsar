@@ -60,6 +60,10 @@ export interface NeedsYou {
 
 /** One agent as the app sees it: tree leaves, lists, previews, the session header. */
 export interface AgentRow extends PublicAgent {
+	/** Saved local conversation with no live recipient. */
+	archived?: boolean;
+	/** Live sessions on the same harness in the saved conversation's folder. */
+	openSessions?: { id: string; name: string }[];
 	machineId: string;
 	/** Pool address: `<machineId>/<agent id>`. */
 	address: string;
@@ -1755,6 +1759,8 @@ export interface LaunchParams {
 	branch?: string;
 	/** What the new branch starts from (worktree only); HEAD when absent. */
 	base?: string;
+	/** Reopen this exact archived session in its original workspace. */
+	resumeSessionId?: string;
 	/** The first message, sent once the agent is ready. */
 	prompt?: string;
 	/** The agent's name in Pulsar. */

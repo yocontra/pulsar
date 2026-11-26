@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { FED_PROTOCOL } from "../federation/protocol.ts";
+import { driverFor } from "../harnesses/index.ts";
 import type {
 	AgentRow,
 	AgentSort,
@@ -17,7 +18,13 @@ import type {
 } from "../http/wire.ts";
 import { RpcError } from "../rpc.ts";
 import type { Store } from "../store.ts";
-import type { Agent, Priority, Receipt, ReceiptState } from "../types.ts";
+import {
+	type Agent,
+	isFolderGuess,
+	type Priority,
+	type Receipt,
+	type ReceiptState,
+} from "../types.ts";
 import { VERSION } from "../version.ts";
 import { authorize } from "./authorize.ts";
 import { OPERATOR_ID, type Principal } from "./caller.ts";
@@ -25,6 +32,7 @@ import { LIMITS } from "./limits.ts";
 import type { Mailbox } from "./mailbox.ts";
 import { splitAddress, splitSubagentId } from "./pool.ts";
 import type { Registry } from "./registry.ts";
+import type { SessionHistory } from "./session-history.ts";
 import { forParentBody, type Subagents } from "./subagents.ts";
 import { delivered, normalPriority } from "./util.ts";
 import { type Views, wakeTotals } from "./views.ts";
@@ -74,6 +82,7 @@ const RECEIPTS_INLINE = 50;
  * and real sends as the user, receipts. Each checks `authorize` itself.
  */
 export class AppApi {
+	private readonly history: SessionHistory;
 	private readonly registry: Registry;
 	private readonly store: Store;
 	private readonly mailbox: Mailbox;
@@ -89,6 +98,7 @@ export class AppApi {
 	onOperatorSend: (agentIds: string[]) => void = () => {};
 
 	constructor(deps: {
+		history: SessionHistory;
 		registry: Registry;
 		store: Store;
 		mailbox: Mailbox;
@@ -96,6 +106,7 @@ export class AppApi {
 		machine: () => { id: string; name: string };
 		subagents: Subagents;
 	}) {
+		this.history = deps.history;
 		this.subagents = deps.subagents;
 		this.registry = deps.registry;
 		this.store = deps.store;
@@ -135,17 +146,56 @@ export class AppApi {
 		};
 	}
 
-	/** `GET /agents/:id`: one live agent's row. */
-	agent(p: Principal, id: string): AgentRow {
+	/** A conversation stays readable after its process exits. */
+	async agent(p: Principal, id: string): Promise<AgentRow> {
 		authorize(p, "agents");
-		// The operator: shown while a presence check from a terminal waits on
-		// it, and still readable once answered (the open view refreshes).
-		const agent =
+		const current = () =>
 			this.registry.find(id) ??
 			(id === OPERATOR_ID ? this.registry.operator() : undefined);
-		if (!agent || agent.status === "gone")
+		let agent = current();
+		if (agent) this.history.remember(agent);
+		if (agent && agent.status !== "gone") return this.views.row(agent);
+		let saved = this.history.get(id);
+		if (!saved) {
+			await this.history.recover(id);
+			agent = current();
+			if (agent && agent.status !== "gone") return this.views.row(agent);
+			saved = this.history.get(id);
+		}
+		if (!saved) {
+			if (agent) return this.views.row(agent);
 			throw new RpcError("not_found", `no agent ${id}`);
-		return this.views.row(agent);
+		}
+		const row = this.views.row(saved);
+		if (row.capabilities)
+			row.capabilities.resume = !!(
+				saved.cwd &&
+				saved.sessionId &&
+				(saved.meta.acp === "1"
+					? saved.meta.acpResume === "1"
+					: driverFor(saved.harness)?.resumeArgs?.(saved.sessionId))
+			);
+		const openSessions = saved.cwd
+			? this.registry
+					.live()
+					.filter(
+						(a) =>
+							a.id !== saved.id &&
+							!a.meta.subagentOf &&
+							a.harness === saved.harness &&
+							a.cwd === saved.cwd &&
+							!isFolderGuess(a) &&
+							a.sessionId &&
+							!a.sessionId.startsWith("pid:"),
+					)
+					.map(({ id, name }) => ({ id, name }))
+			: [];
+		return {
+			...row,
+			archived: true,
+			wake: "refuses",
+			...(openSessions.length ? { openSessions } : {}),
+		};
 	}
 
 	tree(

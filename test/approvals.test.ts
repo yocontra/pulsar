@@ -771,7 +771,7 @@ describe("approvals migration (4)", () => {
 		db.close();
 		const store = new Store(file);
 		expect(store.version()).toBe(SCHEMA_VERSION);
-		expect(SCHEMA_VERSION).toBe(11);
+		expect(SCHEMA_VERSION).toBe(12);
 		const cols = (
 			store.db.prepare("PRAGMA table_info(approvals)").all() as {
 				name: string;

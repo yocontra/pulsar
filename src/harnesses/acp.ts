@@ -10,6 +10,8 @@ import {
 	type AgentCapabilities,
 	ClientApp,
 	type ClientConnection,
+	type CreateElicitationRequest,
+	type CreateElicitationResponse,
 	type InitializeResponse,
 	type LoadSessionResponse,
 	type McpServerStdio,
@@ -24,7 +26,10 @@ import { DaemonClient } from "../client.ts";
 import { gitInfoAsync } from "../git.ts";
 import { ensureDir, stateDir } from "../paths.ts";
 import { parsePush } from "../push-frame.ts";
-import type { InteractionResult } from "../service/approvals.ts";
+import type {
+	InteractionRequest,
+	InteractionResult,
+} from "../service/approvals.ts";
 import { autoTags, envTags } from "../tags.ts";
 import type { TranscriptEvent } from "../transcripts/types.ts";
 import { PROTOCOL_VERSION, type Registration } from "../types.ts";
@@ -32,6 +37,7 @@ import { AcpUsageWriter, loadAcpUsage } from "../usage/acp.ts";
 import { VERSION } from "../version.ts";
 import { AcpSessionControls } from "./acp-controls.ts";
 import { ACP_IDENTITY_ENV } from "./acp-identity.ts";
+import { antigravityQuestion, elicitationQuestions } from "./acp-questions.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
 import { acpTranscriptPath } from "./acp-transcript.ts";
 
@@ -54,6 +60,7 @@ const MAX_OUTPUT_BACKLOG = 256 * 1024;
 const MAX_PERMISSION_REQUESTS = 16;
 const MAX_TEXT = 64 * 1024;
 const TRANSCRIPT_UPDATE_MS = 250;
+const DETACHED_QUIET_MS = 30_000;
 
 type Prompt = {
 	text: string;
@@ -86,12 +93,11 @@ function supportsHostOwnedSteering(initialized: InitializeResponse): boolean {
 }
 
 type Turn = {
-	prompt: Prompt;
+	prompt?: Prompt;
 	cancelled: boolean;
 	delivered: boolean;
 	printed: boolean;
 	permissions: Map<string, () => void>;
-	tools: AcpToolResults;
 	block?: {
 		id: string;
 		messageId?: string | null;
@@ -105,6 +111,7 @@ type Turn = {
 class Bridge {
 	private readonly daemon = new DaemonClient();
 	private readonly controls = new AcpSessionControls();
+	private readonly tools = new AcpToolResults(MAX_TEXT);
 	private readonly setupUpdates: Array<{
 		sessionId: string;
 		update: SessionUpdate;
@@ -127,6 +134,8 @@ class Bridge {
 	private sessionId?: string;
 	private transcript?: number;
 	private turn?: Turn;
+	private detachedTimeout?: ReturnType<typeof setTimeout>;
+	private detachedSettled = false;
 	private draining?: Promise<void>;
 	private steering?: Promise<void>;
 	private canSteer = false;
@@ -143,6 +152,9 @@ class Bridge {
 		this.app = new ClientApp()
 			.onRequest("session/request_permission", ({ params: request }) =>
 				this.permission(request),
+			)
+			.onRequest("elicitation/create", ({ params: request }) =>
+				this.elicitation(request),
 			)
 			.onNotification("session/update", ({ params: { sessionId, update } }) => {
 				if (this.stopping) return;
@@ -225,7 +237,7 @@ class Bridge {
 			"initialize",
 			{
 				protocolVersion: ACP_PROTOCOL_VERSION,
-				clientCapabilities: {},
+				clientCapabilities: { elicitation: { form: {} } },
 				clientInfo: { name: "pulsar", version: VERSION },
 			},
 			startup,
@@ -259,24 +271,21 @@ class Bridge {
 			);
 			this.sessionId = opened.sessionId;
 			state = opened;
-		} else if (canResume) {
-			state = await connection.agent.request<LoadSessionResponse>(
-				"session/resume",
-				{ ...session, sessionId: requestedId },
-				startup,
-			);
-			this.sessionId = requestedId;
-		} else if (canLoad) {
-			state = await connection.agent.request<LoadSessionResponse>(
-				"session/load",
-				{ ...session, sessionId: requestedId },
-				startup,
-			);
-			this.sessionId = requestedId;
 		} else {
-			throw new Error(
-				`${this.options.harness} does not advertise ACP session resume or load`,
+			if (!canResume && !canLoad)
+				throw new Error(
+					`${this.options.harness} does not advertise ACP session resume or load`,
+				);
+			state = await connection.agent.request<LoadSessionResponse>(
+				canResume ? "session/resume" : "session/load",
+				{ ...session, sessionId: requestedId },
+				startup,
 			);
+			if (state && "sessionId" in state && state.sessionId !== requestedId)
+				throw new Error(
+					`${this.options.harness} returned a different session ID while reopening the conversation`,
+				);
+			this.sessionId = requestedId;
 		}
 		if (
 			!this.sessionId ||
@@ -319,6 +328,7 @@ class Bridge {
 			meta: {
 				acp: "1",
 				acpResume: canResume || canLoad ? "1" : "0",
+				acpQuestions: "1",
 				acpSteer: this.canSteer ? "1" : "0",
 				...this.runtimeMeta(),
 			},
@@ -459,6 +469,7 @@ class Bridge {
 		if (
 			!this.ready ||
 			this.stopping ||
+			(this.turn && !this.turn.prompt) ||
 			this.switchingMode ||
 			this.steering ||
 			!this.queue.length
@@ -556,7 +567,6 @@ class Bridge {
 				delivered: false,
 				printed: false,
 				permissions: new Map(),
-				tools: new AcpToolResults(MAX_TEXT),
 			};
 			this.turn = turn;
 			this.notify("set_status", { status: "busy" });
@@ -607,17 +617,14 @@ class Bridge {
 		await this.connection.agent.notify("session/cancel", {
 			sessionId: this.sessionId,
 		});
+		if (!turn.prompt) this.finishDetached(turn);
 		return "interrupted";
 	}
 
 	private async permission(
 		request: RequestPermissionRequest,
 	): Promise<RequestPermissionResponse> {
-		const turn = this.turn;
 		const cancelled = { outcome: { outcome: "cancelled" } } as const;
-		if (!turn || turn.cancelled || request.sessionId !== this.sessionId)
-			return cancelled;
-		this.confirmDelivery(turn);
 		const ids = new Set(request.options.map((option) => option.optionId));
 		if (ids.size !== request.options.length) return cancelled;
 		const allow = request.options.find(
@@ -629,14 +636,70 @@ class Bridge {
 		const select = (optionId: string): RequestPermissionResponse => ({
 			outcome: { outcome: "selected", optionId },
 		});
+		const turn = this.turnForInteraction(request.sessionId);
+		if (!turn) return cancelled;
+		this.confirmDelivery(turn);
 		if (
-			!allow ||
+			this.options.harness === "antigravity" &&
+			request.toolCall.toolCallId.startsWith("interaction_")
+		) {
+			const question = antigravityQuestion(request);
+			if (!question) return cancelled;
+			const answer = await this.interaction(turn, {
+				kind: "question",
+				tool: "Antigravity question",
+				prompt: question.prompt,
+			});
+			const selected =
+				answer?.answer?.kind === "question"
+					? question.answer(answer.answer.answers)
+					: undefined;
+			return selected ? select(selected) : cancelled;
+		}
+		if (!allow || request.toolCall.rawInput == null)
+			return deny ? select(deny.optionId) : cancelled;
+		const result = await this.interaction(turn, {
+			kind: "permission",
+			tool: request.toolCall.title ?? request.toolCall.kind ?? "ACP tool",
+			input: { arguments: request.toolCall.rawInput, option: allow.name },
+		});
+		if (turn.cancelled) return cancelled;
+		if (result?.decision === "allow-once") return select(allow.optionId);
+		return deny ? select(deny.optionId) : cancelled;
+	}
+
+	private async elicitation(
+		request: CreateElicitationRequest,
+	): Promise<CreateElicitationResponse> {
+		if (!("sessionId" in request)) return { action: "cancel" };
+		const form = elicitationQuestions(request);
+		if (!form) return { action: "cancel" };
+		const turn = this.turnForInteraction(request.sessionId);
+		if (!turn) return { action: "cancel" };
+		this.confirmDelivery(turn);
+		const answer = await this.interaction(turn, {
+			kind: "question",
+			tool: "ACP question",
+			prompt: form.prompt,
+		});
+		if (answer?.answer?.kind === "cancel") return { action: "decline" };
+		const content =
+			answer?.answer?.kind === "question"
+				? form.answer(answer.answer.answers)
+				: undefined;
+		return content ? { action: "accept", content } : { action: "cancel" };
+	}
+
+	private async interaction(
+		turn: Turn,
+		request: Pick<InteractionRequest, "kind" | "tool"> &
+			Partial<Pick<InteractionRequest, "input" | "prompt">>,
+	): Promise<InteractionResult | null> {
+		if (
 			!this.daemon.connected ||
-			request.toolCall.rawInput == null ||
 			turn.permissions.size >= MAX_PERMISSION_REQUESTS
 		)
-			return deny ? select(deny.optionId) : cancelled;
-
+			return null;
 		const ref = randomUUID();
 		const stopped = new Promise<null>((done) => {
 			turn.permissions.set(ref, () => {
@@ -652,25 +715,21 @@ class Bridge {
 						"interaction.ask",
 						{
 							ref,
-							kind: "permission",
-							tool:
-								request.toolCall.title ?? request.toolCall.kind ?? "ACP tool",
-							input: {
-								arguments: request.toolCall.rawInput,
-								option: allow.name,
-							},
+							...request,
 							timeoutMs: PERMISSION_TIMEOUT_MS,
 						},
 						PERMISSION_TIMEOUT_MS + 1000,
 					)
 					.catch(() => null),
 			]);
-			if (turn.cancelled) return cancelled;
-			if (result?.result?.decision === "allow-once")
-				return select(allow.optionId);
-			return deny ? select(deny.optionId) : cancelled;
+			return turn.cancelled ? null : (result?.result ?? null);
 		} finally {
 			turn.permissions.delete(ref);
+			if (!turn.prompt && this.detachedSettled && !turn.permissions.size)
+				setImmediate(() => {
+					if (this.detachedSettled && !turn.permissions.size)
+						this.finishDetached(turn);
+				});
 		}
 	}
 
@@ -713,9 +772,79 @@ class Bridge {
 			this.refreshCapabilities();
 		} else if (update.sessionUpdate === "usage_update") {
 			this.usageWriter?.add(update);
+			if (this.turn && !this.turn.prompt) this.settleDetached(this.turn);
 		} else if (this.turn) {
+			if (!this.turn.prompt && !this.turn.cancelled)
+				this.refreshDetached(this.turn);
 			this.update(this.turn, update);
+		} else if (this.options.harness === "antigravity") {
+			if (
+				update.sessionUpdate === "agent_message_chunk" ||
+				update.sessionUpdate === "agent_thought_chunk"
+			) {
+				if (update.content.type === "text" && update.content.text)
+					this.update(this.detachedTurn(), update);
+			} else if (
+				update.sessionUpdate === "tool_call" ||
+				(update.sessionUpdate === "tool_call_update" &&
+					this.tools.has(update.toolCallId))
+			) {
+				this.updateTool(update);
+			}
 		}
+	}
+
+	private turnForInteraction(sessionId: unknown): Turn | undefined {
+		if (
+			!this.ready ||
+			this.stopping ||
+			sessionId !== this.sessionId ||
+			this.turn?.cancelled
+		)
+			return;
+		return (
+			this.turn ??
+			(this.options.harness === "antigravity" ? this.detachedTurn() : undefined)
+		);
+	}
+
+	private detachedTurn(): Turn {
+		const turn: Turn = {
+			cancelled: false,
+			delivered: true,
+			printed: false,
+			permissions: new Map(),
+		};
+		this.turn = turn;
+		this.notify("set_status", { status: "busy" });
+		this.refreshDetached(turn);
+		return turn;
+	}
+
+	private refreshDetached(turn: Turn) {
+		this.detachedSettled = false;
+		clearTimeout(this.detachedTimeout);
+		this.detachedTimeout = setTimeout(
+			() => this.settleDetached(turn),
+			DETACHED_QUIET_MS,
+		);
+		this.detachedTimeout.unref();
+	}
+
+	private settleDetached(turn: Turn) {
+		if (turn !== this.turn) return;
+		this.detachedSettled = true;
+		if (!turn.permissions.size) this.finishDetached(turn);
+	}
+
+	private finishDetached(turn: Turn) {
+		if (turn !== this.turn) return;
+		clearTimeout(this.detachedTimeout);
+		this.writeBlock(turn);
+		if (turn.printed) this.print("\n");
+		this.turn = undefined;
+		this.notify("set_status", { status: "idle" });
+		this.drainQueue();
 	}
 
 	private async control(request: {
@@ -797,7 +926,7 @@ class Bridge {
 	private confirmDelivery(turn: Turn) {
 		if (turn.delivered) return;
 		turn.delivered = true;
-		if (turn.prompt.messageId) this.recordPrompt(turn.prompt);
+		if (turn.prompt?.messageId) this.recordPrompt(turn.prompt);
 	}
 
 	stopTerminalOutput() {
@@ -891,6 +1020,17 @@ class Bridge {
 		if (type === "tool_call") {
 			this.writeBlock(turn);
 			turn.block = undefined;
+		}
+		this.updateTool(update);
+	}
+
+	private updateTool(
+		update: Extract<
+			SessionUpdate,
+			{ sessionUpdate: "tool_call" | "tool_call_update" }
+		>,
+	) {
+		if (update.sessionUpdate === "tool_call") {
 			const { title, toolCallId, rawInput, status } = update;
 			this.record({
 				role: "tool",
@@ -904,7 +1044,7 @@ class Bridge {
 				},
 			});
 		}
-		const result = turn.tools.apply(update);
+		const result = this.tools.apply(update);
 		if (result) this.record(result);
 	}
 
@@ -948,6 +1088,7 @@ class Bridge {
 	async close() {
 		this.stopping = true;
 		clearTimeout(this.reconnect);
+		clearTimeout(this.detachedTimeout);
 		for (const prompt of this.queue) {
 			if (prompt.messageId)
 				this.receipt(
@@ -959,6 +1100,7 @@ class Bridge {
 		if (this.turn) {
 			this.turn.cancelled = true;
 			this.finishPermissions(this.turn);
+			if (!this.turn.prompt) this.writeBlock(this.turn);
 		}
 		const connection = this.connection;
 		if (connection && !connection.signal.aborted && this.sessionId) {

@@ -167,7 +167,7 @@ async function serviceEndpoint(): Promise<ServiceEndpoint | null> {
 
 export type ApiResult =
 	| { ok: true; body: unknown }
-	| { ok: false; status: number | null; error: string };
+	| { ok: false; status: number | null; error: string; uncertain?: boolean };
 
 export interface ApiOptions {
 	/** JSON request body. */
@@ -217,6 +217,9 @@ export async function opencodeRequest(
 				ok: false,
 				status: r.status,
 				error: `${r.status} ${text.slice(0, 300)}`,
+				...(method !== "GET" && (r.status === 408 || r.status >= 500)
+					? { uncertain: true }
+					: {}),
 			};
 			// A read is tried again through the CLI unless the service said 404
 			// (a session that is gone). A write (a prompt, a reply, an
@@ -228,13 +231,11 @@ export async function opencodeRequest(
 					: r.status === 401 || r.status === 403;
 			if (!retry) return httpError;
 		} catch (e) {
-			// A write that timed out may have reached the service: never sent twice.
-			const name = (e as Error).name;
-			if (
-				method !== "GET" &&
-				(name === "TimeoutError" || name === "AbortError")
-			)
-				return { ok: false, status: null, error: "timed out" };
+			// A reset or unreadable response can follow a successful write.
+			// Only a refused connection proves no request reached the service.
+			const err = e as Error & { code?: string; cause?: { code?: string } };
+			if (method !== "GET" && (err.code ?? err.cause?.code) !== "ECONNREFUSED")
+				return { ok: false, status: null, error: err.message, uncertain: true };
 		}
 	if (opts.httpOnly)
 		return httpError ?? { ok: false, status: null, error: "no service" };
@@ -252,12 +253,26 @@ export async function opencodeRequest(
 			lane: opts.lane ?? "background",
 		},
 	);
-	if (!r.ok)
-		return httpError ?? { ok: false, status: null, error: r.error ?? "failed" };
+	if (!r.ok) {
+		if (method === "GET" && httpError) return httpError;
+		return {
+			ok: false,
+			status: null,
+			error: r.error ?? "failed",
+			...(method !== "GET" && (r.timedOut || r.overflow || r.code !== null)
+				? { uncertain: true }
+				: {}),
+		};
+	}
 	try {
 		return { ok: true, body: r.stdout.trim() ? JSON.parse(r.stdout) : null };
 	} catch {
-		return { ok: false, status: null, error: "not JSON" };
+		return {
+			ok: false,
+			status: null,
+			error: "not JSON",
+			...(method !== "GET" ? { uncertain: true } : {}),
+		};
 	}
 }
 

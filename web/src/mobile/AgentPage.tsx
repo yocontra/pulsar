@@ -27,6 +27,7 @@ import type { AgentRow, Approval } from "../api/types.ts";
 import { focusPrompt, promptOnScreen } from "../approval/focus.ts";
 import { ChangesButton } from "../changes/ChangesButton.tsx";
 import { useChangesPeek } from "../changes/data.ts";
+import { useAgent } from "../data/index.ts";
 import { gitOffered, showGit } from "../features/git/open.ts";
 import { openFind } from "../features/search/state.ts";
 import { shortModel } from "../lib/format.ts";
@@ -157,7 +158,8 @@ const menuIcon = (I: LucideIcon) => <I className="size-5" aria-hidden="true" />;
 const MoreMenu = observer(function MoreMenu({ a }: { a: AgentRow | null }) {
 	const [open, setOpen] = useState(false);
 	const btn = useRef<HTMLIonButtonElement | null>(null);
-	const inRepo = !!useChangesPeek(a?.id ?? "").data?.available;
+	const inRepo = !!useChangesPeek(a?.archived ? "" : (a?.id ?? "")).data
+		?.available;
 	const gitInMore = useMedia(NARROW_GIT);
 	const findInMore = useMedia(NARROW_FIND);
 	const items: MenuItem[] = [];
@@ -213,7 +215,7 @@ function AgentPageImpl({ id }: { id: string }) {
 	const { handlers: messageMenu, messageActions } = useMessageMenu();
 	const content = useRef<HTMLIonContentElement | null>(null);
 	useUnderGlass(content);
-	const a = findAgent(id);
+	const a = useAgent(id).data ?? findAgent(id);
 	const att = approvalItem(id);
 	// An expired prompt no longer waits on the app: its card says so, and
 	// the banner goes (the shared clock ticks every 15 s).
@@ -265,11 +267,13 @@ function AgentPageImpl({ id }: { id: string }) {
 					)
 				}
 				end={
-					<>
-						{a && <Slot name="session.header" agent={a} mobile />}
-						<ChangesButton id={id} />
-						<MoreMenu a={a} />
-					</>
+					!a?.archived && (
+						<>
+							{a && <Slot name="session.header" agent={a} mobile />}
+							<ChangesButton id={id} />
+							<MoreMenu a={a} />
+						</>
+					)
 				}
 				below={
 					<>
