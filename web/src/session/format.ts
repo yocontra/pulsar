@@ -14,6 +14,8 @@ export const FORMAT_MAX = 20_000;
 /** Longest wait for the formatter (its first load included). */
 const TIMEOUT_MS = 3000;
 const CACHE_MAX = 300;
+/** Shared display target for Prettier and shell formatting. */
+const PRINT_WIDTH = 80;
 
 /** Languages formatted, by Shiki id or alias. */
 const FORMATS: Record<string, "ts" | "js" | "json" | "bash"> = {
@@ -95,7 +97,7 @@ async function prettierFormat(code: string, kind: "ts" | "js") {
 		// babel-ts reads TypeScript and JavaScript, top-level await included.
 		parser: kind === "ts" ? "babel-ts" : "babel",
 		plugins: [babel, estree],
-		printWidth: 80,
+		printWidth: PRINT_WIDTH,
 	});
 	return out.replace(/\n$/, "");
 }
@@ -116,9 +118,6 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 	});
 }
 
-/** Chains shorter than this stay on one line. */
-const CHAIN_MIN = 60;
-
 /**
  * A one-line shell command with top-level `&&` or `;` chains, one step per
  * line (`a &&\n  b`, the same command to a shell). Null when there is no
@@ -126,7 +125,7 @@ const CHAIN_MIN = 60;
  * heredoc, a comment, `;;`, unbalanced quotes or brackets.
  */
 export function splitChain(cmd: string): string | null {
-	if (cmd.includes("\n") || cmd.length < CHAIN_MIN || /<</.test(cmd))
+	if (cmd.includes("\n") || cmd.length <= PRINT_WIDTH || /<</.test(cmd))
 		return null;
 	const parts: Array<{ text: string; op: string }> = [];
 	let depth = 0;

@@ -333,8 +333,7 @@
 	max-height: none;
 	overflow-y: visible;
 }
-/* Long lines scroll sideways inside a gutter, not under the window's edge;
-   the last character keeps room at the end of the scroll. */
+/* Leave space between the last character and the panel edge. */
 .cv-diff .ds-diff-scroll {
 	margin-inline-end: 12px;
 }

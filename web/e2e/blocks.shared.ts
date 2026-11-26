@@ -70,12 +70,28 @@ export function blocksSuite(platform: "desktop" | "phone") {
 						),
 				)
 				.toBeGreaterThan(1);
+			const line = block.locator(".ds-lc").last();
+			const firstVisualLine = await line.evaluate((el) => {
+				const node = el.querySelector("span")?.firstChild ?? el.firstChild!;
+				const range = document.createRange();
+				range.setStart(node, 0);
+				range.setEnd(node, 1);
+				const top = range.getBoundingClientRect().top;
+				for (let i = 1; i < (node.textContent?.length ?? 0); i++) {
+					range.setStart(node, i);
+					range.setEnd(node, i + 1);
+					if (range.getBoundingClientRect().top > top) return i;
+				}
+				return Infinity;
+			});
+			expect(firstVisualLine).toBeGreaterThan(0);
+			expect(firstVisualLine).toBeLessThanOrEqual(80);
 			const copy = block.getByRole("button", { name: "Copy code" });
 			await expect(copy.locator("svg")).toHaveCSS("width", "14px");
 			await copy.click();
 			await expect(page.locator("body")).toHaveAttribute(
 				"data-copied",
-				"const clock = 42;",
+				`const clock = 42;\n//${"x".repeat(100)}`,
 			);
 			await page.locator("body").evaluate((body) => delete body.dataset.copied);
 		}

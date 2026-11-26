@@ -24,8 +24,7 @@
 		}
 	},
 	"formatter": {
-		"indentStyle": "tab",
-		"lineWidth": 80
+		"indentStyle": "tab"
 	},
 	"overrides": [
 		{

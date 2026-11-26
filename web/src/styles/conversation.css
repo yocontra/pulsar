@@ -1128,7 +1128,8 @@
 	overflow-x: auto;
 	font: var(--ds-text-code) / var(--ds-text-code-lh) var(--ds-font-mono);
 	color: var(--ds-syn-fg);
-	white-space: pre;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 	tab-size: 2;
 	background: transparent;
 }
@@ -1139,7 +1140,15 @@
 .ds-code-pre code {
 	font: inherit;
 	display: block;
-	min-width: max-content;
+}
+.ds-code-pre:not(.has-nums) > code,
+.ds-lc,
+.ds-diff-code,
+.ds-json-row,
+.ds-match-text,
+.ds-user-shell-cmd,
+.exact {
+	max-inline-size: var(--ds-code-measure);
 }
 .ds-code-line {
 	display: block;
@@ -1158,6 +1167,7 @@
 }
 .ds-lc {
 	flex: 1;
+	min-width: 0;
 }
 .ds-code.tone-terminal {
 	background: var(--ds-term-bg);
@@ -1252,12 +1262,10 @@
 .ds-diff-grid {
 	padding: 6px 0;
 }
-.ds-diff-grid.u {
-	min-width: max-content;
-}
 .ds-diff-row {
 	display: flex;
-	white-space: pre;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 	padding-right: 14px;
 }
 .ds-diff .sign {
@@ -1421,15 +1429,6 @@
 .ds-ap-diff {
 	max-height: 360px;
 	overflow: auto;
-}
-/* What an approval writes is the safety view: every line wraps, so no
-   part of it hides past the card's edge (as the Bash command does). */
-.ds-ap-diff .ds-diff-grid.u {
-	min-width: 0;
-}
-.ds-ap-diff .ds-diff-row {
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
 }
 .ds-ap-args {
 	display: flex;
@@ -2029,7 +2028,8 @@
 	display: flex;
 	gap: 12px;
 	padding: 0 12px;
-	white-space: pre;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 .ds-match-lines .ds-ln {
 	flex: none;

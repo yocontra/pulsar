@@ -388,7 +388,7 @@
 	font-size: 0.765rem;
 }
 
-/* Code blocks: readable on 375px; scroll sideways, never wrap. */
+/* Code blocks: readable on narrow phone screens. */
 .session.mobile pre {
 	font-size: 0.706rem;
 	line-height: 1.55;

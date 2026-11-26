@@ -92,6 +92,12 @@
 		font-size: 0.92em;
 	}
 
+	pre:not(.ds-code-pre) {
+		max-inline-size: var(--ds-code-measure);
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
 	kbd {
 		border: 1px solid var(--line);
 		border-bottom-width: 2px;

@@ -98,7 +98,7 @@ export function claudeLog(): string {
 		{
 			type: "thinking",
 			thinking:
-				"The test uses a real clock; fake timers will make it stable.\n\n```typescript\nconst clock = 42;\n```",
+				"The test uses a real clock; fake timers will make it stable.\n\n```typescript\nconst clock = 42;\n//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n```",
 			signature: "sig",
 		},
 	]);
@@ -106,7 +106,7 @@ export function claudeLog(): string {
 	assistant([
 		{
 			type: "text",
-			text: "I'll start with the session module.\n\n- read it\n- fix the race\n- run the tests\n\n```typescript\nconst clock = 42;\n```",
+			text: "I'll start with the session module.\n\n- read it\n- fix the race\n- run the tests\n\n```typescript\nconst clock = 42;\n//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n```",
 		},
 	]);
 	tool(

@@ -51,16 +51,18 @@ describe("splitChain (Bash, display only)", () => {
 	test("top-level && and ; chains, one step per line", () => {
 		expect(
 			splitChain(
-				"cd packages/net && bun install --frozen-lockfile && bun run build; bun test",
+				"cd packages/net && bun install --frozen-lockfile && bun run build; bun test --coverage",
 			),
 		).toBe(
-			"cd packages/net &&\n  bun install --frozen-lockfile &&\n  bun run build\n  bun test",
+			"cd packages/net &&\n  bun install --frozen-lockfile &&\n  bun run build\n  bun test --coverage",
 		);
 	});
 
 	test("anything unsure stays as written", () => {
 		const long = (s: string) => `${s} ${"x".repeat(60)}`;
-		expect(splitChain("cd a && ls")).toBeNull();
+		const atWidth = "echo x && echo ".padEnd(80, "x");
+		expect(splitChain(atWidth)).toBeNull();
+		expect(splitChain(`${atWidth}x`)).toContain("&&\n");
 		expect(splitChain(long("echo 'a && b; c'"))).toBeNull();
 		expect(splitChain(long('echo "a && $(b; c)"'))).toBeNull();
 		expect(splitChain(long("(cd a && make) | tee log"))).toBeNull();
@@ -92,7 +94,7 @@ describe("a formatted block", () => {
 
 	test("a terminal splits a long chain only when asked", async () => {
 		const cmd =
-			"cd packages/net && bun install --frozen-lockfile && bun run build; bun test";
+			"cd packages/net && bun install --frozen-lockfile && bun run build; bun test --coverage";
 		await formatCode(cmd, "bash");
 		const on = renderToStaticMarkup(
 			<TerminalBlock command={cmd} formatCommand />,

@@ -115,7 +115,7 @@ export function CopyButton({
 
 /**
  * A code block: Shiki tokens in the app's palette, a header with the
- * language (or file name) and Copy, horizontal scroll (never wraps), and
+ * language (or file name) and Copy, soft wrapping at 80 columns, and
  * long content folded behind "Show all N lines".
  *
  * `tone="terminal"` is the calm dark-on-light output style for command
