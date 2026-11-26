@@ -11,7 +11,7 @@
  *    needs the server for a chunk of its own build: lazy screens included.
  *    index.html gets a modulepreload for each static import of the entry, so
  *    the browser fetches them with the entry instead of one round trip later.
- * 3. boot.js minified (it counts in the first-load budget).
+ * 3. First-load scripts minified.
  * 4. Precompression: `.br` and `.gz` next to every text file of 1 KB or
  *    more where it saves 10%+; src/transport/static.ts serves them.
  */
@@ -52,12 +52,13 @@ if (
 // A rebuild over an old dist: drop stale sidecars first.
 for (const f of walk(DIST)) if (isSidecar(f)) rmSync(f);
 
-// boot.js runs on every first load and counts in its budget: minified (its
-// source keeps the comments).
-const bootPath = join(DIST, "boot.js");
-const boot = await Bun.build({ entrypoints: [bootPath], minify: true });
-if (!boot.success || !boot.outputs[0]) throw new Error("boot.js: no build");
-writeFileSync(bootPath, await boot.outputs[0].text());
+// These classic scripts run before the app module and ship outside its bundler.
+for (const name of ["boot.js", "prefs.js", "preload.js"]) {
+	const path = join(DIST, name);
+	const build = await Bun.build({ entrypoints: [path], minify: true });
+	if (!build.success || !build.outputs[0]) throw new Error(`${name}: no build`);
+	writeFileSync(path, await build.outputs[0].text());
+}
 
 const files = walk(DIST).sort();
 const hash = createHash("sha256");

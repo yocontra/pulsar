@@ -151,8 +151,14 @@
 
 /* ------------------------------------------------------------------ base */
 
+.ios-status-bar {
+	display: none;
+}
+
 @media (max-width: 1023px) {
 	html {
+		background-color: var(--m-bg);
+		overscroll-behavior: none;
 		font-family:
 			-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
 		font-size: 17px;
@@ -173,6 +179,22 @@
 	   color after a theme switch. Keep Ionic's viewport size and overflow. */
 	html[data-ios-standalone] body {
 		position: absolute;
+	}
+	html[data-ios-standalone]:not([data-vv]) body {
+		transform: none;
+	}
+
+	/* The installed iOS app samples fixed chrome at the viewport edge.
+	   Keep an opaque edge even when iOS places the status bar above the
+	   viewport and reports a zero inset. It occupies no layout space. */
+	html[data-ios-standalone] .ios-status-bar {
+		display: block;
+		position: fixed;
+		inset: 0 0 auto;
+		height: max(6px, var(--sat));
+		background-color: var(--m-bg);
+		z-index: 10;
+		pointer-events: none;
 	}
 
 	button,

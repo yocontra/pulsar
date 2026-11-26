@@ -10,6 +10,9 @@ html.ios ion-header.p-agent-header {
 	background: var(--p-plain);
 	box-shadow: 0 0.5px 0 var(--p-sep);
 }
+html.ios[data-ios-standalone] ion-header.p-agent-header {
+	background: var(--ds-bg-sunken);
+}
 html.md ion-header.p-agent-header ion-toolbar {
 	--background: var(--p-plain);
 }

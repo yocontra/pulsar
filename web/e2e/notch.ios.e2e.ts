@@ -343,6 +343,7 @@ test("the browser bar colour matches the page in each theme, live", async ({
 test("the installed app hides the Add to Home Screen tip", async ({ page }) => {
 	// A Safari tab shows it (no saved dismissal in a fresh context)...
 	await ready(page);
+	await expect(page.locator(".ios-status-bar")).toBeHidden();
 	await expect(page.getByRole("complementary", { name: "Tip" })).toBeVisible();
 	await expect(page.locator("body")).toHaveCSS("position", "fixed");
 	// ...the Home Screen app does not: iOS 27 reports navigator.standalone
@@ -359,26 +360,41 @@ test("the installed app hides the Add to Home Screen tip", async ({ page }) => {
 	await expect(page.locator("body")).toHaveCSS("position", "absolute");
 });
 
-test("the installed app shows no tip, with or without a top inset", async ({
-	page,
-}) => {
-	await page.addInitScript(() =>
-		Object.defineProperty(navigator, "standalone", { get: () => true }),
-	);
-	// iOS 27 gives a fresh install (no status bar key) an opaque status bar
-	// and no top inset: not a sign of an old install.
-	for (const ins of [
-		{ top: 0, bottom: 34, left: 0, right: 0 },
-		LAYOUTS[0]![3],
-	]) {
-		await setInsets(page, ins);
-		await page.goto("about:blank");
+for (const top of [0, 59]) {
+	test(`the installed app paints a fixed status bar with a ${top}px top inset`, async ({
+		page,
+		request,
+	}) => {
+		await page.addInitScript(() =>
+			Object.defineProperty(navigator, "standalone", { get: () => true }),
+		);
+		await setInsets(page, { top, bottom: 34, left: 0, right: 0 });
 		await ready(page);
 		await expect(page.getByRole("complementary", { name: "Tip" })).toHaveCount(
 			0,
 		);
-	}
-});
+		const edge = page.locator(".ios-status-bar");
+		await expect(edge).toHaveCSS("position", "fixed");
+		expect(await edge.boundingBox()).toEqual({
+			x: 0,
+			y: 0,
+			width: await page.evaluate(() => innerWidth),
+			height: Math.max(6, top),
+		});
+		const id = await agentId(request, "name=codex@apparish");
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		const header = page.locator(".p-agent-header:visible");
+		await expect(header).toBeVisible();
+		for (const scheme of ["light", "dark"] as const) {
+			await page.emulateMedia({ colorScheme: scheme });
+			const color =
+				scheme === "light" ? "rgb(244, 243, 241)" : "rgb(11, 11, 10)";
+			await expect(edge).toHaveCSS("background-color", color);
+			await expect(header).toHaveCSS("background-color", color);
+			await expect(page.locator("html")).toHaveCSS("background-color", color);
+		}
+	});
+}
 
 test.describe("notch and home indicator", () => {
 	for (const [layout, w, h, ins] of LAYOUTS)
