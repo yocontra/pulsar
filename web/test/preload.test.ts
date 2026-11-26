@@ -82,8 +82,10 @@ describe("data preload", () => {
 		await defs.tree(client, "machines", "", "busy").queryFn({ signal });
 		await defs.attention().queryFn({ signal });
 		await defs.recent().queryFn({ signal });
-		await defs.children("m:abc", "", "busy").queryFn({ signal });
-		await defs.children("m:abc/p:my app", "", "busy").queryFn({ signal });
+		await defs.children(client, "m:abc", "", "busy").queryFn({ signal });
+		await defs
+			.children(client, "m:abc/p:my app", "", "busy")
+			.queryFn({ signal });
 		// Every one came from the preload: no request of the app's own.
 		expect(calls).toEqual([]);
 		// Single use: the next poll goes to the network.

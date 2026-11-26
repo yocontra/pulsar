@@ -383,7 +383,12 @@ export const api = {
 	}) => request<TreePage>(`/tree${query(p)}`),
 	children: (
 		nodeId: string,
-		p: { cursor?: string | null; filter?: string; sort?: TreeSort },
+		p: {
+			cursor?: string | null;
+			filter?: string;
+			sort?: TreeSort;
+			limit?: number;
+		},
 	) => request<Page<TreeNode>>(`/tree/${enc(nodeId)}/children${query(p)}`),
 	attention: () => request<AttentionList>("/attention"),
 	recent: () => request<{ items: AgentRow[] }>("/recent"),

@@ -39,7 +39,7 @@ import {
 } from "../src/data/patch.ts";
 import { isStopping, localSend } from "../src/data/pending.ts";
 import { createPrefetcher } from "../src/data/prefetch.ts";
-import { transcriptDef } from "../src/data/queries.ts";
+import { defs, fetchMoreTree, transcriptDef } from "../src/data/queries.ts";
 import { deriveSubscription } from "../src/data/topics.ts";
 
 // ------------------------------------------------------------ fixtures
@@ -517,6 +517,89 @@ describe("stream events patch the right keys", () => {
 		expect(after.available).toBe(true);
 		expect(after.missing).toBeUndefined();
 		expect(after.events.map((e) => e.id)).toEqual(["a"]);
+	});
+
+	test("a transcript that appears after a miss takes the first history cursor", () => {
+		const missing: TranscriptData = {
+			events: [],
+			cursor: null,
+			available: false,
+		};
+		const live = applyTranscriptLive(missing, [ev("b", 2)]);
+		expect(transcriptPending(live)).toBe(true);
+		const history = { events: [ev("a", 1)], cursor: "older", available: true };
+		for (const held of [missing, live]) {
+			const found = applyTranscriptPage(held, history, false, new Set());
+			expect(found.cursor).toBe("older");
+			expect(transcriptPending(found)).toBe(false);
+			const retry = applyTranscriptPage(found, missing, true);
+			expect(retry.cursor).toBe("older");
+		}
+	});
+
+	test("large held transcripts can refresh and recover from a history gap", () => {
+		const held: TranscriptData = {
+			events: Array.from({ length: 250_000 }, (_, i) => ev(String(i), i)),
+			available: true,
+			cursor: null,
+		};
+		const latest = ev("latest", 250_000);
+		const after = applyTranscriptPage(
+			held,
+			{ available: true, events: [latest], cursor: "older" },
+			false,
+		);
+		expect(after.events).toEqual([latest]);
+		expect(after.cursor).toBe("older");
+	});
+
+	test("tree refresh keeps the loaded window in current server order, then pages from its new cursor", async () => {
+		const client = new QueryClient();
+		const remote = Array.from({ length: 700 }, (_, i) => leaf(String(699 - i)));
+		const requests: number[] = [];
+		const original = globalThis.fetch;
+		globalThis.fetch = (async (input: string) => {
+			const u = new URL(input, "https://app.test");
+			const offset = Number(u.searchParams.get("cursor")?.slice(1) ?? 0);
+			const limit = Number(u.searchParams.get("limit") ?? 100);
+			requests.push(limit);
+			const items = remote.slice(offset, offset + limit);
+			const next = offset + items.length;
+			return Response.json({
+				items,
+				total: remote.length,
+				nextCursor: next < remote.length ? `p${next}` : null,
+			});
+		}) as typeof fetch;
+		try {
+			for (const def of [
+				defs.tree(client, "machines", "", "name"),
+				defs.children(client, "m:1", "", "name"),
+			]) {
+				const key = def.queryKey;
+				client.setQueryData(key, {
+					items: Array.from({ length: 620 }, (_, i) => leaf(`old${i}`)),
+					nextCursor: "p620",
+					total: 700,
+				});
+				const fresh = await def.queryFn({
+					signal: new AbortController().signal,
+				});
+				expect(fresh.items).toEqual(remote.slice(0, 620));
+				expect(fresh.nextCursor).toBe("p620");
+				client.setQueryData(key, fresh);
+				await fetchMoreTree(client, key);
+				expect(client.getQueryData(key)).toEqual({
+					items: remote,
+					total: 700,
+					nextCursor: null,
+				});
+			}
+			expect(requests).toEqual([500, 120, 100, 500, 120, 100]);
+		} finally {
+			globalThis.fetch = original;
+			client.clear();
+		}
 	});
 
 	test("a full snapshot keeps the order the user sees", () => {

@@ -144,13 +144,19 @@ export interface TranscriptData {
 	/** Older history: pass back for the previous page; null at the start. */
 	cursor: string | null;
 	available: boolean;
+	/** Live events arrived before the first available history page. */
+	awaitingHistory?: true;
 	/** Set while `available` is false: why. Only `unsupported` is final. */
 	missing?: TranscriptMissing;
 }
 
 /** Whether a transcript may still turn up: fetch the page again until it does. */
 export function transcriptPending(d: TranscriptData | undefined): boolean {
-	return !!d && !d.available && d.missing !== "unsupported";
+	return (
+		!!d &&
+		(d.awaitingHistory === true ||
+			(!d.available && d.missing !== "unsupported"))
+	);
 }
 
 /**
@@ -245,7 +251,14 @@ export function applyTranscriptLive(
 	const events = reconcileLocal(mergeLive(d.events, live).events);
 	// Live events from the transcript: it was found.
 	return live.some((e) => !isLocal(e))
-		? { events, cursor: d.cursor, available: true }
+		? {
+				events,
+				cursor: d.cursor,
+				available: true,
+				...(!d.available || d.awaitingHistory
+					? { awaitingHistory: true as const }
+					: {}),
+			}
 		: { ...d, events };
 }
 
@@ -274,19 +287,21 @@ export function applyTranscriptPage(
 		held = held.map((e) => (touched.has(e.id) ? e : (fresh.get(e.id) ?? e)));
 	}
 	const ids = new Set(page.events.map((e) => e.id));
-	const newestTs = Math.max(
-		0,
-		...held.filter((e) => !isLocal(e)).map((e) => e.ts),
+	const pageStart = page.events.reduce(
+		(start, ev) => Math.min(start, ev.ts),
+		Infinity,
 	);
-	// A newest page that shares nothing with a held transcript newer than its
-	// start skipped a stretch (a gap): start over from that page.
+	const hasReal = held.some((e) => !isLocal(e));
+	const firstHistory = !d?.available || d.awaitingHistory;
+	// Disjoint newest data is a gap only when every real event we hold
+	// predates the start of that page. Avoid spreading unbounded history
+	// into Math.max: browsers limit the number of function arguments.
 	if (
 		!older &&
-		d &&
-		page.events.length > 0 &&
-		held.some((e) => !isLocal(e)) &&
+		hasReal &&
+		page.events.length &&
 		!held.some((e) => ids.has(e.id)) &&
-		Math.min(...page.events.map((e) => e.ts)) > newestTs
+		held.every((e) => isLocal(e) || e.ts < pageStart)
 	)
 		return {
 			events: reconcileLocal(mergeHistory(held.filter(isLocal), page.events)),
@@ -297,7 +312,13 @@ export function applyTranscriptPage(
 	return {
 		events,
 		// The newest page refreshes what we hold; keep the older cursor we reached.
-		cursor: older || !d ? page.cursor : d.cursor,
+		cursor:
+			page.available && (older || firstHistory)
+				? page.cursor
+				: (d?.cursor ?? null),
+		...(d?.awaitingHistory && !page.available
+			? { awaitingHistory: true as const }
+			: {}),
 		// A transcript we hold events of is available, whatever one page says
 		// (an older home node answers `false` when its file lookup misses).
 		...availability(page, events),

@@ -164,7 +164,7 @@ export function useTreeChildren(
 	p: { filter: string; sort: TreeSort },
 	enabled = true,
 ) {
-	const def = defs.children(nodeId, p.filter, p.sort);
+	const def = defs.children(queryClient, nodeId, p.filter, p.sort);
 	const q = useLive<ListData<TreeNode>>(def, { enabled, keepPrevious: true });
 	const fetchMore = useCallback(
 		() => fetchMoreTree(queryClient, def.queryKey),

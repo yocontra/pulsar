@@ -240,7 +240,7 @@ export function startBridge(firstHello?: Promise<Hello>) {
 		);
 		for (const id of store.expanded.value)
 			wanted.set(hashKey(keys.children(id, f, s)), () =>
-				mount(defs.children(id, f, s)),
+				mount(defs.children(queryClient, id, f, s)),
 			);
 		treeMounts(wanted);
 		// Cached data (a filter cleared, a branch re-expanded) fires no

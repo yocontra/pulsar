@@ -68,6 +68,36 @@ export function applyHello(h: Hello): Hello {
 	return h;
 }
 
+/** Refresh the visible rows in server order, including pages loaded during this read. */
+async function treeWindow(
+	client: QueryClient,
+	key: readonly unknown[],
+	read: (cursor: string | null, limit: number) => Promise<ListData<TreeNode>>,
+) {
+	const target = () =>
+		Math.max(
+			TREE_PAGE,
+			client.getQueryData<ListData<TreeNode>>(key)?.items.length ?? 0,
+		);
+	const items: TreeNode[] = [];
+	const seen = new Set<string>();
+	let cursor: string | null = null;
+	for (;;) {
+		const page = await read(
+			cursor,
+			Math.min(TREE_MAX, target() - items.length),
+		);
+		for (const item of page.items) {
+			if (seen.has(item.id)) continue;
+			seen.add(item.id);
+			items.push(item);
+		}
+		if (!page.nextCursor || items.length >= target())
+			return { items, total: page.total, nextCursor: page.nextCursor };
+		cursor = page.nextCursor;
+	}
+}
+
 export const defs = {
 	hello: (): LiveDef<Hello> => ({
 		queryKey: keys.hello(),
@@ -94,46 +124,50 @@ export const defs = {
 		const queryKey = keys.tree(group, filter, sort);
 		return {
 			queryKey,
-			queryFn: async () => {
-				const held = client.getQueryData<ListData<TreeNode>>(queryKey);
-				const limit = Math.min(
-					TREE_MAX,
-					Math.max(TREE_PAGE, held?.items.length ?? 0),
-				);
-				const expand = group === "machines" && !filter ? treeExpand : null;
-				treeExpand = null;
-				const { expanded, ...top } = await api.tree({
-					group,
-					filter,
-					sort,
-					limit,
-					cursor: null,
-					expand,
-				});
-				// The included branches seed their own queries (unless already held).
-				for (const [id, p] of Object.entries(expanded ?? {})) {
-					const key = keys.children(id, filter, sort);
-					if (client.getQueryData(key) === undefined)
-						client.setQueryData<ListData<TreeNode>>(key, {
-							items: p.items,
-							total: p.total,
-							nextCursor: p.nextCursor,
-						});
-				}
-				return top;
-			},
+			queryFn: () =>
+				treeWindow(client, queryKey, async (cursor, limit) => {
+					const expand =
+						!cursor && group === "machines" && !filter ? treeExpand : null;
+					if (expand) treeExpand = null;
+					const { expanded, ...top } = await api.tree({
+						group,
+						filter,
+						sort,
+						limit,
+						cursor,
+						expand,
+					});
+					for (const [id, page] of Object.entries(expanded ?? {})) {
+						const key = keys.children(id, filter, sort);
+						if (client.getQueryData(key) === undefined)
+							client.setQueryData<ListData<TreeNode>>(key, page);
+					}
+					return top;
+				}),
 			poll: POLL_MS,
 		};
 	},
 	children: (
+		client: QueryClient,
 		nodeId: string,
 		filter: string,
 		sort: TreeSort,
-	): LiveDef<ListData<TreeNode>> => ({
-		queryKey: keys.children(nodeId, filter, sort),
-		queryFn: () => api.children(nodeId, { filter, sort }),
-		poll: POLL_MS,
-	}),
+	): LiveDef<ListData<TreeNode>> => {
+		const queryKey = keys.children(nodeId, filter, sort);
+		return {
+			queryKey,
+			queryFn: () =>
+				treeWindow(client, queryKey, (cursor, limit) =>
+					api.children(nodeId, {
+						filter,
+						sort,
+						cursor,
+						limit: limit === TREE_PAGE ? undefined : limit,
+					}),
+				),
+			poll: POLL_MS,
+		};
+	},
 	agent: (id: string): LiveDef<AgentRow> => ({
 		queryKey: keys.agent(id),
 		queryFn: () => api.agent(id),
@@ -277,7 +311,7 @@ export async function fetchMoreTree(
 				})
 			: await api.children(a, { cursor: held.nextCursor, filter, sort });
 	client.setQueryData<ListData<TreeNode>>(queryKey, (d) => {
-		if (!d) return d;
+		if (!d || d.nextCursor !== held.nextCursor) return d;
 		const seen = new Set(d.items.map((n) => n.id));
 		return {
 			items: [...d.items, ...page.items.filter((n) => !seen.has(n.id))],
