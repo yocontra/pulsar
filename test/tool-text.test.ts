@@ -33,6 +33,10 @@ test("encrypted tool fields and JSON results keep their surrounding readable con
 	expect(
 		messageContent(Buffer.from("Review is ready.").toString("base64")).text,
 	).toBe("Review is ready.");
+	expect(messageContent(sealed, "Readable preview").text).toBe(
+		"Readable preview",
+	);
+	expect(readableToolText(`iVBOR/${sealed}+AAA`)).toBe(`iVBOR/${sealed}+AAA`);
 	const literal = {
 		filename: "settings.json",
 		contents: "aGVsbG8=",

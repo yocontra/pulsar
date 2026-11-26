@@ -5,7 +5,7 @@ export const ENCRYPTED_MESSAGE =
 export function readableToolText(text: string): string {
 	if (!text.includes("gAAAA")) return text;
 	return text.replace(
-		/(?<![A-Za-z0-9_-])gAAAA[A-Za-z0-9_-]{93,}={0,2}(?![A-Za-z0-9_-])/g,
+		/(?<![A-Za-z0-9+/_-])gAAAA[A-Za-z0-9_-]{93,}={0,2}(?![A-Za-z0-9+/_-])/g,
 		(token) => {
 			const length = token.replace(/=+$/, "").length;
 			const bytes = Math.floor((length * 3) / 4);
@@ -37,7 +37,7 @@ export function readableToolInput(value: unknown, depth = 0): unknown {
 }
 
 /** Decode a whole message field only. Ordinary prose can also mention tokens. */
-export function messageContent(raw: string): { text: string; note?: string } {
+function readMessage(raw: string): { text: string; note?: string } {
 	const visible = readableToolText(raw);
 	const token = visible.trim();
 	if (token === ENCRYPTED_MESSAGE) return { text: "", note: token };
@@ -67,4 +67,16 @@ export function messageContent(raw: string): { text: string; note?: string } {
 		// A word or identifier can look like Base64. Keep the original text.
 	}
 	return { text: visible };
+}
+
+/** Some harnesses supply both an encrypted payload and a readable preview. */
+export function messageContent(...candidates: string[]) {
+	let note: string | undefined;
+	for (const raw of candidates) {
+		if (!raw.trim()) continue;
+		const value = readMessage(raw);
+		if (value.text) return value;
+		note ??= value.note;
+	}
+	return { text: "", note };
 }

@@ -733,7 +733,10 @@ export function TaskBody(p: BodyProps) {
 	const a = rec(p.input);
 	const tasks = Array.isArray(a.tasks) ? a.tasks.map(rec) : [];
 	const { text: prompt, note } = messageContent(
-		str(a.prompt) || str(a.message) || str(a.context) || str(a.task),
+		str(a.prompt),
+		str(a.message),
+		str(a.context),
+		str(a.task),
 	);
 	return (
 		<>
@@ -777,14 +780,18 @@ function ResultProse(p: BodyProps) {
 export function MessageBody(p: BodyProps) {
 	const a = rec(p.input);
 	const parts = [a.items, a.content, a.message].find(Array.isArray);
-	const recorded =
-		str(a.message) || str(a.content) || str(a.text) || str(a.body);
 	const { text: body, note } = messageContent(
-		recorded ||
-			(parts ?? [])
-				.map((part) => str(rec(part).text))
-				.filter(Boolean)
-				.join("\n"),
+		str(a.message),
+		str(a.content),
+		str(a.text),
+		str(a.body),
+		(parts ?? [])
+			.map((part) => {
+				const value = messageContent(str(rec(part).text));
+				return value.text || value.note;
+			})
+			.filter(Boolean)
+			.join("\n"),
 	);
 	const json = rec(asJson(p.output));
 	return (

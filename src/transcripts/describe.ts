@@ -726,7 +726,7 @@ export function describeCall(
 						str(a.name) ||
 						str(a.i) ||
 						str(first.name) ||
-						messageContent(str(a.message) || str(a.task) || str(a.prompt)).text,
+						messageContent(str(a.message), str(a.task), str(a.prompt)).text,
 					"text",
 				),
 				facts: [
