@@ -21,6 +21,7 @@ export interface BuiltinCommand {
 	/** What goes after the name, shown as a hint (`<name>`, `[level]`). */
 	args?: string;
 	dialog?: boolean;
+	terminalOnly?: boolean;
 }
 
 export interface BuiltinList {
@@ -295,7 +296,61 @@ const OMP: BuiltinList = {
 	],
 };
 
+// The reference linked by the installed CLI's antigravity-guide skill:
+// https://antigravity.google/docs/cli/reference.md. Only the three read-only
+// lookups below have an equivalent outside the native terminal.
+const ANTIGRAVITY: BuiltinList = {
+	version: "1.5.16",
+	commands: [
+		c("help", "List commands or look up one command", { args: "[command]" }),
+		c("skills", "List installed skills matching a name", { args: "[name]" }),
+		c("changelog", "Read the latest installed release notes"),
+		c("add-dir", "Add a workspace folder", { terminalOnly: true }),
+		c("agents", "Browse agents", { terminalOnly: true }),
+		c("artifact", "Review artifacts", { terminalOnly: true }),
+		c("boost", "Start a deep reasoning task", { terminalOnly: true }),
+		c("browser", "Start a browser task", { terminalOnly: true }),
+		c("btw", "Ask a side question", { terminalOnly: true }),
+		c("clear", "Start a fresh conversation", { terminalOnly: true }),
+		c("codesearch", "Search the workspace", { terminalOnly: true }),
+		c("compact", "Compact the current conversation", { terminalOnly: true }),
+		c("config", "Edit settings", { terminalOnly: true }),
+		c("context", "Inspect context use", { terminalOnly: true }),
+		c("copy", "Copy a response", { terminalOnly: true }),
+		c("credits", "Check credits", { terminalOnly: true }),
+		c("diff", "Review changes", { terminalOnly: true }),
+		c("effort", "Set reasoning effort", { terminalOnly: true }),
+		c("exit", "Close the terminal session", { terminalOnly: true }),
+		c("feedback", "Send feedback", { terminalOnly: true }),
+		c("fork", "Fork the current conversation", { terminalOnly: true }),
+		c("goal", "Set a goal", { terminalOnly: true }),
+		c("grill-me", "Clarify requirements", { terminalOnly: true }),
+		c("hooks", "Browse hooks", { terminalOnly: true }),
+		c("keybindings", "Edit keyboard shortcuts", { terminalOnly: true }),
+		c("learn", "Propose a rule or skill", { terminalOnly: true }),
+		c("logout", "Sign out of Antigravity", { terminalOnly: true }),
+		c("mcp", "Manage MCP servers", { terminalOnly: true }),
+		c("model", "Select a model", { terminalOnly: true }),
+		c("open", "Open a file in the editor", { terminalOnly: true }),
+		c("permissions", "Review permissions", { terminalOnly: true }),
+		c("plan", "Start planning", { terminalOnly: true }),
+		c("plugin", "Manage plugins", { terminalOnly: true }),
+		c("rename", "Rename this conversation", { terminalOnly: true }),
+		c("remote-control", "Configure remote control", { terminalOnly: true }),
+		c("resume", "Select a conversation", { terminalOnly: true }),
+		c("rewind", "Rewind the conversation", { terminalOnly: true }),
+		c("schedule", "Schedule a task", { terminalOnly: true }),
+		c("statusline", "Configure the status bar", { terminalOnly: true }),
+		c("tasks", "Inspect background tasks", { terminalOnly: true }),
+		c("teamwork", "Start a team task", { terminalOnly: true }),
+		c("title", "Configure the window title", { terminalOnly: true }),
+		c("usage", "Show quota usage", { terminalOnly: true }),
+		c("voice", "Configure voice input", { terminalOnly: true }),
+	],
+};
+
 const BUILTINS: Record<string, BuiltinList> = {
+	antigravity: ANTIGRAVITY,
 	claude: CLAUDE,
 	codex: CODEX,
 	opencode: OPENCODE,

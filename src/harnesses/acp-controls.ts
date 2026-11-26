@@ -39,6 +39,7 @@ function commandEntry(command: AvailableCommand): CommandEntry[] {
 		{
 			name: command.name,
 			source: "agent",
+			...(command.name.startsWith("skill:") ? { skill: true } : {}),
 			description: command.description.slice(0, 300),
 			...(command.input?.hint
 				? { args: command.input.hint.slice(0, 160) }

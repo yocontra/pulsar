@@ -455,17 +455,20 @@ export class Registry {
 			const active = agent.status !== "gone";
 			const acp = agent.meta.acp === "1";
 			const child = isLocalSubagentId(agent.id);
+			const inbox =
+				active &&
+				((child && extension && agent.meta.acks === "1") ||
+					this.sessions
+						.forAgent(agent.id)
+						.some((c) => this.sessions.role(c) === "mcp"));
+			const wake =
+				active && agent.inbound === "accept" && agent.reach === "push";
 			pub.capabilities = {
 				surface: acp ? "managed-acp" : "attached",
 				...(agent.meta.host ? { host: agent.meta.host } : {}),
-				inbox:
-					active &&
-					((child && extension && agent.meta.acks === "1") ||
-						this.sessions
-							.forAgent(agent.id)
-							.some((c) => this.sessions.role(c) === "mcp")),
+				inbox,
 				steer: active && this.canSteer(agent),
-				wake: active && agent.inbound === "accept" && agent.reach === "push",
+				wake,
 				stop: this.canStop(agent),
 				status:
 					active &&
@@ -482,7 +485,7 @@ export class Registry {
 							resume: agent.meta.acpResume === "1",
 							modes: active && extension && agent.meta.acpModes === "1",
 							commands: active && extension && agent.meta.acpCommands === "1",
-							skills: false,
+							skills: active && extension && agent.meta.acpSkills === "1",
 							approvals: active && extension,
 							questions: active && extension && agent.meta.acpQuestions === "1",
 							// Uploads are delivered as local file paths in an ordinary prompt.
@@ -491,6 +494,12 @@ export class Registry {
 						}
 					: {}),
 			};
+			if (!acp && agent.harness === "antigravity" && !child) {
+				const exact =
+					active && ANTIGRAVITY_SESSION_ID.test(agent.sessionId ?? "");
+				pub.capabilities.commands = exact;
+				pub.capabilities.skills = exact && (inbox || wake);
+			}
 		}
 		return this.needsYou(agent.id)
 			? { ...pub, tags: [...pub.tags, NEEDS_YOU_TAG] }

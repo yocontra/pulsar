@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Daemon } from "../src/daemon.ts";
 import { cleanFedAgent } from "../src/federation/state.ts";
@@ -26,6 +26,18 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		`#!/bin/sh\nexec "${process.execPath}" "${fixture}" "$@"\n`,
 	);
 	chmodSync(agy, 0o700);
+	for (const name of [
+		"fixture-local-skill",
+		"fixture-command",
+		"fixture-native-skill",
+	]) {
+		const skill = join(env.home, ".agents", "skills", name);
+		mkdirSync(skill, { recursive: true });
+		writeFileSync(
+			join(skill, "SKILL.md"),
+			`---\nname: ${name}\ndescription: A fixture skill\n---\nFixture skill instructions.\n`,
+		);
+	}
 	let bridge: ReturnType<typeof launch> | undefined;
 
 	function launch(resume?: string, mode?: string) {
@@ -36,6 +48,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				cwd: env.home,
 				env: {
 					...process.env,
+					HOME: env.home,
 					PATH: `${env.home}:${process.env.PATH}`,
 					ACP_FIXTURE_MODE: mode,
 				},
@@ -151,13 +164,14 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		).toBe(false);
 		expect(daemon.store.receipt(fyi.message.id, agentId)?.state).toBe("queued");
 		await until(async () => (await current())?.status === "idle");
+		await until(async () => (await current())?.capabilities?.skills === true);
 		const caps = {
 			surface: "managed-acp",
 			modes: true,
 			commands: true,
 			resume: true,
 			approvals: true,
-			skills: false,
+			skills: true,
 			questions: true,
 			attachments: true,
 			usage: false,
@@ -176,9 +190,34 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				?.capabilities,
 		).toBeUndefined();
 		await selectPlan();
-		expect(await control().commands(agentId)).toMatchObject({
+		const commands = await control().commands(agentId);
+		expect(
+			commands.commands.every((entry) => !Object.hasOwn(entry, "path")),
+		).toBe(true);
+		expect(commands).toMatchObject({
 			runnable: true,
-			commands: [{ name: "fixture-command", source: "agent", args: "details" }],
+			commands: expect.arrayContaining([
+				expect.objectContaining({
+					name: "fixture-command",
+					source: "agent",
+					args: "details",
+				}),
+				expect.objectContaining({
+					name: "fixture-local-skill",
+					source: "project",
+					skill: true,
+				}),
+				expect.objectContaining({
+					name: "skill:fixture-command",
+					source: "project",
+					skill: true,
+				}),
+				expect.objectContaining({
+					name: "skill:fixture-native-skill",
+					source: "project",
+					skill: true,
+				}),
+			]),
 		});
 		expect(await runCommand("/unknown")).toMatchObject({
 			result: "unsupported",
@@ -188,8 +227,29 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			result: "ok",
 			via: "acp",
 		});
+		await until(
+			async () =>
+				(await current())?.status === "idle" &&
+				Boolean(bridge?.output().includes("Fixture command called")),
+		);
+		expect(await runCommand("/fixture-local-skill on test")).toMatchObject({
+			result: "ok",
+			via: "acp",
+		});
 		await until(() =>
-			Boolean(bridge?.output().includes("Fixture command called")),
+			Boolean(
+				bridge?.output().includes("Fixture read installed skill: on test"),
+			),
+		);
+		await until(async () => (await current())?.status === "idle");
+		expect(await runCommand("/skill:fixture-native-skill")).toMatchObject({
+			result: "ok",
+			via: "acp",
+		});
+		await until(() =>
+			Boolean(
+				bridge?.output().includes("Fixture received native skill syntax"),
+			),
 		);
 
 		const uploaded = "Fixture attachment contents";
@@ -500,6 +560,13 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			agent: agentId,
 		});
 		expect(history.available).toBe(true);
+		expect(history.events).toContainEqual(
+			expect.objectContaining({
+				role: "user",
+				subtype: "command",
+				text: "/fixture-local-skill on test",
+			}),
+		);
 		for (const body of [
 			"fixture-steer",
 			"fixture-next-turn",

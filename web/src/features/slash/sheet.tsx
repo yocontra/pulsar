@@ -61,7 +61,11 @@ function Row({
 			}
 			subtitle={`${c.skill ? `${SOURCE[c.source]} skill` : SOURCE[c.source]}${c.args ? ` · ${c.args}` : ""}`}
 			text={
-				terminal ? "Opens a dialog only the terminal can answer" : c.description
+				terminal
+					? c.terminalOnly
+						? "Run this command in the agent’s terminal"
+						: "Opens a dialog only the terminal can answer"
+					: c.description
 			}
 		/>
 	);

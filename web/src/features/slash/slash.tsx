@@ -42,7 +42,6 @@ import {
 	modesFor,
 	noteRecent,
 	recentFor,
-	runNow,
 	switchMode,
 } from "./data.ts";
 import "./slash.css";
@@ -83,13 +82,15 @@ function replaceText(
 }
 
 /** The agent's `/` list, loaded once the menu or sheet first needs it. */
-function useCatalog(agentId: string | null, want: boolean) {
+function useCatalog(agent: AgentRow | null, want: boolean) {
+	const agentId = agent?.id;
+	const capabilities = `${agent?.capabilities?.commands}/${agent?.capabilities?.skills}`;
 	const [cat, setCat] = useState<CommandCatalog | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	useEffect(() => {
 		if (!agentId || !want) return;
 		let live = true;
-		catalogFor(agentId).then(
+		catalogFor(agentId, capabilities).then(
 			(c) => {
 				if (!live) return;
 				setCat(c);
@@ -100,7 +101,7 @@ function useCatalog(agentId: string | null, want: boolean) {
 		return () => {
 			live = false;
 		};
-	}, [agentId, want]);
+	}, [agentId, capabilities, want]);
 	return { cat: cat?.agentId === agentId ? cat : null, error };
 }
 
@@ -114,7 +115,7 @@ function SlashMenuImpl(p: ComposerSlotProps) {
 	const [text, setText] = useState("");
 	const [active, setActive] = useState(0);
 	const { cat, error } = useCatalog(
-		agent?.id ?? null,
+		agent,
 		open !== null || text.startsWith("/"),
 	);
 	const items = cat
@@ -128,16 +129,20 @@ function SlashMenuImpl(p: ComposerSlotProps) {
 	useEffect(() => {
 		const ta = p.textarea.current;
 		if (!ta || !agent) return;
-		let dismissed = false;
+		let dismissed: string | null = null;
 		const check = () => {
 			setText(ta.value);
 			const t =
 				ta.selectionStart === ta.selectionEnd
 					? slashToken(ta.value, ta.selectionStart)
 					: null;
-			if (!t) dismissed = false;
+			if (t?.q !== dismissed) dismissed = null;
 			setOpen((o) =>
-				t && !dismissed ? (o && o.q === t.q && o.end === t.end ? o : t) : null,
+				t && t.q !== dismissed
+					? o && o.q === t.q && o.end === t.end
+						? o
+						: t
+					: null,
 			);
 		};
 		const pick = (c: CommandEntry) => {
@@ -150,7 +155,7 @@ function SlashMenuImpl(p: ComposerSlotProps) {
 				insertText(c),
 			);
 			setOpen(null);
-			dismissed = true;
+			dismissed = c.name;
 		};
 		pickRef.current = pick;
 		const key = (e: KeyboardEvent) => {
@@ -179,7 +184,7 @@ function SlashMenuImpl(p: ComposerSlotProps) {
 				pick(c);
 			} else if (e.key === "Escape") {
 				stop();
-				dismissed = true;
+				dismissed = open.q;
 				setOpen(null);
 			}
 		};
@@ -296,7 +301,9 @@ function SlashMenuImpl(p: ComposerSlotProps) {
 						{c.args && <span className="slash-args">{c.args}</span>}
 						<span className="slash-desc">
 							{needsTerminal(c)
-								? "Opens a dialog only the terminal can answer"
+								? c.terminalOnly
+									? "Run this command in the agent’s terminal"
+									: "Opens a dialog only the terminal can answer"
 								: c.description}
 						</span>
 						<Badge c={c} />
@@ -338,6 +345,7 @@ function SlashButtonImpl(p: ComposerSlotProps) {
 					open={open}
 					onClose={() => setOpen(false)}
 					onClosed={() => setMounted(false)}
+					onRun={p.runCommand}
 					onInsert={(c) => {
 						const ta = p.textarea.current;
 						setOpen(false);
@@ -360,12 +368,14 @@ function CommandSheet({
 	open,
 	onClose,
 	onClosed,
+	onRun,
 	onInsert,
 }: {
 	agent: AgentRow;
 	open: boolean;
 	onClose: () => void;
 	onClosed: () => void;
+	onRun: (line: string) => void;
 	onInsert: (c: CommandEntry) => void;
 }) {
 	const [q, setQ] = useState("");
@@ -373,7 +383,7 @@ function CommandSheet({
 	useEffect(() => {
 		void import("./sheet.tsx").then(setSheet);
 	}, []);
-	const { cat, error } = useCatalog(agent.id, true);
+	const { cat, error } = useCatalog(agent, true);
 	if (!Sheet) return null;
 	const recent = cat ? recentFor(cat.harness) : [];
 	const items = cat ? rankCommands(cat.commands, q, recent, 200) : [];
@@ -392,7 +402,7 @@ function CommandSheet({
 			onRun={(c) => {
 				onClose();
 				noteRecent(cat?.harness ?? agent.harness, c.name);
-				void runNow(agent, `/${c.name}`);
+				onRun(`/${c.name}`);
 			}}
 		/>
 	);

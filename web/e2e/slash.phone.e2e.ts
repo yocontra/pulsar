@@ -64,6 +64,30 @@ test("+ → Skills & Commands opens the command sheet: search, tap inserts, Run 
 	expect(await ran(request)).toContainEqual({ agent: id, line: "/recap" });
 });
 
+test("a command run from the sheet keeps the draft and shows the delivery receipt", async ({
+	page,
+	request,
+}) => {
+	const composer = await openAgent(page, request, "name=apparish-auth");
+	const field = composer.locator(".composer-input");
+	await field.fill("Draft for later");
+	const receipt = "Skill request queued for this session’s next inbox check.";
+	await page.route("**/api/v1/agents/*/command", async (route) => {
+		const response = await route.fetch();
+		await route.fulfill({
+			response,
+			json: { ...(await response.json()), detail: receipt },
+		});
+	});
+	const sheet = await openSheet(page, composer);
+	await sheet.getByPlaceholder("Search commands and skills").fill("recap");
+	await sheet.getByRole("button", { name: "Run /recap", exact: true }).click();
+	await expect(
+		composer.getByRole("status").filter({ hasText: receipt }),
+	).toBeVisible();
+	await expect(field).toHaveValue("Draft for later");
+});
+
 test("the command sheet: search under the header, one scroller, rows clear the insets (phone)", async ({
 	page,
 	request,

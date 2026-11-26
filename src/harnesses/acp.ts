@@ -35,11 +35,13 @@ import type { TranscriptEvent } from "../transcripts/types.ts";
 import { PROTOCOL_VERSION, type Registration } from "../types.ts";
 import { AcpUsageWriter, loadAcpUsage } from "../usage/acp.ts";
 import { VERSION } from "../version.ts";
+import { AcpCommandCatalog } from "./acp-commands.ts";
 import { AcpSessionControls } from "./acp-controls.ts";
 import { ACP_IDENTITY_ENV } from "./acp-identity.ts";
 import { antigravityQuestion, elicitationQuestions } from "./acp-questions.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
 import { acpTranscriptPath } from "./acp-transcript.ts";
+import { antigravitySkillPrompt } from "./antigravity-commands.ts";
 
 export interface AcpBridgeOptions {
 	command: string[];
@@ -64,6 +66,7 @@ const DETACHED_QUIET_MS = 30_000;
 
 type Prompt = {
 	text: string;
+	providerText?: string;
 	messageId?: string;
 	command?: true;
 	urgent?: true;
@@ -111,6 +114,7 @@ type Turn = {
 class Bridge {
 	private readonly daemon = new DaemonClient();
 	private readonly controls = new AcpSessionControls();
+	private readonly commands: AcpCommandCatalog;
 	private readonly tools = new AcpToolResults(MAX_TEXT);
 	private readonly setupUpdates: Array<{
 		sessionId: string;
@@ -149,6 +153,11 @@ class Bridge {
 	constructor(options: AcpBridgeOptions, identityPath: string) {
 		this.options = options;
 		this.identityPath = identityPath;
+		this.commands = new AcpCommandCatalog({
+			harness: options.harness,
+			cwd: options.cwd,
+			home: options.env?.HOME,
+		});
 		this.app = new ClientApp()
 			.onRequest("session/request_permission", ({ params: request }) =>
 				this.permission(request),
@@ -344,6 +353,7 @@ class Bridge {
 		this.ready = true;
 		this.applySetupUpdates(this.sessionId);
 		this.refreshCapabilities();
+		void this.commands.refresh().then(() => this.refreshCapabilities());
 		this.drainQueue();
 		return { sessionId: this.sessionId, connection };
 	}
@@ -574,7 +584,7 @@ class Bridge {
 				if (!prompt.messageId) this.recordPrompt(prompt);
 				const result = await connection.agent.request("session/prompt", {
 					sessionId,
-					prompt: [{ type: "text", text: prompt.text }],
+					prompt: [{ type: "text", text: prompt.providerText ?? prompt.text }],
 				});
 				this.confirmDelivery(turn);
 				if (prompt.messageId) this.receipt(prompt.messageId, true);
@@ -740,16 +750,20 @@ class Bridge {
 	}
 
 	private runtimeMeta() {
+		const commands = this.commands.list(this.controls.commands);
 		return {
 			acpModes: this.controls.selection?.modes.length ? "1" : "0",
-			acpCommands: this.controls.commands.length ? "1" : "0",
+			acpCommands: commands.size ? "1" : "0",
+			acpSkills: [...commands.values()].some(({ entry }) => entry.skill)
+				? "1"
+				: "0",
 			acpUsage: this.usageObserved ? "1" : "0",
 		};
 	}
 
 	private refreshCapabilities() {
 		const registration = this.registration;
-		if (!registration) return;
+		if (!registration || this.stopping) return;
 		const next = this.runtimeMeta();
 		if (
 			Object.entries(next).every(
@@ -857,6 +871,15 @@ class Bridge {
 				result: "unsupported",
 				detail: "The ACP session is unavailable.",
 			};
+		if (request.kind === "commands" || request.kind === "command") {
+			await this.commands.refresh();
+			if (this.stopping)
+				return {
+					result: "unsupported",
+					detail: "The ACP session is unavailable.",
+				};
+			this.refreshCapabilities();
+		}
 		const modes = this.controls.selection;
 		const busy =
 			!!this.turn ||
@@ -874,15 +897,17 @@ class Bridge {
 					: {}),
 			};
 		}
-		if (request.kind === "commands")
+		if (request.kind === "commands") {
+			const entries = [...this.commands.list(this.controls.commands).values()];
 			return {
 				result: "ok",
-				commands: this.controls.commands,
-				runnable: !busy && this.controls.commands.length > 0,
+				commands: entries.map(({ entry }) => entry),
+				runnable: !busy && entries.length > 0,
 				...(busy
 					? { detail: "Wait for the current ACP operation to finish." }
 					: {}),
 			};
+		}
 		if (busy)
 			return {
 				result: "busy",
@@ -907,17 +932,27 @@ class Bridge {
 			const name = /^\/([A-Za-z0-9][A-Za-z0-9:_.-]{0,127})(?: |$)/.exec(
 				line,
 			)?.[1];
-			if (
-				line.length <= 4000 &&
-				!/\p{Cc}/u.test(line) &&
-				this.controls.commands.some((entry) => entry.name === name)
-			) {
-				this.enqueue({ text: line, command: true });
+			const command = name
+				? this.commands.list(this.controls.commands).get(name)
+				: undefined;
+			if (line.length <= 4000 && !/\p{Cc}/u.test(line) && command && name) {
+				this.enqueue({
+					text: line,
+					command: true,
+					...(command.skillPath
+						? {
+								providerText: antigravitySkillPrompt(
+									command.skillPath,
+									line.slice(name.length + 1).trim(),
+								),
+							}
+						: {}),
+				});
 				return { result: "ok" };
 			}
 			return {
 				result: "unsupported",
-				detail: "The agent did not advertise this ACP command.",
+				detail: "The session does not have this ACP command or skill.",
 			};
 		}
 		return { result: "unsupported", detail: "Unknown ACP control request." };

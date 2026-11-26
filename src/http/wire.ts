@@ -2045,6 +2045,8 @@ export type CommandSource = "builtin" | "project" | "user" | "plugin" | "agent";
 
 /** One entry of the composer's `/` menu. */
 export interface CommandEntry {
+	/** Only the native terminal can execute this entry. */
+	terminalOnly?: boolean;
 	/** Typed after the `/`, e.g. `compact`, `review-pr`, `gh:review`. */
 	name: string;
 	description: string;

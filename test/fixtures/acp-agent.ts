@@ -143,6 +143,10 @@ for await (const line of lines) {
 									description: "Run the fixture command",
 									input: { hint: "details" },
 								},
+								{
+									name: "skill:fixture-native-skill",
+									description: "Run the advertised skill",
+								},
 							],
 						},
 					});
@@ -186,6 +190,27 @@ for await (const line of lines) {
 				reply(id, { stopReason: "end_turn" });
 			} else if (text.startsWith("/fixture-command")) {
 				update("Fixture command called");
+				reply(id, { stopReason: "end_turn" });
+			} else if (text.startsWith("/skill:fixture-native-skill")) {
+				update("Fixture received native skill syntax");
+				reply(id, { stopReason: "end_turn" });
+			} else if (text.startsWith("Read the installed Antigravity skill at ")) {
+				const path =
+					/^Read the installed Antigravity skill at (".*") and follow its instructions\./.exec(
+						text,
+					)?.[1];
+				if (
+					!path ||
+					!(await readFile(JSON.parse(path), "utf8")).includes(
+						"Fixture skill instructions.",
+					)
+				)
+					throw new Error(
+						"Fixture skill prompt did not reference the installed skill",
+					);
+				update(
+					`Fixture read installed skill: ${text.split("\n\nUser request: ")[1] ?? ""}`,
+				);
 				reply(id, { stopReason: "end_turn" });
 			} else if (text.includes("fixture-idle-wake")) {
 				update("Fixture woke from idle");

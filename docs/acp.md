@@ -14,6 +14,8 @@ New sessions started from the Pulsar app use managed ACP when the provider's ACP
 
 Use `pulsar acp <provider> --resume <session-id>` when the provider supports reopening ACP sessions. Run it from the original project directory. Resume existing native sessions with their harness's own resume command. See [Harness support](adapters.md).
 
+The slash menu in a managed Antigravity session includes commands from the provider and skills installed on the session machine. Select a skill and enter any arguments. When the provider has no corresponding slash command, Pulsar asks Antigravity to read and apply the installed skill. [Antigravity skill locations](https://antigravity.google/docs/skills)
+
 Managed sessions can ask questions in the Pulsar app through ACP forms. Supported fields include text, choices, multiple selections, numbers, and yes/no. Pulsar also recognizes older Antigravity question requests. Stop closes any unanswered question for the current turn. [T3 Code Antigravity protocol reference](https://github.com/pingdotgg/t3code/blob/37d3d199/apps/server/src/provider/acp/AntigravityProtocol.ts)
 
 Antigravity can send a reply or ask a question after the original prompt ends. Pulsar records that activity in the same transcript and shows the session as working until the reply ends. Late tool results keep their original tool names. [T3 Code Antigravity adapter reference](https://github.com/pingdotgg/t3code/blob/37d3d199/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.ts#L250-L261)

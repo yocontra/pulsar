@@ -31,7 +31,11 @@ import {
 } from "../tmux.ts";
 import { type Agent, isFolderGuess } from "../types.ts";
 import { tailAsync } from "../util.ts";
-import type { Acting } from "./acting.ts";
+import type { Acting, VerifiedUser } from "./acting.ts";
+import {
+	type InvokeSkill,
+	runAntigravityCommand,
+} from "./antigravity-controls.ts";
 import type { Principal } from "./caller.ts";
 import { type CatalogPorts, Catalogs } from "./catalog.ts";
 import type { Sessions } from "./sessions.ts";
@@ -265,6 +269,7 @@ export function claudePath(from: string, to: string): string[] {
 }
 
 export class Controls {
+	private readonly invokeSkill?: InvokeSkill;
 	remote: RemoteControls | null = null;
 	readonly catalogs: Catalogs;
 	private readonly lookup: (id: string) => Agent | undefined;
@@ -279,10 +284,12 @@ export class Controls {
 		lookup: (id: string) => Agent | undefined;
 		sessions: Pick<Sessions, "extensionFor">;
 		acting?: Acting;
+		invokeSkill?: InvokeSkill;
 		ports?: Partial<ControlPorts>;
 		catalog?: Partial<CatalogPorts>;
 	}) {
 		this.lookup = deps.lookup;
+		this.invokeSkill = deps.invokeSkill;
 		this.sessions = deps.sessions;
 		this.ports = { ...realControlPorts, ...deps.ports };
 		this.catalogs = new Catalogs({
@@ -294,8 +301,8 @@ export class Controls {
 			const local = this.local(agent!);
 			return this.setMode(local, modeParam(params, local.meta.acp === "1"));
 		});
-		deps.acting?.register("agents.command", async ({ agent, params }) =>
-			this.run(this.local(agent!), lineParam(params)),
+		deps.acting?.register("agents.command", async ({ agent, params, user }) =>
+			this.run(this.local(agent!), lineParam(params), user),
 		);
 	}
 
@@ -379,6 +386,7 @@ export class Controls {
 	): Promise<{ ok: true } | { ok: false; reason: string }> {
 		if (agent.status === "gone")
 			return { ok: false, reason: "The agent is gone." };
+		if (agent.harness === "antigravity" && agent.sessionId) return { ok: true };
 		if (agent.harness === "pi" && this.sessions.extensionFor(agent.id))
 			return { ok: true };
 		if (agent.harness === "opencode" && agent.sessionId) return { ok: true };
@@ -764,7 +772,11 @@ export class Controls {
 	// ---- commands ----
 
 	/** Runs a `/name args` line (the `agents.command` acting op). */
-	async run(agent: Agent, line: string): Promise<ControlResult> {
+	async run(
+		agent: Agent,
+		line: string,
+		user?: VerifiedUser,
+	): Promise<ControlResult> {
 		const done = (r: Omit<ControlResult, "agentId">): ControlResult => ({
 			agentId: agent.id,
 			...r,
@@ -786,6 +798,15 @@ export class Controls {
 		if (agent.meta.acp === "1")
 			return done(
 				await this.acpAction(agent, { kind: "command", line }, "command"),
+			);
+
+		if (agent.harness === "antigravity" && agent.sessionId)
+			return runAntigravityCommand(
+				agent,
+				cmd,
+				this.catalogs,
+				this.invokeSkill,
+				user,
 			);
 
 		if (agent.harness === "pi" && this.sessions.extensionFor(agent.id)) {

@@ -15,15 +15,28 @@ import { showToast } from "../../lib/store.ts";
 const CATALOG_MS = 30_000;
 const MODES_MS = 4_000;
 
-const catalogs = new Map<string, { at: number; p: Promise<CommandCatalog> }>();
+const catalogs = new Map<
+	string,
+	{ at: number; capabilities: string; p: Promise<CommandCatalog> }
+>();
 const modes = new Map<string, { at: number; p: Promise<AgentModes> }>();
 
-export function catalogFor(agentId: string): Promise<CommandCatalog> {
+export function catalogFor(
+	agentId: string,
+	capabilities: string,
+): Promise<CommandCatalog> {
 	const hit = catalogs.get(agentId);
-	if (hit && Date.now() - hit.at < CATALOG_MS) return hit.p;
+	if (hit?.capabilities === capabilities && Date.now() - hit.at < CATALOG_MS)
+		return hit.p;
 	const p = api.commands(agentId);
-	catalogs.set(agentId, { at: Date.now(), p });
-	p.catch(() => catalogs.delete(agentId));
+	catalogs.set(agentId, { at: Date.now(), capabilities, p });
+	const forget = () => {
+		if (catalogs.get(agentId)?.p === p) catalogs.delete(agentId);
+	};
+	// A starting or reconnecting harness may advertise its commands later.
+	void p.then((c) => {
+		if (!c.runnable || !c.commands.length) forget();
+	}, forget);
 	return p;
 }
 
@@ -96,25 +109,6 @@ export async function switchMode(
 			"warn",
 		);
 		return null;
-	}
-}
-
-/** Runs one command line in the agent's session now (the phone sheet's Run). */
-export async function runNow(agent: AgentRow, line: string) {
-	try {
-		const r = await api.runCommand(agent.id, line);
-		showToast(
-			r.result === "ok"
-				? `Ran ${line.split(" ")[0]} in ${agent.name}'s session`
-				: `${line.split(" ")[0]} didn't run: ${r.detail ?? r.result}`,
-			r.result === "ok" ? "ok" : "warn",
-		);
-	} catch (e) {
-		if (e instanceof ProveCancelled) return;
-		showToast(
-			`Couldn't run it: ${e instanceof ApiError ? e.message : (e as Error).message}`,
-			"warn",
-		);
 	}
 }
 

@@ -57,6 +57,8 @@ export class Registry<T extends Entry> {
 
 /** What the composer's toolbar slots get. */
 export interface ComposerSlotProps {
+	/** Run a selected command and keep the current draft. */
+	runCommand(line: string): void;
 	target: Target;
 	/** The phone's one-row composer. */
 	compact: boolean;

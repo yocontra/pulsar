@@ -274,7 +274,9 @@ function ComposerImpl({
 	const [drift, setDrift] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	/** The command that just ran in the agent's session (a note under the box). */
-	const [ran, setRan] = useState<string | null>(null);
+	const [ran, setRan] = useState<{ command: string; detail?: string } | null>(
+		null,
+	);
 	/** The send that failed (same client id), for Retry. */
 	const [failed, setFailed] = useState<SendRequest | null>(null);
 	const [last, setLast] = useState<{
@@ -400,30 +402,35 @@ function ComposerImpl({
 	/**
 	 * A `/name args` line to one agent runs in its session (typed into its
 	 * terminal or through its harness's API): an acting op, so Prove Human
-	 * first. It never goes as a message.
+	 * first. The daemon chooses the delivery method for the command.
 	 */
-	const runSlash = async (agentId: string, line: string) => {
+	const runSlash = async (line: string, fromDraft: boolean) => {
+		if (target.kind !== "agent" || phase !== "idle") return;
 		setError(null);
 		setFailed(null);
 		setRan(null);
-		pendingBody.current = line;
-		if (ta.current) ta.current.value = "";
-		setHasText(false);
+		if (fromDraft) {
+			pendingBody.current = line;
+			if (ta.current) ta.current.value = "";
+			setHasText(false);
+		}
 		setPhase("sending");
 		try {
-			const r = await api.runCommand(agentId, line);
+			const r = await api.runCommand(target.agent.id, line);
 			setPhase("idle");
 			if (r.result === "ok") {
-				pendingBody.current = "";
-				draft.clear();
-				setRan(line);
+				if (fromDraft) {
+					pendingBody.current = "";
+					draft.clear();
+				}
+				setRan({ command: line.split(" ")[0]!, detail: r.detail });
 				return;
 			}
 			setError(`${line.split(" ")[0]} didn't run: ${r.detail ?? r.result}`);
-			restore();
+			if (fromDraft) restore();
 		} catch (err) {
 			setPhase("idle");
-			restore();
+			if (fromDraft) restore();
 			if (err instanceof ProveCancelled) return;
 			setError(err instanceof ApiError ? err.message : "Couldn't run it");
 		}
@@ -438,7 +445,7 @@ function ComposerImpl({
 			!draft.files.value.length
 				? commandLine(text)
 				: null;
-		if (line && target.kind === "agent") return runSlash(target.agent.id, line);
+		if (line && target.kind === "agent") return runSlash(line, true);
 		setRan(null);
 		// The files went to the agent's machine already: the message names them.
 		pendingBody.current = draft.body(text);
@@ -490,6 +497,7 @@ function ComposerImpl({
 
 	// What the toolbar slots (lib/registry.tsx) get.
 	const slot: ComposerSlotProps = {
+		runCommand: (line) => void runSlash(line, false),
 		target,
 		compact,
 		busy: phase === "checking" || phase === "sending",
@@ -658,9 +666,13 @@ function ComposerImpl({
 			)}
 			{ran && !error && (
 				<p className="composer-ran" role="status">
-					Ran <code>{ran.split(" ")[0]}</code> in{" "}
-					{target.kind === "agent" ? target.agent.name : "the agent"}
-					{"'"}s session
+					{ran.detail || (
+						<>
+							Ran <code>{ran.command}</code> in{" "}
+							{target.kind === "agent" ? target.agent.name : "the agent"}
+							{"'"}s session
+						</>
+					)}
 				</p>
 			)}
 			{error && (

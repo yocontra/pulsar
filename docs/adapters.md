@@ -42,6 +42,8 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 
 To connect an existing Antigravity conversation, ask the agent in its terminal: “Run `pulsar antigravity-bind` so I can wake this conversation from Pulsar.” The command uses the connection Antigravity supplies to its own command tool. Check for `push` in `pulsar list`. Pulsar reads the native transcript from the conversation database. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
 
+On your phone, open **+ → Skills & Commands**, or type `/` in the message box. In a native Antigravity session, `/skills <name>` searches installed skills and `/help <name>` searches commands. Select a skill, add your request, and send it. A pull-only session receives the request at its next inbox check. A bound session can wake. Commands that need the Antigravity terminal are marked in the picker. [Antigravity CLI commands](https://antigravity.google/docs/cli/reference)
+
 When an omp agent has no activity summary, Pulsar uses the latest action from its session log, such as “Ran a command.” The list omits command arguments and message content.
 
 Limits:

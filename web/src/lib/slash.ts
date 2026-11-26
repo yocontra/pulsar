@@ -74,7 +74,7 @@ export function rankCommands(
 		if (r >= 0) s -= 1 - r / 100;
 		if (!query && c.source !== "builtin" && r < 0) s += 0.5;
 		// Only the terminal can answer these: after everything that runs here.
-		if (c.dialog && !c.args) s += 20;
+		if (needsTerminal(c)) s += 20;
 		scored.push([c, s]);
 	}
 	scored.sort((a, b) => a[1] - b[1] || a[0].name.localeCompare(b[0].name));
@@ -88,7 +88,7 @@ export function insertText(c: CommandEntry): string {
 
 /** A dialog command with nothing to pass is one only the terminal can answer. */
 export function needsTerminal(c: CommandEntry): boolean {
-	return c.dialog === true && !c.args;
+	return !!c.terminalOnly || (c.dialog === true && !c.args);
 }
 
 /** Commands that end, restart or leave the session: never one tap. */
@@ -106,5 +106,7 @@ const DRASTIC = new Set([
 
 /** The phone sheet offers Run (one tap) only for a command with nothing to type that keeps the session. */
 export function runsInOneTap(c: CommandEntry): boolean {
-	return !c.args && !c.dialog && !c.skill && !DRASTIC.has(c.name);
+	return (
+		!c.args && !c.dialog && !c.terminalOnly && !c.skill && !DRASTIC.has(c.name)
+	);
 }

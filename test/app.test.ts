@@ -378,6 +378,38 @@ describe("user sends", () => {
 		t.done();
 	});
 
+	test("a skill requested for a pull-only session waits in that exact inbox", async () => {
+		const t = setup();
+		try {
+			const add = (sessionId: string) =>
+				t.service.registry.upsert({
+					...registration({ harness: "antigravity", sessionId }),
+					meta: {},
+					registered: false,
+				});
+			const target = add("selected");
+			add("same-workspace");
+			const result = await t.service.app.invokeSkill(
+				target,
+				"Use the selected skill.",
+				{ ...USER, verified: true },
+			);
+			expect(result).toMatchObject({
+				result: "ok",
+				via: "inbox",
+				detail: expect.stringContaining("queued"),
+			});
+			expect(
+				t.store.db.prepare("SELECT agent_id, state FROM receipts").all(),
+			).toEqual([{ agent_id: target.id, state: "queued" }]);
+			expect(
+				t.store.db.prepare("SELECT from_id FROM messages").get()?.from_id,
+			).toBe("user:me@example.com");
+		} finally {
+			t.done();
+		}
+	});
+
 	test("a queued user message is still framed as the user's when pushed later", async () => {
 		const t = setup();
 		const a = t.connect({ sessionId: "q1" });

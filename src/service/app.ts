@@ -4,6 +4,7 @@ import { driverFor } from "../harnesses/index.ts";
 import type {
 	AgentRow,
 	AgentSort,
+	ControlResult,
 	DryRun,
 	FacetKey,
 	Feature,
@@ -26,6 +27,7 @@ import {
 	type ReceiptState,
 } from "../types.ts";
 import { VERSION } from "../version.ts";
+import type { VerifiedUser } from "./acting.ts";
 import { authorize } from "./authorize.ts";
 import { OPERATOR_ID, type Principal } from "./caller.ts";
 import { LIMITS } from "./limits.ts";
@@ -289,6 +291,55 @@ export class AppApi {
 			return result;
 		}
 		return this.sendOnce(p, input);
+	}
+
+	/** A skill invoked through the agent's inbox uses the signed-in operator as sender. */
+	async invokeSkill(
+		agent: Agent,
+		body: string,
+		user: VerifiedUser,
+	): Promise<Omit<ControlResult, "agentId">> {
+		const sent = await this.send(user, { ids: [agent.id], body });
+		const receipt =
+			!sent.dryRun && sent.receipts.find((r) => r.agentId === agent.id);
+		const via = "inbox";
+		if (!receipt)
+			return {
+				result: "failed",
+				via,
+				detail: "No delivery receipt for this session.",
+			};
+		switch (receipt.state) {
+			case "queued":
+				return {
+					result: "ok",
+					via,
+					detail: "Skill request queued for this session’s next inbox check.",
+				};
+			case "held":
+				return {
+					result: "ok",
+					via,
+					detail: "Skill request held in this session’s inbox.",
+				};
+			case "sent":
+			case "delivered":
+			case "read":
+			case "acked":
+			case "done":
+			case "replied":
+				return {
+					result: "ok",
+					via,
+					detail: "Skill request sent to this session.",
+				};
+			default:
+				return {
+					result: "failed",
+					via,
+					detail: receipt.detail || `Skill request ${receipt.state}.`,
+				};
+		}
 	}
 
 	private async sendOnce(

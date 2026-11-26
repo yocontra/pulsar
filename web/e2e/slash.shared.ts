@@ -60,6 +60,10 @@ export function slashSuite(platform: "desktop" | "phone") {
 		await field.press("Enter");
 		await expect(menu).toHaveCount(0);
 		await expect(field).toHaveValue("/compact ");
+		// Replacing a selected skill or command can start another lookup immediately.
+		await field.fill("/rec");
+		await expect(menu).toContainText("/recap");
+		await field.fill("/compact ");
 		await field.pressSequentially("keep the API notes");
 		const note = composer.getByTestId("slash-note");
 		await expect(note).toContainText(
@@ -74,6 +78,36 @@ export function slashSuite(platform: "desktop" | "phone") {
 			agent: id,
 			line: "/compact keep the API notes",
 		});
+	});
+
+	test(`reopening the picker loads commands advertised after startup (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const composer = await openAgent(page, request, "name=apparish-auth");
+		let first = true;
+		await page.route("**/api/v1/agents/*/commands", async (route) => {
+			if (!first) return route.continue();
+			first = false;
+			const response = await route.fetch();
+			await route.fulfill({
+				response,
+				json: {
+					...(await response.json()),
+					commands: [],
+					runnable: false,
+					reason: "Starting session",
+				},
+			});
+		});
+		const field = composer.locator(".composer-input");
+		await field.fill("/");
+		const menu = page.getByRole("listbox", { name: "Commands" });
+		await expect(composer).toContainText("Starting session");
+		await field.fill("");
+		await expect(menu).toHaveCount(0);
+		await field.fill("/");
+		await expect(menu).toContainText("/compact");
 	});
 
 	test(`fuzzy match, Escape, and a dialog-only command is not offered (${platform})`, async ({

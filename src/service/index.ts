@@ -611,6 +611,8 @@ export class PulsarService {
 		this.acting.register("attachments.upload", this.attachments.handler);
 		this.files = new Files(localAgent);
 		this.controls = new Controls({
+			invokeSkill: (agent, prompt, user) =>
+				this.app.invokeSkill(agent, prompt, user),
 			lookup: localAgent,
 			sessions: this.sessions,
 			acting: this.acting,

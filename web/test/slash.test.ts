@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CommandEntry } from "../src/api/types.ts";
 import {
 	commandLine,
+	needsTerminal,
 	rankCommands,
 	runsInOneTap,
 	slashToken,
@@ -54,6 +55,10 @@ describe("slash commands in the composer", () => {
 
 	test("one tap runs only what keeps the session and needs nothing typed", () => {
 		expect(runsInOneTap(c("recap"))).toBe(true);
+		expect(
+			needsTerminal(c("compact", { args: "[focus]", terminalOnly: true })),
+		).toBe(true);
+		expect(runsInOneTap(c("compact", { terminalOnly: true }))).toBe(false);
 		for (const n of ["exit", "clear", "restart", "background", "logout"])
 			expect(runsInOneTap(c(n))).toBe(false);
 		expect(runsInOneTap(c("rename", { args: "<name>" }))).toBe(false);

@@ -1,12 +1,24 @@
-import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join, relative, sep } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import { exec } from "../exec.ts";
+import { antigravityCommands } from "../harnesses/antigravity-commands.ts";
 import { builtinsFor } from "../harnesses/builtins.ts";
 import type { ApiResult } from "../harnesses/opencode-api.ts";
 import type { CommandEntry, CommandSource } from "../http/wire.ts";
 import { which } from "../setup/files.ts";
 import type { Agent } from "../types.ts";
+import {
+	entries,
+	frontmatter,
+	MAX_ENTRIES,
+	oneLine,
+	projectDirs,
+	readJson,
+	readText,
+	skillFilesIn,
+} from "./catalog-files.ts";
+
+export { frontmatter } from "./catalog-files.ts";
 
 /**
  * The composer's `/` menu for one agent: its harness's built-in commands
@@ -25,9 +37,6 @@ import type { Agent } from "../types.ts";
  */
 
 const CACHE_MS = 30_000;
-/** Files read per folder, and SKILL.md bytes read: a bound on odd setups. */
-const MAX_ENTRIES = 500;
-const MAX_FILE = 64 * 1024;
 const VERSION_MS = 10 * 60_000;
 
 export interface CatalogPorts {
@@ -52,7 +61,7 @@ const realPorts = (): Omit<CatalogPorts, "opencode" | "extension"> => {
 		version(harness) {
 			const hit = versions.get(harness);
 			if (hit && Date.now() - hit.at < VERSION_MS) return hit.v;
-			const bin = which(harness);
+			const bin = which(harness === "antigravity" ? "agy" : harness);
 			const v = bin
 				? exec(bin, ["--version"], {
 						timeoutMs: 4000,
@@ -75,84 +84,10 @@ export interface Listed {
 	stale: boolean;
 }
 
-/** A SKILL.md or command file's front matter: flat `key: value` pairs. */
-export function frontmatter(text: string): Record<string, string> {
-	const out: Record<string, string> = {};
-	if (!text.startsWith("---")) return out;
-	const end = text.indexOf("\n---", 3);
-	if (end < 0) return out;
-	const lines = text.slice(text.indexOf("\n") + 1, end).split("\n");
-	for (let i = 0; i < lines.length; i++) {
-		const m = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(lines[i]!);
-		if (!m) continue;
-		let value = m[2]!.trim();
-		if (
-			value === "" ||
-			value === ">" ||
-			value === "|" ||
-			/^[>|][-+]?$/.test(value)
-		) {
-			// A block value: the indented lines under the key.
-			const block: string[] = [];
-			while (i + 1 < lines.length && /^\s+\S/.test(lines[i + 1]!))
-				block.push(lines[++i]!.trim());
-			value = block.join(value.startsWith("|") ? "\n" : " ");
-		}
-		if (/^(["']).*\1$/.test(value)) value = value.slice(1, -1);
-		out[m[1]!.toLowerCase()] = value;
-	}
-	return out;
-}
-
-/** The first sentence-ish line of a description, for one menu row. */
-function oneLine(s: string | undefined): string {
-	const t = (s ?? "").replace(/\s+/g, " ").trim();
-	return t.length > 200 ? `${t.slice(0, 197)}…` : t;
-}
-
-async function readText(path: string): Promise<string | null> {
-	try {
-		const s = await stat(path);
-		if (!s.isFile()) return null;
-		const buf = await readFile(path);
-		return buf.subarray(0, MAX_FILE).toString("utf8");
-	} catch {
-		return null;
-	}
-}
-
-async function entries(dir: string): Promise<string[]> {
-	try {
-		return (await readdir(dir)).slice(0, MAX_ENTRIES);
-	} catch {
-		return [];
-	}
-}
-
-/** Every `<dir>/<name>/SKILL.md`, as menu entries. */
 export async function skillsIn(
-	dir: string,
-	source: CommandSource,
-	opts: { prefix?: string; plugin?: string } = {},
+	...args: Parameters<typeof skillFilesIn>
 ): Promise<CommandEntry[]> {
-	const out: CommandEntry[] = [];
-	for (const name of await entries(dir)) {
-		const text = await readText(join(dir, name, "SKILL.md"));
-		if (text === null) continue;
-		const fm = frontmatter(text);
-		// A skill the person never invokes by name stays out of the menu.
-		if (fm["user-invocable"] === "false") continue;
-		const own = fm.name && /^[\w:.-]{1,128}$/.test(fm.name) ? fm.name : name;
-		out.push({
-			name: `${opts.prefix ?? ""}${own}`,
-			description: oneLine(fm.description),
-			source,
-			skill: true,
-			...(fm["argument-hint"] ? { args: oneLine(fm["argument-hint"]) } : {}),
-			...(opts.plugin ? { plugin: opts.plugin } : {}),
-		});
-	}
-	return out;
+	return (await skillFilesIn(...args)).map(({ path: _, ...entry }) => entry);
 }
 
 /** Every `*.md` under `dir` (one level of subfolders too), as commands. */
@@ -185,34 +120,6 @@ export async function commandsIn(
 				if (sub.endsWith(".md")) await add(join(path, sub));
 	}
 	return out;
-}
-
-/** The folders from `cwd` up to its repo root (or home), nearest first. */
-async function projectDirs(cwd: string, home: string): Promise<string[]> {
-	const out: string[] = [];
-	let dir = cwd;
-	for (let i = 0; i < 12; i++) {
-		if (dir === home) break;
-		out.push(dir);
-		try {
-			await stat(join(dir, ".git"));
-			break;
-		} catch {}
-		const up = dirname(dir);
-		if (up === dir) break;
-		dir = up;
-	}
-	return out;
-}
-
-async function readJson(path: string): Promise<unknown> {
-	const text = await readText(path);
-	if (text === null) return null;
-	try {
-		return JSON.parse(text);
-	} catch {
-		return null;
-	}
 }
 
 /** Claude Code's enabled plugins and where each is installed. */
@@ -277,6 +184,21 @@ export class Catalogs {
 		this.ports = { ...realPorts(), ...ports };
 	}
 
+	async antigravitySkills(agent: Agent) {
+		const entries = await antigravityCommands(agent.cwd, this.ports.home());
+		const reserved = new Set(
+			builtinsFor("antigravity", null)?.commands.map((c) => c.name),
+		);
+		const names = new Set(entries.map((c) => c.name));
+		return entries.map((entry) => {
+			if (!reserved.has(entry.name)) return entry;
+			let name = `skill:${entry.name}`;
+			while (names.has(name)) name = `skill:${name}`;
+			names.add(name);
+			return { ...entry, name };
+		});
+	}
+
 	list(agent: Agent): Promise<Listed> {
 		// pi/omp answer for their own session; the others by folder.
 		const key = `${agent.harness}\0${agent.harness === "pi" || agent.harness === "omp" ? agent.id : (agent.cwd ?? "")}`;
@@ -299,6 +221,7 @@ export class Catalogs {
 			description: b.description,
 			source: "builtin",
 			...(b.args ? { args: b.args } : {}),
+			...(b.terminalOnly ? { terminalOnly: true } : {}),
 			...(b.dialog ? { dialog: true } : {}),
 		}));
 		const home = this.ports.home();
@@ -310,6 +233,10 @@ export class Catalogs {
 	}
 
 	private async custom(agent: Agent, home: string): Promise<CommandEntry[]> {
+		if (agent.harness === "antigravity")
+			return (await this.antigravitySkills(agent)).map(
+				({ path: _, ...entry }) => entry,
+			);
 		const projects = agent.cwd ? await projectDirs(agent.cwd, home) : [];
 		switch (agent.harness) {
 			case "claude": {
