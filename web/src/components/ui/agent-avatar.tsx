@@ -1,3 +1,4 @@
+import { HARNESSES } from "../../../../src/harnesses/catalog.ts";
 import { harnessUi } from "../../harnesses/index.ts";
 import { cx as cn } from "../../lib/cx.ts";
 import { STATUS_LABEL } from "../../lib/format.ts";
@@ -8,20 +9,17 @@ import { STATUS_LABEL } from "../../lib/format.ts";
  * scannable by harness at a glance. Unknown harnesses get their initial.
  * Colors come from the `--ds-h-<harness>-*` tokens.
  */
-export type HarnessKey =
-	| "claude"
-	| "codex"
-	| "opencode"
-	| "pi"
-	| "omp"
-	| "cursor"
-	| "gemini"
-	| "vscode"
-	| "other";
+export type HarnessKey = (typeof HARNESSES)[number]["id"] | "other";
+const harnessIds = new Map<string, HarnessKey>(
+	HARNESSES.map(({ id }) => [id, id]),
+);
 
 /** "claude-code", "Claude", "codex-cli" → a known harness key. */
 export function harnessKey(harness: string | null | undefined): HarnessKey {
-	const h = (harness ?? "").toLowerCase();
+	const h = (harness ?? "").trim().toLowerCase();
+	const exact = harnessIds.get(h);
+	if (exact) return exact;
+	if (h === "agy") return "antigravity";
 	if (h.includes("claude")) return "claude";
 	if (h.includes("codex")) return "codex";
 	if (h.includes("opencode") || h === "oc") return "opencode";
@@ -54,6 +52,12 @@ export function HarnessGlyph({
 			<span className="ds-avatar-initial" aria-hidden="true">
 				{(harness?.trim()[0] ?? "A").toUpperCase()}
 			</span>
+		);
+	if ("symbol" in icon)
+		return (
+			<svg width={size} height={size} aria-hidden="true" data-mark={k}>
+				<use href={`/harness-marks.svg#${icon.symbol}`} />
+			</svg>
 		);
 	return (
 		<svg

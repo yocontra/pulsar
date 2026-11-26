@@ -9,7 +9,9 @@ const PAD_TOP = 8;
 /** A series' color: the harness's own token, else a neutral one. */
 export function seriesColor(key: string): string {
 	const k = harnessKey(key);
-	return k === "other" ? "var(--ds-text-3)" : `var(--ds-h-${k}-fg)`;
+	return k === "other"
+		? "var(--ds-text-3)"
+		: `var(--ds-h-${k}-fg, var(--ds-text-3))`;
 }
 
 /**

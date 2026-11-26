@@ -97,6 +97,7 @@ const precache = [
 	"/preload.js",
 	"/manifest.webmanifest",
 	"/icon.svg",
+	"/harness-marks.svg",
 	...shell.map((f) => `/${relative(DIST, f)}`),
 ];
 writeFileSync(

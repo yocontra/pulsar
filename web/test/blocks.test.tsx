@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { HARNESSES } from "../../src/harnesses/catalog.ts";
 /**
  * One test per chat-block renderer: each tool body, the card line, system
  * rows, reasoning and the lazy views (ANSI, JSON tree, notebook), rendered
@@ -320,21 +322,22 @@ describe("harness adapters", async () => {
 		"../src/components/ui/agent-avatar.tsx"
 	);
 	test("every harness key has an adapter with a name and a mark", () => {
-		for (const id of [
-			"claude",
-			"codex",
-			"omp",
-			"pi",
-			"opencode",
-			"cursor",
-			"gemini",
-			"vscode",
-		]) {
+		const sprite = readFileSync(
+			new URL("../public/harness-marks.svg", import.meta.url),
+			"utf8",
+		);
+		for (const { id } of HARNESSES) {
 			const ui = harnessUi(id);
 			expect(ui.name).toBeTruthy();
-			expect(ui.icon?.paths.length).toBeGreaterThan(0);
-			expect(harnessKey(id)).toBe(id as never);
+			expect(harnessKey(id)).toBe(id);
+			const rendered = html(<HarnessGlyph harness={id} />);
+			expect(rendered).toContain(`data-mark="${id}"`);
+			if (ui.icon && "symbol" in ui.icon) {
+				expect(rendered).toContain(`href="/harness-marks.svg#${id}"`);
+				expect(sprite).toContain(`<symbol id="${id}"`);
+			} else expect(ui.icon?.paths.length).toBeGreaterThan(0);
 		}
+		expect(harnessKey("agy")).toBe("antigravity");
 		expect(new Set(HARNESS_UI.map((h) => h.id)).size).toBe(HARNESS_UI.length);
 		expect(harnessUi("aider")).toEqual({ id: "aider" });
 	});

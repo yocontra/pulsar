@@ -38,14 +38,16 @@ export interface HarnessUi {
  * logos (nominative use: they identify the harness an agent runs in);
  * `stroke` marks are drawn for harnesses with no usable logo.
  */
-export interface HarnessIcon {
-	viewBox: string;
-	paths: readonly string[];
-	/** Draw the paths as 2 px strokes (round caps) instead of filling them. */
-	stroke?: boolean;
-	/** Even-odd fill for marks with holes. */
-	evenOdd?: boolean;
-}
+export type HarnessIcon =
+	| { symbol: string }
+	| {
+			viewBox: string;
+			paths: readonly string[];
+			/** Draw the paths as 2 px strokes (round caps) instead of filling them. */
+			stroke?: boolean;
+			/** Even-odd fill for marks with holes. */
+			evenOdd?: boolean;
+	  };
 
 export interface ToolCard {
 	kind?: ToolKind;

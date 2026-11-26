@@ -35,6 +35,7 @@ const custom: readonly HarnessUi[] = [
 export const HARNESS_UI: readonly HarnessUi[] = HARNESSES.map((h) => ({
 	name: h.label,
 	id: h.id,
+	icon: { symbol: h.id },
 	...custom.find((ui) => ui.id === h.id),
 }));
 
