@@ -132,6 +132,45 @@ describe("what the queue lists", () => {
 		}
 	});
 
+	test("busy steerable sessions retain editable next-turn messages until promotion or idle", async () => {
+		const t = setup();
+		try {
+			const ext = t.connect("extension", { capabilities: ["steer"] });
+			const { registry, queue } = t.service;
+			registry.idleSettleMs = 0;
+			queue.start();
+			const agent = registry.get(ext.agent.id)!;
+			await t.service.handle(ext.caller, "set_status", { status: "busy" });
+			const a = await t.userSend(agent.id, "first");
+			const b = await t.userSend(agent.id, "old text");
+			const c = await t.userSend(agent.id, "withdraw");
+			const d = await t.userSend(agent.id, "last");
+			await t.userSend(agent.id, "quiet", USER, "fyi");
+			expect(ext.pushes).toHaveLength(0);
+			expect(await t.list(agent.id)).toContainEqual(
+				expect.objectContaining({
+					messageId: a.id,
+					canPromote: true,
+					canWithdraw: true,
+					canEdit: true,
+				}),
+			);
+			await queue.act(USER, agent.id, b.id, "edit", { body: "edited" });
+			await queue.act(USER, agent.id, c.id, "withdraw");
+			await queue.act(USER, agent.id, a.id, "promote");
+			expect(ext.pushes.map((p) => p.message.priority)).toEqual(["urgent"]);
+			await t.service.handle(ext.caller, "set_status", { status: "idle" });
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(ext.pushes.map((p) => [p.message.id, p.message.body])).toEqual([
+				[a.id, "first"],
+				[b.id, "edited"],
+				[d.id, "last"],
+			]);
+		} finally {
+			t.done();
+		}
+	});
+
 	test("urgent queued turns remain visible until the session accepts them", async () => {
 		const t = setup();
 		try {

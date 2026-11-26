@@ -42,7 +42,7 @@ export function codexControlAvailable(): boolean {
 	return hit?.ok ?? false;
 }
 
-class CodexRpcError extends Error {
+export class CodexRpcError extends Error {
 	readonly code: number;
 	constructor(code: number, message: string) {
 		super(message);

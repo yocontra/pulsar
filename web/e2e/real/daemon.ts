@@ -138,7 +138,11 @@ const fixer = await agent({
 	cwd: CWD,
 	model: "claude-fable-5-2",
 });
-const reviewer = await agent({ name: "reviewer", role: "extension" });
+const reviewer = await agent({
+	name: "reviewer",
+	role: "extension",
+	capabilities: ["steer"],
+});
 /** The text of each push the reviewer got, by message id (`GET /push?id=`). */
 const pushTexts = new Map<string, string>();
 /** Every body the reviewer was pushed, in order (`GET /pushes?body=`). */

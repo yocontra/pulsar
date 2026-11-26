@@ -142,12 +142,17 @@ function Row({ item }: { item: QueueItem }) {
 			else if (action === "edit") {
 				setDraft(null);
 				toast("Message updated");
-			} else if (r.receipt && r.receipt.state === "queued")
+			} else if (
+				r.receipt &&
+				["queued", "refused", "failed", "nacked"].includes(r.receipt.state)
+			)
 				toast("Couldn't send it now", {
 					tone: "warning",
 					description: r.receipt.detail ?? undefined,
 				});
-			else toast("Sent now");
+			else if (r.receipt?.via === "codex-queue")
+				toast("Queued for the next turn");
+			else toast("Sent with urgent priority");
 		} catch (e) {
 			if (!(e instanceof ProveCancelled))
 				toast("That didn't work", { tone: "error", description: errorText(e) });

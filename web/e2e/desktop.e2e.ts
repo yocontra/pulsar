@@ -326,7 +326,7 @@ test.describe("desktop", () => {
 			.first()
 			.click();
 		await expect(page.locator(".composer-to")).toContainText("on studio");
-		await page.getByRole("radio", { name: "Urgent" }).click();
+		await page.getByRole("radio", { name: "Send now" }).click();
 		await page.locator(".composer-input").fill("hold refresh() for 10 minutes");
 		await page.keyboard.press("ControlOrMeta+Enter");
 		// The delivery state sits under the sent bubble, not under the composer.

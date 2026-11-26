@@ -49,10 +49,12 @@ A message to a group or a broadcast is delivered again only after a session rest
 The app shows each agent's queue: messages that are not in its conversation yet. These are messages waiting in the inbox, held, waiting for a retry, in your machine's outbox for an agent on another machine, and messages the harness has but shows only when the current turn ends. The operator can act on each one:
 
 - **Withdraw** works only while the message waits in Pulsar (the inbox, held, a retry, the outbox). The receipt becomes `withdrawn`, a final state. The message leaves the inbox, and it is never delivered again. If the sender waits with `await_reply`, the wait ends at once, and the sender gets a notice in its inbox.
-- **Send now** pushes the message at once as urgent, also a held one. For the outbox, the machine is tried now.
+- **Send now** promotes a message Pulsar still holds to urgent. A session that supports steering can receive it during the current turn. For an offline recipient, Pulsar retries the machine.
 - **Edit** changes the operator's own message while no recipient has it. An edit without Face ID / Touch ID loses the operator tag: the agent sees the message as "not verified as your operator".
 
-When the harness has the message already, Pulsar can't take it back.
+For a busy top-level session with steering, Pulsar keeps new **Next turn** messages until the turn ends. During that time, the operator can edit, withdraw or promote them. Messages already in a harness queue, including messages sent before this behavior was available, stay there until the harness delivers them. Pulsar disables the queue actions after handoff to prevent a second copy.
+
+A session without steering controls when urgent input reaches the agent. See the [harness delivery table](adapters.md#per-harness).
 
 For the operator's own messages, the same rule applies as for sending. For a message from an agent, the app asks for Face ID / Touch ID; for an agent on another machine, that machine checks the passkey itself. The app lists the queue of an agent on another machine from that machine, and adds what waits in this machine's outbox. Messages that wait in a third machine's outbox are not shown.
 

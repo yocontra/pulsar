@@ -5,7 +5,7 @@ import { exec } from "../exec.ts";
 import { type ProcessInfo, processSnapshot } from "../processes.ts";
 import { jsonAction, skillFor } from "../setup/actions.ts";
 import { exists, getPath, readJsonc, which } from "../setup/files.ts";
-import { isFolderGuess } from "../types.ts";
+import { type Agent, isFolderGuess } from "../types.ts";
 import { listOpencodeSubagents } from "./more-subagents.ts";
 import {
 	opencodeGet,
@@ -212,6 +212,12 @@ function opencodeConfig(): string {
 		: join(dir, "opencode.json");
 }
 
+function hasOpenCodeTarget(agent: Agent): boolean {
+	return (
+		agent.harness === "opencode" && !!agent.sessionId && !isFolderGuess(agent)
+	);
+}
+
 export const opencode: HarnessDriver = {
 	...opencodeIdent,
 
@@ -225,19 +231,18 @@ export const opencode: HarnessDriver = {
 
 	// Child sessions. `session.prompt` on a child's own id lands in that
 	// session and starts its turn (verified live with OpenCode 2.2.5).
-	subagents: { list: listOpencodeSubagents, direct: true },
+	subagents: {
+		list: listOpencodeSubagents,
+		direct: true,
+		interruptBySession: true,
+	},
 
 	push: {
 		// A folder guess is never woken or resumed: the operator may not be
 		// using it. Its messages wait in the inbox (the TUI's pulsar tools
 		// read them).
-		canPush(agent) {
-			return (
-				agent.harness === opencode.id &&
-				!!agent.sessionId &&
-				!isFolderGuess(agent)
-			);
-		},
+		canPush: hasOpenCodeTarget,
+		canSteer: hasOpenCodeTarget,
 		async deliver(agent, text, priority) {
 			const table = await processSnapshot(2000, "user");
 			if (!opencodeServiceRunning(table))
@@ -268,11 +273,15 @@ export const opencode: HarnessDriver = {
 
 	// Runs owned by the OpenCode service stop with `session.interrupt`; a
 	// `--standalone` TUI runs in its own server and answers false.
-	canInterrupt(agent) {
-		return agent.harness === opencode.id && !!agent.sessionId;
-	},
+	canInterrupt: hasOpenCodeTarget,
 	async interrupt(agent) {
 		const via = "opencode-api";
+		if (!hasOpenCodeTarget(agent))
+			return {
+				result: "unsupported",
+				via,
+				detail: "No confirmed OpenCode session",
+			};
 		const table = await processSnapshot();
 		if (!agent.sessionId || !opencodeServiceRunning(table))
 			return {

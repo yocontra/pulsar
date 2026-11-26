@@ -27,15 +27,18 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 
 ## Per harness
 
-| Harness | How a message arrives | Busy / idle |
+| Session | Send now during a turn | Next turn |
 | --- | --- | --- |
-| Claude Code | Claude's per-session inbox. `urgent` lands between tool calls; `normal` after the turn, and it wakes an idle session | Yes |
-| Codex | `codex queue --resume`: queued on the thread, then run as a turn | Yes, from turn events in the session log |
-| OpenCode | OpenCode's local server, into the session | Yes |
-| pi, omp | The Pulsar extension, inside the session | Yes |
-| Native Antigravity CLI | Run `pulsar antigravity-bind` from the agent’s command tool once per conversation. A normal message can then wake that conversation. | Yes, from the native session |
-| Managed ACP providers, including Antigravity | A normal message starts a turn on the connected session. FYI stays in the inbox. | Yes, from the bridge |
-| Other native sessions with only an MCP connection | Messages wait in the inbox. Pulsar tool results report unread messages. | Depends on the native driver |
+| Native Claude Code | The session inbox accepts urgent input between tool calls. | The inbox delivers after the current turn and can wake an idle session. |
+| Native Codex | Pulsar sends `turn/steer` to the active turn on the exact thread. The app server returns the turn ID. Direct child input also requires the child to permit it. | The native queue can resume a parent thread. A loaded child uses its own queue. If a turn ends before a steer, Pulsar uses the native queue. |
+| Native OpenCode | Pulsar sends a steering prompt to the confirmed session on the local OpenCode service. | A queued prompt can resume that session. |
+| Native pi and omp | The connected Pulsar extension requests steering. The harness applies the input at its next opportunity. | The extension submits a follow-up. |
+| Managed Claude Agent ACP and Codex ACP | An adapter that advertises steering can accept input into the running prompt. Pulsar requires Claude Agent ACP 0.110.0 or later, or Codex ACP 2.12.0 or later. | The bridge runs one prompt at a time. If the turn ends before steering, the bridge starts a new prompt. |
+| Other managed ACP sessions, including Antigravity | The bridge waits for the current prompt to finish. | Starts a prompt on the same session. |
+| Native Antigravity CLI | The bound client accepts a message with no priority parameter. The client controls when the input appears. | A bound conversation can wake. |
+| MCP connection only | The agent reads its inbox or receives a message during an active Pulsar wait. | Waits in the inbox. |
+
+**Don't wake** keeps the message in the inbox across all harnesses. A session can read it through Pulsar.
 
 To connect an existing Antigravity conversation, ask the agent in its terminal: “Run `pulsar antigravity-bind` so I can wake this conversation from Pulsar.” The command uses the connection Antigravity supplies to its own command tool. Check for `push` in `pulsar list`. Pulsar reads the native transcript from the conversation database. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
 
@@ -46,21 +49,29 @@ Limits:
 - **Claude Code** holds a peer message for approval when the session skips permission prompts. `pulsar setup` asks to set `crossSessionInbound: "accept"` in `~/.claude/settings.json` to deliver these. When the session shows a dialog in the terminal, the app shows the agent as needing you.
 - **Codex** approvals and questions can be answered from the app for sessions that run in Codex's app-server (the default). A session started with `codex --no-daemon` shows them read-only. "Allow for session" is not offered. Pulsar reads turn start, completion and interruption from the Codex session log. An idle wait needs an identifiable thread and a readable log. A Codex TUI that is not attached to Codex's app-server may not show a message until you resume it. Setup sets `default_tools_approval_mode = "approve"` for Pulsar's tools and `tool_timeout_sec = 1900`, so `ask` and `wait` can block.
 - **OpenCode**: an idle TUI with no running session shows its folder's most recent session as "Idle · last session". Pulsar does not push into it until that session loads Pulsar's tools. If the daemon finds an `opencode` older than 2.0 first on its PATH, `pulsar doctor` says so.
-- **pi, omp and managed ACP sessions** confirm when a message reaches the conversation. Native Codex and managed ACP sessions queue urgent messages for the next turn.
+- **pi, omp and managed ACP sessions** confirm when a message reaches the conversation. Native Claude Code, Codex and OpenCode confirm handoff to the harness. A handoff does not tell you when the agent acted on the message.
 
 See [delivery.md](delivery.md) for receipts and redelivery.
 
-### Native harness smoke checks
+### Harness smoke checks
 
-These checks used separate workspaces and Pulsar state directories on macOS. The child messaging checks used a local model fixture to exercise the installed harness and Pulsar together.
+These checks used disposable sessions on macOS. The Codex steering check used the installed app server and a local model fixture.
 
 | Installed harness | Verified result |
 | --- | --- |
 | Claude Code 2.1.331 | A child received a message through a tool hook, replied as itself, and updated its identity. Its parent kept its original identity. |
-| Codex CLI 0.172.0 | Codex stopped at thread creation because it could not synchronize managed preferences. The native reply and idle wait could not run in this environment. |
-| OpenCode 2.2.5 | A native child listed agents, received a direct message through the OpenCode service, and replied from its own child address. Pulsar also found a nested child through the native session API. |
-| pi 1.5.0 | The native RPC process answered its state request. The configured model request was rate-limited before a Pulsar reply. |
-| omp 19.1.1 | Two native children discovered one another. Pulsar delivered a message to the first child, which sent to its sibling and received the reply. |
+| Codex CLI 0.172.0 | The installed app server accepted urgent input during a turn. The local model received it on the original thread, with one turn ID throughout. Starting an already queued submission during that turn was refused. Stop interrupted the turn and the session became idle. |
+| OpenCode 2.2.5 | A native child listed agents, received a direct message through the OpenCode service, and replied from its own child address. Pulsar also found a nested child through the native session API. In two disposable service sessions, the model received urgent input after a tool result within the active turn, and normal input only after the assistant finished its turn. |
+| pi 1.5.0 | The local model received urgent input during the active turn and normal input after idle. Pulsar confirmed both deliveries. |
+| omp 19.1.1 | The local model received urgent input during the active turn and normal input after idle. A running child received urgent input, messaged its sibling, and received the reply. |
+
+Extension host tests verified the steering and follow-up requests for pi and omp, including delivery acknowledgements for an omp child. The omp host tests also checked child Stop and discovery of commands and modes.
+
+| Managed ACP adapter | Steering qualification |
+| --- | --- |
+| Claude Agent ACP 0.110.0 | The installed adapter accepted input during a held prompt. A local model fixture received the input in that turn. |
+| Codex ACP 2.12.0 | The installed adapter advertised steering. Live prompt verification requires credentials for the adapter. The bridge tests cover active-turn acknowledgement and fallback when the turn ends. |
+| OpenCode 2.2.5 and Antigravity CLI 1.5.16 | Neither advertised ACP steering. Urgent input waits for the next managed prompt. |
 
 ## Prompts in the app
 
@@ -70,7 +81,8 @@ These checks used separate workspaces and Pulsar state directories on macOS. The
 | OpenCode | Permission prompts, the `question` tool |
 | omp | `ask` forms, tool approvals, plan review, extension dialogs |
 | pi | Extension dialogs (select, confirm, input) |
-| Codex | Shown read-only; answer in the terminal |
+| Codex | Approvals and questions on the app server. Embedded sessions show read-only cards. |
+| Managed ACP | Permission requests from the connected provider. |
 
 MCP elicitation forms, Codex's "Implement this plan?" and pi `custom()` dialogs are not relayed. An unanswered card ends after 9 minutes for a permission prompt and 59 minutes for a question or plan; the terminal prompt stays. `pulsar setup --no-approvals` keeps Claude Code prompts out of the app.
 
@@ -84,7 +96,10 @@ Stop interrupts an agent's current turn; the session keeps running. Use the app 
 | Codex | `turn/interrupt` through Codex's app-server daemon |
 | OpenCode | `session.interrupt` on the OpenCode service (not a `--standalone` TUI) |
 | pi, omp | The Pulsar extension aborts the run |
-| Cursor, Gemini CLI | Not supported |
+| Managed ACP sessions | The bridge sends `session/cancel` for the active prompt. |
+| Other native sessions, including bound Antigravity CLI | No Stop control. |
+
+For child agents, Pulsar enables Stop on a connected omp child that supports it, or on a verified Codex or OpenCode child session. A Claude tool hook can deliver a child message but cannot stop that child independently.
 
 ## Modes and slash commands
 
@@ -97,7 +112,7 @@ The app can switch an agent's mode and run slash commands and skills in its sess
 | OpenCode | Build, Plan | Shift+Tab in its pane (only an agent Pulsar started in tmux: OpenCode reports no pid); else the service's `/agent` API (the terminal may not follow) | Server commands and skills through the service; the TUI's own commands typed into its pane |
 | pi | None | — | The Pulsar extension (extension commands, prompt templates, `/skill:name`), when idle |
 | omp | Default, Plan | The Pulsar extension (`sessionModes`) | Not supported (omp runs commands only when typed) |
-| Cursor, Gemini CLI | Not supported | — | — |
+| Other native sessions | Not supported | — | — |
 
 Pulsar types only into the agent's own pane: the pane's process must be up the agent's process tree with no other agent between them, so a session started inside another agent's tool call is never typed into. The phone's one-tap Run is offered only for commands that take nothing and keep the session (not `/exit`, `/clear`, `/restart` and the like).
 

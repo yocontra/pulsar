@@ -102,7 +102,7 @@ export async function promoteOthers(page: Page) {
 		.getByRole("button", { name: /^Send now/ })
 		.click();
 	await proveInSheet(page);
-	await expect(page.getByText("Sent now")).toBeVisible();
+	await expect(page.getByText("Sent with urgent priority")).toBeVisible();
 	await expect(row(page, "Pause refresh() changes")).toHaveCount(0);
 	await expect(strip(page).locator(".q-title")).toHaveText("Queued (1)");
 }

@@ -72,7 +72,7 @@ test("a live OMP child has its own socket, selector, mailbox, and reply identity
 			).rejects.toMatchObject({ code: "not_found" });
 			const child = await agentClient({
 				...base,
-				capabilities: ["acks"],
+				capabilities: ["acks", "steer", "stop"],
 				subagent: { key: "Review", file: childLog },
 			});
 			childClient = child.client;
@@ -80,9 +80,25 @@ test("a live OMP child has its own socket, selector, mailbox, and reply identity
 			expect(child.agent.capabilities).toMatchObject({
 				inbox: true,
 				wake: true,
-				stop: false,
+				stop: true,
+				steer: true,
 				subagents: false,
 			});
+			let parentStops = 0;
+			parent.client.on("interrupt", () => {
+				parentStops++;
+			});
+			child.client.on("interrupt", (data) => {
+				const { requestId } = data as { requestId: string };
+				void child.client.call("interrupt_result", {
+					requestId,
+					result: "interrupted",
+				});
+			});
+			expect(
+				await daemon.service.stopAgent({ kind: "terminal" }, child.agent.id),
+			).toMatchObject({ result: "interrupted", via: "extension" });
+			expect(parentStops).toBe(0);
 			expect(daemon.service.registry.live().map((a) => a.id)).not.toContain(
 				child.agent.id,
 			);

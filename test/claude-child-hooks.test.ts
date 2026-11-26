@@ -71,6 +71,15 @@ test("a Claude subagent hook receives queued context for its own child and confi
 			mode: "direct",
 			note: expect.stringMatching(/hook/i),
 		});
+		const child = service.registry.find(childId)!;
+		expect(service.registry.view(child).capabilities).toMatchObject({
+			stop: false,
+			steer: false,
+		});
+		expect(service.app.views.row(child).canStop).toBe(false);
+		expect(
+			await service.stopAgent({ kind: "terminal" }, childId),
+		).toMatchObject({ result: "unsupported" });
 		const sent = await service.app.send(
 			{
 				kind: "human",

@@ -29,7 +29,7 @@ import {
 	sendKeys,
 	type TmuxResult,
 } from "../tmux.ts";
-import type { Agent } from "../types.ts";
+import { type Agent, isFolderGuess } from "../types.ts";
 import { tailAsync } from "../util.ts";
 import type { Acting } from "./acting.ts";
 import type { Principal } from "./caller.ts";
@@ -207,6 +207,8 @@ const POLL_MS = 100;
 
 const NOT_IN_TMUX =
 	"The agent does not run in tmux, so Pulsar cannot reach its terminal.";
+const FOLDER_GUESS =
+	"OpenCode has not confirmed which session is open in this folder.";
 const NO_EXTENSION = "The pulsar extension is not connected in this session.";
 /** How long an extension has to answer. */
 const EXTENSION_TIMEOUT_MS = 5000;
@@ -325,6 +327,14 @@ export class Controls {
 				return this.remote.commands(agentId, as);
 			throw new RpcError("not_found", `no agent ${agentId}`);
 		}
+		if (isFolderGuess(agent))
+			return {
+				agentId: agent.id,
+				harness: agent.harness,
+				commands: [],
+				runnable: false,
+				reason: FOLDER_GUESS,
+			};
 		if (agent.meta.acp === "1") {
 			const response = await this.askExtension(agent, { kind: "commands" });
 			const commands = Array.isArray(response?.commands)
@@ -392,6 +402,15 @@ export class Controls {
 	}
 
 	private async readModes(agent: Agent): Promise<AgentModes> {
+		if (isFolderGuess(agent))
+			return {
+				agentId: agent.id,
+				modes: [],
+				current: null,
+				live: false,
+				canSwitch: false,
+				reason: FOLDER_GUESS,
+			};
 		if (agent.meta.acp === "1") {
 			const response = await this.askExtension(agent, { kind: "mode.get" });
 			const modes = Array.isArray(response?.modes)
@@ -507,6 +526,12 @@ export class Controls {
 			agentId: agent.id,
 			...r,
 		});
+		if (isFolderGuess(agent))
+			return done({
+				result: "unsupported",
+				via: "opencode",
+				detail: FOLDER_GUESS,
+			});
 		if (agent.meta.acp === "1")
 			return done(
 				await this.acpAction(agent, { kind: "mode.set", mode: target }, "mode"),
@@ -752,6 +777,12 @@ export class Controls {
 				detail: "A command is one line: / and a name, then its arguments.",
 			});
 
+		if (isFolderGuess(agent))
+			return done({
+				result: "unsupported",
+				via: "opencode",
+				detail: FOLDER_GUESS,
+			});
 		if (agent.meta.acp === "1")
 			return done(
 				await this.acpAction(agent, { kind: "command", line }, "command"),

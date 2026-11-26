@@ -96,6 +96,8 @@ export type SessionRef = Pick<Agent, "harness" | "sessionId" | "cwd"> & {
 
 export interface DeliveryResult {
 	ok: boolean;
+	/** Delivery may have succeeded. Replaying this input can duplicate it. */
+	uncertain?: boolean;
 	via: string;
 	detail?: string;
 }
@@ -327,6 +329,8 @@ export interface HarnessDriver {
 		 * session id, verified live. Without it a message goes to the parent.
 		 */
 		direct?: boolean;
+		/** Interrupt addresses the child session itself without targeting a shared process. */
+		interruptBySession?: boolean;
 	};
 
 	/** Prove a native wake relay names the session its host process currently owns. */
@@ -339,6 +343,8 @@ export interface HarnessDriver {
 	push?: {
 		/** True when this driver can reach the agent. False for other harnesses. */
 		canPush(agent: Agent): boolean;
+		/** True when this session supports input addressed to its active turn. */
+		canSteer?(agent: Agent): boolean;
 		deliver(
 			agent: Agent,
 			text: string,

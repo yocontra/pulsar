@@ -93,7 +93,12 @@ import { Mailbox } from "./mailbox.ts";
 import { BACKFILL_MS, MessageSearch } from "./message-search.ts";
 import { SqlitePasskeyStore } from "./passkey-store.ts";
 import { Passkeys } from "./passkeys.ts";
-import { isLocalSubagentId, type PoolView, SUB_MARK } from "./pool.ts";
+import {
+	isLocalSubagentId,
+	isRemote,
+	type PoolView,
+	SUB_MARK,
+} from "./pool.ts";
 import { PrReviewOps } from "./pr-review.ts";
 import { Presence } from "./presence.ts";
 import { Push, type PushOptions } from "./push.ts";
@@ -369,10 +374,19 @@ export class PulsarService {
 		});
 		this.router.onHandoff = (m, agent, r) =>
 			this.deliveries.handedOff(m, agent, r);
+		this.router.onUncertain = (receipt) => {
+			this.store.setDelivery(receipt.messageId, receipt.agentId, {
+				dueAt: null,
+			});
+			this.deliveries.settle(receipt.messageId, receipt);
+		};
 		this.mailbox.onRead = (agent, messages) =>
 			this.deliveries.readFromInbox(agent, messages);
 		this.registry.onGone = (agent) => this.deliveries.gone(agent);
-		this.registry.onBack = (agent) => void this.deliveries.back(agent);
+		this.registry.onBack = (agent) => {
+			void this.deliveries.back(agent);
+			void this.router.releaseNextTurn(agent);
+		};
 		this.passkeys = new Passkeys(new SqlitePasskeyStore(this.store));
 		this.approvals = new Approvals({
 			store: this.store,
@@ -518,7 +532,10 @@ export class PulsarService {
 		this.acting.register("agents.launch", ({ user, params }) =>
 			this.launches.start(user, params),
 		);
-		this.registry.onRelease = (agent) => void this.router.releaseHeld(agent);
+		this.registry.onRelease = (agent) => {
+			void this.router.releaseHeld(agent);
+			void this.router.releaseNextTurn(agent);
+		};
 		const resolveTranscript = opts.transcripts?.resolve ?? driverTranscript;
 		this.issues = new IssueOps({
 			registry: this.registry,
@@ -1110,7 +1127,7 @@ export class PulsarService {
 		if (reg.capabilities?.includes("acks")) agent.meta.acks = "1";
 		this.registry.registerSubagent(agent);
 		caller.principal = { kind: "agent", agentId: agent.id };
-		this.sessions.bind(caller);
+		this.sessions.bind(caller, reg.capabilities);
 		this.events.emit("agent", { action: "join", agent: toPublic(agent) });
 		void this.subagents.refresh(agent.meta.subagentOf!);
 		return agent;
@@ -1307,7 +1324,7 @@ export class PulsarService {
 			}
 		}
 		caller.principal = { kind: "agent", agentId: agent.id };
-		this.sessions.bind(caller);
+		this.sessions.bind(caller, reg.capabilities);
 		agent.reach = this.registry.reachOf(agent);
 		this.events.emit("agent", { action: "join", agent: toPublic(agent) });
 		// Tracked messages an earlier session got go again; then anything that
@@ -1321,6 +1338,8 @@ export class PulsarService {
 						agent,
 						this.deliveries.config.maxAttempts,
 					);
+				else if (!this.registry.closed)
+					await this.router.releaseNextTurn(agent);
 			} catch (e) {
 				// The store closed under a test or a stopping daemon; nothing is lost.
 				daemonLog(`delivery after hello failed: ${(e as Error).message}`);
@@ -1482,8 +1501,10 @@ export class PulsarService {
 			case "set_status": {
 				const me = registry.self(caller);
 				const status = p.status as AgentStatus;
-				if (status === "busy" || status === "idle")
+				if (status === "busy" || status === "idle") {
 					registry.setStatus(me, status);
+					this.router.reportStatus(caller, me, status);
+				}
 				return { ok: true };
 			}
 			case "msg.ack":
@@ -1686,15 +1707,15 @@ export class PulsarService {
 		const remote = agentId.includes("/")
 			? this.registry.find(agentId)
 			: undefined;
-		if (remote?.id.includes("/") && this.registry.pool)
+		if (remote && isRemote(remote) && this.registry.pool)
 			return (await this.registry.pool.stopAgent(
 				remote.id,
 				principal,
 				assertion,
 			)) as StopResult;
 		// An id, or the exact name of one live agent (the CLI takes names).
-		let id = agentId;
-		if (!this.registry.get(id)) {
+		let id = remote?.id ?? agentId;
+		if (!this.registry.find(id)) {
 			const named = this.registry.live().filter((a) => a.name === agentId);
 			if (named.length > 1)
 				throw new RpcError(
@@ -1712,7 +1733,7 @@ export class PulsarService {
 		const remote = agentId.includes("/")
 			? this.registry.find(agentId)
 			: undefined;
-		if (!remote?.id.includes("/") || !this.registry.pool)
+		if (!remote || !isRemote(remote) || !this.registry.pool)
 			throw new RpcError(
 				"bad_request",
 				"a local agent's Stop uses your passkey session; no options needed",

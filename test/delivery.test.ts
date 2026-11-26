@@ -279,6 +279,125 @@ describe("sessions without a pid", () => {
 });
 
 describe("a scanned session pushed through its harness driver", () => {
+	test("idle release picks up a replacement scan row and an edit during handoff", async () => {
+		const opened = Promise.withResolvers<void>();
+		const finish = Promise.withResolvers<void>();
+		const pushed: string[] = [];
+		let status: Scanned["status"] = "busy";
+		const scan = {
+			intervalMs: 60_000,
+			sessions: (): Scanned[] => [
+				{
+					harness: "turn-boundary",
+					sessionId: "c1",
+					pid: process.pid,
+					cwd: null,
+					status,
+					meta: {},
+				},
+			],
+		};
+		const driver: HarnessDriver = {
+			id: "turn-boundary",
+			label: "Turn boundary fixture",
+			matchProcess: () => false,
+			scan,
+			push: {
+				canPush: () => true,
+				canSteer: () => true,
+				deliver: async (_agent, text) => {
+					pushed.push(text);
+					if (pushed.length === 1) {
+						opened.resolve();
+						await finish.promise;
+					}
+					return { ok: true, via: "fixture" };
+				},
+			},
+		};
+		DRIVERS.push(driver);
+		try {
+			const { registry, router } = daemon.service;
+			await registry.runScan(driver.id, scan);
+			const target = registry.get(`${driver.id}:c1`)!;
+			const a = await session("s-a");
+			const send = (body: string) =>
+				a.call<SendResult>("send", {
+					to: target.name,
+					body,
+					priority: "normal",
+				});
+			await send("First staged prompt");
+			const second = await send("Original second prompt");
+			target.status = "idle";
+			const releasing = router.releaseNextTurn(target);
+			await opened.promise;
+			status = "idle";
+			await registry.runScan(driver.id, scan);
+			expect(registry.get(target.id)).not.toBe(target);
+			daemon.store.setMessageBody(second.message.id, "Edited second prompt");
+			finish.resolve();
+			await releasing;
+			expect(pushed).toHaveLength(2);
+			expect(pushed[1]).toContain("Edited second prompt");
+			expect(pushed[1]).not.toContain("Original second prompt");
+		} finally {
+			finish.resolve();
+			DRIVERS.splice(DRIVERS.indexOf(driver), 1);
+		}
+	});
+
+	test("an uncertain native handoff ends delivery without replay", async () => {
+		let attempts = 0;
+		const scan = {
+			intervalMs: 60_000,
+			sessions: (): Scanned[] => [
+				{
+					harness: "uncertain-handoff",
+					sessionId: "c1",
+					pid: process.pid,
+					cwd: null,
+					status: "busy",
+					meta: {},
+				},
+			],
+		};
+		const driver: HarnessDriver = {
+			id: "uncertain-handoff",
+			label: "Uncertain handoff fixture",
+			matchProcess: () => false,
+			scan,
+			push: {
+				canPush: () => true,
+				deliver: async () => {
+					attempts++;
+					return {
+						ok: false,
+						uncertain: true,
+						via: "fixture",
+						detail: "Reply lost.",
+					};
+				},
+			},
+		};
+		DRIVERS.push(driver);
+		try {
+			const { registry, router } = daemon.service;
+			await registry.runScan(driver.id, scan);
+			const target = registry.get(`${driver.id}:c1`)!;
+			const a = await session("s-a");
+			const q = await ask(a, target.name, "uncertain");
+			expect(q.sent.receipts).toMatchObject([
+				{ state: "nacked", detail: "Delivery unknown: Reply lost." },
+			]);
+			expect(await q.waiting).toMatchObject({ event: "nacked" });
+			await router.flushQueued(target);
+			expect(attempts).toBe(1);
+		} finally {
+			DRIVERS.splice(DRIVERS.indexOf(driver), 1);
+		}
+	});
+
 	test("the session restarts under the same id: redelivered through the driver", async () => {
 		const pushed: string[] = [];
 		let found: Scanned[] = [];

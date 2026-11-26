@@ -129,6 +129,22 @@ html.md .p-agent .m-composer {
 	-webkit-backdrop-filter: none;
 	backdrop-filter: none;
 }
+.p-agent .m-composer > .seg {
+	display: flex;
+	width: 100%;
+	margin-bottom: 4px;
+}
+.p-agent .m-composer > .seg button {
+	flex: 1;
+	min-height: 36px;
+	border-radius: 16px;
+	color: var(--m-label-2);
+}
+.p-agent .m-composer > .seg button[aria-checked="true"] {
+	background: var(--ds-surface-2);
+	color: var(--m-label);
+	font-weight: 600;
+}
 .p-agent .m-composer .q-strip {
 	border-radius: 18px;
 }

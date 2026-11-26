@@ -121,6 +121,7 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 					stop: caps.stop === true,
 					inbox: caps.inbox === true,
 					wake: caps.wake === true,
+					...(typeof caps.steer === "boolean" ? { steer: caps.steer } : {}),
 					transcript: caps.transcript === true,
 					subagents: caps.subagents === true,
 					...(typeof caps.usage === "boolean" ? { usage: caps.usage } : {}),

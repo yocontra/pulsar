@@ -15,7 +15,7 @@ import type { EventBus } from "./events.ts";
 import { LIMITS } from "./limits.ts";
 import { isRemote, type RemoteQueueAct, splitAddress } from "./pool.ts";
 import type { Registry } from "./registry.ts";
-import { type Router, URGENT_HANDOFF } from "./router.ts";
+import { NEXT_TURN, type Router, URGENT_HANDOFF } from "./router.ts";
 import type { PushMessage } from "./util.ts";
 
 export type QueueAction = RemoteQueueAct["action"];
@@ -90,7 +90,12 @@ export class Queue {
 		if (this.off) return;
 		this.off = this.events.on("agent:status", ({ agentId, to, at }) => {
 			if (to === "busy") this.busySince.set(agentId, at);
-			else this.busySince.delete(agentId);
+			else {
+				this.busySince.delete(agentId);
+				const agent = this.registry.get(agentId);
+				if (agent && (to === "idle" || to === "unknown"))
+					void this.router.releaseNextTurn(agent);
+			}
 		});
 	}
 
@@ -256,6 +261,7 @@ export class Queue {
 				continue;
 			}
 			if (receipt.state === "held") state = "held";
+			else if (receipt.via === NEXT_TURN) state = "idle";
 			else if (isRetry(receipt, dueAt)) state = "retrying";
 			else state = "next-turn";
 			const editable = mine && this.editable(message);
@@ -326,6 +332,8 @@ export class Queue {
 		if (!agent) throw new RpcError("not_found", `no agent ${agentId}`);
 		const message = this.message(messageId);
 		const current = this.store.receipt(messageId, agent.id);
+		if (this.router.activeHandoff(agentId, messageId))
+			throw new RpcError("conflict", WHY.handed);
 		if (!current || !WAITING.has(current.state))
 			throw new RpcError(
 				"conflict",
@@ -435,8 +443,8 @@ export class Queue {
 
 	/**
 	 * True while a message the harness has waits for the current turn to
-	 * end. Codex queues native messages and ACP serializes provider prompts,
-	 * including urgent ones. Other transports can steer a busy turn.
+	 * end. A native queue receipt or an ACP prompt awaiting a bridge ACK
+	 * can still be pending even when the sender requested urgent delivery.
 	 */
 	private waitsForIdle(agent: Agent, message: Message, r: Receipt): boolean {
 		if (agent.status !== "busy") return false;
@@ -458,6 +466,7 @@ export class Queue {
 	 */
 	private editable(message: Message): boolean {
 		for (const r of this.store.receiptsFor(message.id)) {
+			if (this.router.activeHandoff(r.agentId, message.id)) return false;
 			if (r.state === "withdrawn") continue;
 			const parts = splitAddress(r.agentId);
 			if (parts) {

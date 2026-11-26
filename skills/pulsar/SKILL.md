@@ -66,7 +66,7 @@ Each match comes with evidence ("Edited src/auth/session.ts 4m ago", "branch fix
 - `send ... await_reply=true` blocks until the first reply (default 120 s, `timeout_seconds` to change it) and returns it.
 - `to: "*"` reaches every agent on the machine. Use it only for notices that truly apply to all, such as "main is frozen for a release".
 - `priority`:
-  - `urgent` requests mid-turn delivery where supported. Native Codex and managed ACP sessions queue it for the next turn.
+  - `urgent` requests mid-turn delivery where supported. Codex can steer its active turn. Managed ACP sessions steer when their provider supports it, and otherwise queue the message.
   - `normal` (the default) arrives on the next turn and can wake an idle agent with push support
   - `fyi` waits in the inbox and wakes no one
 - Keep messages short and self-contained. Name files, branches and PRs exactly.

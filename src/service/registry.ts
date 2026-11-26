@@ -35,6 +35,7 @@ import { LIMITS } from "./limits.ts";
 import {
 	isAddress,
 	isLocalSubagentId,
+	isRemote,
 	type PoolView,
 	splitAddress,
 } from "./pool.ts";
@@ -403,6 +404,42 @@ export class Registry {
 			});
 	}
 
+	canSteer(agent: Agent): boolean {
+		const ext = this.sessions.extensionFor(agent.id);
+		if (ext)
+			return agent.meta.acp === "1"
+				? agent.meta.acpSteer === "1"
+				: this.sessions.supports(ext, "steer");
+		if (this.sessions.wakeFor(agent.id) || this.reachOf(agent) !== "push")
+			return false;
+		return pushFor(agent)?.canSteer?.(agent) === true;
+	}
+
+	/** A shared parent process is never a child Stop target. */
+	canStop(agent: Agent): boolean {
+		if (agent.status === "gone" || isRemote(agent)) return false;
+		const ext = this.sessions.extensionFor(agent.id);
+		if (ext)
+			return (
+				!isLocalSubagentId(agent.id) || this.sessions.supports(ext, "stop")
+			);
+		const driver = attachedDriver(agent);
+		if (isLocalSubagentId(agent.id)) {
+			const target = this.discoveredSubagent(agent.id);
+			if (
+				!driver?.subagents?.interruptBySession ||
+				!target?.sessionId ||
+				target.status === "gone" ||
+				target.meta.subagentNative !== "1" ||
+				target.meta.subagentPull ||
+				target.sessionId !== agent.sessionId ||
+				target.sessionId === this.get(target.meta.subagentOf!)?.sessionId
+			)
+				return false;
+		}
+		return !!driver?.interrupt && !!driver.canInterrupt?.(agent);
+	}
+
 	/**
 	 * An agent as selectors and views see it: public fields plus the virtual
 	 * `needs:you` tag while it waits on the user.
@@ -427,9 +464,9 @@ export class Registry {
 						this.sessions
 							.forAgent(agent.id)
 							.some((c) => this.sessions.role(c) === "mcp")),
+				steer: active && this.canSteer(agent),
 				wake: active && agent.inbound === "accept" && agent.reach === "push",
-				stop:
-					!child && active && (extension || !!driver?.canInterrupt?.(agent)),
+				stop: this.canStop(agent),
 				status:
 					active &&
 					!child &&

@@ -35,13 +35,11 @@ export class Interrupts {
 
 	/** Cheap: whether Stop is offered for this agent. */
 	can(agent: Agent): boolean {
-		if (agent.status === "gone") return false;
-		if (this.sessions.extensionFor(agent.id)) return true;
-		return attachedDriver(agent)?.canInterrupt?.(agent) ?? false;
+		return this.registry.canStop(agent);
 	}
 
 	async stop(principal: Principal, agentId: string): Promise<StopResult> {
-		const agent = this.registry.get(agentId);
+		const agent = this.registry.deliveryAgent(agentId);
 		if (!agent || agent.status === "gone")
 			throw new RpcError("not_found", `no agent ${agentId}`);
 		let outcome: InterruptOutcome;
@@ -67,6 +65,12 @@ export class Interrupts {
 	}
 
 	private run(agent: Agent): Promise<InterruptOutcome> {
+		if (!this.can(agent))
+			return Promise.resolve({
+				result: "unsupported",
+				via: agent.harness,
+				detail: "This session has no supported Stop target",
+			});
 		const ext = this.sessions.extensionFor(agent.id);
 		if (ext) {
 			const requestId = randomBytes(8).toString("base64url");
@@ -91,7 +95,7 @@ export class Interrupts {
 			});
 		}
 		const driver = attachedDriver(agent);
-		if (!driver?.interrupt || !driver.canInterrupt?.(agent))
+		if (!driver?.interrupt)
 			return Promise.resolve({
 				result: "unsupported",
 				via: driver?.id ?? agent.harness,

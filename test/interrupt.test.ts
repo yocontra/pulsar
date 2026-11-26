@@ -299,6 +299,80 @@ describe("pi/omp interrupt through the pulsar extension", () => {
 });
 
 describe("stopAgent is the one entry point", () => {
+	for (const harness of ["opencode", "codex"]) {
+		test(`${harness} stops only the confirmed child session, including when this node has peers`, async () => {
+			const { Store } = await import("../src/store.ts");
+			const { PulsarService } = await import("../src/service/index.ts");
+			const store = new Store(":memory:");
+			const service = new PulsarService({ store, scan: false, machine: "t" });
+			const driver = driverFor(harness)!;
+			const saved = {
+				canInterrupt: driver.canInterrupt,
+				interrupt: driver.interrupt,
+			};
+			const sent: string[] = [];
+			try {
+				const parent = service.registry.upsert({
+					harness,
+					sessionId: "session-parent",
+					pid: 4242,
+					cwd: null,
+					project: null,
+					branch: null,
+					tags: [],
+					meta: {},
+					registered: false,
+				});
+				const child = agent({
+					harness,
+					id: `${parent.id}/sub:child`,
+					pid: parent.pid,
+					sessionId: "session-child",
+					meta: { subagentOf: parent.id, subagentNative: "1" },
+				});
+				service.registry.discoveredSubagent = (id) =>
+					id === child.id ? child : undefined;
+				service.registry.pool = {
+					stopAgent() {
+						throw new Error("local Stop reached a peer");
+					},
+					stopOptions() {
+						throw new Error("local options reached a peer");
+					},
+				} as unknown as NonNullable<typeof service.registry.pool>;
+				driver.canInterrupt = () => true;
+				driver.interrupt = async (target) => {
+					sent.push(target.sessionId!);
+					return { result: "interrupted", via: harness };
+				};
+				const operator = { kind: "terminal" } as const;
+				expect(service.registry.view(child).capabilities?.stop).toBe(true);
+				expect((await service.stopAgent(operator, child.id)).result).toBe(
+					"interrupted",
+				);
+				await expect(
+					service.stopOptions(operator, child.id),
+				).rejects.toMatchObject({ code: "bad_request" });
+				child.sessionId = parent.sessionId;
+				expect(service.registry.view(child).capabilities?.stop).toBe(false);
+				expect((await service.stopAgent(operator, child.id)).result).toBe(
+					"unsupported",
+				);
+				child.sessionId = "session-child";
+				child.meta.subagentPull = "inbox";
+				expect(service.registry.view(child).capabilities?.stop).toBe(false);
+				expect((await service.stopAgent(operator, child.id)).result).toBe(
+					"unsupported",
+				);
+				expect(sent).toEqual(["session-child"]);
+			} finally {
+				Object.assign(driver, saved);
+				service.registry.pool = null;
+				service.stop();
+				store.close();
+			}
+		});
+	}
 	test("it authorizes itself: an agent may not stop another", async () => {
 		const { Store } = await import("../src/store.ts");
 		const { PulsarService } = await import("../src/service/index.ts");

@@ -511,6 +511,9 @@ export const claude: HarnessDriver = {
 		canPush(agent) {
 			return agent.harness === claude.id && agent.pid !== null;
 		},
+		canSteer(agent) {
+			return agent.pid !== null;
+		},
 		async deliver(agent, text, priority, fromName) {
 			const pid = agent.pid!;
 			const socketFile =

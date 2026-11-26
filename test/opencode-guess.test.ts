@@ -61,6 +61,10 @@ test("the guess is inbox-only and labelled; the running session wakes", () => {
 	const guess = registry().get("opencode:ses_guess")!;
 	const live = registry().get("opencode:ses_live")!;
 	expect(guess.reach).toBe("pull");
+	expect(opencode.push!.canSteer!(guess)).toBe(false);
+	expect(opencode.push!.canSteer!(live)).toBe(true);
+	expect(opencode.canInterrupt!(guess)).toBe(false);
+	expect(opencode.canInterrupt!(live)).toBe(true);
 	expect(live.reach).toBe("push");
 	const g = views().row(guess);
 	expect(g.wake).toBe("inbox-only");

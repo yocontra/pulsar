@@ -697,6 +697,30 @@ describe("OpenCode", () => {
 			return { ok: true, body: null };
 		};
 
+	test("folder guesses cannot run a command or switch a terminal or service mode", async () => {
+		const a = oc({ registered: false, meta: { sessionFrom: "folder" } });
+		const pane = new FakePane("opencode", ["build", "plan"]);
+		const { controls, opencodeCalls } = rig({
+			pane,
+			opencode: api({ agent: "build" }),
+			agents: [a],
+		});
+		expect(await controls.commands(a.id)).toMatchObject({
+			commands: [],
+			runnable: false,
+		});
+		expect(await controls.modes(a.id)).toMatchObject({
+			modes: [],
+			canSwitch: false,
+		});
+		for (const cmd of ["/review", "/undo"])
+			expect((await controls.run(a, cmd)).result).toBe("unsupported");
+		expect((await controls.setMode(a, "plan")).result).toBe("unsupported");
+		expect(pane.keys).toEqual([]);
+		expect(pane.submitted).toEqual([]);
+		expect(opencodeCalls).toEqual([]);
+	});
+
 	test("no pane: the mode through its API, with the caveat", async () => {
 		const state = { agent: "build" };
 		const a = oc();

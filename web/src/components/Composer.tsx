@@ -90,7 +90,7 @@ export const PRIORITY_HINT: Record<Priority, string> = {
 };
 
 const PRIORITIES: { value: Priority; label: string; hint: string }[] = [
-	{ value: "urgent", label: "Urgent", hint: PRIORITY_HINT.urgent },
+	{ value: "urgent", label: "Send now", hint: PRIORITY_HINT.urgent },
 	{
 		value: "normal",
 		label: "Next turn",
@@ -99,16 +99,32 @@ const PRIORITIES: { value: Priority; label: string; hint: string }[] = [
 	{ value: "fyi", label: "Don't wake", hint: PRIORITY_HINT.fyi },
 ];
 
+function choicesFor(steer?: boolean) {
+	return steer === false
+		? PRIORITIES.map((p) =>
+				p.value === "urgent"
+					? {
+							...p,
+							label: "Urgent",
+							hint: "This session controls when it reads urgent messages.",
+						}
+					: p,
+			)
+		: PRIORITIES;
+}
+
 function PriorityPickerImpl({
+	choices = PRIORITIES,
 	value,
 	onChange,
 }: {
+	choices?: typeof PRIORITIES;
 	value: Priority;
 	onChange: (p: Priority) => void;
 }) {
 	return (
 		<div className="seg d-seg" role="radiogroup" aria-label="Priority">
-			{PRIORITIES.map((p) => (
+			{choices.map((p) => (
 				<button
 					type="button"
 					key={p.value}
@@ -493,6 +509,15 @@ function ComposerImpl({
 		hasText,
 		draft,
 	);
+	const busyRecipient =
+		target.kind === "agent" && target.agent.status === "busy"
+			? target.agent
+			: null;
+	const choices = choicesFor(busyRecipient?.capabilities?.steer);
+	const showTiming =
+		!!busyRecipient &&
+		busyRecipient.reach === "push" &&
+		busyRecipient.capabilities?.steer !== false;
 	const form = compact ? (
 		<ComposerActionsProvider value={actionsApi}>
 			<Slot name="composer.top" {...slot} />
@@ -502,7 +527,8 @@ function ComposerImpl({
 			>
 				<ComposerPlus
 					actions={actions}
-					priorities={PRIORITIES}
+					priorities={choices}
+					hidePriorities={showTiming}
 					priority={priority}
 					onPriority={setPriority}
 					expectReply={expectReply}
@@ -547,6 +573,13 @@ function ComposerImpl({
 			{compact && wakeNote && (
 				<p className={`m-wake-note w-${wakeNote.wake}`}>{wakeNote.text}</p>
 			)}
+			{compact && showTiming && (
+				<PriorityPicker
+					value={priority}
+					onChange={setPriority}
+					choices={choices}
+				/>
+			)}
 			{form}
 			{!compact && showTo && (
 				<div className="composer-to">
@@ -583,7 +616,11 @@ function ComposerImpl({
 					<PromptInputFooter className="composer-bar">
 						<PromptInputTools className="composer-tools">
 							<Slot name="composer.left" {...slot} />
-							<PriorityPicker value={priority} onChange={setPriority} />
+							<PriorityPicker
+								value={priority}
+								onChange={setPriority}
+								choices={choices}
+							/>
 							<label className="check d-toggle">
 								<input
 									type="checkbox"
@@ -970,7 +1007,10 @@ function ReceiptsImpl({
 function ReceiptWordsImpl({ row }: { row?: ReceiptRow }) {
 	if (!row) return <span className="muted">Waiting</span>;
 	const word =
-		(row.state === "queued" || row.state === "sent") && row.detail
+		(row.state === "queued" ||
+			row.state === "sent" ||
+			row.state === "nacked") &&
+		row.detail
 			? sentence(row.detail)
 			: RECEIPT_WORDS[row.state];
 	return <span className={`rstate r-${row.state}`}>{word}</span>;

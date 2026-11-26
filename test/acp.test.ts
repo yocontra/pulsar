@@ -110,8 +110,9 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 	}
 
 	try {
-		bridge = launch();
+		bridge = launch(undefined, "steer");
 		await session();
+		expect((await current())?.capabilities?.steer).toBe(true);
 		await until(async () => (await current())?.status === "idle");
 		const sendIdle = (body: string, priority: "normal" | "fyi") =>
 			op.call<{
@@ -242,6 +243,26 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				(await current())?.status === "busy" &&
 				Boolean(bridge?.output().includes("Holding")),
 		);
+		const urgent = (body: string) =>
+			op.call<{ message: { id: string } }>("send", {
+				to: agentId,
+				body,
+				priority: "urgent",
+			});
+		const steered = await urgent("fixture-steer");
+		await until(
+			() =>
+				daemon.store.receipt(steered.message.id, agentId)?.state ===
+					"delivered" &&
+				Boolean(bridge?.output().includes("Steered inside holding turn")),
+		);
+		expect((await current())?.status).toBe("busy");
+		const unconfirmed = await urgent("fixture-unconfirmed");
+		await until(
+			() =>
+				daemon.store.receipt(unconfirmed.message.id, agentId)?.state ===
+				"nacked",
+		);
 		expect(await control().modes(agentId)).toMatchObject({
 			current: "plan-v2",
 			canSwitch: false,
@@ -253,6 +274,19 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		// Replaying a queued receipt after restart must not start a second turn.
 		const sent = daemon.store.receipt(held.message.id, agentId)!;
 		daemon.store.setReceipt({ ...sent, state: "queued" });
+		const heldAcrossReconnect = await op.call<{ message: { id: string } }>(
+			"send",
+			{
+				to: agentId,
+				body: "fixture-normal-while-busy-restart",
+			},
+		);
+		const queuedAcrossReconnect = () =>
+			daemon.store.receipt(heldAcrossReconnect.message.id, agentId);
+		expect(queuedAcrossReconnect()).toMatchObject({
+			state: "queued",
+			via: "pulsar-next-turn",
+		});
 		op.close();
 		await daemon.stop();
 		daemon = new Daemon({
@@ -262,6 +296,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			remote: { mode: "off" },
 		});
 		expect(await daemon.start()).toBe(true);
+		daemon.service.registry.idleSettleMs = 25;
 		op = await operator();
 		await until(
 			async () =>
@@ -269,6 +304,10 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				(await current())?.reach === "push",
 			4000,
 		);
+		expect(queuedAcrossReconnect()).toMatchObject({
+			state: "queued",
+			via: "pulsar-next-turn",
+		});
 		expect(await op.call("stop", { agent: agentId })).toMatchObject({
 			result: "interrupted",
 		});
@@ -276,7 +315,44 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			() =>
 				daemon.store.receipt(held.message.id, agentId)?.state === "delivered",
 		);
+		await until(() => queuedAcrossReconnect()?.state === "delivered");
 		expect(bridge.output().match(/Holding/g)?.length).toBe(1);
+		await prompt("fixture-hold");
+		await until(() => (bridge?.output().match(/Holding/g)?.length ?? 0) === 2);
+		const normalBehindTurn = await op.call<{ message: { id: string } }>(
+			"send",
+			{
+				to: agentId,
+				body: "fixture-normal-while-busy",
+				priority: "normal",
+			},
+		);
+		const secondNormal = await op.call<{ message: { id: string } }>("send", {
+			to: agentId,
+			body: "fixture-normal-while-busy-second",
+			priority: "normal",
+		});
+		expect(
+			daemon.store.receipt(normalBehindTurn.message.id, agentId)?.state,
+		).not.toBe("delivered");
+		const fallback = await urgent("fixture-next-turn");
+		await until(
+			() =>
+				daemon.store.receipt(fallback.message.id, agentId)?.state ===
+					"delivered" && Boolean(bridge?.output().includes("Queued turn ran")),
+		);
+		expect(bridge.output().match(/Queued turn ran/g)?.length).toBe(1);
+		await until(
+			() =>
+				daemon.store.receipt(normalBehindTurn.message.id, agentId)?.state ===
+					"delivered" &&
+				Boolean(bridge?.output().includes("Normal turn ran separately")),
+		);
+		await until(
+			() =>
+				daemon.store.receipt(secondNormal.message.id, agentId)?.state ===
+				"delivered",
+		);
 		await prompt("fixture-tools");
 		await until(() => (bridge?.output().split(agentId).length ?? 0) >= 3);
 		await until(async () => (await current())?.status === "idle");
@@ -294,6 +370,18 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			agent: agentId,
 		});
 		expect(history.available).toBe(true);
+		for (const body of [
+			"fixture-steer",
+			"fixture-next-turn",
+			"fixture-normal-while-busy",
+		]) {
+			expect(
+				history.events.filter((event) => event.text === body),
+			).toHaveLength(1);
+		}
+		expect(
+			history.events.some((event) => event.text === "fixture-unconfirmed"),
+		).toBe(false);
 		expect(bridge.output()).toContain("ACP prompt exceeds the size limit");
 		expect(
 			history.events.some((event) => event.text === "fixture-rejected"),
@@ -344,6 +432,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			bridge = launch(sessionId, mode);
 			await session();
 			expect((await current())?.sessionId).toBe(sessionId);
+			expect((await current())?.capabilities?.steer).toBe(false);
 			await until(() => Boolean(bridge?.output().includes("Holding")));
 			expect(bridge.output().match(/Holding/g)?.length).toBe(1);
 			expect(await op.call("stop", { agent: agentId })).toMatchObject({

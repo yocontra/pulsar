@@ -25,7 +25,7 @@ The phone app looks native: iOS on an iPhone, Material on Android. A tab bar at 
 - Everything on the phone is live: agents, Needs You, Usage, git and Diagnostics change as soon as the machines report. There is no pull to refresh and no refresh button.
 - Usage on a phone is one column: Period and Cost or Tokens at the top, then the total, the chart, the Machine and Harness filters, Limits, each harness, Totals and Breakdown.
 
-An agent's page has its name and status at the top, then actions for finding messages, Git, and Changes when available. The ••• menu has more actions. On a narrow phone (360 px wide or less), git and find move into the ••• menu. The composer floats at the bottom, above the keyboard when you type. On an iPhone the conversation scrolls under the top bar and the composer.
+An agent's page has its name and status at the top, then actions for finding messages, Git, and Changes when available. The ••• menu has more actions. On a narrow phone (360 px wide or less), git and find move into the ••• menu. The composer floats above the keyboard. While a session can receive messages during a turn, its delivery choices appear above the message field. Tap **Send now**, then send your message. On an iPhone the conversation scrolls under the top bar and the composer.
 
 ## The pool
 
@@ -44,7 +44,7 @@ A turn that edited files ends with "Changed 3 files +42 −7". Open it to list t
 
 The composer at the bottom sends to this agent. Choose how urgent it is:
 
-- **Urgent** (`urgent`) requests delivery during the current turn. Native Codex and managed ACP sessions queue the message for their next turn.
+- **Send now** (`urgent`) sends input into the current turn when the session supports steering. Otherwise the selector says **Urgent** and the session controls when the input arrives.
 - **Next turn** (`normal`) queues the message for the next turn. It can wake an idle session with push support.
 - **Don't wake** (`fyi`): waits in the agent's inbox.
 
@@ -54,7 +54,7 @@ Receipts follow each send: handed over, in its conversation, read, replied. Repl
 
 | State | Meaning |
 | --- | --- |
-| Waiting for idle | The agent's session has it and shows it when the current turn ends |
+| Waiting for idle | The message waits for the current turn to finish. Available actions depend on whether Pulsar or the harness holds it. |
 | Next turn | It waits in the agent's inbox (a Don't wake message, or an agent Pulsar can't push to) |
 | Held | The agent holds its messages |
 | Retrying | A push failed, or Pulsar delivers it again soon |
@@ -62,10 +62,10 @@ Receipts follow each send: handed over, in its conversation, read, replied. Repl
 | Sending | On its way to the agent's machine |
 
 - **Cancel** withdraws it before the agent sees it. Its receipt says "Withdrawn". An agent that waits for an answer to it stops waiting and gets a note.
-- **Send now** delivers it at once as Urgent (also a held one). For a message to an offline machine, it tries the machine again.
+- **Send now** promotes the waiting message to urgent. For an offline recipient, it retries the machine.
 - **Edit** changes the text of your own message before it arrives.
 
-Your own messages need no extra check, as for sending. Another agent's message needs Face ID / Touch ID; on another machine, that machine checks it. When the session already has the message, Cancel, Send now and Edit are off: use Stop to end the turn so it arrives now. On the phone, the strip starts folded: tap it to see the messages.
+Your own messages need no extra check, as for sending. Another agent's message needs Face ID / Touch ID; on another machine, that machine checks it. For a busy top-level session with steering, these actions stay available while Pulsar holds a **Next turn** message. If the harness already has the message, the actions are disabled. On the phone, the strip starts folded: tap it to see the messages.
 
 **Attach files** with the paperclip (on the phone: Photo Library or Choose Files), by dropping files on the composer, or by pasting an image. A paste of 32 KB of text or more becomes a `.txt` file. Up to 10 files per message: images up to 10 MB, other files up to 25 MB. Each file uploads when you add it, after one Face ID / Touch ID check for the batch. Its tile shows its progress, and Retry if the upload fails. Send waits until every file is uploaded. Pulsar saves the files on the agent's own machine, readable only by your user, and deletes them after 7 days. The message names each file by its path, and the agent opens the files from there. Your message shows the files as chips.
 
@@ -77,7 +77,7 @@ Your own messages need no extra check, as for sending. Another agent's message n
 
 **Stop** (in the header, or Cmd-.) interrupts the agent's current turn after you confirm. While the agent works and your draft is empty, the composer's Send button turns into a red Stop button. Stop shows only when Pulsar can reach the agent this way; see [Stop](adapters.md#stop) for each harness.
 
-**No transcript yet**: a new session's transcript can take a moment to appear (the harness writes its log after the first message). The conversation shows as loading and fills in once Pulsar finds the log. After a few seconds it says why it is still empty, with Retry. Harnesses that keep no transcript Pulsar can read (OpenCode, Cursor, Gemini CLI, VS Code) show "No transcript for this agent"; you can still message them.
+**No transcript yet**: a new session's transcript can take a moment to appear (the harness writes its log after the first message). The conversation shows as loading and fills in once Pulsar finds the log. After a few seconds it says why it is still empty, with Retry. Sessions without a readable transcript show "No transcript for this agent". You can still message them.
 
 ## Subagents
 
@@ -88,7 +88,7 @@ Subagents stay under their parent in the app. General broadcasts skip them. To r
 | Native harness | How a live child receives a direct message |
 | --- | --- |
 | Claude Code | Run `pulsar setup --client claude` to install the child hooks. Pulsar queues the message for the child's next supported hook. Its receipt changes to delivered when Pulsar hands the message to that hook. |
-| Codex | A loaded thread can receive direct input when its app server permits it. A child with a verified Pulsar tool connection can also receive through its inbox. |
+| Codex | A loaded thread can receive direct input when its app server permits it. Send now addresses the child’s active turn. A child with a verified Pulsar tool connection can also receive through its inbox. |
 | OpenCode | Pulsar sends to the child's own session. |
 | OMP | The child receives the message through its Pulsar extension. Resume older sessions in a new OMP process to load the extension. |
 

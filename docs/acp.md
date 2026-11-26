@@ -14,6 +14,10 @@ New sessions started from the Pulsar app use managed ACP when the provider's ACP
 
 Use `pulsar acp <provider> --resume <session-id>` when the provider supports reopening ACP sessions. Run it from the original project directory. Resume existing native sessions with their harness's own resume command. See [Harness support](adapters.md).
 
+Normal messages wait for the current turn to finish. FYI messages stay in the inbox. An urgent message can join a running turn when the adapter advertises steering and supports returning unconsumed input to Pulsar. This is available with Codex ACP 2.12.0+ and Claude Agent ACP 0.110.0+. If the adapter returns the input, Pulsar sends it as a regular prompt once the current turn ends. [ACP steering contract](https://github.com/agentclientprotocol/codex-acp/blob/main/docs/steering.md)
+
+On November 26, 2026, all 10 managed providers available on the test Mac initialized over ACP v1 in clean workspaces. Claude Agent ACP 0.110.0 and Codex ACP 2.12.0 advertised steering. Antigravity 1.5.16, OpenCode 2.2.5, Kiro 3.6.0, goose 1.61.0, Droid 1.20.0, Grok Build, Mistral Vibe 3.1.5, and pi-acp 0.0.35 did not advertise it. A live Claude Agent ACP test delivered an urgent message through Pulsar during an active turn against a local model fixture. The isolated Codex ACP session required sign-in before opening a turn.
+
 When an ACP agent or adapter reports its context window or a cumulative amount in US dollars, the session header shows those values. The cost label identifies the amount reported through ACP. An invoice comes from the provider. The Usage page groups token records from supported session logs by the time of each response. ACP context counters and cumulative session cost stay in the session header.
 
 To check a local installation from this checkout, use `bun scripts/live/acp-smoke.ts <provider> --session-only`. Omit `--session-only` to send a normal Pulsar message to the idle session and verify its reply.

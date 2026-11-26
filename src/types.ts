@@ -46,6 +46,7 @@ export interface SessionCapabilities {
 	host?: string;
 	inbox: boolean;
 	wake: boolean;
+	steer?: boolean;
 	stop: boolean;
 	status: boolean;
 	transcript: boolean;

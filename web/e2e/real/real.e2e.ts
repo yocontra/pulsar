@@ -233,7 +233,7 @@ test.describe("real daemon @real", () => {
 		await page.goto(`/#/a/${encodeURIComponent(reviewer)}`);
 		await expect(page.locator(".session-header h1")).toHaveText("reviewer");
 		const text = `check the lock ${Date.now()}`;
-		await page.getByRole("radio", { name: "Urgent" }).click();
+		await page.getByRole("radio", { name: "Send now" }).click();
 		await page.locator(".composer-input").fill(text);
 		await page.keyboard.press("ControlOrMeta+Enter");
 		// pi keeps no transcript (no bubble): its receipt line stays.
@@ -241,6 +241,34 @@ test.describe("real daemon @real", () => {
 			`reviewer got: ${text}`,
 			{ timeout: 10_000 },
 		);
+	});
+
+	test("promote a next-turn message while the reviewer is busy @real", async ({
+		page,
+		request,
+	}) => {
+		const { reviewer } = await agents(request);
+		await open(page, request);
+		await page.goto(`/#/a/${encodeURIComponent(reviewer)}`);
+		const body = `promote once ${Date.now()}`;
+		await page.locator(".composer-input").fill(body);
+		await page.keyboard.press("ControlOrMeta+Enter");
+		const strip = page.getByTestId("queue-strip");
+		await expect(strip).toContainText(body);
+		await strip.getByRole("button", { name: /^Send now/ }).click();
+		await expect
+			.poll(
+				async () =>
+					(
+						await (
+							await request.get(
+								`${CONTROL}/pushes?body=${encodeURIComponent(body)}`,
+							)
+						).json()
+					).count,
+			)
+			.toBe(1);
+		await expect(strip.getByText(body, { exact: true })).toHaveCount(0);
 	});
 
 	test("a send retried after a lost response is delivered once (client id) @real", async ({
@@ -264,7 +292,7 @@ test.describe("real daemon @real", () => {
 			else await route.fulfill({ response: res });
 		});
 		// The reviewer is busy: interrupt, so the push goes now.
-		await page.getByRole("radio", { name: "Urgent" }).click();
+		await page.getByRole("radio", { name: "Send now" }).click();
 		await page.locator(".composer-input").fill(text);
 		await page.keyboard.press("ControlOrMeta+Enter");
 		const count = async () =>
@@ -369,7 +397,7 @@ test.describe("real daemon @real", () => {
 		}
 		await expect(nav).toHaveAccessibleName(/^Prove Human: Proven/);
 		const body = `tighten the refresh lock ${Date.now()}`;
-		await page.getByRole("radio", { name: "Urgent" }).click();
+		await page.getByRole("radio", { name: "Send now" }).click();
 		await page.locator(".composer-input").fill(body);
 		const sent = page.waitForResponse(
 			(r) =>

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { pushFor } from "../harnesses/index.ts";
 import { neutralizeHumanTag } from "../human-tag.ts";
+import { daemonLog } from "../log.ts";
 import { RpcError } from "../rpc.ts";
 import type { Store } from "../store.ts";
 import type { Agent, Message, Receipt } from "../types.ts";
@@ -19,6 +20,7 @@ import type { Waiters } from "./waiters.ts";
 
 /** Stored per recipient because Send now promotes only that recipient's delivery. */
 export const URGENT_HANDOFF = "sent with urgent priority";
+export const NEXT_TURN = "pulsar-next-turn";
 
 /**
  * Local delivery: inbound policy, inbox cap, waiting `ask`/`wait` calls, live
@@ -33,7 +35,14 @@ export class Router {
 	/** Set by the service: a tracked message reached a session. */
 	onHandoff: (message: Message, agent: Agent, receipt: Receipt) => void =
 		() => {};
+	onUncertain: (receipt: Receipt) => void = () => {};
 
+	private readonly reportedExtensionStatus = new WeakMap<
+		Caller,
+		{ agentId: string; status: "busy" | "idle" }
+	>();
+	private readonly releasingNextTurn = new Set<string>();
+	private readonly pushing = new Map<string, Promise<Receipt>>();
 	private readonly waking = new Map<string, Promise<Receipt>>();
 	private readonly wakeRequests = new Map<
 		string,
@@ -250,7 +259,104 @@ export class Router {
 			: this.unavailableSubagent(message.id, target);
 	}
 
+	activeHandoff(agentId: string, messageId: string) {
+		return this.pushing.has(JSON.stringify([agentId, messageId]));
+	}
+
 	private async pushCurrent(
+		message: PushMessage,
+		sender: Agent,
+		target: Agent,
+	): Promise<Receipt> {
+		const key = JSON.stringify([target.id, message.id]);
+		const pending = this.pushing.get(key);
+		if (pending) return pending;
+		if (
+			message.priority === "normal" &&
+			!isLocalSubagentId(target.id) &&
+			this.registry.canSteer(target) &&
+			(target.status === "busy" || !this.extensionReadyForTurn(target))
+		) {
+			return this.receipt(
+				message.id,
+				target,
+				"queued",
+				NEXT_TURN,
+				"Waiting for the current turn to finish",
+			);
+		}
+		const handoff = Promise.resolve().then(() =>
+			this.handoff(message, sender, target),
+		);
+		this.pushing.set(key, handoff);
+		try {
+			return await handoff;
+		} finally {
+			this.pushing.delete(key);
+		}
+	}
+
+	private extensionReadyForTurn(agent: Agent): boolean {
+		const extension = this.sessions.extensionFor(agent.id);
+		if (!extension) return this.canPush(agent);
+		if (agent.meta.acp !== "1" && !this.sessions.supports(extension, "steer"))
+			return true;
+		const report = this.reportedExtensionStatus.get(extension);
+		return report?.agentId === agent.id && report.status === "idle";
+	}
+
+	reportStatus(caller: Caller, agent: Agent, status: "busy" | "idle") {
+		if (caller !== this.sessions.extensionFor(agent.id)) return;
+		this.reportedExtensionStatus.set(caller, { agentId: agent.id, status });
+		if (status === "idle") void this.releaseNextTurn(agent);
+	}
+
+	/** Deliver only the messages Pulsar retained for this turn boundary. */
+	async releaseNextTurn(agent: Agent) {
+		const agentId = agent.id;
+		if (this.releasingNextTurn.has(agentId)) return;
+		this.releasingNextTurn.add(agentId);
+		try {
+			if (this.registry.closed) return;
+			for (const queued of this.store.unread(agentId, LIMITS.inboxCap)) {
+				const current = this.registry.get(agentId);
+				if (
+					this.registry.closed ||
+					!current ||
+					!this.extensionReadyForTurn(current) ||
+					current.inbound !== "accept" ||
+					(current.status !== "idle" && current.status !== "unknown")
+				)
+					break;
+				const receipt = this.store.receipt(queued.id, agentId);
+				if (
+					receipt?.state !== "queued" ||
+					receipt.via !== NEXT_TURN ||
+					this.activeHandoff(agentId, queued.id)
+				)
+					continue;
+				const message = this.store.getMessage(queued.id);
+				if (!message) continue;
+				const attempt = receipt.attempt ?? 1;
+				const push = attempt > 1 ? { ...message, attempt } : message;
+				const result = await this.push(
+					push,
+					this.registry.senderOf(message),
+					current,
+				);
+				this.handedOff(message, current, result);
+				// This connection will report the end of the new turn.
+				if (current.meta.acp === "1" && result.state === "sent") break;
+			}
+		} catch (error) {
+			if (!this.registry.closed)
+				daemonLog(`next-turn delivery failed: ${error}`);
+		} finally {
+			this.releasingNextTurn.delete(agentId);
+		}
+	}
+
+	private async handoff(
 		message: PushMessage,
 		sender: Agent,
 		target: Agent,
@@ -316,6 +422,17 @@ export class Router {
 			message.priority,
 			neutralizeHumanTag(sender.name),
 		);
+		if (result.uncertain) {
+			const receipt = this.receipt(
+				message.id,
+				target,
+				"nacked",
+				result.via,
+				`Delivery unknown: ${result.detail ?? "the session did not confirm the handoff."}`,
+			);
+			this.onUncertain(receipt);
+			return receipt;
+		}
 		return result.ok
 			? this.receipt(message.id, target, "sent", result.via, detail)
 			: this.receipt(
@@ -334,20 +451,25 @@ export class Router {
 
 	/** Pushes what arrived while the session had no pulsar connection. */
 	async flushQueued(agent: Agent, maxAttempts?: number) {
-		for (const msg of this.store.unread(agent.id)) {
+		for (const queued of this.store.unread(agent.id)) {
+			if (this.registry.closed) break;
+			const msg = this.store.getMessage(queued.id);
+			if (!msg) continue;
+			const receipt = this.store.receipt(msg.id, agent.id);
 			if (
 				msg.priority === "fyi" ||
-				(this.sessions.wakeFor(agent.id) &&
-					this.store.receipt(msg.id, agent.id)?.state !== "queued")
+				receipt?.state !== "queued" ||
+				receipt.via === NEXT_TURN
 			)
 				continue;
 			const sender = this.registry.senderOf(msg);
 			// A redelivery that waited in the inbox keeps its attempt number.
-			const attempt = this.store.receipt(msg.id, agent.id)?.attempt ?? 1;
+			const attempt = receipt.attempt ?? 1;
 			const push: PushMessage =
 				attempt > 1 && maxAttempts ? { ...msg, attempt, maxAttempts } : msg;
 			this.handedOff(msg, agent, await this.push(push, sender, agent));
 		}
+		if (!this.registry.closed) await this.releaseNextTurn(agent);
 	}
 
 	/** Releases held messages once the agent accepts again. */

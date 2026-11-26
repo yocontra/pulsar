@@ -112,6 +112,16 @@ async function openSession(page: Page) {
 }
 
 test.describe("ios gestures", () => {
+	test("Send now is visible for a busy Codex session", async ({ page }) => {
+		await openSession(page);
+		const now = page.getByRole("radio", { name: "Send now" });
+		await now.tap();
+		await expect(now).toHaveAttribute("aria-checked", "true");
+		await expect(
+			page.getByRole("radio", { name: "Next turn" }),
+		).toHaveAttribute("aria-checked", "false");
+	});
+
 	test("Ionic is styled under the strict CSP (WebKit)", async ({ page }) => {
 		await home(page);
 		await expectIonicStyledUnderCsp(page);

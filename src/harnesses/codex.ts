@@ -11,6 +11,7 @@ import { codexIdent } from "./codex-ident.ts";
 import { codexPending } from "./codex-interactions.ts";
 import { codexNames } from "./codex-names.ts";
 import {
+	CodexRpcError,
 	codexControlAvailable,
 	codexControlReady,
 	codexRpc,
@@ -75,15 +76,65 @@ export async function codexRolloutAsync(
 	return null;
 }
 
-/** Whether the thread's latest turn still runs, from the app-server; null when it can't tell. */
-async function codexTurnRuns(threadId: string): Promise<boolean | null> {
-	if (!(await codexControlReady())) return null;
+async function latestTurn(threadId: string) {
 	const [turns] = (await codexRpc(
 		[["thread/turns/list", { threadId, limit: 1 }]],
 		{ timeoutMs: 3000 },
-	)) as [{ data?: Array<{ status?: string }> }];
-	const status = turns.data?.[0]?.status;
+	)) as [{ data?: Array<{ id?: string; status?: string }> }];
+	return turns.data?.[0];
+}
+
+/** Whether the thread's latest turn still runs, from the app-server; null when it can't tell. */
+async function codexTurnRuns(threadId: string): Promise<boolean | null> {
+	if (!(await codexControlReady())) return null;
+	const status = (await latestTurn(threadId))?.status;
 	return status ? status === "inProgress" : null;
+}
+
+/** Null means Codex has not accepted a steer, so normal queue delivery is safe. */
+async function steerCodexTurn(threadId: string, text: string) {
+	if (!(await codexControlReady())) return null;
+	const turn = await latestTurn(threadId).catch(() => null);
+	if (turn?.status !== "inProgress" || !turn.id) return null;
+	const via = "codex-steer";
+	try {
+		const [receipt] = (await codexRpc([
+			[
+				"turn/steer",
+				{
+					threadId,
+					expectedTurnId: turn.id,
+					input: [{ type: "text", text, text_elements: [] }],
+					clientUserMessageId: lazyCrypto().randomUUID(),
+				},
+			],
+		])) as [{ turnId?: string }];
+		return receipt?.turnId === turn.id
+			? { ok: true, via }
+			: {
+					ok: false,
+					via,
+					uncertain: true,
+					detail: "Codex did not confirm steering the active turn.",
+				};
+	} catch (error) {
+		// Only retry via the queue after a definitive refusal. A lost response
+		// may mean the original turn already received the message.
+		if (
+			error instanceof CodexRpcError &&
+			(error.code === -32601 ||
+				/no active turn|expected active turn|turn id mismatch|turn is not steerable/i.test(
+					error.message,
+				))
+		)
+			return null;
+		return {
+			ok: false,
+			via,
+			uncertain: !(error instanceof CodexRpcError),
+			detail: (error as Error).message,
+		};
+	}
 }
 
 /** The model each rollout named last, kept while the file is unchanged. */
@@ -104,7 +155,11 @@ const codexWatch = () => {
 };
 
 /** Only a loaded child that grants direct input can receive this addressed queue submission. */
-async function queueCodexSubagent(threadId: string | null, text: string) {
+async function deliverCodexSubagent(
+	threadId: string | null,
+	text: string,
+	urgent: boolean,
+) {
 	const via = "codex-queue";
 	if (
 		!threadId ||
@@ -142,6 +197,10 @@ async function queueCodexSubagent(threadId: string | null, text: string) {
 				via,
 				detail: "This Codex subagent no longer accepts direct input.",
 			};
+		if (urgent) {
+			const steered = await steerCodexTurn(threadId, text);
+			if (steered) return steered;
+		}
 		const [receipt] = (await codexRpc(
 			[
 				[
@@ -174,9 +233,20 @@ export const codex: HarnessDriver = {
 				agent.meta.subagentOutboundOnly !== "1"
 			);
 		},
-		async deliver(agent, text) {
+		canSteer(agent) {
+			return this.canPush(agent) && codexControlAvailable();
+		},
+		async deliver(agent, text, priority) {
 			if (agent.meta.subagentOf)
-				return queueCodexSubagent(agent.sessionId, text);
+				return deliverCodexSubagent(
+					agent.sessionId,
+					text,
+					priority === "urgent",
+				);
+			if (priority === "urgent" && agent.sessionId) {
+				const steered = await steerCodexTurn(agent.sessionId, text);
+				if (steered) return steered;
+			}
 			try {
 				await run("codex", [
 					"queue",
@@ -206,11 +276,9 @@ export const codex: HarnessDriver = {
 			return { result: "unsupported", via, detail: "no app-server socket" };
 		const threadId = agent.sessionId;
 		try {
-			const [turns] = (await codexRpc([
-				["thread/turns/list", { threadId, limit: 1 }],
-			])) as [{ data?: Array<{ id: string; status?: string }> }];
-			const turn = turns.data?.[0];
-			if (turn?.status !== "inProgress") return { result: "not-running", via };
+			const turn = await latestTurn(threadId);
+			if (turn?.status !== "inProgress" || !turn.id)
+				return { result: "not-running", via };
 			await codexRpc([["turn/interrupt", { threadId, turnId: turn.id }]]);
 			return { result: "interrupted", via };
 		} catch (e) {
@@ -254,7 +322,7 @@ export const codex: HarnessDriver = {
 	},
 
 	// Spawned threads; their transcript is the thread's own (`transcript.locate`).
-	subagents: { list: listCodexSubagents },
+	subagents: { list: listCodexSubagents, interruptBySession: true },
 
 	// Threads in the app-server daemon: answered from the app (codex-watch.ts).
 	// Others (`--no-daemon`): read from the rollout, answered in the terminal.

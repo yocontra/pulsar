@@ -542,6 +542,12 @@ export class Mailbox {
 					event: "reply",
 					message: delivered(existing, this.registry.get(existing.fromId)),
 				});
+			const message = this.store.getMessage(target);
+			if (message?.fromId === me.id && message.tracked === 2) {
+				const receipt = this.store.receiptsFor(target)[0];
+				if (receipt?.state === "nacked")
+					return Promise.resolve({ event: "nacked", receipt });
+			}
 		} else {
 			const queued = this.store.unread(me.id, 1)[0];
 			if (queued) {

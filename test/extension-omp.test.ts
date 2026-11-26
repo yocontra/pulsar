@@ -92,6 +92,9 @@ function fixture(key: string, supported = true, identified = true) {
 		calls,
 		tools,
 		received,
+		interrupt: (requestId: string) => events.get("interrupt")?.({ requestId }),
+		mode: (requestId: string) =>
+			events.get("control")?.({ requestId, kind: "mode.set", mode: "plan" }),
 		failDelivery: () => {
 			failDelivery = true;
 		},
@@ -102,6 +105,71 @@ function fixture(key: string, supported = true, identified = true) {
 			}),
 	};
 }
+
+test("Stop uses only the verified OMP child's current turn", async () => {
+	const f = fixture("A");
+	let aborted = 0;
+	let idle = false;
+	const child = {
+		...context("A"),
+		isIdle: () => idle,
+		abort: () => {
+			aborted++;
+		},
+	};
+	try {
+		await f.child.start(child);
+		f.interrupt("busy");
+		expect(aborted).toBe(1);
+		expect(f.calls.at(-1)).toMatchObject({
+			method: "interrupt_result",
+			params: { requestId: "busy", result: "interrupted" },
+		});
+		idle = true;
+		f.interrupt("idle");
+		expect(f.calls.at(-1)).toMatchObject({ params: { result: "not-running" } });
+		f.child.observe({ ...child, ...context("B"), isIdle: () => false });
+		f.interrupt("wrong-session");
+		expect(f.calls.at(-1)).toMatchObject({ params: { result: "unsupported" } });
+		expect(aborted).toBe(1);
+	} finally {
+		f.child.stop();
+	}
+});
+
+test("mode requests target the bound OMP child and reject stale contexts", async () => {
+	const f = fixture("A");
+	let entered = 0;
+	const child = {
+		...context("A"),
+		sessionModes: {
+			getState: () => ({ plan: entered > 0 }),
+			set: () => {
+				entered++;
+				return { ok: true };
+			},
+		},
+	};
+	try {
+		await f.child.start(child);
+		f.mode("enter");
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(f.calls.at(-1)).toMatchObject({
+			method: "control_result",
+			params: { requestId: "enter", result: "ok", mode: "plan" },
+		});
+		f.child.observe({ ...child, ...context("B") });
+		f.mode("stale");
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(f.calls.at(-1)).toMatchObject({
+			method: "control_result",
+			params: { requestId: "stale", result: "unsupported" },
+		});
+		expect(entered).toBe(1);
+	} finally {
+		f.child.stop();
+	}
+});
 
 test("OMP children use separate hello identities, delivery and outgoing messages", async () => {
 	const a = fixture("A");

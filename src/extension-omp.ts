@@ -2,6 +2,11 @@
 import { basename, isAbsolute } from "node:path";
 import { DaemonClient } from "./client.ts";
 import {
+	type ControlApi,
+	type ControlContext,
+	registerExtensionControls,
+} from "./extension-controls.ts";
+import {
 	type InputSchema,
 	type Prop,
 	type ToolResult,
@@ -17,7 +22,7 @@ import type { DeliveredMessage, PublicAgent, Registration } from "./types.ts";
 import { PROTOCOL_VERSION } from "./types.ts";
 import { VERSION } from "./version.ts";
 
-export interface OmpChildContext {
+export interface OmpChildContext extends ControlContext {
 	agent?: { kind?: string };
 	cwd?: string;
 	sessionManager?: { getSessionFile?(): string | undefined };
@@ -40,7 +45,7 @@ export interface OmpChildTool {
 	) => Promise<ToolResult & { details: null }>;
 }
 
-export interface OmpChildApi {
+export interface OmpChildApi extends ControlApi {
 	registerTool?(tool: OmpChildTool): void;
 	typebox?: { Type?: TypeBox };
 	getAllTools?(): Array<{ name: string; mcpServerName?: string }>;
@@ -195,9 +200,10 @@ export function ompChildMessaging(
 			branch: null,
 			tags: [],
 			role: "extension",
-			...(api.registerTool && api.typebox?.Type
-				? { capabilities: ["acks"] }
-				: {}),
+			capabilities:
+				api.registerTool && api.typebox?.Type
+					? ["steer", "stop", "acks"]
+					: ["steer", "stop"],
 			subagent: target,
 		};
 		const reply = await client.call<{ agent?: PublicAgent }>("hello", {
@@ -267,6 +273,11 @@ export function ompChildMessaging(
 		await ack(message.id);
 	}
 
+	registerExtensionControls(client, "omp", api, () =>
+		ready && !stopped && childRoute(current)?.file === route?.file
+			? current
+			: undefined,
+	);
 	client.on("push", (data) => {
 		if (ready) void push(data);
 		else if (connecting && !stopped && buffered.length < 128)

@@ -25,6 +25,7 @@ const PRIORITY_ICON = {
 export default function ComposerPlus({
 	actions,
 	priorities,
+	hidePriorities,
 	priority,
 	onPriority,
 	expectReply,
@@ -32,6 +33,7 @@ export default function ComposerPlus({
 }: {
 	actions: ComposerAction[];
 	priorities: { value: Priority; label: string }[];
+	hidePriorities: boolean;
 	priority: Priority;
 	onPriority: (p: Priority) => void;
 	expectReply: boolean;
@@ -47,7 +49,7 @@ export default function ComposerPlus({
 			disabled: a.disabled,
 			onSelect: a.run,
 		})),
-		...priorities.map((p) => {
+		...(hidePriorities ? [] : priorities).map((p) => {
 			const I = PRIORITY_ICON[p.value];
 			return {
 				label: p.label,

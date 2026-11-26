@@ -174,3 +174,77 @@ test("a Codex queue rejection does not retry or reroute the child's message", as
 		"thread/queue/add",
 	]);
 });
+
+function activeChild(accepts = true) {
+	server.handlers.set("thread/read", () => ({
+		thread: {
+			id: childId,
+			parentThreadId: parentId,
+			canAcceptDirectInput: accepts,
+			status: { type: "active" },
+		},
+	}));
+}
+
+for (const target of [parent, child]) {
+	test(`urgent input steers the exact active turn on ${target.id}`, async () => {
+		activeChild();
+		server.handlers.set("thread/turns/list", (params) => {
+			expect(params).toEqual({ threadId: target.sessionId, limit: 1 });
+			return { data: [{ id: "working-turn", status: "inProgress" }] };
+		});
+		server.handlers.set("turn/steer", (params) => {
+			expect(params).toEqual({
+				threadId: target.sessionId,
+				expectedTurnId: "working-turn",
+				input: [{ type: "text", text: "Use this input", text_elements: [] }],
+				clientUserMessageId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+			});
+			return { turnId: "working-turn" };
+		});
+		expect(
+			await codex.push!.deliver(target, "Use this input", "urgent", "Operator"),
+		).toEqual({ ok: true, via: "codex-steer" });
+	});
+}
+
+test("a turn that ends before steering receives the input through the child queue", async () => {
+	activeChild();
+	server.handlers.set("thread/turns/list", () => ({
+		data: [{ id: "just-ended", status: "inProgress" }],
+	}));
+	server.handlers.set("turn/steer", () => {
+		throw new Error("no active turn to steer");
+	});
+	server.handlers.set("thread/queue/add", () => ({
+		queuedSubmission: { id: "queued-once" },
+	}));
+	expect(
+		await codex.push!.deliver(child, "Keep this input", "urgent", "Operator"),
+	).toEqual({ ok: true, via: "codex-queue" });
+	expect(
+		server.calls.filter((call) => call.method === "thread/queue/add"),
+	).toHaveLength(1);
+});
+
+test("an ambiguous steer receipt never causes a second submission", async () => {
+	activeChild();
+	server.handlers.set("thread/turns/list", () => ({
+		data: [{ id: "turn", status: "inProgress" }],
+	}));
+	server.handlers.set("turn/steer", () => ({}));
+	expect(
+		await codex.push!.deliver(child, "Only once", "urgent", "Operator"),
+	).toMatchObject({ ok: false, via: "codex-steer", uncertain: true });
+	expect(server.calls.some((call) => call.method === "thread/queue/add")).toBe(
+		false,
+	);
+});
+
+test("urgent input respects a child that disallows direct messages", async () => {
+	activeChild(false);
+	expect(
+		await codex.push!.deliver(child, "Blocked", "urgent", "Operator"),
+	).toMatchObject({ ok: false });
+	expect(server.calls.some((call) => call.method === "turn/steer")).toBe(false);
+});

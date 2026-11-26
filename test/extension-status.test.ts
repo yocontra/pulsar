@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { Daemon } from "../src/daemon.ts";
 import pulsarExtension, { backgroundWork, endKind } from "../src/extension.ts";
-import { startDaemon, until } from "./helpers.ts";
+import { operator, startDaemon, until } from "./helpers.ts";
 
 type Job = { type: string };
 // biome-ignore lint/suspicious/noExplicitAny: a fake host context
@@ -11,7 +11,12 @@ type Handler = (e: unknown, c: any) => unknown;
 /** A fake pi/omp host: fires events at the extension with a context whose jobs the test sets. */
 function fakeHost(
 	jobPollMs = 20,
-	opts: { omp?: boolean; continueGraceMs?: number; bashGraceMs?: number } = {},
+	opts: {
+		omp?: boolean;
+		continueGraceMs?: number;
+		bashGraceMs?: number;
+		sendMessage?: Parameters<typeof pulsarExtension>[0]["sendMessage"];
+	} = {},
 ) {
 	const handlers = new Map<string, Handler[]>();
 	const jobs: Job[] = [];
@@ -31,7 +36,7 @@ function fakeHost(
 				on: (event, fn) => {
 					handlers.set(event, [...(handlers.get(event) ?? []), fn]);
 				},
-				sendMessage: () => {},
+				sendMessage: opts.sendMessage ?? (() => {}),
 			},
 			{
 				jobPollMs,
@@ -99,6 +104,65 @@ describe("backgroundWork", () => {
 	});
 });
 
+for (const harness of ["pi", "omp"]) {
+	test(`${harness} confirms a push only after the host accepts it`, async () => {
+		const { daemon, cleanup } = await startDaemon();
+		const sender = await operator();
+		const deliveries: Array<{
+			as: string | undefined;
+			accept: () => void;
+			reject: (e: Error) => void;
+		}> = [];
+		const host = fakeHost(20, {
+			omp: harness === "omp",
+			sendMessage: (_message, options) =>
+				new Promise<void>((accept, reject) => {
+					deliveries.push({ as: options?.deliverAs, accept, reject });
+				}),
+		});
+		try {
+			await host.fire("session_start");
+			await host.fire("agent_start");
+			await until(() => statusOf(daemon) === "busy");
+			const target = daemon.service.registry
+				.live()
+				.find((a) => a.pid === process.pid)!;
+			for (const priority of ["urgent", "normal"]) {
+				const sent = await sender.call<{ message: { id: string } }>("send", {
+					to: target.id,
+					body: priority,
+					priority,
+				});
+				const receipt = () =>
+					daemon.service.store.receipt(sent.message.id, target.id);
+				if (priority === "normal") {
+					expect(receipt()?.state).toBe("queued");
+					expect(deliveries).toHaveLength(0);
+					await host.fire("agent_settled");
+				}
+				await until(() => deliveries.length > 0);
+				const delivery = deliveries.shift()!;
+				expect(receipt()?.state).toBe("sent");
+				if (priority === "urgent") {
+					expect(delivery.as).toBe("steer");
+					delivery.accept();
+					await until(() => receipt()?.state === "delivered");
+				} else {
+					expect(delivery.as).toBe("followUp");
+					delivery.reject(new Error("host unavailable"));
+					await until(() => receipt()?.state === "queued");
+					expect(receipt()?.detail).toContain("host unavailable");
+				}
+			}
+		} finally {
+			sender.close();
+			await host.quit();
+			await daemon.stop();
+			cleanup();
+		}
+	});
+}
+
 describe("extension busy/idle", () => {
 	test("a turn that ends with subagents still running stays busy until they finish", async () => {
 		const { daemon, cleanup } = await startDaemon();
@@ -141,27 +205,98 @@ describe("extension busy/idle", () => {
 		}
 	});
 
-	test("a daemon restart mid-turn learns the turn is still running", async () => {
-		const { daemon, home, cleanup } = await startDaemon();
-		const host = fakeHost();
-		let next: Daemon | null = null;
-		try {
-			await host.fire("session_start");
-			await host.fire("agent_start");
-			await until(() => statusOf(daemon) === "busy");
-			await daemon.stop();
-			next = new Daemon({
-				socket: join(home, "bus.sock"),
-				db: join(home, "pulsar.db"),
-				scan: false,
-				remote: { mode: "off" },
+	for (const harness of ["pi", "omp"])
+		test(`${harness} keeps a staged message across a daemon restart mid-turn`, async () => {
+			const { daemon, home, cleanup } = await startDaemon();
+			const sender = await operator();
+			const delivered: string[] = [];
+			const host = fakeHost(20, {
+				omp: harness === "omp",
+				sendMessage: (message) => delivered.push(message.content),
 			});
-			expect(await next.start()).toBe(true);
-			const restarted = next;
-			await until(() => statusOf(restarted) === "busy", 5000);
+			let next: Daemon | null = null;
+			try {
+				await host.fire("session_start");
+				await host.fire("agent_start");
+				await until(() => statusOf(daemon) === "busy");
+				const target = daemon.service.registry
+					.live()
+					.find((agent) => agent.pid === process.pid)!;
+				const pending = await sender.call<{ message: { id: string } }>("send", {
+					to: target.id,
+					body: "Keep this staged through restart",
+					priority: "normal",
+				});
+				const receipt = (d: Daemon) =>
+					d.store.receipt(pending.message.id, target.id);
+				expect(receipt(daemon)).toMatchObject({
+					state: "queued",
+					via: "pulsar-next-turn",
+				});
+				await daemon.stop();
+				next = new Daemon({
+					socket: join(home, "bus.sock"),
+					db: join(home, "pulsar.db"),
+					scan: false,
+					remote: { mode: "off" },
+				});
+				expect(await next.start()).toBe(true);
+				const restarted = next;
+				await until(() => statusOf(restarted) === "busy", 5000);
+				expect(receipt(restarted)).toMatchObject({
+					state: "queued",
+					via: "pulsar-next-turn",
+				});
+				expect(delivered).toHaveLength(0);
+				await host.fire("agent_settled");
+				await until(() => receipt(restarted)?.state === "delivered");
+				expect(delivered).toHaveLength(1);
+				expect(delivered[0]).toContain("Keep this staged through restart");
+			} finally {
+				sender.close();
+				await host.quit();
+				await daemon.stop();
+				await next?.stop();
+				cleanup();
+			}
+		});
+
+	test("a new idle extension takes a staged message before its first turn", async () => {
+		const { daemon, cleanup } = await startDaemon();
+		const sender = await operator();
+		const previous = fakeHost();
+		const delivered: string[] = [];
+		const fresh = fakeHost(20, {
+			sendMessage: (message) => delivered.push(message.content),
+		});
+		try {
+			await previous.fire("session_start");
+			await previous.fire("agent_start");
+			await until(() => statusOf(daemon) === "busy");
+			const { registry, sessions, store } = daemon.service;
+			const target = registry
+				.live()
+				.find((agent) => agent.pid === process.pid)!;
+			const pending = await sender.call<{ message: { id: string } }>("send", {
+				to: target.id,
+				body: "Staged for the idle extension",
+				priority: "normal",
+			});
+			const receipt = () => store.receipt(pending.message.id, target.id);
+			expect(receipt()).toMatchObject({
+				state: "queued",
+				via: "pulsar-next-turn",
+			});
+			await previous.quit();
+			await until(() => !sessions.extensionFor(target.id));
+			await fresh.fire("session_start");
+			await until(() => receipt()?.state === "delivered");
+			expect(delivered).toHaveLength(1);
 		} finally {
-			await host.quit();
-			await next?.stop();
+			await previous.quit();
+			await fresh.quit();
+			sender.close();
+			await daemon.stop();
 			cleanup();
 		}
 	});

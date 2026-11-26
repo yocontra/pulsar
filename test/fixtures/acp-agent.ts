@@ -57,6 +57,15 @@ for await (const line of lines) {
 		case "initialize":
 			reply(id, {
 				protocolVersion: 1,
+				...(mode === "steer"
+					? {
+							agentInfo: {
+								name: "@agentclientprotocol/codex-acp",
+								version: "2.12.0",
+							},
+							_meta: { steering: { supported: true } },
+						}
+					: {}),
 				agentCapabilities:
 					mode === "unsupported"
 						? {}
@@ -171,6 +180,12 @@ for await (const line of lines) {
 				);
 			} else if (text.includes("fixture-hold")) {
 				update("Holding");
+			} else if (text.includes("fixture-next-turn")) {
+				update("Queued turn ran");
+				reply(id, { stopReason: "end_turn" });
+			} else if (text.includes("fixture-normal-while-busy")) {
+				update("Normal turn ran separately");
+				reply(id, { stopReason: "end_turn" });
 			} else if (text.includes("fixture-permission")) {
 				emit(
 					"session/request_permission",
@@ -251,6 +266,26 @@ for await (const line of lines) {
 					},
 				});
 				reply(id, { stopReason: "end_turn" });
+			}
+			break;
+		}
+		case "_session/steering": {
+			if (
+				mode !== "steer" ||
+				params._meta.steering.idleBehavior !== "promptRequired"
+			)
+				throw new Error("Fixture expected host-owned steering");
+			const text = params.prompt[0].text as string;
+			if (text.includes("fixture-normal-while-busy"))
+				throw new Error("Fixture received a normal message as a steer");
+			if (text.includes("fixture-unconfirmed")) {
+				reply(id, { outcome: "failed" });
+			} else if (text.includes("fixture-next-turn")) {
+				reply(id, { outcome: "promptRequired", reason: "noRunningTurn" });
+				if (promptId !== undefined) reply(promptId, { stopReason: "end_turn" });
+			} else {
+				reply(id, { outcome: "injected" });
+				update("Steered inside holding turn");
 			}
 			break;
 		}

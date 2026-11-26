@@ -10,6 +10,7 @@ import {
 	type AgentCapabilities,
 	ClientApp,
 	type ClientConnection,
+	type InitializeResponse,
 	type LoadSessionResponse,
 	type McpServerStdio,
 	type NewSessionResponse,
@@ -54,7 +55,35 @@ const MAX_PERMISSION_REQUESTS = 16;
 const MAX_TEXT = 64 * 1024;
 const TRANSCRIPT_UPDATE_MS = 250;
 
-type Prompt = { text: string; messageId?: string; command?: true };
+type Prompt = {
+	text: string;
+	messageId?: string;
+	command?: true;
+	urgent?: true;
+};
+
+function supportsHostOwnedSteering(initialized: InitializeResponse): boolean {
+	const steering = initialized._meta?.steering as
+		| { supported?: unknown }
+		| undefined;
+	if (steering?.supported !== true) return false;
+	// The general capability also exists in releases that start a detached
+	// turn when steering races with completion. Require a verified version.
+	const info = initialized.agentInfo;
+	const minimum =
+		info?.name === "@agentclientprotocol/codex-acp"
+			? [2, 12, 0]
+			: info?.name === "@agentclientprotocol/claude-agent-acp"
+				? [0, 110, 0]
+				: undefined;
+	const actual = info?.version
+		?.match(/^(\d+)\.(\d+)\.(\d+)$/)
+		?.slice(1)
+		.map(Number);
+	if (!minimum || !actual) return false;
+	const difference = actual.findIndex((part, index) => part !== minimum[index]);
+	return difference === -1 || actual[difference]! > minimum[difference]!;
+}
 
 type Turn = {
 	prompt: Prompt;
@@ -89,7 +118,7 @@ class Bridge {
 	private readonly received = new Set<string>();
 	private readonly receipts = new Map<
 		string,
-		{ method: "ack" | "nack"; params: unknown }
+		{ method: "ack" | "nack" | "msg.nack"; params: unknown }
 	>();
 	private readonly app: ClientApp;
 	private readonly flushingReceipts = new Set<string>();
@@ -99,6 +128,8 @@ class Bridge {
 	private transcript?: number;
 	private turn?: Turn;
 	private draining?: Promise<void>;
+	private steering?: Promise<void>;
+	private canSteer = false;
 	private reconnect?: ReturnType<typeof setTimeout>;
 	private retryMs = 500;
 	private stopping = false;
@@ -155,11 +186,15 @@ class Bridge {
 			// FYI messages belong to the inbox and must never start a provider turn.
 			if (message?.priority === "fyi") return;
 			if (this.received.has(messageId)) return;
-			if (this.receipts.get(messageId)?.method === "ack") {
+			if (this.receipts.has(messageId)) {
 				void this.flushReceipt(messageId);
 				return;
 			}
-			this.enqueue({ text, messageId });
+			this.enqueue({
+				text,
+				messageId,
+				...(message?.priority === "urgent" ? { urgent: true } : {}),
+			});
 		});
 		this.daemon.on("interrupt", (data) => {
 			const { requestId } = data as { requestId: string };
@@ -200,6 +235,7 @@ class Bridge {
 				`Unsupported ACP protocol version ${initialized.protocolVersion}`,
 			);
 		this.capabilities = initialized.agentCapabilities;
+		this.canSteer = supportsHostOwnedSteering(initialized);
 		const mcp: McpServerStdio = {
 			name: "pulsar",
 			command: process.execPath,
@@ -283,6 +319,7 @@ class Bridge {
 			meta: {
 				acp: "1",
 				acpResume: canResume || canLoad ? "1" : "0",
+				acpSteer: this.canSteer ? "1" : "0",
 				...this.runtimeMeta(),
 			},
 		};
@@ -314,7 +351,7 @@ class Bridge {
 				registration: this.registration,
 			});
 			await this.daemon.call("set_status", {
-				status: this.turn ? "busy" : "idle",
+				status: this.turn || this.steering ? "busy" : "idle",
 			});
 			await Promise.all(
 				[...this.receipts.keys()].map((id) => this.flushReceipt(id)),
@@ -345,7 +382,12 @@ class Bridge {
 			void this.daemon.call(method, params).catch(() => {});
 	}
 
-	private receipt(messageId: string, accepted: boolean, reason?: string) {
+	private receipt(
+		messageId: string,
+		accepted: boolean,
+		reason?: string,
+		steer = false,
+	) {
 		if (this.receipts.size >= MAX_RECEIPTS) {
 			const oldest = this.receipts.keys().next().value;
 			if (oldest) this.receipts.delete(oldest);
@@ -353,8 +395,14 @@ class Bridge {
 		this.receipts.set(
 			messageId,
 			accepted
-				? { method: "ack", params: { messageId, via: "acp" } }
-				: { method: "nack", params: { messageId, reason } },
+				? {
+						method: "ack",
+						params: { messageId, via: steer ? "acp-steer" : "acp" },
+					}
+				: {
+						method: steer ? "msg.nack" : "nack",
+						params: { messageId, reason },
+					},
 		);
 		void this.flushReceipt(messageId);
 	}
@@ -412,20 +460,94 @@ class Bridge {
 			!this.ready ||
 			this.stopping ||
 			this.switchingMode ||
+			this.steering ||
 			!this.queue.length
 		)
 			return;
+		if (this.turn && !this.turn.cancelled && this.canSteer) {
+			const index = this.queue.findIndex((prompt) => prompt.urgent);
+			if (index >= 0) {
+				this.steering = this.steer(index).finally(() => {
+					this.steering = undefined;
+					if (!this.turn && !this.queue.length)
+						this.notify("set_status", { status: "idle" });
+					this.drainQueue();
+				});
+				return;
+			}
+		}
 		this.draining ??= this.drain().finally(() => {
 			this.draining = undefined;
 			this.drainQueue();
 		});
 	}
 
+	private async steer(index: number) {
+		const connection = this.connection;
+		const sessionId = this.sessionId;
+		const prompt = this.queue[index];
+		if (!connection || !sessionId || !prompt?.messageId) return;
+		const { messageId } = prompt;
+		this.queue.splice(index, 1);
+		let deferred = false;
+		try {
+			const result = await connection.agent.request<{
+				outcome?: unknown;
+				reason?: unknown;
+			}>(
+				"_session/steering",
+				{
+					sessionId,
+					prompt: [{ type: "text", text: prompt.text }],
+					_meta: { steering: { idleBehavior: "promptRequired" } },
+				},
+				{
+					cancellationSignal: AbortSignal.timeout(SETUP_TIMEOUT_MS),
+					stopWaitingOnCancel: true,
+				},
+			);
+			if (result?.outcome === "injected") {
+				if (this.turn) {
+					this.confirmDelivery(this.turn);
+					this.writeBlock(this.turn);
+					this.turn.block = undefined;
+				}
+				this.recordPrompt(prompt);
+				this.receipt(messageId, true, undefined, true);
+			} else if (
+				!this.stopping &&
+				result?.outcome === "promptRequired" &&
+				result.reason === "noRunningTurn"
+			) {
+				prompt.urgent = undefined;
+				this.queue.splice(index, 0, prompt);
+				deferred = true;
+			} else {
+				this.receipt(
+					messageId,
+					false,
+					"ACP did not confirm in-turn delivery",
+					true,
+				);
+			}
+		} catch {
+			// The request may already have been applied. Never replay it.
+			this.receipt(
+				messageId,
+				false,
+				"ACP did not confirm in-turn delivery",
+				true,
+			);
+		} finally {
+			if (!deferred) this.received.delete(messageId);
+		}
+	}
+
 	private async drain() {
 		const connection = this.connection;
 		const sessionId = this.sessionId;
 		if (!connection || !sessionId) return;
-		while (!this.stopping) {
+		while (!this.stopping && !this.steering) {
 			const prompt = this.queue.shift();
 			if (!prompt) return;
 			const turn: Turn = {
@@ -467,7 +589,7 @@ class Bridge {
 				if (prompt.messageId) this.received.delete(prompt.messageId);
 				this.turn = undefined;
 				if (turn.printed) this.print("\n");
-				if (!this.queue.length || this.stopping)
+				if ((!this.queue.length && !this.steering) || this.stopping)
 					this.notify("set_status", { status: "idle" });
 			}
 		}
@@ -607,7 +729,11 @@ class Bridge {
 				detail: "The ACP session is unavailable.",
 			};
 		const modes = this.controls.selection;
-		const busy = !!this.turn || this.switchingMode || this.queue.length > 0;
+		const busy =
+			!!this.turn ||
+			!!this.steering ||
+			this.switchingMode ||
+			this.queue.length > 0;
 		if (request.kind === "mode.get") {
 			return {
 				result: "ok",
@@ -853,6 +979,7 @@ class Bridge {
 		}
 		connection?.close();
 		await this.draining;
+		await this.steering;
 		await this.usageWriter?.finish();
 		this.daemon.close();
 		if (this.transcript !== undefined) closeSync(this.transcript);

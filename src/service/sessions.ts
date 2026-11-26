@@ -10,6 +10,10 @@ export const MAX_RETIRED = 4;
  * lookups stay cheap however many connections are open.
  */
 export class Sessions {
+	private readonly extensionCapabilities = new WeakMap<
+		Caller,
+		readonly string[]
+	>();
 	private roles = new Map<Caller, Role | null>();
 	private byAgent = new Map<string, Set<Caller>>();
 	private agentOf = new Map<Caller, string>();
@@ -45,8 +49,11 @@ export class Sessions {
 	}
 
 	/** Re-files a caller under its current principal's agent (after hello). */
-	bind(caller: Caller) {
+	bind(caller: Caller, capabilities: readonly string[] = []) {
 		if (!this.roles.has(caller)) return;
+		if (this.role(caller) === "extension")
+			this.extensionCapabilities.set(caller, capabilities);
+		else this.extensionCapabilities.delete(caller);
 		this.unindex(caller);
 		const id = agentIdOf(caller.principal);
 		if (!id) return;
@@ -78,6 +85,12 @@ export class Sessions {
 		for (const c of this.byAgent.get(agentId) ?? [])
 			if (this.roles.get(c) === "extension") return c;
 		return undefined;
+	}
+
+	supports(caller: Caller, capability: "steer" | "stop") {
+		return (
+			this.extensionCapabilities.get(caller)?.includes(capability) === true
+		);
 	}
 
 	wakeFor(agentId: string): Caller | undefined {
