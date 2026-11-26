@@ -248,16 +248,14 @@ html.md .msr-home .k-block-title {
 	color: var(--ds-link);
 }
 
-/* The find bar on the phone: a Liquid Glass capsule under the iOS bar; a
+/* The find bar on the phone: a solid search field under the iOS bar; a
    Material 3 search bar (full-round surface container) on Android. */
 html.ios .msr-find.is-phone {
 	min-height: 44px;
 	padding-inline: 14px 4px;
 	border: 0;
 	border-radius: 999px;
-	background: var(--ds-material);
-	-webkit-backdrop-filter: var(--ds-material-filter);
-	backdrop-filter: var(--ds-material-filter);
+	background: var(--ds-surface);
 	box-shadow: var(--ds-shadow-md);
 }
 html.ios .msr-find.is-phone input {

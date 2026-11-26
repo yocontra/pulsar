@@ -4,7 +4,26 @@
  * Android; the one-line needs summary opens Needs You; the search field is
  * Konsta's once it loads; the pool footer counts the machines.
  */
+import type { Page } from "@playwright/test";
 import { agentId, expect, ready, test } from "./fixtures.ts";
+
+async function expectSharpHeader(page: Page) {
+	const header = page.locator("ion-header.p-bar:visible").last();
+	await expect(header).toBeVisible();
+	await expect(header).not.toHaveClass(/header-translucent/);
+	const filters = await header.evaluate((el) =>
+		[el, ...el.querySelectorAll("*")]
+			.map((node) => {
+				const style = getComputedStyle(node);
+				return (
+					style.getPropertyValue("backdrop-filter") ||
+					style.getPropertyValue("-webkit-backdrop-filter")
+				);
+			})
+			.filter((value) => value && value !== "none"),
+	);
+	expect(filters).toEqual([]);
+}
 
 test.describe("agents tab", () => {
 	test("New agent: the header's + on iOS, a FAB on Android", async ({
@@ -43,8 +62,11 @@ test.describe("agents tab", () => {
 				});
 			await expect.poll(async () => (await add.boundingBox())!.y).toBe(y);
 		}
+		await expect(page.locator(".p-home-search .k-searchbar")).toBeVisible();
+		await expectSharpHeader(page);
 		await add.click();
 		await expect(page).toHaveURL(/#\/new$/);
+		await expectSharpHeader(page);
 	});
 
 	test("the needs summary opens Needs You; it hides while searching", async ({

@@ -24,9 +24,10 @@ div.p-bar-below {
 	width: 100%;
 	padding-block: 0;
 }
-/* Konsta's searchbar glass on the page: no drop shadow (the toolbar would
-   clip it to a box). */
+/* Keep the toolbar search field on the same solid surface as the header. */
 .p-home-search .k-glass {
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
 	box-shadow: none;
 }
 .p-home-search input {

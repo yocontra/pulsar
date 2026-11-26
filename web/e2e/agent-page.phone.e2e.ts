@@ -1,7 +1,7 @@
 /**
  * The phone agent page's bar and dock (mobile/AgentPage.tsx, AgentBar.tsx),
  * on iOS (`ios`) and Android (`android`): the actions (git, Find, Changes,
- * More) in iOS's glass capsule or as Material icon buttons; at 400 px or
+ * More) in the top toolbar; at 400 px or
  * less Find is in More, and at 360 px or less git too; the title never
  * runs under the actions, and on a 375 px iPhone a name like
  * "apparish-auth" and "Needs approval" show whole; the composer floats in a dock above the home
@@ -61,7 +61,7 @@ async function shownActions(page: Page): Promise<string[]> {
 }
 
 test.describe("agent page bar", () => {
-	test("all four actions, in a glass capsule on iOS and icon buttons on Android", async ({
+	test("all four actions share a solid header on iOS and Android", async ({
 		page,
 		request,
 	}, info) => {
@@ -79,10 +79,13 @@ test.describe("agent page bar", () => {
 			const back = bar(page).locator(".p-back");
 			await expect(back).toHaveClass(/is-md/);
 			await expect(back).toHaveText("");
-			await expect(actions(page)).not.toHaveClass(/k-glass/);
-		} else {
-			await expect(actions(page)).toHaveClass(/k-glass/);
 		}
+		await expect(bar(page).locator(".p-bar-bg, .k-glass")).toHaveCount(0);
+		if (!md)
+			await expect(bar(page)).not.toHaveCSS(
+				"background-color",
+				"rgba(0, 0, 0, 0)",
+			);
 		// The title ends before the actions start.
 		const h1 = await bar(page).locator("h1").boundingBox();
 		const act = await actions(page).boundingBox();

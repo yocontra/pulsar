@@ -6,11 +6,8 @@
 
 /* ------------------------------------------------------------ top bar
    PageShell's bar (ui/ui.css .p-bar) over the conversation's background. */
-.p-agent-header .p-bar-bg {
-	inset: 0;
-	background: var(--p-plain);
-}
 html.ios ion-header.p-agent-header {
+	background: var(--p-plain);
 	box-shadow: 0 0.5px 0 var(--p-sep);
 }
 html.md ion-header.p-agent-header ion-toolbar {
@@ -33,19 +30,10 @@ html.md .p-agent-header .p-nav-title h1 {
 	font-weight: 500;
 }
 
-/* The actions: iOS's glass capsule (40 px targets keep the title room at
-   361 px), Material's 48 dp icon buttons. */
+/* iOS uses 40 px targets to leave room for the title on narrow phones. */
 .p-agent-actions {
 	display: flex;
 	align-items: center;
-}
-/* Konsta's glass shadow has a 25 px halo the toolbar would clip into a
-   band: the rim alone, and a short drop. */
-html.ios .p-agent-actions.k-glass {
-	margin-inline-end: 8px;
-	box-shadow:
-		inset 0 0 0 0.5px var(--p-dock-ring),
-		0 2px 10px rgba(0, 0, 0, 0.08);
 }
 html.ios .p-agent-actions ion-button {
 	min-width: 40px;
@@ -156,8 +144,7 @@ html.md .p-agent .m-composer {
    iOS: the conversation scrolls under the bar and the dock. IonContent is
    fullscreen (under the header); SessionView's section fills it, and its
    column, jump pill, find bar and scroll anchoring inset by the heights
-   useUnderGlass (AgentBar.tsx) measures. The bar fades the conversation
-   out under it (iOS's scroll edge) instead of a hairline; the subagent
+   useUnderGlass (AgentBar.tsx) measures. The subagent
    page's note sits over its composer, so its dock stays in the flow. */
 html.ios .p-agent .p-agent-body {
 	position: absolute;
@@ -180,20 +167,7 @@ html.ios .p-agent .session.mobile:not(.subagent) > .m-composer {
 	bottom: 0;
 	z-index: 3;
 }
-html.ios ion-header.p-agent-header {
-	box-shadow: none;
-}
-html.ios .p-agent-header .p-bar-bg {
-	inset: 0 0 -24px;
-	background: linear-gradient(
-		to bottom,
-		var(--p-plain) calc(100% - 32px),
-		color-mix(in srgb, var(--p-plain) 70%, transparent) calc(100% - 16px),
-		transparent
-	);
-}
-/* Under the dock, the home indicator's strip fades the conversation out
-   (as the bar does at the top). */
+/* Keep the home indicator legible over a scrolling conversation. */
 html.ios .p-agent .session.mobile:not(.subagent)::after {
 	content: "";
 	position: absolute;

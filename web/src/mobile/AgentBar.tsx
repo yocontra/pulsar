@@ -4,14 +4,12 @@
  * status) and room under the toolbar for the page's own rows (subagents,
  * the approval banner).
  *
- * - iOS: the Liquid Glass bar, the back chevron alone (the title needs the
- *   room), the actions grouped in a glass capsule.
+ * - iOS: a back chevron and grouped actions beside the title.
  * - Android: Material's top app bar: the back arrow without the previous
  *   title, the actions as icon buttons.
  *
  * The conversation scrolls in SessionView's own scroller, not IonContent.
  */
-import { Glass } from "konsta/react";
 import { type ReactNode, type RefObject, useEffect } from "react";
 import type { Route } from "../lib/router.ts";
 import { BackButton } from "./BackButton.tsx";
@@ -35,7 +33,7 @@ export function AgentBar({
 	mark?: ReactNode;
 	/** The second line: status, model, type. */
 	sub?: ReactNode;
-	/** The actions: a glass capsule on iOS, icon buttons on Android. */
+	/** The toolbar action buttons. */
 	end?: ReactNode;
 	/** Rows under the toolbar, inside the bar. */
 	below?: ReactNode;
@@ -48,7 +46,6 @@ export function AgentBar({
 			className={`p-bar p-agent-header${className ? ` ${className}` : ""}`}
 			data-testid="agent-bar"
 		>
-			{!isMaterial && <div aria-hidden="true" className="p-bar-bg" />}
 			<IonToolbar>
 				<IonButtons slot="start">
 					<BackButton route={route} compact={compactBack} />
@@ -64,19 +61,9 @@ export function AgentBar({
 				</IonTitle>
 				{end && (
 					<IonButtons slot="end">
-						{isMaterial ? (
-							<div className="p-agent-actions" data-testid="agent-actions">
-								{end}
-							</div>
-						) : (
-							<Glass
-								highlight={false}
-								className="p-bar-glass p-agent-actions"
-								data-testid="agent-actions"
-							>
-								{end}
-							</Glass>
-						)}
+						<div className="p-agent-actions" data-testid="agent-actions">
+							{end}
+						</div>
 					</IonButtons>
 				)}
 			</IonToolbar>
@@ -86,7 +73,7 @@ export function AgentBar({
 }
 
 /**
- * iOS: the conversation scrolls under the glass bar and the composer dock
+ * iOS: the conversation scrolls under the top bar and the composer dock
  * (agent.css). The page's IonContent gets the bar's height
  * (`--p-agent-top`) and the dock's (`--p-dock-h`), which SessionView's
  * column, jump pill, find bar and scroll anchoring inset by. Both change:

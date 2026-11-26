@@ -152,12 +152,6 @@ ion-header.p-tab-bar ion-toolbar {
 html.ios ion-header.p-tab-bar ion-toolbar {
 	--min-height: 52px;
 }
-/* Ionic's toolbar container clips (overflow: hidden): the capsule's glass
-   shadow would end in a box. */
-ion-header.p-tab-bar ion-toolbar::part(container) {
-	overflow: visible;
-	contain: none;
-}
 .p-tab-row {
 	display: flex;
 	align-items: center;
@@ -254,49 +248,16 @@ html.k-material
 }
 
 /* ------------------------------------------------------------ top bar
-   PageShell (ui/PageShell.tsx). iOS: Konsta's Liquid Glass navbar, a
-   backdrop (.p-bar-bg) behind a clear toolbar, the trailing buttons in a
-   glass capsule. The large title's own toolbar stays on the page. */
+   The header covers content that scrolls behind the safe area and toolbar. */
 html.ios ion-header.p-bar {
-	isolation: isolate;
+	background: var(--ds-bg-sunken);
 }
 html.ios ion-header.p-bar ion-toolbar {
 	--background: transparent;
 	--border-width: 0;
-	/* Ionic's `contain: content` clips the capsule's glass shadow to a box. */
-	contain: none;
 }
-html.ios ion-header.p-bar > .header-background {
-	display: none;
-}
-.p-bar-bg {
-	position: absolute;
-	inset: 0 0 -16px;
-	z-index: -1;
-	pointer-events: none;
-}
-/* The page color holds under the status bar and the title, then fades: the
-   condensed title stays legible over content (blur alone isn't enough over
-   cards and charts, and Reduce Transparency drops it). */
-html.ios .p-bar-bg {
-	background-image: linear-gradient(
-		to bottom,
-		var(--ds-bg-sunken) 0%,
-		var(--ds-bg-sunken) 62%,
-		transparent 100%
-	);
-}
-/* The capsule keeps iOS's 16 pt margin from the screen edge (the
-   toolbar's own end padding is 4). */
 html.ios ion-header.p-bar ion-buttons[slot="end"] {
 	margin-inline-end: 12px;
-}
-.p-bar-glass {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	padding-inline: 4px;
-	border-radius: 999px;
 }
 
 /* Android: Material's top app bar on the page surface. */

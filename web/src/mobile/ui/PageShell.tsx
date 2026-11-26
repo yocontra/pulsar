@@ -4,9 +4,7 @@
  * titles), with Konsta inside.
  *
  * - iOS: a large title that condenses into the bar as the page scrolls
- *   (IonHeader collapse="condense"), and a Liquid Glass bar: Konsta's
- *   navbar backdrop (a surface-to-clear gradient over a light blur) with
- *   the trailing buttons in a glass capsule.
+ *   (IonHeader collapse="condense") under a solid top bar.
  * - Android: Material's top app bar (back arrow, title, icon buttons).
  *
  * A tab's root (TabShell) shows no title: see there.
@@ -14,7 +12,6 @@
  * Safe areas come from Ionic (the header and content pad for --sat/--sab):
  * nothing inside adds Konsta's pt-safe/pb-safe on top.
  */
-import { Glass } from "konsta/react";
 import type { ReactNode } from "react";
 import type { Route } from "../../lib/router.ts";
 import { BackButton } from "../BackButton.tsx";
@@ -36,7 +33,7 @@ export interface PageShellProps {
 	route?: Route;
 	/** Leading buttons after the back button. */
 	start?: ReactNode;
-	/** Trailing buttons: a glass capsule on iOS, icon buttons on Android. */
+	/** Trailing action buttons. */
 	end?: ReactNode;
 	/** Under the title (a search field): under the iOS large title, where
 	 * it scrolls away with it; at the top of the content on Android. */
@@ -71,13 +68,7 @@ export function PageShell({
 	const condense = large && !isMaterial;
 	return (
 		<>
-			<IonHeader translucent={!isMaterial} className="p-bar">
-				{!isMaterial && (
-					<div
-						aria-hidden="true"
-						className="p-bar-bg bg-gradient-to-b from-ios-light-surface to-transparent dark:from-ios-dark-surface/50 backdrop-blur-[2px] mask-b-from-50% mask-b-to-100%"
-					/>
-				)}
+			<IonHeader className="p-bar">
 				<IonToolbar>
 					{(route || start) && (
 						<IonButtons slot="start">
@@ -95,17 +86,7 @@ export function PageShell({
 							title
 						)}
 					</IonTitle>
-					{end && (
-						<IonButtons slot="end">
-							{isMaterial ? (
-								end
-							) : (
-								<Glass highlight={false} className="p-bar-glass">
-									{end}
-								</Glass>
-							)}
-						</IonButtons>
-					)}
+					{end && <IonButtons slot="end">{end}</IonButtons>}
 				</IonToolbar>
 			</IonHeader>
 			<IonContent
@@ -160,28 +141,12 @@ export function TabShell({
 	return (
 		<>
 			{row && (
-				<IonHeader translucent={!isMaterial} className="p-bar p-tab-bar">
-					{!isMaterial && (
-						<div
-							aria-hidden="true"
-							className="p-bar-bg bg-gradient-to-b from-ios-light-surface to-transparent dark:from-ios-dark-surface/50 backdrop-blur-[2px] mask-b-from-50% mask-b-to-100%"
-						/>
-					)}
+				<IonHeader className="p-bar p-tab-bar">
 					<IonToolbar>
 						<div className="p-tab-row">
 							{start}
 							<div className="p-tab-row-main">{below}</div>
-							{end && (
-								<IonButtons className="p-tab-row-end">
-									{isMaterial ? (
-										end
-									) : (
-										<Glass highlight={false} className="p-bar-glass">
-											{end}
-										</Glass>
-									)}
-								</IonButtons>
-							)}
+							{end && <IonButtons className="p-tab-row-end">{end}</IonButtons>}
 						</div>
 					</IonToolbar>
 				</IonHeader>
