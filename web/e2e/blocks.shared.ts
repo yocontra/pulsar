@@ -103,6 +103,18 @@ export function blocksSuite(platform: "desktop" | "phone") {
 	}) => {
 		const id = await agentId(request, "fixture=blocks");
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		const spawn = page
+			.locator('[data-tool="spawn_agent"]')
+			.filter({ hasText: "runtime_debt" })
+			.first();
+		await spawn.locator(".ds-tool-head").click();
+		await expect(spawn).toContainText(
+			"The transcript stores this message encrypted.",
+		);
+		await expect(spawn).not.toContainText("gAAAA");
+		const followup = page.locator('[data-tool="followup_task"]').first();
+		await followup.locator(".ds-tool-head").click();
+		await expect(followup.locator(".ds-sent")).toHaveText("Review is ready.");
 		const cards = page.locator('[data-tool="send_message"]');
 		const encrypted = cards.filter({ hasText: "inventory" }).first();
 		await encrypted.locator(".ds-tool-head").click();

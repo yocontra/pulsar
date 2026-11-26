@@ -9,6 +9,7 @@ import {
 	toolKind,
 } from "./describe.ts";
 import { pulsarTool } from "./pulsar.ts";
+import { readableToolInput, readableToolText } from "./tool-text.ts";
 import {
 	DETAIL_LINKS,
 	DOCUMENT_MAX_BYTES,
@@ -372,6 +373,7 @@ export function callEvent(
 		const { sourceProof: _proof, ...visible } = args;
 		input = visible;
 	}
+	input = readableToolInput(input);
 	const event: TranscriptEvent = {
 		...base,
 		role: "assistant",
@@ -411,6 +413,7 @@ export function resultEvents(
 	const pending = state.calls.get(callId);
 	state.calls.delete(callId);
 	const name = pending?.name ?? fallbackName ?? "tool";
+	output = readableToolText(output);
 	const capped = capOutput(output);
 	const detail = toolDetail(name, output, isError, extra);
 	const summary = pending

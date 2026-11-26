@@ -4,6 +4,7 @@
  * one-line summaries and the web app's tool cards. Pure: no I/O, no DOM.
  */
 import { execCalls, isShell, shellCommand } from "./command.ts";
+import { messageContent } from "./tool-text.ts";
 import type { ToolDetail } from "./types.ts";
 
 export { shellCommand };
@@ -88,7 +89,7 @@ add("todo", "todowrite", "todoread", "update_steps", "update_plan", "todo");
 add("plan", "exitplanmode", "enterplanmode");
 add("question", "askuserquestion", "ask", "question", "request_user_input");
 add("task", "task", "agent", "spawn_agent");
-add("message", "sendmessage", "send_message", "send_input");
+add("message", "sendmessage", "send_message", "send_input", "followup_task");
 add("wait", "wait", "wait_agent");
 add("skill", "skill");
 add("tools", "toolsearch");
@@ -721,11 +722,11 @@ export function describeCall(
 				verb: v("Ran subagent", "Running subagent"),
 				target: t(
 					str(a.description) ||
+						str(a.task_name) ||
 						str(a.name) ||
 						str(a.i) ||
 						str(first.name) ||
-						str(a.message) ||
-						str(a.task),
+						messageContent(str(a.message) || str(a.task) || str(a.prompt)).text,
 					"text",
 				),
 				facts: [

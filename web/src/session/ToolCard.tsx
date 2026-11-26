@@ -35,6 +35,10 @@ import {
 	toolKind,
 	toolLabel,
 } from "../../../src/transcripts/describe.ts";
+import {
+	readableToolInput,
+	readableToolText,
+} from "../../../src/transcripts/tool-text.ts";
 import type { TranscriptEvent } from "../api/types.ts";
 import { harnessUi } from "../harnesses/index.ts";
 import { sentence } from "../lib/format.ts";
@@ -257,7 +261,8 @@ export function ToolCard({
 	const call = item.call;
 	const res = item.result;
 	const name = call?.tool?.name ?? res?.tool?.name ?? "tool";
-	const input = call?.tool?.input;
+	const rawInput = call?.tool?.input;
+	const input = useMemo(() => readableToolInput(rawInput), [rawInput]);
 	const detail = res?.tool?.detail ?? call?.tool?.detail;
 	const isError = !!(res?.tool?.isError ?? call?.tool?.isError);
 	// A live call can arrive again with its result folded in (`done`).
@@ -286,8 +291,10 @@ export function ToolCard({
 	// A harness's own card, else a card shared by every harness (Pulsar's tools).
 	const custom = harnessUi(harness).toolCards?.[name] ?? pulsarCard(name);
 	const kind = custom?.kind ?? line.kind;
-	const out = textOf(res);
-	const summary = res?.tool?.summary ?? call?.tool?.summary ?? "";
+	const out = readableToolText(textOf(res));
+	const summary = readableToolText(
+		res?.tool?.summary ?? call?.tool?.summary ?? "",
+	);
 	const state = cardState(detail, isError, done);
 
 	const stat = useMemo(() => {

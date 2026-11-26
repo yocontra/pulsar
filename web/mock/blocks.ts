@@ -312,11 +312,18 @@ export function claudeLog(): string {
 		},
 		'{"success":true,"message":"Message sent"}',
 	);
+	const sealed = `gAAAA${"A".repeat(93)}==`;
 	tool(
-		"send_message",
-		{ target: "inventory", message: `gAAAA${"A".repeat(93)}==` },
+		"spawn_agent",
+		{ task_name: "runtime_debt", message: sealed },
+		'{"agent_id":"worker"}',
+	);
+	tool(
+		"followup_task",
+		{ target: "runtime_debt", message: "UmV2aWV3IGlzIHJlYWR5Lg==" },
 		"",
 	);
+	tool("send_message", { target: "inventory", message: sealed }, "");
 	tool(
 		"send_message",
 		{ target: "reviewer", message: "UmV2aWV3IGlzIHJlYWR5Lg==" },

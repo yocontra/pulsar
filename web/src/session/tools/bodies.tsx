@@ -28,6 +28,7 @@ import {
 	todos,
 	toolPath,
 } from "../../../../src/transcripts/describe.ts";
+import { messageContent } from "../../../../src/transcripts/tool-text.ts";
 import type { ToolDetail } from "../../api/types.ts";
 import { MessageResponse } from "../../components/ai-elements/message.tsx";
 import { plural } from "../../lib/format.ts";
@@ -35,7 +36,6 @@ import { CodeBlock, TerminalBlock } from "../CodeBlock.tsx";
 import { Diff } from "../Diff.tsx";
 import { langForPath } from "../highlight.tsx";
 import { CommandBody } from "./CommandBody.tsx";
-import { messageContent } from "./message-text.ts";
 import { readCells } from "./notebook.ts";
 
 export { CommandBody } from "./CommandBody.tsx";
@@ -732,10 +732,12 @@ export function QuestionBody(p: BodyProps) {
 export function TaskBody(p: BodyProps) {
 	const a = rec(p.input);
 	const tasks = Array.isArray(a.tasks) ? a.tasks.map(rec) : [];
-	const prompt =
-		str(a.prompt) || str(a.message) || str(a.context) || str(a.task);
+	const { text: prompt, note } = messageContent(
+		str(a.prompt) || str(a.message) || str(a.context) || str(a.task),
+	);
 	return (
 		<>
+			{note && <p className="ds-tool-note">{note}</p>}
 			{prompt && (
 				<div className="ds-tool-prose is-folded">
 					<MessageResponse>{prompt}</MessageResponse>
