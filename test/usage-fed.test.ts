@@ -18,6 +18,7 @@ import { RemoteUsage } from "../src/federation/usage.ts";
 import type { AgentUsage, UsageLimits, UsageReport } from "../src/http/wire.ts";
 import { RpcError } from "../src/rpc.ts";
 import { PulsarService } from "../src/service/index.ts";
+import { SessionHistory } from "../src/service/session-history.ts";
 import { Store } from "../src/store.ts";
 import { HttpTransport } from "../src/transport/http.ts";
 import { FakeTailnet } from "./fake-tailnet.ts";
@@ -222,6 +223,33 @@ describe("usage across the pool", () => {
 		expect(r.body.tokens.input).toBe(1_000_000);
 		expect(r.body.cost).toBeCloseTo(2, 6);
 		expect(r.body.context).toEqual({ used: 1_000_000, window: 200_000 });
+	});
+
+	test("an archived peer session loads usage through its home node without a registry row", async () => {
+		const id = "codex:archived-usage";
+		const current = home.service.registry.get(`codex:${THREAD}`)!;
+		new SessionHistory(home.store, home.name).remember({
+			...current,
+			id,
+			sessionId: "archived-usage",
+		});
+		home.store.db
+			.prepare(
+				"INSERT INTO usage_hourly (hour,harness,model,project,session,input,records) VALUES (?,?,?,?,?,?,?)",
+			)
+			.run(1, "codex", "claude-sonnet-5-5", "api", "archived-usage", 10, 1);
+		const archived = `${home.service.machineId}/${id}`;
+		expect(viewer.service.registry.find(archived)).toBeUndefined();
+		expect(home.service.registry.get(id)).toBeUndefined();
+		const result = await api<AgentUsage>(
+			"viewer",
+			`/agents/${enc(archived)}/usage`,
+		);
+		expect(result.status).toBe(200);
+		expect(result.body).toMatchObject({
+			agent: archived,
+			tokens: { input: 10, records: 1 },
+		});
 	});
 
 	test("a home node's plan limits show on the viewer, warn there once, and reach the agent's header", async () => {

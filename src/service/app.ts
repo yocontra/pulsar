@@ -85,6 +85,7 @@ const RECEIPTS_INLINE = 50;
  */
 export class AppApi {
 	private readonly history: SessionHistory;
+	private readonly archivedModel: (agent: Agent) => string | null;
 	private readonly registry: Registry;
 	private readonly store: Store;
 	private readonly mailbox: Mailbox;
@@ -101,6 +102,7 @@ export class AppApi {
 
 	constructor(deps: {
 		history: SessionHistory;
+		archivedModel: (agent: Agent) => string | null;
 		registry: Registry;
 		store: Store;
 		mailbox: Mailbox;
@@ -109,6 +111,7 @@ export class AppApi {
 		subagents: Subagents;
 	}) {
 		this.history = deps.history;
+		this.archivedModel = deps.archivedModel;
 		this.subagents = deps.subagents;
 		this.registry = deps.registry;
 		this.store = deps.store;
@@ -157,18 +160,17 @@ export class AppApi {
 		let agent = current();
 		if (agent) this.history.remember(agent);
 		if (agent && agent.status !== "gone") return this.views.row(agent);
-		let saved = this.history.get(id);
-		if (!saved) {
-			await this.history.recover(id);
-			agent = current();
-			if (agent && agent.status !== "gone") return this.views.row(agent);
-			saved = this.history.get(id);
-		}
+		const saved = await this.history.resolve(id);
+		agent = current();
+		if (agent && agent.status !== "gone") return this.views.row(agent);
 		if (!saved) {
 			if (agent) return this.views.row(agent);
 			throw new RpcError("not_found", `no agent ${id}`);
 		}
-		const row = this.views.row(saved);
+		const row = this.views.row({
+			...saved,
+			model: this.archivedModel(saved) ?? saved.model,
+		});
 		if (row.capabilities)
 			row.capabilities.resume = !!(
 				saved.cwd &&

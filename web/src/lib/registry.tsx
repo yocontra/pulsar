@@ -78,6 +78,7 @@ export interface SlotProps {
 	"sidebar.header": { mobile: boolean };
 	/** Actions in a session's header, next to Stop. */
 	"session.header": { agent: AgentRow; mobile: boolean };
+	"session.archive": { agent: AgentRow };
 	/** The composer toolbar's left end (attach). */
 	"composer.left": ComposerSlotProps;
 	/** The composer toolbar's right end, before Send (send / stop). */
@@ -104,6 +105,7 @@ export interface SlotEntry<K extends SlotName> extends Entry {
 const slots: { [K in SlotName]: Registry<SlotEntry<K>> } = {
 	"sidebar.header": new Registry(),
 	"session.header": new Registry(),
+	"session.archive": new Registry(),
 	"composer.left": new Registry(),
 	"composer.right": new Registry(),
 	"composer.top": new Registry(),

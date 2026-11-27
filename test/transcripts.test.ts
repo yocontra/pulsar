@@ -1315,17 +1315,43 @@ describe("service transcripts", () => {
 						: null,
 			},
 		});
+		store.db
+			.prepare(
+				"INSERT INTO usage_hourly (hour,harness,model,project,session,input,output,records) VALUES (?,?,?,?,?,?,?,?)",
+			)
+			.run(1, "pi", "fixture-model", "demo", original.sessionId, 12, 7, 1);
+		store.db
+			.prepare(
+				"INSERT INTO usage_files (path,harness,session,model,last_at) VALUES (?,?,?,?,?)",
+			)
+			.run(file, "pi", original.sessionId, "fixture-model", 1);
+		const usage = {
+			agent: original.id,
+			model: "fixture-model",
+			tokens: { input: 12, output: 7, records: 1 },
+			context: null,
+		};
+		await expect(
+			service.agentUsage(original.id, principal),
+		).resolves.toMatchObject(usage);
+		await expect(
+			service.agentUsage("pi:nobody", principal),
+		).rejects.toMatchObject({ code: "not_found" });
 		for (const id of [original.id, `${store.machineId()}/${original.id}`]) {
 			const saved = await service.app.agent(principal, id);
 			expect(saved).toMatchObject({
 				id: original.id,
 				archived: true,
+				model: "fixture-model",
 				name: original.name,
 				state: "offline",
 				canStop: false,
 				wake: "refuses",
 				pid: null,
 			});
+			await expect(service.agentUsage(id, principal)).resolves.toMatchObject(
+				usage,
+			);
 			expect(
 				(await service.transcripts.page(id)).events.map((e) => e.id),
 			).toContain("cm000001");

@@ -65,6 +65,13 @@ registerSlot("session.header", {
 	),
 });
 
+registerSlot("session.archive", {
+	id: "usage",
+	component: observer(({ agent }: SlotProps["session.archive"]) =>
+		offered() ? <AgentUsage agentId={agent.id} /> : null,
+	),
+});
+
 registerCommand({
 	id: "usage.open",
 	label: "Usage",

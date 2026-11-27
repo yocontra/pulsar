@@ -97,6 +97,7 @@ import {
 	isLocalSubagentId,
 	isRemote,
 	type PoolView,
+	splitAddress,
 	SUB_MARK,
 } from "./pool.ts";
 import { PrReviewOps } from "./pr-review.ts";
@@ -265,6 +266,7 @@ export class PulsarService {
 	readonly ask: Lookup;
 	/** Token usage read from harness session files, and its API estimate. */
 	readonly usage: Usage;
+	private readonly history: SessionHistory;
 	readonly hosted = new HostedCatalog();
 	/** This machine's `pulsar doctor` report for the app (src/diagnostics/). */
 	readonly diagnostics: { local: LocalDiagnosticsRunner };
@@ -486,8 +488,11 @@ export class PulsarService {
 			...(opts.push?.send ? { send: opts.push.send } : {}),
 		});
 		const history = new SessionHistory(this.store, this.registry.machine);
+		this.history = history;
 		this.app = new AppApi({
 			history,
+			archivedModel: (agent) =>
+				this.usage.sessionModel(agent.harness, agent.sessionId),
 			registry: this.registry,
 			store: this.store,
 			mailbox: this.mailbox,
@@ -770,16 +775,29 @@ export class PulsarService {
 	/** One agent's tokens, cost and context (a remote one's from its home node). */
 	async agentUsage(id: string, as: Principal): Promise<AgentUsage> {
 		authorize(as, "usage");
-		const agent = this.registry.find(id);
-		if (!agent) throw new RpcError("not_found", `no agent ${id}`);
-		if (!agent.id.includes("/"))
+		const address = splitAddress(id);
+		if (!address || address.machineId === this.machineId) {
+			const localId = address?.localId ?? id;
 			return this.usage.priceAgent(
-				agent.id,
-				await this.usage.localAgent(agent),
+				localId,
+				await this.localAgentUsage(localId, as),
 			);
+		}
 		const pool = this.registry.pool?.usage;
 		if (!pool) throw new RpcError("not_found", `no agent ${id}`);
-		return this.usage.priceAgent(agent.id, await pool.agentUsage(agent.id, as));
+		return this.usage.priceAgent(id, await pool.agentUsage(id, as));
+	}
+
+	async localAgentUsage(id: string, as: Principal) {
+		authorize(as, "usage");
+		if (splitAddress(id)) throw new RpcError("not_found", `no agent ${id}`);
+		const current = this.registry.find(id);
+		const agent =
+			current?.status === "gone"
+				? ((await this.history.resolve(id)) ?? current)
+				: (current ?? (await this.history.resolve(id)));
+		if (!agent) throw new RpcError("not_found", `no agent ${id}`);
+		return this.usage.localAgent(agent);
 	}
 
 	/**

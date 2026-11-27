@@ -2770,13 +2770,11 @@ export class Federation implements PoolView {
 				const tz = Math.max(-1440, Math.min(1440, Number(action.tz) || 0));
 				return { ok: true, usage: this.service.usage.local(period, tz) };
 			}
-			case "usage.agent": {
-				const agent = this.service.registry.get(String(action.agent));
-				authorize(user, "usage");
-				if (!agent)
-					return fail("not_found", `no agent ${String(action.agent)}`);
-				return { ok: true, usage: await this.service.usage.localAgent(agent) };
-			}
+			case "usage.agent":
+				return {
+					ok: true,
+					usage: await this.service.localAgentUsage(String(action.agent), user),
+				};
 			case "diag.read": {
 				authorize(user, "diagnostics");
 				return {

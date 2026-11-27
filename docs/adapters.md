@@ -86,7 +86,8 @@ Extension host tests verified the steering and follow-up requests for pi and omp
 | omp | `ask` forms, tool approvals, plan review, extension dialogs |
 | pi | Extension dialogs (select, confirm, input) |
 | Codex | Approvals and questions on the app server. Embedded sessions show read-only cards. |
-| Managed ACP | Permission requests from the connected provider. |
+| Native Antigravity 1.5.18 | Answer permission prompts and questions in the terminal. The native hooks run before the dialog opens and after it closes. |
+| Managed ACP | Permission requests and supported question forms from the connected provider, including child requests with a session ID. |
 
 MCP elicitation forms, Codex's "Implement this plan?" and pi `custom()` dialogs are not relayed. An unanswered card ends after 9 minutes for a permission prompt and 59 minutes for a question or plan; the terminal prompt stays. `pulsar setup --no-approvals` keeps Claude Code prompts out of the app.
 

@@ -13,6 +13,7 @@ import type { AgentRow } from "../api/types.ts";
 import { PromptInline, promptCallId } from "../approval/PromptInline.tsx";
 import { Composer } from "../components/Composer.tsx";
 import { useAgent, useLiveEvent, useTranscript } from "../data/index.ts";
+import { Slot } from "../lib/registry.tsx";
 import { hrefFor } from "../lib/router.ts";
 import { observer } from "../lib/signals.ts";
 import {
@@ -305,6 +306,7 @@ function ArchivedSession({ agent }: { agent: AgentRow }) {
 	return (
 		<div className="ds-banner" role="status">
 			<span>Saved conversation · Session closed</span>
+			<Slot name="session.archive" agent={agent} />
 			{agent.openSessions?.map((open) => (
 				<p key={open.id}>
 					<a href={hrefFor({ view: "agent", id: open.id })}>Open {open.name}</a>

@@ -362,6 +362,19 @@ WHERE hour >= ? GROUP BY harness`,
 		};
 	}
 
+	/** Latest model recorded by the session's usage source. */
+	sessionModel(harness: string, sessionId: string | null): string | null {
+		if (!sessionId || !USAGE_HARNESSES.has(harness)) return null;
+		const row = this.store.db
+			.prepare(
+				`SELECT model FROM usage_files WHERE harness = ? AND session = ?
+	AND model IS NOT NULL
+	ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC, path LIMIT 1`,
+			)
+			.get(harness, sessionId, sessionId);
+		return typeof row?.model === "string" ? row.model : null;
+	}
+
 	/** One local agent's session: tokens per model and its latest context. */
 	async localAgent(agent: Agent): Promise<LocalAgentUsage> {
 		const none: LocalAgentUsage = {
@@ -438,7 +451,7 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 							window: Number(file.context_window) || null,
 						}
 					: null,
-			model: file?.model ? String(file.model) : null,
+			model: this.sessionModel(harness, sessionId),
 			limits: this.limits.forHarness(agent.harness),
 			...acpFields,
 		};

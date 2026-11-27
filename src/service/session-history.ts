@@ -92,6 +92,13 @@ export class SessionHistory {
 		};
 	}
 
+	async resolve(id: string): Promise<Agent | undefined> {
+		const known = this.get(id);
+		if (known) return known;
+		await this.recover(id);
+		return this.get(id);
+	}
+
 	/** Import a pre-existing native conversation only if the driver verifies its exact ID. */
 	async recover(id: string) {
 		const key = this.localId(id);
