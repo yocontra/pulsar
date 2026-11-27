@@ -1319,7 +1319,7 @@ class Bridge {
 					(entry) => entry.name === name,
 				);
 				if (choices.length) {
-					if (args && choices.some(({ value }) => value === args))
+					if (args && this.controls.hasChoice(name, args))
 						return this.selectConfig(args, name);
 					// A provider can also support a native /effort subcommand such as "status".
 					if (!native || (args && !(name === "effort" && native.args)))

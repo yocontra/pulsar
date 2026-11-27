@@ -1259,7 +1259,7 @@ export class Launches {
 			const choices = catalog?.commands.find(
 				({ name }) => name === kind,
 			)?.argumentChoices;
-			if (choices?.length) hints[kind] = choices.slice(0, 100);
+			if (choices?.length) hints[kind] = choices;
 		}
 		return hints;
 	}

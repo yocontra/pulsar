@@ -5,6 +5,7 @@ import type {
 	SessionModeState,
 	SessionUpdate,
 } from "@agentclientprotocol/sdk";
+import { boundedArgumentChoices } from "../command-choices.ts";
 import type { CommandEntry, ModeOption } from "../http/wire.ts";
 
 const CALL_TIMEOUT_MS = 4000;
@@ -65,9 +66,9 @@ function configSelection(
 	return {
 		configId: option.id,
 		current: option.currentValue,
-		modes: values
-			.slice(0, 100)
-			.flatMap((item) => modeOption(item.value, item.name, item.description)),
+		modes: (category === "mode" ? values.slice(0, 100) : values).flatMap(
+			(item) => modeOption(item.value, item.name, item.description),
+		),
 	};
 }
 
@@ -105,13 +106,22 @@ export class AcpSessionControls {
 		return this.selectors[kind]?.current ?? null;
 	}
 
+	hasChoice(command: AcpSelectorCommand, id: string): boolean {
+		return (
+			this.selectors[command]?.modes.some((item) => item.id === id) ?? false
+		);
+	}
+
 	commandChoices(
 		command: AcpSelectorCommand,
 	): { value: string; label: string }[] {
-		return (
-			this.selectors[command]?.modes.flatMap(({ id, label }) =>
+		const selection = this.selectors[command];
+		if (!selection) return [];
+		return boundedArgumentChoices(
+			selection.modes.flatMap(({ id, label }) =>
 				id === id.trim() ? [{ value: id, label }] : [],
-			) ?? []
+			),
+			selection.current,
 		);
 	}
 
