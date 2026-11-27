@@ -124,6 +124,11 @@ async function startNode(name: string): Promise<Node> {
 			shell: "/bin/sh",
 			command: (_h, resumeArgs) => {
 				if (resumeArgs) resumedArgs.push(resumeArgs);
+				if (resumeArgs?.[0] === "codex") {
+					// Use a disposable process with the same native argv. Bash exec -a
+					// chooses argv[0]; the shell reads the scratch "resume" script.
+					return `exec /bin/bash -c 'exec -a codex /bin/sh resume ${resumeArgs[2]}'`;
+				}
 				const log = join(root, `typed-${logN++}.txt`);
 				writeFileSync(log, "");
 				logs.push(log);
@@ -554,6 +559,40 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 			}
 		});
 	}
+
+	test("Codex confirms a newly loaded exact thread without a registered MCP or ownership of the server", async () => {
+		const id = "12450000-0000-4000-8000-000000000999";
+		const driver = driverFor("codex")!;
+		using _saved = spyOn(driver, "readSession").mockResolvedValue({
+			cwd: project,
+			lastSeen: Date.now(),
+		});
+		using loaded = spyOn(driver.nativeResume!, "loaded").mockResolvedValue(
+			"idle",
+		);
+		const params = {
+			harness: "codex",
+			cwd: project,
+			workspace: "current",
+			resumeSessionId: id,
+			nonce: nonce(),
+		};
+		expect(await code(home.service.launches.start(VERIFIED, params))).toBe(
+			"conflict",
+		);
+		writeFileSync(join(project, "resume"), "while read line; do :; done\n");
+		loaded.mockResolvedValueOnce(null);
+		const opened = await home.service.launches.start(VERIFIED, params);
+		await until(() => now(home, opened.id).step === "done", 5000);
+		const live = home.service.registry.get(`codex:${id}`)!;
+		expect(now(home, opened.id).agentId).toBe(live.id);
+		expect(live).toMatchObject({
+			registered: false,
+			pid: expect.any(Number),
+			meta: { sessionFrom: "native-resume" },
+		});
+		expect(live.meta.tmux).toBeUndefined();
+	});
 
 	test("OpenCode can confirm its exact tab in the launched pane without taking control of its shared service", async () => {
 		const driver = driverFor("opencode")!;

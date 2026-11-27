@@ -41,6 +41,33 @@ afterEach(async () => {
 	await rm(directory, { recursive: true, force: true });
 });
 
+test("checking native archive presence only reads the requested root thread", async () => {
+	const loaded = codex.nativeResume!.loaded!;
+	const cwd = "/fixture";
+	let thread = {
+		id: parentId,
+		cwd,
+		parentThreadId: null as string | null,
+		status: { type: "notLoaded" },
+	};
+	server.handlers.set("thread/read", (params) => {
+		expect(params).toEqual({ threadId: parentId, includeTurns: false });
+		return { thread };
+	});
+	expect(await loaded(parentId, cwd)).toBeNull();
+	thread.status.type = "idle";
+	expect(await loaded(parentId, cwd)).toBe("idle");
+	thread.status.type = "active";
+	expect(await loaded(parentId, cwd)).toBe("busy");
+	thread = { ...thread, parentThreadId: childId };
+	await expect(loaded(parentId, cwd)).rejects.toThrow("different thread");
+	expect(
+		server.calls
+			.filter((c) => !["initialize", "initialized"].includes(c.method))
+			.map((c) => c.method),
+	).toEqual(Array(4).fill("thread/read"));
+});
+
 test("only live Codex children explicitly accepting app-server input advertise direct messaging", async () => {
 	const now = Date.now();
 	server.handlers.set("thread/list", (params) => {

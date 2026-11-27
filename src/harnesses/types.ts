@@ -351,6 +351,8 @@ export interface HarnessDriver {
 		direct?: boolean;
 		/** Interrupt addresses the child session itself without targeting a shared process. */
 		interruptBySession?: boolean;
+		/** The installed root invocation hook also runs inside native child conversations. */
+		invocationHook?: boolean;
 	};
 
 	/** Prove a native wake relay names the session its host process currently owns. */
@@ -419,6 +421,8 @@ export interface HarnessDriver {
 	nativeResume?: {
 		valid(id: string): boolean;
 		args(id: string, session: SavedNativeSession): string[] | null;
+		/** Read-only proof of an already loaded native session in a shared host. */
+		loaded?(id: string, cwd: string): Promise<"idle" | "busy" | null>;
 	};
 
 	/**

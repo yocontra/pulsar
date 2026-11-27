@@ -264,6 +264,36 @@ export const codex: HarnessDriver = {
 	nativeResume: {
 		valid: (id) => CODEX_THREAD_ID.test(id),
 		args: (id) => ["codex", "resume", id],
+		async loaded(id, cwd) {
+			if (!CODEX_THREAD_ID.test(id) || !(await codexControlReady()))
+				return null;
+			const [result] = (await codexRpc(
+				[["thread/read", { threadId: id, includeTurns: false }]],
+				{ experimental: true, timeoutMs: 2500 },
+			)) as [
+				{
+					thread?: {
+						id?: string;
+						cwd?: string;
+						parentThreadId?: string | null;
+						status?: { type?: string };
+					};
+				},
+			];
+			const thread = result?.thread;
+			if (thread?.id !== id || thread.parentThreadId || thread.cwd !== cwd)
+				throw new Error("Codex returned a different thread or workspace");
+			switch (thread.status?.type) {
+				case "notLoaded":
+					return null;
+				case "idle":
+					return "idle";
+				case "active":
+					return "busy";
+				default:
+					throw new Error("Codex could not confirm the thread's state");
+			}
+		},
 	},
 	async readSession(id) {
 		if (!CODEX_THREAD_ID.test(id)) return null;

@@ -330,6 +330,8 @@ export interface LaunchDeps {
 
 interface Resume {
 	args: string[];
+	sessionFile?: string;
+	lastProbe?: number;
 	acp: boolean;
 }
 
@@ -506,6 +508,19 @@ export class Launches {
 					"No exact native session file is available",
 				);
 			original = saved.cwd ?? original;
+			let loaded: "busy" | "idle" | null | undefined;
+			try {
+				loaded = original
+					? await driver.nativeResume.loaded?.(id, original)
+					: undefined;
+			} catch {
+				throw new RpcError(
+					"unavailable",
+					"Could not check whether the native session is already open",
+				);
+			}
+			if (loaded)
+				throw new RpcError("conflict", "This session is already open");
 			const rows = (await driver.scan?.sessions()) ?? [];
 			if (!driver.scan && saved.sessionFile) {
 				const open = await exec(
@@ -537,7 +552,7 @@ export class Launches {
 					"conflict",
 					"The harness has an open session whose identity is still unknown",
 				);
-			resume = { args, acp: false };
+			resume = { args, acp: false, sessionFile: saved.sessionFile };
 		}
 		if (!original || (await this.folder(original)) !== cwd)
 			throw new RpcError(
@@ -745,10 +760,15 @@ export class Launches {
 				t0,
 				run.params.resumeSessionId,
 				configured ? true : run.resume?.acp,
+				run.resume,
 			);
 			if (agent) {
 				// The launcher knows the pane: Stop and typing reach it.
-				if (agent.meta.sessionFrom !== "tab" && agent.meta.tmux !== pane)
+				if (
+					!(s.harness === "codex" && run.resume?.acp === false) &&
+					agent.meta.sessionFrom !== "tab" &&
+					agent.meta.tmux !== pane
+				)
 					agent.meta.tmux = pane;
 				if (agent.id !== s.agentId) this.d.onAgent?.(agent.id);
 				if (!named && run.params.name) {
@@ -857,6 +877,7 @@ export class Launches {
 		since: number,
 		resumeSessionId?: string,
 		managed?: boolean,
+		resume?: Resume,
 	): Promise<Agent | null> {
 		const candidates = this.d.registry
 			.all()
@@ -870,7 +891,11 @@ export class Launches {
 							this.d.registry.agentId(s.harness, resumeSessionId, null) &&
 							(a.meta.acp === "1") === managed)),
 			);
-		if (candidates.length === 0) return null;
+		const shared =
+			resume && !resume.acp
+				? driverFor(s.harness)?.nativeResume?.loaded
+				: undefined;
+		if (!candidates.length && !shared) return null;
 		if (shellPid) {
 			const direct = candidates.find((a) => a.pid === shellPid);
 			if (direct) return direct;
@@ -893,6 +918,65 @@ export class Launches {
 						under(Number(a.meta.tuiPid))),
 			);
 			if (child) return child;
+			if (
+				resume &&
+				resumeSessionId &&
+				shared &&
+				Date.now() - (resume.lastProbe ?? 0) >= 1000
+			) {
+				resume.lastProbe = Date.now();
+				const terminal = [...procs.values()].find((proc) => {
+					if (!under(proc.pid)) return false;
+					const [exe, ...argv] = proc.args.trim().split(/\s+/);
+					return (
+						!!exe &&
+						basename(exe) === resume.args[0] &&
+						argv.length + 1 === resume.args.length &&
+						argv.every((arg, i) => arg === resume.args[i + 1])
+					);
+				});
+				if (!terminal) return null;
+				let status: "idle" | "busy" | "unknown" | null = await shared(
+					resumeSessionId,
+					s.cwd,
+				).catch(() => null);
+				if (!status && resume.sessionFile) {
+					const owners = await exec(
+						"lsof",
+						["-nP", "-t", "--", resume.sessionFile],
+						{ lane: "user", timeoutMs: 2500 },
+					);
+					if (
+						owners.ok &&
+						owners.stdout
+							.trim()
+							.split(/\s+/)
+							.some((pid) => under(Number(pid)))
+					)
+						status = "unknown";
+				}
+				if (status) {
+					// Keep the shared server's original registration when it exists. The
+					// TUI proves this launch, not terminal control over every server thread.
+					const known = this.d.registry.get(
+						this.d.registry.agentId(s.harness, resumeSessionId, null),
+					);
+					if (known && known.status !== "gone")
+						return known.meta.acp === "1" ? null : known;
+					return this.d.registry.upsert({
+						harness: s.harness,
+						sessionId: resumeSessionId,
+						pid: terminal.pid,
+						cwd: s.cwd,
+						project: basename(s.cwd),
+						branch: s.branch,
+						tags: [],
+						meta: { sessionFrom: "native-resume" },
+						registered: false,
+						status,
+					});
+				}
+			}
 		}
 		if (resumeSessionId || managed === true) return null;
 		const recent = candidates.filter(
