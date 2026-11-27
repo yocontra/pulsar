@@ -24,7 +24,7 @@ export function archiveAddress(agent: Agent): string | null {
 	if (agent.sessionId && !agent.sessionId.startsWith("pid:")) return agent.id;
 	const key = agent.meta.resumeKey;
 	if (
-		(agent.harness !== "pi" && agent.harness !== "omp") ||
+		!driverFor(agent.harness)?.extension ||
 		!key?.startsWith(`${agent.harness}:`)
 	)
 		return null;
