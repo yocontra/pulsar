@@ -278,13 +278,14 @@ const conversationTitles = new Map<string, string | null>();
 /** A mock agent as the daemon's `AgentRow`. */
 function row(a: MockAgent): AgentRow {
 	const needs = a.status === "needs-you";
+	const pid = a.id.startsWith("pi:pid:") ? Number(a.id.slice(7)) : null;
 	return {
 		id: a.id,
 		name: a.name,
 		conversationTitle: conversationTitles.get(a.id) ?? undefined,
 		harness: a.harness,
-		sessionId: a.id.slice(a.id.indexOf(":") + 1),
-		pid: null,
+		sessionId: pid === null ? a.id.slice(a.id.indexOf(":") + 1) : null,
+		pid,
 		// The gallery's logs run in /work/demo (web/mock/blocks.ts).
 		cwd:
 			a === BLOCKS || a === OMP_BLOCKS

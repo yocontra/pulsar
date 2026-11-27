@@ -46,6 +46,7 @@ const HARNESSES: { id: LaunchHarness; label: string }[] = [
 const runs = new Map<string, { state: LaunchState; params: LaunchParams }>();
 const nonces = new Map<string, string>();
 let seq = 0;
+let resumedPid = 40_000;
 
 const baseName = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
 
@@ -147,6 +148,9 @@ function advance(id: string, ctx: LaunchCtx) {
 			const project = baseName(s.cwd);
 			const a = makeAgent(m, project, {
 				harness: s.harness,
+				...(r.params.resumeSessionId && s.harness === "pi"
+					? { id: `pi:pid:${resumedPid++}` }
+					: {}),
 				name: r.params.name ?? `${s.harness}@${project}`,
 				status: "idle",
 				lastActive: Date.now(),
