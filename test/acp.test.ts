@@ -360,6 +360,21 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			),
 		);
 		await until(async () => (await current())?.status === "idle");
+		writeFileSync(
+			join(workspace, ".agents", "skills.json"),
+			JSON.stringify({ exclude: ["fixture-local-skill"] }),
+		);
+		expect(await runCommand("/fixture-local-skill now disabled")).toMatchObject(
+			{
+				result: "unsupported",
+				via: "acp",
+			},
+		);
+		expect(
+			(await control().commands(agentId)).commands.some(
+				(command) => command.name === "fixture-local-skill",
+			),
+		).toBe(false);
 		expect(await runCommand("/skill:fixture-native-skill")).toMatchObject({
 			result: "ok",
 			via: "acp",
@@ -369,6 +384,19 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				bridge?.output().includes("Fixture received native skill syntax"),
 			),
 		);
+		await until(async () => (await current())?.status === "idle");
+		writeFileSync(
+			join(workspace, ".agents", "skills.json"),
+			JSON.stringify({
+				exclude: ["fixture-local-skill", "fixture-native-skill"],
+			}),
+		);
+		expect(
+			await runCommand("/skill:fixture-native-skill now disabled"),
+		).toMatchObject({
+			result: "unsupported",
+			via: "acp",
+		});
 
 		const uploaded = "Fixture attachment contents";
 		const bytes = Buffer.from(uploaded);

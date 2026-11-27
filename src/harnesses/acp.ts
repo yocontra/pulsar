@@ -1260,8 +1260,16 @@ class Bridge {
 				result: "unsupported",
 				detail: "The ACP session is unavailable.",
 			};
+		const line =
+			request.kind === "command" && typeof request.line === "string"
+				? request.line
+				: null;
+		const name =
+			line && /^\/([A-Za-z0-9][A-Za-z0-9:_.-]{0,127})(?: |$)/.exec(line)?.[1];
 		if (request.kind === "commands" || request.kind === "command") {
-			await this.commands.refresh();
+			await this.commands.refresh(
+				!!(name && this.commandCatalog().get(name)?.revalidateSkill),
+			);
 			if (this.stopping)
 				return {
 					result: "unsupported",
@@ -1305,11 +1313,7 @@ class Bridge {
 		if (request.kind === "mode.set" && typeof request.mode === "string")
 			return this.selectConfig(request.mode, "mode");
 
-		if (request.kind === "command" && typeof request.line === "string") {
-			const line = request.line;
-			const name = /^\/([A-Za-z0-9][A-Za-z0-9:_.-]{0,127})(?: |$)/.exec(
-				line,
-			)?.[1];
+		if (line !== null) {
 			if (!name || line.length > 4000 || /\p{Cc}/u.test(line))
 				return { result: "unsupported", detail: "Invalid ACP command." };
 			const args = line.slice(name.length + 1).trim();
