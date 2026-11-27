@@ -10,13 +10,14 @@ import {
 } from "./more-subagents.ts";
 import { ompActivity } from "./omp-activity.ts";
 import { piAgentDir } from "./pi-paths.ts";
-import { locatePiStyle, piSessionLog } from "./pi-sessions.ts";
+import { locatePiStyle, piSessionLog, piStyleResume } from "./pi-sessions.ts";
 import { parsePi } from "./pi-transcript.ts";
 import { ompIdent } from "./simple-ident.ts";
 import type { HarnessDriver } from "./types.ts";
 
 export const omp: HarnessDriver = {
 	...ompIdent,
+	...piStyleResume("omp"),
 	activity: ompActivity,
 
 	// omp pads line 1 (the session title) and rewrites it in place: never read it.

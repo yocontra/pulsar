@@ -28,6 +28,7 @@ import { type Principal, principalLabel } from "./caller.ts";
 import type { EventBus } from "./events.ts";
 import { LIMITS } from "./limits.ts";
 import type { Registry } from "./registry.ts";
+import { archiveAddress } from "./session-history.ts";
 
 /**
  * Starting agents from the app (`agents.launch`, an acting op).
@@ -239,7 +240,7 @@ export function parseLaunchParams(raw: unknown): LaunchParams {
 			resumeSessionId.includes("%2F") ||
 			/\p{Cc}/u.test(resumeSessionId) ||
 			(!ACP_BINARIES.has(harness as LaunchHarness) &&
-				!driverFor(harness)?.resumeArgs?.(resumeSessionId)))
+				!driverFor(harness)?.nativeResume?.valid(resumeSessionId)))
 	)
 		throw new RpcError(
 			"bad_request",
@@ -466,9 +467,10 @@ export class Launches {
 		cwd: string,
 	): Promise<Resume> {
 		const key = this.d.registry.agentId(harness, id, null);
-		const active = this.d.registry.get(key);
-		if (active && active.status !== "gone")
-			throw new RpcError("conflict", "This session is already open");
+		const active = this.d.registry
+			.all()
+			.some((a) => a.status !== "gone" && archiveAddress(a) === key);
+		if (active) throw new RpcError("conflict", "This session is already open");
 		const known = this.d.savedSession?.(key);
 		let original = known?.cwd;
 		let resume: Resume;
@@ -486,8 +488,7 @@ export class Launches {
 			resume = { args: ["pulsar", "acp", harness, "--resume", id], acp: true };
 		} else {
 			const driver = driverFor(harness);
-			const args = driver?.resumeArgs?.(id);
-			if (!args || !driver?.scan)
+			if (!driver?.nativeResume?.valid(id))
 				throw new RpcError(
 					"bad_request",
 					"This session cannot resume with its native CLI",
@@ -498,11 +499,40 @@ export class Launches {
 					"not_found",
 					"The native session is no longer available",
 				);
+			const args = driver.nativeResume.args(id, saved);
+			if (!args)
+				throw new RpcError(
+					"bad_request",
+					"No exact native session file is available",
+				);
 			original = saved.cwd ?? original;
-			const rows = await driver.scan.sessions();
+			const rows = (await driver.scan?.sessions()) ?? [];
+			if (!driver.scan && saved.sessionFile) {
+				const open = await exec(
+					"lsof",
+					["-nP", "-t", "--", saved.sessionFile],
+					{ timeoutMs: 4000, lane: "user" },
+				);
+				if (open.stdout.trim())
+					throw new RpcError(
+						"conflict",
+						"The native session file is still open",
+					);
+				if (open.code !== 1 || open.timedOut)
+					throw new RpcError(
+						"unavailable",
+						"Could not check whether the native session file is open",
+					);
+			}
 			if (rows.some((row) => row.sessionId === id))
 				throw new RpcError("conflict", "This session is already open");
-			if (rows.some((row) => row.sessionId.startsWith("pid:")))
+			if (
+				rows.some(
+					(row) =>
+						row.sessionId.startsWith("pid:") ||
+						(row.meta.sessionFrom === "folder" && row.cwd === original),
+				)
+			)
 				throw new RpcError(
 					"conflict",
 					"The harness has an open session whose identity is still unknown",
@@ -835,7 +865,8 @@ export class Launches {
 					a.status !== "gone" &&
 					(managed !== true || a.meta.acp === "1") &&
 					(!resumeSessionId ||
-						(a.sessionId === resumeSessionId &&
+						(archiveAddress(a) ===
+							this.d.registry.agentId(s.harness, resumeSessionId, null) &&
 							(a.meta.acp === "1") === managed)),
 			);
 		if (candidates.length === 0) return null;

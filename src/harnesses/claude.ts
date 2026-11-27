@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { debugLog } from "../log.ts";
 import { pidAlive, processSnapshot } from "../processes.ts";
 import {
@@ -26,7 +26,7 @@ import {
 import { isPane, panePid as panePidOf, sendKeys } from "../tmux.ts";
 import { claudeTurnFailed } from "../transcripts/turn-outcome.ts";
 import type { AgentStatus } from "../types.ts";
-import { lastModel, statAsync, tailAsync } from "../util.ts";
+import { headAsync, lastModel, statAsync, tailAsync } from "../util.ts";
 import { claudeLocalAnswer } from "./claude-approvals.ts";
 import {
 	type ClaudeSessionRecord,
@@ -484,6 +484,31 @@ export function installedApprovalHook(): string | null {
 
 export const claude: HarnessDriver = {
 	...claudeIdent,
+
+	nativeResume: {
+		valid: (id) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id),
+		args: (id) => ["claude", "--resume", id],
+	},
+	async readSession(id) {
+		if (!claude.nativeResume!.valid(id)) return null;
+		const file = await claudeTranscript(null, id);
+		if (!file) return null;
+		const stamp = await statAsync(file);
+		if (!stamp) return null;
+		for (const line of (await headAsync(file, 1024 * 1024)).split("\n")) {
+			try {
+				const row = JSON.parse(line);
+				if (
+					row.sessionId === id &&
+					!row.isSidechain &&
+					typeof row.cwd === "string" &&
+					isAbsolute(row.cwd)
+				)
+					return { cwd: row.cwd, lastSeen: stamp.mtimeMs, sessionFile: file };
+			} catch {}
+		}
+		return null;
+	},
 
 	scan: { intervalMs: 4000, sessions: scanClaude, tracksPid: true },
 

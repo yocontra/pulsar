@@ -11,13 +11,14 @@ import {
 } from "../setup/files.ts";
 import { piTurnFailed } from "../transcripts/turn-outcome.ts";
 import { piAgentDir } from "./pi-paths.ts";
-import { locatePiStyle, piSessionLog } from "./pi-sessions.ts";
+import { locatePiStyle, piSessionLog, piStyleResume } from "./pi-sessions.ts";
 import { parsePi } from "./pi-transcript.ts";
 import { piIdent } from "./simple-ident.ts";
 import type { HarnessDriver } from "./types.ts";
 
 export const pi: HarnessDriver = {
 	...piIdent,
+	...piStyleResume("pi"),
 
 	transcript: {
 		locate: (agent) => locatePiStyle("pi", agent),

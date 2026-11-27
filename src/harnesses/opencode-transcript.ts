@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { parsePush } from "../push-frame.ts";
 import {
 	callEvent,
@@ -29,6 +29,33 @@ function open(path: string) {
 		"node:sqlite",
 	) as typeof import("node:sqlite");
 	return new sqlite.DatabaseSync(path, { readOnly: true });
+}
+
+export function nativeOpencodeId(id: string) {
+	return /^ses_[A-Za-z0-9]{1,100}$/.test(id);
+}
+
+export async function readOpencodeSession(id: string) {
+	if (!nativeOpencodeId(id)) return null;
+	try {
+		const db = open(opencodeDbPath());
+		try {
+			const row = db
+				.prepare(
+					"SELECT directory, time_updated FROM session_v2 WHERE id = ? AND parent_id IS NULL",
+				)
+				.get(id);
+			return typeof row?.directory === "string" &&
+				isAbsolute(row.directory) &&
+				typeof row.time_updated === "number"
+				? { cwd: row.directory, lastSeen: row.time_updated }
+				: null;
+		} finally {
+			db.close();
+		}
+	} catch {
+		return null;
+	}
 }
 
 interface Row {

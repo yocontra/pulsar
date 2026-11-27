@@ -220,6 +220,14 @@ export type HarnessIdent = Pick<
 	| "cliArgs"
 >;
 
+export interface SavedNativeSession {
+	cwd: string | null;
+	name?: string;
+	lastSeen: number;
+	/** Verified native journal used by file-backed harnesses. */
+	sessionFile?: string;
+}
+
 export interface HarnessDriver {
 	/** Harness id: the `harness:` tag, `PULSAR_HARNESS` value and `--client` name. */
 	id: string;
@@ -406,11 +414,12 @@ export interface HarnessDriver {
 	 */
 	transcript?: TranscriptSupport<SessionRef>;
 	/** Look up an exact saved native session without starting it or claiming presence. */
-	readSession?(
-		sessionId: string,
-	): Promise<{ cwd: string | null; name?: string; lastSeen: number } | null>;
+	readSession?(sessionId: string): Promise<SavedNativeSession | null>;
 	/** The native CLI argv that reopens this exact session. Never use latest or fork. */
-	resumeArgs?(sessionId: string): string[] | null;
+	nativeResume?: {
+		valid(id: string): boolean;
+		args(id: string, session: SavedNativeSession): string[] | null;
+	};
 
 	/**
 	 * Permission prompts relayed by the harness's hook (approvals): how the

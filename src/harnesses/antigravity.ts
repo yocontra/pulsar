@@ -201,8 +201,10 @@ export const antigravity: HarnessDriver = {
 		}
 		return null;
 	},
-	resumeArgs: (id) =>
-		ANTIGRAVITY_SESSION_ID.test(id) ? ["agy", "--conversation", id] : null,
+	nativeResume: {
+		valid: (id) => ANTIGRAVITY_SESSION_ID.test(id),
+		args: (id) => ["agy", "--conversation", id],
+	},
 	async verifyWakeHost(pid, sessionId) {
 		if (!ANTIGRAVITY_SESSION_ID.test(sessionId)) return null;
 		const table = await freshProcessSnapshot(0, "user");

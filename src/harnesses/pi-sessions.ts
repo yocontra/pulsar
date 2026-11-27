@@ -1,11 +1,11 @@
 import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { exec } from "../exec.ts";
 import type { TranscriptSource } from "../transcripts/types.ts";
-import { tailAsync } from "../util.ts";
+import { headAsync, statAsync, tailAsync } from "../util.ts";
 import { piAgentDir } from "./pi-paths.ts";
-import type { SessionRef } from "./types.ts";
+import type { HarnessDriver, SessionRef } from "./types.ts";
 
 /**
  * Session folder names a pi-style harness may use for a working folder:
@@ -204,6 +204,49 @@ export async function piSessionFile(
 
 /** The pi and omp folders, and whether the harness pads line 1 (omp). */
 const PI_STYLE = { pi: ".pi", omp: ".omp" } as const;
+
+/** Resolve a full session ID in this harness's active profile before passing a file to the CLI. */
+export function piStyleResume(
+	harness: keyof typeof PI_STYLE,
+): Pick<HarnessDriver, "readSession" | "nativeResume"> {
+	const valid = (id: string) =>
+		/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id);
+	return {
+		nativeResume: {
+			valid,
+			args: (_id, session) =>
+				session.sessionFile
+					? [harness, "--session", session.sessionFile]
+					: null,
+		},
+		async readSession(id) {
+			if (!valid(id)) return null;
+			const file = await piSessionFileById(
+				PI_STYLE[harness],
+				null,
+				id,
+				process.env.HOME || homedir(),
+			);
+			if (!file) return null;
+			for (const line of (await headAsync(file, 128 * 1024)).split("\n", 2)) {
+				try {
+					const row = JSON.parse(line);
+					if (
+						row.type !== "session" ||
+						row.id !== id ||
+						typeof row.cwd !== "string" ||
+						!isAbsolute(row.cwd)
+					)
+						continue;
+					const stamp = await statAsync(file);
+					if (stamp)
+						return { cwd: row.cwd, lastSeen: stamp.mtimeMs, sessionFile: file };
+				} catch {}
+			}
+			return null;
+		},
+	};
+}
 
 /**
  * A pi-style agent's transcript, in this harness's folder or the other

@@ -511,6 +511,50 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 		}
 	});
 
+	for (const harness of ["pi", "omp"] as const) {
+		test(`an archived ${harness} session binds the resumed pane to its exact host session`, async () => {
+			const id =
+				harness === "pi"
+					? "11550000-0000-4000-8000-000000000987"
+					: "11550000-0000-4000-8000-000000000988";
+			const folder = join(HOME, `.${harness}`, "agent/sessions/-project");
+			mkdirSync(folder, { recursive: true });
+			const file = join(folder, `2026_${id}.jsonl`);
+			writeFileSync(
+				file,
+				`${JSON.stringify({ type: "session", id, cwd: project })}\n`,
+			);
+			const params = {
+				nonce: nonce(),
+				cwd: project,
+				workspace: "current",
+				harness,
+				resumeSessionId: id,
+			};
+			const launched = await home.service.launches.start(VERIFIED, params);
+			await until(() => now(home, launched.id).step === "waiting", 5000);
+			expect(resumedArgs.at(-1)).toEqual([harness, "--session", file]);
+			const exact = register(home, launched, harness);
+			try {
+				exact.agent.meta.resumeKey = `${harness}:decoy`;
+				expect(now(home, launched.id).agentId).toBeNull();
+				exact.agent.meta.resumeKey = `${harness}:${id}`;
+				await until(() => now(home, launched.id).step === "done", 5000);
+				expect(now(home, launched.id).agentId).toBe(exact.agent.id);
+				expect(
+					await code(
+						home.service.launches.start(VERIFIED, {
+							...params,
+							nonce: nonce(),
+						}),
+					),
+				).toBe("conflict");
+			} finally {
+				exact.close();
+			}
+		});
+	}
+
 	test("the login shell passes an opaque provider session id as one literal argument", () => {
 		const id = "space and 'quotes' + $(uname) + `pwd`";
 		const command = harnessCommand("cursor", ["/usr/bin/printf", "%s", id]);

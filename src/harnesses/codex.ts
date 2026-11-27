@@ -1,12 +1,14 @@
 import { access, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { createRequire } from "node:module";
+import { join, resolve, sep } from "node:path";
 import { lazyCrypto } from "../lazy.ts";
 import { type Action, cliUndo, skillFor } from "../setup/actions.ts";
 import { exists, runCli, setTomlKey, tryCli, which } from "../setup/files.ts";
 import { codexTurnFailed } from "../transcripts/turn-outcome.ts";
 import { MAX_BLOCK_SECONDS } from "../types.ts";
 import { headAsync, lastModel, run, statAsync, tailAsync } from "../util.ts";
-import { codexIdent } from "./codex-ident.ts";
+import { codexRolloutIdentity } from "./codex-child-ident.ts";
+import { CODEX_THREAD_ID, codexIdent } from "./codex-ident.ts";
 import { codexPending } from "./codex-interactions.ts";
 import { codexNames } from "./codex-names.ts";
 import {
@@ -36,7 +38,9 @@ export const codexMissRetry = { ms: 2000 };
 export async function codexRolloutAsync(
 	threadId: string,
 ): Promise<string | null> {
-	const cached = codexFiles.get(threadId);
+	const root = join(codexHome(), "sessions");
+	const cacheKey = `${root}\0${threadId}`;
+	const cached = codexFiles.get(cacheKey);
 	if (
 		cached &&
 		(await access(cached).then(
@@ -45,10 +49,16 @@ export async function codexRolloutAsync(
 		))
 	)
 		return cached;
-	const missed = codexMisses.get(threadId);
+	const missed = codexMisses.get(cacheKey);
 	if (missed !== undefined && Date.now() - missed < codexMissRetry.ms)
 		return null;
-	const root = join(codexHome(), "sessions");
+	const indexed = CODEX_THREAD_ID.test(threadId)
+		? indexedRollout(threadId)
+		: null;
+	if (indexed && (await statAsync(indexed))) {
+		codexFiles.set(cacheKey, indexed);
+		return indexed;
+	}
 	const newest = async (dir: string, n?: number) =>
 		(await readdir(dir)).sort().reverse().slice(0, n);
 	try {
@@ -62,14 +72,14 @@ export async function codexRolloutAsync(
 				f.endsWith(`${threadId}.jsonl`),
 			);
 			if (file) {
-				codexFiles.set(threadId, join(dir, file));
-				codexMisses.delete(threadId);
+				codexFiles.set(cacheKey, join(dir, file));
+				codexMisses.delete(cacheKey);
 				return join(dir, file);
 			}
 		}
 	} catch {}
 	if (codexMisses.size > 1000) codexMisses.clear();
-	codexMisses.set(threadId, Date.now());
+	codexMisses.set(cacheKey, Date.now());
 	return null;
 }
 
@@ -219,8 +229,56 @@ async function deliverCodexSubagent(
 	}
 }
 
+/** Older threads can fall outside the recent rollout search. Use the native thread index. */
+function indexedRollout(id: string): string | null {
+	try {
+		const { DatabaseSync } = createRequire(import.meta.url)(
+			"node:sqlite",
+		) as typeof import("node:sqlite");
+		const db = new DatabaseSync(join(codexHome(), "state_5.sqlite"), {
+			readOnly: true,
+		});
+		try {
+			const row = db
+				.prepare(
+					"SELECT rollout_path FROM threads WHERE id = ? AND archived = 0",
+				)
+				.get(id);
+			const file = row?.rollout_path;
+			return typeof file === "string" &&
+				file === resolve(file) &&
+				file.startsWith(`${join(codexHome(), "sessions")}${sep}`) &&
+				file.endsWith(`-${id}.jsonl`)
+				? file
+				: null;
+		} finally {
+			db.close();
+		}
+	} catch {
+		return null;
+	}
+}
+
 export const codex: HarnessDriver = {
 	...codexIdent,
+	nativeResume: {
+		valid: (id) => CODEX_THREAD_ID.test(id),
+		args: (id) => ["codex", "resume", id],
+	},
+	async readSession(id) {
+		if (!CODEX_THREAD_ID.test(id)) return null;
+		const file = await codexRolloutAsync(id);
+		if (!file) return null;
+		const header = codexRolloutIdentity(
+			id,
+			(await headAsync(file, 1024 * 1024)).split("\n", 1)[0] ?? "",
+		);
+		const stamp =
+			header?.cwd && !header.parentId ? await statAsync(file) : null;
+		return stamp && header
+			? { cwd: header.cwd, lastSeen: stamp.mtimeMs, sessionFile: file }
+			: null;
+	},
 
 	push: {
 		canPush(agent) {
