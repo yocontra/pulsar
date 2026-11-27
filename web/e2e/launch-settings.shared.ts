@@ -1,13 +1,22 @@
-import { expect, localhostBase, test, withPasskey } from "./fixtures.ts";
+import {
+	expect,
+	localhostBase,
+	registerPasskey,
+	resetPasskeys,
+	test,
+} from "./fixtures.ts";
+
+import { softAuthenticator } from "./soft-webauthn.ts";
 
 export function launchSettingsTest() {
 	test("first-turn choices are scoped to the launch machine and a refusal keeps the message", async ({
 		page,
 		request,
-		context,
 	}) => {
+		await resetPasskeys(request);
+		await softAuthenticator(page);
 		await page.goto(`${localhostBase()}/#/new?machine=desk`);
-		await withPasskey(page, request, context);
+		await registerPasskey(page);
 		const draft = page.getByTestId("launch-draft");
 		await expect(draft.getByTestId("launch-machine")).toHaveAccessibleName(
 			"Machine: desk",

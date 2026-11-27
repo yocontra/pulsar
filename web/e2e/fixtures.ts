@@ -196,6 +196,11 @@ export async function withPasskey(
 ) {
 	if (opts.mock !== false) await resetPasskeys(request);
 	await addAuthenticator(page, context);
+	await registerPasskey(page);
+}
+
+/** Register with the authenticator installed on this page, verified by the server. */
+export async function registerPasskey(page: Page) {
 	const ok = await page.evaluate(async () => {
 		const b64 = (s: string) =>
 			Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) =>
