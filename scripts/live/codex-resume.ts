@@ -34,7 +34,13 @@ const first = "PULSAR_SELECTED_CONVERSATION";
 const decoy = "PULSAR_OTHER_CONVERSATION";
 const followup = "PULSAR_CONTINUATION";
 const reply = "PULSAR_MODEL_ANSWER";
-let continued = false;
+const resumedReply = "PULSAR_CONFIRMED_RESUME";
+const requests: {
+	selected: boolean;
+	other: boolean;
+	previousReply: boolean;
+	followup: boolean;
+}[] = [];
 let count = 0;
 const server = Bun.serve({
 	hostname: "127.0.0.1",
@@ -47,18 +53,31 @@ const server = Bun.serve({
 			return new Response(null, { status: 404 });
 		const { input } = (await req.json()) as { input: unknown };
 		const turns = JSON.stringify(input);
-		if (turns.includes(followup))
-			continued =
-				turns.includes(first) &&
-				turns.includes(reply) &&
-				!turns.includes(decoy);
+		const evidence = {
+			selected: turns.includes(first),
+			other: turns.includes(decoy),
+			previousReply: turns.includes(reply),
+			followup: turns.includes(followup),
+		};
+		requests.push(evidence);
+		const continued =
+			evidence.followup &&
+			evidence.selected &&
+			evidence.previousReply &&
+			!evidence.other;
 		const id = `resp_${++count}`;
 		const item = {
 			type: "message",
 			id: `msg_${count}`,
 			role: "assistant",
 			status: "completed",
-			content: [{ type: "output_text", text: reply, annotations: [] }],
+			content: [
+				{
+					type: "output_text",
+					text: continued ? resumedReply : reply,
+					annotations: [],
+				},
+			],
 		};
 		const events = [
 			{ type: "response.created", response: { id } },
@@ -163,12 +182,22 @@ enabled = false
 			`Resumed terminal did not show selected history: ${screen.slice(-2500)}`,
 		);
 	await tmux("send-keys", "-t", "resume:", "-l", followup);
+	const typedUntil = Date.now() + 5000;
+	while (
+		!(await tmux("capture-pane", "-p", "-t", "resume:")).includes(followup) &&
+		Date.now() < typedUntil
+	)
+		await delay(100);
 	await tmux("send-keys", "-t", "resume:", "Enter");
 	const until = Date.now() + 20000;
-	while (!continued && Date.now() < until) await delay(150);
-	if (!continued)
+	do {
+		screen = await tmux("capture-pane", "-pJ", "-t", "resume:");
+		if (screen.includes(resumedReply)) break;
+		await delay(150);
+	} while (Date.now() < until);
+	if (!screen.includes(resumedReply))
 		throw new Error(
-			"The model did not receive the selected history on the resumed turn",
+			`Incomplete continuation: ${JSON.stringify(requests)}\n${screen.trim().slice(-2200)}`,
 		);
 	console.log(
 		"Codex reopened the selected thread and continued it with its own history.",
