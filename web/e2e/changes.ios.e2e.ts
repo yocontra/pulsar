@@ -16,31 +16,38 @@ const top = (page: Page) =>
 	page.locator("ion-nav > .ion-page:not(.ion-page-hidden)").last();
 
 test.describe("changes pages", () => {
-	test("the button follows diff history, including on a clean working tree", async ({
-		page,
-		request,
-	}) => {
-		const id = await agentId(request, "name=codex@apparish");
-		const match = /\/api\/v1\/agents\/[^/]+\/changes\?mode=worktree$/;
-		let read = page.waitForResponse((response) => match.test(response.url()));
-		await page.goto(`/#/a/${encodeURIComponent(id)}`);
-		await read;
-		const button = page.getByRole("button", { name: /^Changes/ });
-		await expect(button).toHaveCount(0);
-		await page.route(match, async (route) => {
-			const response = await route.fetch();
-			await route.fulfill({
-				response,
-				json: { ...(await response.json()), hasChanges: true },
+	for (const hasChanges of [false, true]) {
+		test(`a clean worktree ${hasChanges ? "with" : "without"} diff history`, async ({
+			page,
+			request,
+		}) => {
+			const id = await agentId(request, "name=codex@apparish");
+			const match = /\/api\/v1\/agents\/[^/]+\/changes\?mode=worktree$/;
+			await page.route(match, async (route) => {
+				const response = await route.fetch();
+				await route.fulfill({
+					response,
+					json: { ...(await response.json()), hasChanges },
+				});
 			});
+			const read = page.waitForResponse((response) =>
+				match.test(response.url()),
+			);
+			await page.goto(`/#/a/${encodeURIComponent(id)}`);
+			await read;
+			await expect(top(page).locator(".composer-input")).toBeVisible();
+			const button = page.getByRole("button", { name: /^Changes/ });
+			if (hasChanges) {
+				await expect(button).toHaveAccessibleName("Changes");
+				await button.click();
+				await expect(top(page).locator(".cv-empty")).toContainText(
+					"No changes in",
+				);
+			} else {
+				await expect(button).toHaveCount(0);
+			}
 		});
-		read = page.waitForResponse((response) => match.test(response.url()));
-		await page.reload();
-		await read;
-		await expect(button).toHaveAccessibleName("Changes");
-		await button.click();
-		await expect(top(page).locator(".cv-empty")).toContainText("No changes in");
-	});
+	}
 
 	test("incomplete history keeps the phone Changes button available", async ({
 		page,
