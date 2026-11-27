@@ -55,6 +55,7 @@ import { type TurnSummary, turnNotice } from "../../src/service/push-copy.ts";
 import { UserSessions } from "../../src/service/user-sessions.ts";
 import { isAutoTag } from "../../src/tags.ts";
 import { serveStatic } from "../../src/transport/static.ts";
+import { validImageRefs } from "../../src/upload-images.ts";
 import type {
 	AgentRow,
 	AgentSort,
@@ -924,6 +925,7 @@ interface SendInput {
 }
 
 const SEND_KEYS = new Set([
+	"imageRefs",
 	"to",
 	"ids",
 	"body",
@@ -959,6 +961,8 @@ function parseSend(raw: unknown): SendInput {
 		!(Array.isArray(o.ids) && o.ids.every((x) => typeof x === "string"))
 	)
 		throw badRequest("ids: expected an array of strings");
+	if (o.imageRefs !== undefined && !validImageRefs(o.imageRefs))
+		throw badRequest("invalid uploaded images");
 	return {
 		to: str("to"),
 		ids: o.ids as string[] | undefined,

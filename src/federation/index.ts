@@ -32,6 +32,7 @@ import {
 import { delivered, writeReceipt } from "../service/util.ts";
 import type { Agent, Message, Receipt, ReceiptState } from "../types.ts";
 import { RECEIPT_STATES as ALL_RECEIPT_STATES } from "../types.ts";
+import { validImageRefs } from "../upload-images.ts";
 import { USAGE_PERIODS } from "../usage/index.ts";
 import { VERSION } from "../version.ts";
 import { RemoteAttachmentsRelay } from "./attachments.ts";
@@ -2362,7 +2363,15 @@ export class Federation implements PoolView {
 			}
 		} else return fail("bad_request", "a delivery names its sender");
 
+		if (
+			m.imageRefs !== undefined &&
+			(from?.kind !== "user" ||
+				targets.length !== 1 ||
+				!validImageRefs(m.imageRefs))
+		)
+			return fail("bad_request", "invalid uploaded image references");
 		const copy: Message = {
+			...(m.imageRefs && { imageRefs: m.imageRefs }),
 			id: m.id.slice(0, 100),
 			threadId: m.threadId.slice(0, 100),
 			fromId: sender.id,

@@ -429,6 +429,51 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			`Read the uploaded file\nAttached: ${attachment.file!.path} (text/plain, ${bytes.length} B)`,
 		);
 		await until(() => Boolean(bridge?.output().includes(uploaded)));
+		const imageBytes = Buffer.from("89504e470d0a1a0a00000000", "hex");
+		const imageUpload = (await daemon.service.acting.run(
+			user,
+			"attachments.upload",
+			{ agent: agentId },
+			{
+				nonce: "fixture-image-0001",
+				files: [
+					{
+						name: "pixel.png",
+						size: imageBytes.length,
+						type: "image/png",
+						sha256: createHash("sha256").update(imageBytes).digest("hex"),
+					},
+				],
+			},
+		)) as AttachmentUpload;
+		const savedImage = (
+			await daemon.service.attachments.write(
+				user.login,
+				agentId,
+				imageUpload.upload,
+				0,
+				0,
+				imageBytes,
+			)
+		).file!;
+		const sendImage = () =>
+			daemon.service.app.send(user, {
+				ids: [agentId],
+				body: "fixture-image-content",
+				imageRefs: [savedImage.imageRef!],
+			});
+		await sendImage();
+		await until(() =>
+			Boolean(
+				bridge
+					?.output()
+					.includes(
+						JSON.stringify([
+							["image", "image/png", imageBytes.toString("hex")],
+						]),
+					),
+			),
+		);
 		await prompt("fixture-ready");
 		await until(() => Boolean(bridge?.output().includes("Fixture ready")));
 		const usage = () =>
@@ -1030,6 +1075,12 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				result: "unsupported",
 				detail: expect.stringContaining("low, high"),
 			});
+			if (mode === "load") {
+				await sendImage();
+				await until(() =>
+					Boolean(bridge?.output().includes("Fixture image blocks []")),
+				);
+			}
 			await selectPlan();
 			if (mode === "load") {
 				expect((await current())?.conversationTitle).toBe(

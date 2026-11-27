@@ -439,7 +439,27 @@ export class Router {
 		const detail = message.priority === "urgent" ? URGENT_HANDOFF : null;
 		const ext = this.sessions.extensionFor(target.id);
 		if (ext) {
+			const refs = message.imageRefs;
+			const images =
+				refs?.length && target.meta.acpImage === "1"
+					? this.store.uploadedImages(
+							refs,
+							sender.harness === "user"
+								? (sender.meta.localId ?? sender.id).slice("user:".length)
+								: "",
+							target.id,
+						)
+					: [];
+			if (!images)
+				return this.receipt(
+					message.id,
+					target,
+					"failed",
+					"extension",
+					"An uploaded image expired or belongs to a different session. Attach it again.",
+				);
 			ext.emit("push", {
+				...(images.length && { images }),
 				message: { ...delivered(message, sender), ...attemptOf(message) },
 				text,
 			});

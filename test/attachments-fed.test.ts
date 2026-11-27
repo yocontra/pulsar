@@ -57,6 +57,7 @@ interface Node {
 
 const tailnet = new FakeTailnet();
 const nodes: Node[] = [];
+const pushed: unknown[] = [];
 
 async function startNode(name: string): Promise<Node> {
 	const dir = mkdtempSync(join(tmpdir(), `pulsar-attach-fed-${name}-`));
@@ -107,13 +108,20 @@ function agentOn(n: Node, name: string) {
 	const caller: Caller = {
 		principal: { kind: "terminal" },
 		closed: controller.signal,
-		emit: () => {},
+		emit: (event, data) => {
+			if (event === "push") pushed.push(data);
+		},
 	};
 	n.service.attach(caller);
 	n.service.setRole(caller, "extension");
 	return n.service.registerAgent(
 		caller,
-		registration({ name, project: "demo", cwd: "/work/demo" }),
+		registration({
+			name,
+			project: "demo",
+			cwd: "/work/demo",
+			meta: { acp: "1", acpImage: "1" },
+		}),
 	);
 }
 
@@ -228,6 +236,57 @@ describe("attachments for an agent on another machine", () => {
 			device: "iPhone",
 			via: "relay",
 		});
+	});
+
+	test("the remote home resolves an uploaded image only for the identified recipient and sender", async () => {
+		const bytes = Buffer.from("89504e470d0a1a0a00000000", "hex");
+		const upload = await openRemote({
+			nonce: "fed-image-prompt-0001",
+			files: [
+				{
+					name: "pixel.png",
+					type: "image/png",
+					size: bytes.length,
+					sha256: sha(bytes),
+				},
+			],
+		});
+		const saved = await relay.service.attachments.receive(
+			USER,
+			address(),
+			upload.upload,
+			0,
+			streamOf(bytes),
+		);
+		const imageRefs = [saved.file.imageRef!];
+		const sent = await relay.service.app.send(USER, {
+			ids: [address()],
+			body: "send the verified image",
+			imageRefs,
+		});
+		if (sent.dryRun) throw Error("expected message");
+		await until(() =>
+			pushed.some(
+				(p) =>
+					(p as { message?: { id?: string } }).message?.id === sent.message.id,
+			),
+		);
+		expect(pushed).toContainEqual(
+			expect.objectContaining({
+				images: [
+					{
+						expiresAt: expect.any(Number),
+						path: saved.file.path,
+						sha256: sha(bytes),
+						mimeType: "image/png",
+						size: bytes.length,
+					},
+				],
+			}),
+		);
+		expect(home.store.getMessage(sent.message.id)?.imageRefs).toEqual(
+			imageRefs,
+		);
 	});
 
 	test("bytes that don't match the signed hash are not kept", async () => {

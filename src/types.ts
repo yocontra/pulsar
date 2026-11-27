@@ -125,6 +125,8 @@ export type PublicAgent = Omit<Agent, "meta"> & {
 };
 
 export interface Message {
+	/** Opaque operator-uploaded image references at the recipient’s home node. */
+	imageRefs?: string[];
 	id: string;
 	threadId: string;
 	fromId: string;

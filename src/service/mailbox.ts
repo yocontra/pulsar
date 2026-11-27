@@ -21,6 +21,7 @@ import {
 import type { Waiters, WaitKind } from "./waiters.ts";
 
 export interface SendInput {
+	imageRefs?: string[];
 	to: string;
 	body: string;
 	priority: Priority;
@@ -227,6 +228,7 @@ export class Mailbox {
 		}
 		const tracked = trackLevel(input.expectReply, targets.length, broadcast);
 		const message: Message = {
+			...(input.imageRefs && { imageRefs: input.imageRefs }),
 			id: newId("m"),
 			threadId: parent?.threadId ?? newId("t"),
 			fromId: sender.id,

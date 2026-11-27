@@ -802,6 +802,8 @@ export interface MessageSearchResponse {
 
 /** `POST /send`: `to` (a selector) or `ids` (agent ids), not both. */
 export interface SendRequest {
+	/** Completed image uploads for the single addressed session. */
+	imageRefs?: string[];
 	to?: string;
 	ids?: string[];
 	body?: string;
@@ -1679,6 +1681,8 @@ export interface AttachmentUpload {
 
 /** A file saved on the agent's machine. */
 export interface AttachmentSaved {
+	/** Opaque reference for a verified uploaded image. */
+	imageRef?: string;
 	name: string;
 	/** Sniffed for images; else the browser's type. */
 	type: string;

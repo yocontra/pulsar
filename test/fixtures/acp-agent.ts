@@ -160,6 +160,7 @@ for await (const line of lines) {
 					mode === "unsupported"
 						? {}
 						: {
+								promptCapabilities: { image: mode !== "load" },
 								loadSession: loadOnly,
 								sessionCapabilities: loadOnly ? {} : { resume: {}, close: {} },
 							},
@@ -340,7 +341,12 @@ for await (const line of lines) {
 			const attachment = /^Attached: (.+) \(text\/plain, \d+ B\)$/m.exec(
 				text,
 			)?.[1];
-			if (text.includes("fixture-first-settings")) {
+			if (text.includes("fixture-image-content")) {
+				update(
+					`Fixture image blocks ${JSON.stringify(params.prompt.slice(1).map((block: { type: string; mimeType: string; data: string }) => [block.type, block.mimeType, Buffer.from(block.data, "base64").toString("hex")]))}`,
+				);
+				reply(id, { stopReason: "end_turn" });
+			} else if (text.includes("fixture-first-settings")) {
 				update(
 					`First prompt used ${modelOption().currentValue} with ${currentEffort} reasoning`,
 				);

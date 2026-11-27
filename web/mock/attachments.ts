@@ -63,9 +63,11 @@ export function putFile(
 	if (u.saved.size === u.files.length) uploads.delete(upload);
 	const image = sniffImage(bytes);
 	const name = safeName(f.name);
+	const id = randomBytes(18).toString("base64url");
 	return {
 		received: bytes.length,
 		file: {
+			...(image && { imageRef: id }),
 			name,
 			type:
 				image ??
@@ -73,7 +75,7 @@ export function putFile(
 					? f.type
 					: "application/octet-stream"),
 			size: f.size,
-			path: `/Users/mock/.local/state/pulsar/attachments/${agent.replace(/[^\w.-]/g, "_")}/${randomBytes(6).toString("base64url")}-${name}`,
+			path: `/Users/mock/.local/state/pulsar/attachments/${agent.replace(/[^\w.-]/g, "_")}/up_${id}-${name}`,
 		},
 	};
 }

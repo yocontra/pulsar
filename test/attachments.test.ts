@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { runGit } from "../src/git-write.ts";
+import { acpPrompt } from "../src/harnesses/acp-prompt.ts";
 import { StaticIdentity } from "../src/http/identity.ts";
 import type {
 	AttachmentManifest,
@@ -129,6 +130,170 @@ afterAll(async () => {
 	store.close();
 	rmSync(dir, { recursive: true, force: true });
 	cleanupRepos();
+});
+
+test("image references survive retries and a reopened store, bound to the signed upload", async () => {
+	const upload = await open({
+		nonce: nonce(),
+		files: [spec("pixel.png", PNG, "image/png")],
+	});
+	await service.attachments.write(
+		OWNER,
+		agentId,
+		upload.upload,
+		0,
+		0,
+		PNG.subarray(0, 2),
+	);
+	const done = await service.attachments.write(
+		OWNER,
+		agentId,
+		upload.upload,
+		0,
+		2,
+		PNG.subarray(2),
+	);
+	const ref = done.file!.imageRef!;
+	expect(ref).toMatch(/^[A-Za-z0-9_-]{24}$/);
+	expect(
+		(await service.attachments.write(OWNER, agentId, upload.upload, 0, 0, PNG))
+			.file?.imageRef,
+	).toBe(ref);
+	const reopened = new Store(join(dir, "pulsar.db"));
+	try {
+		const images = reopened.uploadedImages([ref], OWNER, agentId)!;
+		expect(await acpPrompt("pixel", images)).toEqual([
+			{ type: "text", text: "pixel" },
+			{ type: "image", mimeType: "image/png", data: PNG.toString("base64") },
+		]);
+		await expect(
+			acpPrompt("pixel", [{ ...images[0]!, expiresAt: 0 }]),
+		).rejects.toThrow("expired");
+		expect(reopened.uploadedImages([ref], OWNER, "other")).toBeNull();
+		expect(reopened.uploadedImages([ref], "other", agentId)).toBeNull();
+		expect(
+			reopened.uploadedImages(
+				[ref],
+				OWNER,
+				agentId,
+				Date.now() + ATTACH_LIMITS.keepMs + 1,
+			),
+		).toBeNull();
+		expect(
+			reopened.uploadedImages(["A".repeat(24)], OWNER, agentId),
+		).toBeNull();
+		await expect(
+			service.app.send(USER, {
+				ids: [agentId],
+				body: "image",
+				imageRefs: ["A".repeat(24)],
+			}),
+		).rejects.toThrow("Attach it again");
+		const text = `Attached: ${images[0]!.path} (image/png, 208 B)`;
+		expect(await acpPrompt(text)).toEqual([{ type: "text", text }]);
+		writeFileSync(images[0]!.path, Buffer.alloc(PNG.length, 0));
+		await expect(acpPrompt("pixel", images)).rejects.toThrow("changed");
+		rmSync(images[0]!.path);
+		await expect(acpPrompt("pixel", images)).rejects.toThrow("unavailable");
+	} finally {
+		reopened.close();
+	}
+});
+
+test("failed verification, persistence, and rename can retry from zero", async () => {
+	let fail = true;
+	const attachments = new Attachments({
+		dir: () => attachDir,
+		isLocal: () => true,
+		rememberImage() {
+			if (fail) throw Error("unable to remember");
+		},
+	});
+	const text = Buffer.alloc(PNG.length, 65);
+	const first = (await attachments.handler({
+		user: VERIFIED,
+		agent: agentId,
+		params: { nonce: nonce(), files: [spec("first", text)] },
+	} as Parameters<typeof attachments.handler>[0])) as AttachmentUpload;
+	await expect(
+		attachments.write(OWNER, agentId, first.upload, 0, 0, PNG),
+	).rejects.toThrow("changed in transit");
+	const file = (
+		await attachments.write(OWNER, agentId, first.upload, 0, 0, text)
+	).file!;
+	expect(file.imageRef).toBeUndefined();
+	expect(file.type).toBe("application/octet-stream");
+	const second = (await attachments.handler({
+		user: VERIFIED,
+		agent: agentId,
+		params: { nonce: nonce(), files: [spec("second", PNG)] },
+	} as Parameters<typeof attachments.handler>[0])) as AttachmentUpload;
+	await expect(
+		attachments.write(OWNER, agentId, second.upload, 0, 0, PNG),
+	).rejects.toThrow("unable to remember");
+	fail = false;
+	expect(
+		(await attachments.write(OWNER, agentId, second.upload, 0, 0, PNG)).file
+			?.imageRef,
+	).toMatch(/^[\w-]{24}$/);
+	const third = (await attachments.handler({
+		user: VERIFIED,
+		agent: agentId,
+		params: { nonce: nonce(), files: [spec("rename", PNG)] },
+	} as Parameters<typeof attachments.handler>[0])) as AttachmentUpload;
+	await attachments.write(
+		OWNER,
+		agentId,
+		third.upload,
+		0,
+		0,
+		PNG.subarray(0, 2),
+	);
+	const folder = join(
+		attachDir,
+		readdirSync(attachDir).find((d) =>
+			readdirSync(join(attachDir, d)).some((n) => n.endsWith("-rename.part")),
+		)!,
+	);
+	const part = readdirSync(folder).find((n) => n.endsWith("-rename.part"))!;
+	const blocker = join(folder, part.slice(0, -5));
+	mkdirSync(blocker);
+	await expect(
+		attachments.write(OWNER, agentId, third.upload, 0, 2, PNG.subarray(2)),
+	).rejects.toThrow();
+	rmSync(blocker, { recursive: true });
+	expect(
+		(await attachments.write(OWNER, agentId, third.upload, 0, 0, PNG)).file
+			?.imageRef,
+	).toMatch(/^[\w-]{24}$/);
+});
+
+test("queue edits may keep or remove only originally attached images", async () => {
+	const refs = ["a".repeat(24), "b".repeat(24)];
+	const lines = refs.map(
+		(id) => `Attached: /work/up_${id}-pic.png (image/png, 70 B)`,
+	);
+	const sent = await service.app.send(USER, {
+		ids: [agentId],
+		body: "queue fixture",
+		priority: "fyi",
+	});
+	if (sent.dryRun) throw Error("expected message");
+	const message = {
+		...sent.message,
+		id: "edited-uploads-fixture",
+		body: ["caption", ...lines].join("\n"),
+		imageRefs: refs,
+	};
+	store.addMessage(message);
+	store.setMessageBody(message.id, ["new caption", ...lines].join("\n"));
+	expect(store.getMessage(message.id)?.imageRefs).toEqual(refs);
+	store.setMessageBody(message.id, ["new caption", lines[1]].join("\n"));
+	expect(store.getMessage(message.id)?.imageRefs).toEqual([refs[1]!]);
+	store.setMessageBody(message.id, ["new caption", ...lines].join("\n"));
+	expect(store.getMessage(message.id)?.imageRefs).toEqual([refs[1]!]);
+	store.setMessageBody(message.id, "caption only");
+	expect(store.getMessage(message.id)?.imageRefs).toBeUndefined();
 });
 
 describe("manifest", () => {

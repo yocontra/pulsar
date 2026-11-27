@@ -83,7 +83,7 @@ describe("migrations", () => {
 		old.close();
 
 		const store = new Store(path);
-		expect(SCHEMA_VERSION).toBe(14);
+		expect(SCHEMA_VERSION).toBe(15);
 		expect(
 			store.db.prepare("SELECT COUNT(*) AS n FROM usage_native_responses").get()
 				?.n,

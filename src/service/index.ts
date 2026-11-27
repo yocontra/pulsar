@@ -637,6 +637,7 @@ export class PulsarService {
 			return agent && !agent.id.includes("/") ? agent : undefined;
 		};
 		this.attachments = new Attachments({
+			rememberImage: (...args) => this.store.saveUploadedImage(...args),
 			dir: opts.attachments?.dir ?? (() => join(stateDir(), "attachments")),
 			isLocal: (id) => !!this.registry.get(id),
 		});

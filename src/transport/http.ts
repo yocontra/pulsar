@@ -51,6 +51,7 @@ import {
 } from "../service/pr-review.ts";
 import { decodeCursor, encodeCursor, FACET_KEYS } from "../service/views.ts";
 import { RECEIPT_STATES } from "../types.ts";
+import { MAX_UPLOAD_IMAGES, UPLOAD_IMAGE_ID } from "../upload-images.ts";
 import { serveStatic } from "./static.ts";
 
 /**
@@ -320,6 +321,11 @@ const USAGE_REFRESH_WAIT_MS = 8000;
 
 const SendBody = z
 	.object({
+		imageRefs: z
+			.array(z.string().regex(UPLOAD_IMAGE_ID))
+			.min(1)
+			.max(MAX_UPLOAD_IMAGES)
+			.optional(),
 		to: z.string().max(4000).optional(),
 		ids: z.array(z.string().min(1).max(300)).max(LIMITS.maxSendIds).optional(),
 		body: z

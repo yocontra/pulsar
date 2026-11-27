@@ -39,6 +39,7 @@ import {
 	type PublicAgent,
 	type Registration,
 } from "../types.ts";
+import type { UploadedImage } from "../upload-images.ts";
 import { AcpUsageWriter, loadAcpUsage } from "../usage/acp.ts";
 import { VERSION } from "../version.ts";
 import { AcpChildren, readAcpChildren } from "./acp-children.ts";
@@ -83,6 +84,7 @@ const DETACHED_QUIET_MS = 30_000;
 
 type Prompt = {
 	text: string;
+	images?: UploadedImage[];
 	providerText?: string;
 	messageId?: string;
 	command?: true;
@@ -235,7 +237,8 @@ class Bridge {
 			);
 		});
 		this.daemon.on("push", (data) => {
-			const { message, text } = data as {
+			const { message, text, images } = data as {
+				images?: UploadedImage[];
 				message?: { id?: string; priority?: string };
 				text?: string;
 			};
@@ -250,6 +253,9 @@ class Bridge {
 			}
 			this.enqueue({
 				text,
+				...(this.capabilities?.promptCapabilities?.image && images?.length
+					? { images }
+					: {}),
 				messageId,
 				...(message?.priority === "urgent" ? { urgent: true } : {}),
 			});
@@ -435,6 +441,7 @@ class Bridge {
 				acp: "1",
 				acpResume: canResume || canLoad ? "1" : "0",
 				acpQuestions: "1",
+				acpImage: this.capabilities?.promptCapabilities?.image ? "1" : "0",
 				acpSteer: this.canSteer ? "1" : "0",
 				...this.runtimeMeta(),
 			},
@@ -727,7 +734,7 @@ class Bridge {
 				"_session/steering",
 				{
 					sessionId,
-					prompt: [{ type: "text", text: prompt.text }],
+					prompt: await acpPrompt(prompt.text, prompt.images),
 					_meta: { steering: { idleBehavior: "promptRequired" } },
 				},
 				{
@@ -808,7 +815,10 @@ class Bridge {
 				if (!prompt.messageId) this.recordPrompt(prompt);
 				const result = await connection.agent.request("session/prompt", {
 					sessionId,
-					prompt: [{ type: "text", text: prompt.providerText ?? prompt.text }],
+					prompt: await acpPrompt(
+						prompt.providerText ?? prompt.text,
+						prompt.images,
+					),
 				});
 				this.confirmDelivery(turn);
 				if (prompt.messageId && !turn.confirmLaunch)

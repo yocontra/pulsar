@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
 import { daemonLog } from "./log.ts";
 import type { Agent, Message, Receipt, ReceiptState } from "./types.ts";
+import { retainedImageRefs, type UploadedImage } from "./upload-images.ts";
 
 // node:sqlite still prints an ExperimentalWarning on some Node versions.
 // Silence only that one warning so it never lands in an MCP client's stderr log.
@@ -396,6 +397,15 @@ CREATE INDEX IF NOT EXISTS usage_native_owner ON usage_native_responses(response
 				key INTEGER PRIMARY KEY, at INTEGER NOT NULL
 			)`),
 	},
+	{
+		ensure: (db) => {
+			if (!hasColumn(db, "messages", "image_refs"))
+				db.exec("ALTER TABLE messages ADD COLUMN image_refs TEXT");
+			db.exec(
+				"CREATE TABLE IF NOT EXISTS uploaded_images (id TEXT PRIMARY KEY, login TEXT NOT NULL, agent TEXT NOT NULL, path TEXT NOT NULL, mime_type TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, expires INTEGER NOT NULL)",
+			);
+		},
+	},
 ];
 
 /** The schema version this pulsar writes. */
@@ -411,6 +421,9 @@ function toMessage(r: Row): Message {
 		fromName: String(r.from_name),
 		to: String(r.to_spec),
 		body: String(r.body),
+		...(typeof r.image_refs === "string" && {
+			imageRefs: JSON.parse(r.image_refs) as string[],
+		}),
 		priority: r.priority as Message["priority"],
 		replyTo: (r.reply_to as string | null) ?? null,
 		expectReply: Number(r.expect_reply) === 1,
@@ -655,8 +668,8 @@ export class Store {
 		this.writes++;
 		const r = this.db
 			.prepare(
-				`INSERT OR IGNORE INTO messages (id, thread_id, from_id, from_name, to_spec, body, priority, reply_to, expect_reply, created_at, origin_machine, received_at, tracked)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				`INSERT OR IGNORE INTO messages (id, thread_id, from_id, from_name, to_spec, body, priority, reply_to, expect_reply, created_at, origin_machine, received_at, tracked, image_refs)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				m.id,
@@ -672,8 +685,51 @@ export class Store {
 				opts.originMachine ?? null,
 				opts.receivedAt ?? m.createdAt,
 				m.tracked ?? 0,
+				m.imageRefs ? JSON.stringify(m.imageRefs) : null,
 			);
 		return Number(r.changes) > 0;
+	}
+
+	saveUploadedImage(
+		id: string,
+		login: string,
+		agent: string,
+		image: UploadedImage,
+	) {
+		this.db
+			.prepare(
+				"INSERT INTO uploaded_images(id,login,agent,path,mime_type,size,sha256,expires) VALUES(?,?,?,?,?,?,?,?)",
+			)
+			.run(
+				id,
+				login,
+				agent,
+				image.path,
+				image.mimeType,
+				image.size,
+				image.sha256,
+				image.expiresAt,
+			);
+	}
+
+	uploadedImages(
+		ids: string[],
+		login: string,
+		agent: string,
+		now = Date.now(),
+	): UploadedImage[] | null {
+		const query = this.db.prepare(
+			"SELECT path,mime_type AS mimeType,size,sha256,expires AS expiresAt FROM uploaded_images WHERE id=? AND login=? AND agent=? AND expires>?",
+		);
+		const images: UploadedImage[] = [];
+		for (const id of ids) {
+			const image = query.get(id, login, agent, now) as unknown as
+				| UploadedImage
+				| undefined;
+			if (!image) return null;
+			images.push(image);
+		}
+		return images;
 	}
 
 	getMessage(id: string): Message | null {
@@ -1096,9 +1152,12 @@ export class Store {
 	/** Replaces a stored message's body (an edit before delivery). */
 	setMessageBody(messageId: string, body: string) {
 		this.writes++;
+		const old = this.getMessage(messageId);
+		const refs =
+			old?.imageRefs && retainedImageRefs(old.imageRefs, old.body, body);
 		this.db
-			.prepare("UPDATE messages SET body = ? WHERE id = ?")
-			.run(body, messageId);
+			.prepare("UPDATE messages SET body = ?, image_refs = ? WHERE id = ?")
+			.run(body, refs?.length ? JSON.stringify(refs) : null, messageId);
 	}
 
 	/**
@@ -1210,6 +1269,7 @@ export class Store {
 			)
 			.run(cutoff);
 		this.db.prepare("DELETE FROM messages WHERE created_at < ?").run(cutoff);
+		this.db.prepare("DELETE FROM uploaded_images WHERE expires <= ?").run(now);
 	}
 
 	// --- Federation (the pool): message origin, outbox, peers ---

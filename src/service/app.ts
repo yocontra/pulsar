@@ -26,13 +26,14 @@ import {
 	type Receipt,
 	type ReceiptState,
 } from "../types.ts";
+import { validImageRefs } from "../upload-images.ts";
 import { VERSION } from "../version.ts";
 import type { VerifiedUser } from "./acting.ts";
 import { authorize } from "./authorize.ts";
 import { OPERATOR_ID, type Principal } from "./caller.ts";
 import { LIMITS } from "./limits.ts";
 import type { Mailbox } from "./mailbox.ts";
-import { splitAddress, splitSubagentId } from "./pool.ts";
+import { isRemote, splitAddress, splitSubagentId } from "./pool.ts";
 import type { Registry } from "./registry.ts";
 import { archiveAddress, type SessionHistory } from "./session-history.ts";
 import { forParentBody, type Subagents } from "./subagents.ts";
@@ -410,6 +411,14 @@ export class AppApi {
 		);
 		const ids = input.ids?.length ? [...new Set(input.ids)] : null;
 		const to = input.to?.trim() ?? "";
+		if (
+			input.imageRefs !== undefined &&
+			(!validImageRefs(input.imageRefs) || ids?.length !== 1)
+		)
+			throw new RpcError(
+				"bad_request",
+				"Image uploads require valid references and one recipient",
+			);
 		if (!ids && !to)
 			throw new RpcError("bad_request", "give `to` (a selector) or `ids`");
 		if (ids && to)
@@ -434,6 +443,18 @@ export class AppApi {
 			throw new RpcError(
 				"no_recipients",
 				ids ? "none of those agents is live" : `no live agent matches "${to}"`,
+			);
+		if (
+			input.imageRefs &&
+			targets.some(
+				(target) =>
+					!isRemote(target) &&
+					!this.store.uploadedImages(input.imageRefs!, p.login, target.id),
+			)
+		)
+			throw new RpcError(
+				"bad_request",
+				"An uploaded image expired or belongs to a different session. Attach it again.",
 			);
 		this.onOperatorSend(targets.map((t) => t.id));
 		if (input.resolveToken) {
@@ -472,6 +493,7 @@ export class AppApi {
 			{
 				to: label,
 				body,
+				...(input.imageRefs && { imageRefs: input.imageRefs }),
 				priority,
 				replyTo: null,
 				expectReply: Boolean(input.expectReply),

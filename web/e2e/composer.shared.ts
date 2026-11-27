@@ -239,9 +239,9 @@ export function composerSuite(platform: "desktop" | "phone") {
 		const shown = page.locator(".composer:visible").last();
 		const field = shown.getByRole("textbox", { name: "Message" });
 		await composer.getByTestId("attach-files").setInputFiles({
-			name: "draft-notes.txt",
-			mimeType: "text/plain",
-			buffer: Buffer.from("draft note"),
+			name: "draft-image.png",
+			mimeType: "image/png",
+			buffer: PNG,
 		});
 		await expect(composer.getByTestId("attachment")).toHaveAttribute(
 			"data-state",
@@ -273,7 +273,7 @@ export function composerSuite(platform: "desktop" | "phone") {
 			"done",
 		);
 		await expect(shown.getByTestId("attachment")).toContainText(
-			"draft-notes.txt",
+			"draft-image.png",
 		);
 
 		const sent = page.waitForResponse(
@@ -284,8 +284,11 @@ export function composerSuite(platform: "desktop" | "phone") {
 		await shown.getByRole("button", { name: "Send", exact: true }).click();
 		const r = await sent;
 		expect(r.ok()).toBe(true);
-		expect(r.request().postDataJSON()).toMatchObject({ ids: [home] });
-		expect(r.request().postDataJSON().body).toContain("draft-notes.txt");
+		expect(r.request().postDataJSON()).toMatchObject({
+			ids: [home],
+			imageRefs: [expect.stringMatching(/^[A-Za-z0-9_-]{24}$/)],
+		});
+		expect(r.request().postDataJSON().body).toContain("draft-image.png");
 		await expect(field).toHaveValue("");
 		await expect
 			.poll(() =>

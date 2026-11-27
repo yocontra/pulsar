@@ -18,6 +18,7 @@ import type {
 } from "../http/wire.ts";
 import { RpcError } from "../rpc.ts";
 import { sniffImage } from "../transcripts/tailer.ts";
+import type { UploadedImage } from "../upload-images.ts";
 import type { ActingHandler } from "./acting.ts";
 import type { Principal } from "./caller.ts";
 import type { RemoteAttachments } from "./pool.ts";
@@ -67,11 +68,24 @@ export function safeName(name: string): string {
 		.replace(/^[.\s]+/, "")
 		.trim();
 	if (!clean) return "file";
-	if (clean.length <= ATTACH_LIMITS.nameChars) return clean;
+	if (
+		clean.length <= ATTACH_LIMITS.nameChars &&
+		Buffer.byteLength(clean) <= 220
+	)
+		return clean;
 	// Keep the extension when shortening.
 	const dot = clean.lastIndexOf(".");
 	const ext = dot > 0 && clean.length - dot <= 12 ? clean.slice(dot) : "";
-	return clean.slice(0, ATTACH_LIMITS.nameChars - ext.length) + ext;
+	let stem = "";
+	for (const char of ext ? clean.slice(0, -ext.length) : clean) {
+		if (
+			stem.length + char.length + ext.length > ATTACH_LIMITS.nameChars ||
+			Buffer.byteLength(stem + char + ext) > 220
+		)
+			break;
+		stem += char;
+	}
+	return stem + ext;
 }
 
 const TYPE_RE =
@@ -128,12 +142,14 @@ function tooLarge(name: string, image: boolean): RpcError {
 
 interface UploadFile {
 	spec: AttachmentFileSpec;
+	id: string;
 	path: string;
 	received: number;
 	hash: Hash | null;
 	handle: FileHandle | null;
 	/** Sniffed from the first bytes. */
 	image: string | null;
+	header: Buffer;
 	saved: AttachmentSaved | null;
 	/** One write at a time per file. */
 	busy: boolean;
@@ -148,6 +164,12 @@ interface Upload {
 }
 
 export interface AttachmentsOptions {
+	rememberImage?: (
+		id: string,
+		login: string,
+		agent: string,
+		image: UploadedImage,
+	) => void;
 	/** The root folder (default `<state>/attachments`). */
 	dir: () => string;
 	/** True when the id is an agent of this machine. */
@@ -196,16 +218,21 @@ export class Attachments {
 			agent,
 			login,
 			expiresAt: this.now() + ATTACH_LIMITS.uploadMs,
-			files: manifest.files.map((spec) => ({
-				spec,
-				path: join(dir, `${randomId(6)}-${safeName(spec.name)}`),
-				received: 0,
-				hash: null,
-				handle: null,
-				image: null,
-				saved: null,
-				busy: false,
-			})),
+			files: manifest.files.map((spec) => {
+				const id = randomId(18);
+				return {
+					id,
+					spec,
+					path: join(dir, `up_${id}-${safeName(spec.name)}`),
+					received: 0,
+					hash: null,
+					handle: null,
+					image: null,
+					header: Buffer.alloc(0),
+					saved: null,
+					busy: false,
+				};
+			}),
 		};
 		this.uploads.set(upload.id, upload);
 		return {
@@ -262,8 +289,12 @@ export class Attachments {
 				f.handle = await open(`${f.path}.part`, "w", 0o600);
 				f.hash = createHash("sha256");
 			}
-			if (f.received === 0 && data.length > 0) {
-				f.image = sniffImage(data);
+			if (!f.image && f.header.length < 12 && data.length) {
+				f.header = Buffer.concat([
+					f.header,
+					data.subarray(0, 12 - f.header.length),
+				]);
+				f.image = sniffImage(f.header);
 				if (f.image && f.spec.size > ATTACH_LIMITS.imageBytes) {
 					await this.reset(f);
 					throw tooLarge(f.spec.name, true);
@@ -282,15 +313,34 @@ export class Attachments {
 			f.handle = null;
 			f.hash = null;
 			if (digest !== f.spec.sha256) {
-				await unlink(`${f.path}.part`).catch(() => {});
-				f.received = 0;
+				await this.reset(f);
 				throw new RpcError(
 					"bad_request",
 					`'${safeName(f.spec.name)}' changed in transit; attach it again`,
 				);
 			}
-			await rename(`${f.path}.part`, f.path);
+			const imageRef = f.image && this.o.rememberImage ? f.id : undefined;
+			try {
+				await rename(`${f.path}.part`, f.path);
+				try {
+					if (imageRef && f.image)
+						this.o.rememberImage!(imageRef, login, agent, {
+							path: f.path,
+							mimeType: f.image,
+							size: f.spec.size,
+							sha256: digest,
+							expiresAt: this.now() + ATTACH_LIMITS.keepMs,
+						});
+				} catch (error) {
+					await unlink(f.path);
+					throw error;
+				}
+			} catch (error) {
+				await this.reset(f);
+				throw error;
+			}
 			f.saved = {
+				...(imageRef && { imageRef }),
 				name: safeName(f.spec.name),
 				type: savedType(f.spec.type, f.image),
 				size: f.spec.size,
@@ -431,6 +481,7 @@ export class Attachments {
 		f.hash = null;
 		f.received = 0;
 		f.image = null;
+		f.header = Buffer.alloc(0);
 		await unlink(`${f.path}.part`).catch(() => {});
 	}
 }

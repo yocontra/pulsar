@@ -10,6 +10,7 @@ import type { Principal } from "../service/caller.ts";
 // The viewer's own caps, so a peer can't send more.
 import { IMAGE_MAX, TEXT_MAX, TREE_MAX } from "../service/files.ts";
 import type { RemoteAttachments } from "../service/pool.ts";
+import { UPLOAD_IMAGE_ID } from "../upload-images.ts";
 import type { Federation } from "./index.ts";
 
 /** A home node too old for these ops. */
@@ -248,6 +249,9 @@ function savedFile(v: unknown): AttachmentSaved | null {
 	)
 		return null;
 	return {
+		...(typeof f.imageRef === "string" && UPLOAD_IMAGE_ID.test(f.imageRef)
+			? { imageRef: f.imageRef }
+			: {}),
 		name: f.name.slice(0, 200),
 		type: f.type.slice(0, 130),
 		size: f.size,

@@ -255,7 +255,11 @@ function ComposerImpl({
 		total: number;
 	} | null>(null);
 	const ta = useRef<HTMLTextAreaElement>(null);
-	const pending = useRef({ body: "", revision: "" });
+	const pending = useRef<{
+		body: string;
+		revision: string;
+		imageRefs?: string[];
+	}>({ body: "", revision: "" });
 	const legacyKey = targetKey(target);
 	const key =
 		target.kind === "selector"
@@ -324,6 +328,9 @@ function ComposerImpl({
 	const base = (): SendRequest => ({
 		...targetRequest(target),
 		body: pending.current.body,
+		...(pending.current.imageRefs?.length
+			? { imageRefs: pending.current.imageRefs }
+			: {}),
 		priority,
 		expectReply,
 		...(viaParent ? { viaParent: true } : {}),
@@ -447,6 +454,7 @@ function ComposerImpl({
 		// The files went to the agent's machine already: the message names them.
 		pending.current = {
 			body: draft.body(text),
+			imageRefs: draft.ready().flatMap((f) => (f.imageRef ? [f.imageRef] : [])),
 			revision: draft.checkpoint().revision,
 		};
 		// One recipient (an agent, a subagent): no confirmation to show.
