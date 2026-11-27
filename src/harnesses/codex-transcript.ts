@@ -48,7 +48,7 @@ export function parseCodex(
 		}
 		if (rec.type === "compacted") {
 			out.push({
-				id: `compacted:${hash(JSON.stringify(rec))}`,
+				id: str(payload.id) ?? `compacted:${hash(JSON.stringify(rec))}`,
 				ts: toMs(rec.timestamp),
 				role: "system",
 				kind: "system",
@@ -196,16 +196,22 @@ export function parseCodex(
 				seenResults(state).add(callId);
 				const { text, isError } = codexOutput(payload.output);
 				const pending = state.calls.get(callId);
-				if (
-					pending &&
-					cellWait(pending.name, pending.input) &&
-					!isError &&
-					emptyCellOutput(text)
-				) {
+				const outputName = str(payload.name);
+				const isCellWait = pending
+					? cellWait(pending.name, pending.input)
+					: outputName === "functions.wait";
+				if (isCellWait && !isError && emptyCellOutput(text)) {
 					state.calls.delete(callId);
 					break;
 				}
-				const events = resultEvents(state, { id, ts }, callId, text, isError);
+				const events = resultEvents(
+					state,
+					{ id, ts },
+					callId,
+					text,
+					isError,
+					outputName,
+				);
 				attachImages(state, events.at(-1), outputImages(payload.output));
 				out.push(...events);
 				break;
@@ -324,6 +330,7 @@ function codexOutput(output: unknown): { text: string; isError?: boolean } {
 	if (Array.isArray(parsed)) return { text: contentText(parsed) };
 	const o = obj(parsed);
 	if (o && typeof o.output === "string") {
+		if (o.is_error === true) return { text: o.output, isError: true };
 		const code = obj(o.metadata)?.exit_code;
 		return typeof code === "number"
 			? { text: `${o.output}\nExit code: ${code}`, isError: code !== 0 }

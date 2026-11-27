@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { codex } from "../src/harnesses/codex.ts";
 import { codexControlSocket } from "../src/harnesses/codex-rpc.ts";
+import { codexThreadHistory } from "../src/harnesses/codex-thread-history.ts";
+import { patchFiles, patchText } from "../src/transcripts/describe.ts";
 import { FakeCodex } from "./codex-fake.ts";
 import { agentRecord } from "./subagent-fixtures.ts";
 
@@ -424,4 +426,87 @@ test("a child without a rollout reads its own paged thread history, including pe
 		text: "My first prompt",
 	});
 	expect(server.calls.some((c) => c.method === "thread/resume")).toBe(false);
+});
+
+test("Codex thread history retains patch hunks, tool outcomes and stable compaction notices", async () => {
+	server.handlers.set("thread/turns/list", () => ({
+		data: [
+			{
+				items: [
+					{
+						id: "f",
+						type: "fileChange",
+						changes: [
+							{ kind: { type: "add" }, path: "new.ts", diff: "new\n" },
+							{ kind: { type: "delete" }, path: "old.ts", diff: "old\n" },
+							{
+								kind: { type: "update", move_path: "after.ts" },
+								path: "before.ts",
+								diff: "--- before.ts\n+++ after.ts\n@@ -1 +1 @@\n-old\n+replacement\n\nMoved to: after.ts",
+							},
+						],
+						status: "completed",
+						startedAtMs: 1700000000012,
+					},
+					{
+						id: "tool",
+						type: "dynamicToolCall",
+						tool: "lookup",
+						contentItems: [{ type: "inputText", text: "offline" }],
+						status: "failed",
+					},
+					{
+						id: "wait",
+						type: "functionCallOutput",
+						name: "wait",
+						namespace: "functions",
+						output: "",
+					},
+					{
+						id: "result",
+						type: "functionCallOutput",
+						name: "read",
+						output: "hello",
+					},
+					{
+						id: "hidden",
+						type: "reasoning",
+						summary: [],
+						content: ["private raw text"],
+					},
+					{ id: "compact", type: "contextCompaction" },
+				],
+			},
+		],
+	}));
+	const { events } = await codexThreadHistory(childId, null, parent.cwd);
+	const call = events.find((e) => e.kind === "tool_call" && e.id === "f")!;
+	expect(call.ts).toBe(1700000000012);
+	expect(patchFiles(patchText(call.tool?.input))).toMatchObject([
+		{ path: "new.ts", op: "add", added: 1, removed: 0 },
+		{ path: "old.ts", op: "delete", added: 0, removed: 1 },
+		{
+			path: "before.ts",
+			moveTo: "after.ts",
+			added: 1,
+			removed: 1,
+			lines: ["@@ -1 +1 @@", "-old", "+replacement"],
+		},
+	]);
+	expect(events.find((e) => e.id === "tool#output")).toMatchObject({
+		text: "offline",
+		tool: { isError: true },
+	});
+	expect(events.find((e) => e.id === "result")).toMatchObject({
+		text: "hello",
+		tool: { name: "read" },
+	});
+	expect(events.find((e) => e.id === "hidden")).toMatchObject({
+		subtype: "hidden",
+		text: "",
+	});
+	expect(events.some((e) => e.id === "wait")).toBe(false);
+	expect(events.find((e) => e.id === "compact")).toMatchObject({
+		subtype: "compacted",
+	});
 });

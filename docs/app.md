@@ -109,7 +109,7 @@ A subagent is running only while it works, and idle only while it is alive and w
 - **omp**: a task with no exit record and no write for 10 minutes is finished.
 - When the parent agent is gone, all its subagents are finished.
 
-Limits: Codex lists descendants across worktrees while its app server runs. Pulsar reads the child’s rollout when available. For children without a rollout, it reads paged conversation text, public reasoning summaries, shell commands, MCP calls and agent messages from the app server. OpenCode 2 sessions and their children show saved messages and tool results from the local session database. Pulsar lists direct children and follows parent links in the 500 most recently updated OpenCode sessions to find nested children. Claude Code workflow runs are not listed.
+Limits: Codex lists descendants across worktrees while its app server runs. Pulsar reads the child’s rollout when available. For children without a rollout, it reads paged conversation text, public reasoning summaries, shell commands, file edits, tool results and agent messages from the app server. OpenCode 2 sessions and their children show saved messages and tool results from the local session database. Pulsar lists direct children and follows parent links in the 500 most recently updated OpenCode sessions to find nested children. Claude Code workflow runs are not listed.
 
 ## Changes
 
