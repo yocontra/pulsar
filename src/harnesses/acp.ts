@@ -137,7 +137,12 @@ class Bridge {
 		sessionId: string;
 		update: SessionUpdate;
 	}> = [];
-	private setupNotificationBytes = 0;
+	// Provider replay and session metadata arrive on the same stream. Keep
+	// separate limits so a long transcript cannot displace the controls.
+	private readonly setupBudget = {
+		history: { count: 0, bytes: 0 },
+		metadata: { count: 0, bytes: 0 },
+	};
 	private switchingConfig = false;
 	private usageObserved = false;
 	private conversationTitle: string | undefined;
@@ -199,33 +204,7 @@ class Bridge {
 						this.controls.update(update);
 						return;
 					}
-					// Agents may publish their catalog before the setup response.
-					if (
-						this.setupUpdates.length < 200 &&
-						(update.sessionUpdate === "available_commands_update" ||
-							update.sessionUpdate === "config_option_update" ||
-							update.sessionUpdate === "current_mode_update" ||
-							update.sessionUpdate === "notice" ||
-							update.sessionUpdate === "session_info_update" ||
-							update.sessionUpdate === "compaction_update" ||
-							update.sessionUpdate === "subagent_update" ||
-							update.sessionUpdate === "session_message" ||
-							update.sessionUpdate === "session_message_chunk" ||
-							update.sessionUpdate === "agent_message_chunk" ||
-							update.sessionUpdate === "agent_thought_chunk" ||
-							update.sessionUpdate === "user_message_chunk" ||
-							update.sessionUpdate === "tool_call" ||
-							update.sessionUpdate === "tool_call_update")
-					) {
-						const bytes = Buffer.byteLength(JSON.stringify(update));
-						if (
-							this.setupNotificationBytes + bytes <=
-							MAX_SETUP_NOTIFICATION_BYTES
-						) {
-							this.setupNotificationBytes += bytes;
-							this.setupUpdates.push({ sessionId, update });
-						}
-					}
+					this.bufferSetupUpdate(sessionId, update);
 					return;
 				}
 				if (this.childUpdate(sessionId, update)) return;
@@ -1012,14 +991,50 @@ class Bridge {
 		}
 	}
 
+	private bufferSetupUpdate(sessionId: string, update: SessionUpdate) {
+		let budget = this.setupBudget.history;
+		switch (update.sessionUpdate) {
+			case "available_commands_update":
+			case "config_option_update":
+			case "current_mode_update":
+			case "session_info_update":
+			case "usage_update":
+				budget = this.setupBudget.metadata;
+				break;
+			case "agent_message_chunk":
+			case "agent_thought_chunk":
+			case "user_message_chunk":
+			case "tool_call":
+			case "tool_call_update":
+				// Reopening a recorded root reads its transcript from disk. Its
+				// replay must not crowd out announcements or child transcripts.
+				if (sessionId === this.options.sessionId) return;
+				break;
+			case "notice":
+			case "compaction_update":
+			case "subagent_update":
+			case "session_message":
+			case "session_message_chunk":
+				break;
+			default:
+				return;
+		}
+		if (budget.count >= 200) return;
+		const bytes = Buffer.byteLength(JSON.stringify(update));
+		if (budget.bytes + bytes > MAX_SETUP_NOTIFICATION_BYTES) return;
+		budget.count++;
+		budget.bytes += bytes;
+		this.setupUpdates.push({ sessionId, update });
+	}
+
 	private applySetupUpdates(sessionId: string) {
-		this.setupNotificationBytes = 0;
 		for (const pending of this.setupUpdates.splice(0)) {
 			if (this.childUpdate(pending.sessionId, pending.update)) continue;
 			if (pending.sessionId === sessionId) {
 				if (
 					pending.update.sessionUpdate === "session_info_update" ||
-					pending.update.sessionUpdate === "compaction_update"
+					pending.update.sessionUpdate === "compaction_update" ||
+					pending.update.sessionUpdate === "usage_update"
 				)
 					this.sessionUpdate(pending.update);
 				else this.controls.update(pending.update);

@@ -994,6 +994,12 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				detail: expect.stringContaining("low, high"),
 			});
 			await selectPlan();
+			if (mode === "load") {
+				expect((await current())?.conversationTitle).toBe(
+					"Early conversation title",
+				);
+				await until(async () => (await usage()).context?.used === 511);
+			}
 			if (mode === "resume") {
 				await until(async () => (await current())?.model === "fixture-plan");
 				expect((await daemon.service.agentUsage(agentId, user)).model).toBe(

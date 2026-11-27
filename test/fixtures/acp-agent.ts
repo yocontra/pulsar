@@ -19,6 +19,8 @@ const emit = (method: string, params: unknown, id?: number) =>
 	process.stdout.write(
 		`${JSON.stringify({ jsonrpc: "2.0", method, params, id })}\n`,
 	);
+const emitUpdate = (sessionId: string, update: unknown) =>
+	emit("session/update", { sessionId, update });
 const update = (text: string) =>
 	emit("session/update", {
 		sessionId,
@@ -197,6 +199,18 @@ for await (const line of lines) {
 			mcpLines.on("line", (message) => {
 				const data = JSON.parse(message);
 				if (data.id === 1) {
+					if (method === "session/load") {
+						for (let i = 0; i < 201; i++)
+							emitUpdate(sessionId, {
+								sessionUpdate: "agent_message_chunk",
+								content: { type: "text", text: "Previously recorded" },
+							});
+						emitUpdate(sessionId, {
+							sessionUpdate: "usage_update",
+							used: 511,
+							size: 4096,
+						});
+					}
 					emit("session/update", {
 						sessionId,
 						update: {
@@ -337,8 +351,6 @@ for await (const line of lines) {
 			} else if (text.includes("fixture-hold")) {
 				update("Holding");
 			} else if (text.includes("fixture-child")) {
-				const emitUpdate = (sessionId: string, update: unknown) =>
-					emit("session/update", { sessionId, update });
 				emitUpdate(childSessionId, {
 					sessionUpdate: "agent_message_chunk",
 					content: { type: "text", text: "Unannounced text" },
