@@ -586,12 +586,14 @@ describe("locate", () => {
 					meta: {},
 					registered: true,
 				});
-			const own = register("ours");
+			let own = register("ours");
 			const missing = register("missing");
 			const row = (id: string) => service.app.agent({ kind: "terminal" }, id);
 			await service.registry.refreshActivity();
 			expect((await row(own.id)).activity).toBe("Requested a command");
 			expect((await row(missing.id)).activity).toBeNull();
+			own = register("ours");
+			expect((await row(own.id)).activity).toBe("Requested a command");
 			appendFileSync(
 				file,
 				line({

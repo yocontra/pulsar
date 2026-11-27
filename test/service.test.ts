@@ -60,6 +60,8 @@ describe("authorize matrix", () => {
 		peer: { kind: "peer", machineId: "m-2", node: "studio" },
 	};
 	const agentOnly = new Set<Op>([
+		"native.hook.collect",
+		"acp.children",
 		"claude.subagent.bind",
 		"claude.subagent.collect",
 		"claude.subagent.confirm",

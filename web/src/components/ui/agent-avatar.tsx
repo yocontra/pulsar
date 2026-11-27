@@ -9,7 +9,7 @@ import { STATUS_LABEL } from "../../lib/format.ts";
  * scannable by harness at a glance. Unknown harnesses get their initial.
  * Colors come from the `--ds-h-<harness>-*` tokens.
  */
-export type HarnessKey = (typeof HARNESSES)[number]["id"] | "other";
+export type HarnessKey = (typeof HARNESSES)[number]["id"] | "gemini" | "other";
 const harnessIds = new Map<string, HarnessKey>(
 	HARNESSES.map(({ id }) => [id, id]),
 );

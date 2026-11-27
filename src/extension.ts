@@ -23,7 +23,9 @@ import {
 	ompChildMessaging,
 } from "./extension-omp.ts";
 import { gitInfoAsync } from "./git.ts";
+import { ACP_IDENTITY_ENV } from "./harnesses/acp-identity.ts";
 import { extensionHostFor } from "./harnesses/ident.ts";
+import { pulsarRuntime } from "./lazy.ts";
 import { daemonLog } from "./log.ts";
 import { autoTags, envTags } from "./tags.ts";
 import type { DeliveredMessage, Registration } from "./types.ts";
@@ -166,6 +168,14 @@ export default function pulsarExtension(
 		[process.execPath, process.argv0, ...process.argv].join(" "),
 	);
 	const harness = host?.id ?? "unknown";
+	// Managed pi/OMP already receive Pulsar through their ACP connection.
+	// A CLI independently started inside one of their tools still registers.
+	if (
+		process.env[ACP_IDENTITY_ENV] &&
+		((harness === "omp" && process.argv[2] === "acp") ||
+			/(?:^|[\\/])pi-acp(?:[\\/]|$)/.test(process.argv[1] ?? ""))
+	)
+		return;
 	const child = harness === "omp" ? ompChildMessaging(pi) : null;
 	const isSub = isOmpChild;
 	let boundChild = false;
@@ -509,7 +519,7 @@ export default function pulsarExtension(
 		if (pi.registerMcpServer) {
 			try {
 				pi.registerMcpServer("pulsar", {
-					command: process.execPath,
+					command: pulsarRuntime(),
 					args: [fileURLToPath(new URL("./cli.js", import.meta.url)), "mcp"],
 					env: { PULSAR_HARNESS: harness },
 				});

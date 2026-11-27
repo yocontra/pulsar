@@ -10,9 +10,12 @@ import { lazyCrypto } from "../lazy.ts";
  * `codex queue` uses). Enough for one short request/response exchange.
  */
 
+export function codexHome(): string {
+	return process.env.CODEX_HOME || join(homedir(), ".codex");
+}
+
 export function codexControlSocket(): string {
-	const home = process.env.CODEX_HOME ?? join(homedir(), ".codex");
-	return join(home, "app-server-control", "app-server-control.sock");
+	return join(codexHome(), "app-server-control", "app-server-control.sock");
 }
 
 /** Whether the app-server's control socket exists (checked without blocking). */

@@ -9,11 +9,21 @@
  * false`, and nothing is typed into it.
  */
 
-export type ScreenHarness = "claude" | "codex" | "opencode";
+export type ScreenHarness =
+	| "claude"
+	| "codex"
+	| "opencode"
+	| "omp"
+	| "pi"
+	| "antigravity";
 
 export interface Screen {
 	/** The harness's normal prompt screen: an input box and its footer. */
 	recognized: boolean;
+	/** The host offers Escape to cancel the active model turn. */
+	busy?: true;
+	/** Exact visible native draft, where the reader can verify pasted input. */
+	draft?: string;
 	/** The mode the footer shows (the harness's own mode id); null when it shows none we know. */
 	mode: string | null;
 	/** `empty`: nothing typed (a dim placeholder counts as empty); `draft`: someone's unsent text. */
@@ -157,8 +167,117 @@ export function readOpencode(ansi: string): Screen {
 	return UNRECOGNIZED;
 }
 
+/** The native Antigravity composer or its slash completions, never a modal. */
+function readAntigravity(ansi: string): Screen {
+	const { plain, raw } = lines(ansi);
+	while (plain.length && !plain.at(-1)!.trim()) plain.pop();
+	const footer = plain.at(-1) ?? "";
+	const match =
+		/^(?:\? for shortcuts|esc to cancel|\s)\s{2,}(?:(accept-edits|plan) · )?[^·]+ · [^·]+$/.exec(
+			footer,
+		);
+	if (!match) return UNRECOGNIZED;
+	const mode = match[1] ?? "default";
+	let bottom = plain.length - 2;
+	while (bottom > 0 && !RULE.test(plain[bottom]!)) bottom--;
+	let top = bottom - 1;
+	while (top > 0 && !RULE.test(plain[top]!)) top--;
+	const value = plain[top + 1]?.match(/^>(?: (.*))?$/);
+	const continuation = plain.slice(top + 2, bottom);
+	if (
+		!value ||
+		!RULE.test(plain[top] ?? "") ||
+		continuation.some((l) => !l.startsWith("  ") && l.trim())
+	)
+		return UNRECOGNIZED;
+	const text = [
+		(value[1] ?? "").trimEnd(),
+		...continuation.map((l) => l.slice(2).trimEnd()),
+	].join("\n");
+	const extra = plain.slice(bottom + 1, -1).filter((l) => l.trim());
+	const popup = extra.length > 0;
+	if (
+		popup &&
+		!(
+			text.startsWith("/") &&
+			/^> \/[\w-]+\s/.test(extra[0]!) &&
+			extra.at(-1)?.includes("enter Select · tab Complete")
+		)
+	)
+		return UNRECOGNIZED;
+	const busy = !popup && footer.startsWith("esc to cancel");
+	if (busy && !/^[⠀-⣿]\s+Generating\.{3}\s*$/.test(plain[top - 1] ?? ""))
+		return UNRECOGNIZED;
+	// agy's mode hint is gray. An operator's draft with the same text is not.
+	const hint =
+		/^\s*(?:Plan mode: research & plan only|Accept-edits mode: file edits auto-approved) \(shift\+tab to cycle\)$/.test(
+			text,
+		) && raw[top + 1]?.includes(`\x1b[90m${text}`);
+	return {
+		recognized: true,
+		mode,
+		input: !text || hint ? "empty" : "draft",
+		...(text && !hint ? { draft: text } : {}),
+		...(busy ? { busy: true as const } : {}),
+	};
+}
+
+/** OMP's status-band composer. Menus and alternative layouts are left alone. */
+function readOmp(ansi: string): Screen {
+	const { plain } = lines(ansi);
+	for (let i = plain.length - 1; i > 0; i--) {
+		const prompt = /^╰─ (.*)$/.exec(plain[i]!);
+		if (!prompt || !/^\s*π [>›].*▶─/.test(plain[i - 1]!)) continue;
+		const value = prompt[1]!;
+		const empty =
+			!value.trim() || /^\s{3,}⇧⇥ to change thinking effort\s*$/.test(value);
+		const tail = plain.slice(i + 1).filter((line) => line.trim());
+		if (
+			tail.length &&
+			(empty || !value.startsWith("/") || !/^❯ /.test(tail[0]!))
+		)
+			return UNRECOGNIZED;
+		return { recognized: true, mode: null, input: empty ? "empty" : "draft" };
+	}
+	return UNRECOGNIZED;
+}
+
+/** pi's composer is the ruled box above its working directory and context footer. */
+function readPi(ansi: string): Screen {
+	const { plain } = lines(ansi);
+	while (plain.length && !plain.at(-1)!.trim()) plain.pop();
+	if (
+		!/^\s*[\d.]+%\/[\d.]+[km]?\b/i.test(plain.at(-1) ?? "") ||
+		!/^\s*(?:[~/]|[A-Za-z]:[\\/])/.test(plain.at(-2) ?? "")
+	)
+		return UNRECOGNIZED;
+	let bottom = plain.length - 3;
+	// Slash completion suggestions appear between the box and the directory.
+	if (!RULE.test(plain[bottom] ?? "")) {
+		while (bottom >= 0 && !RULE.test(plain[bottom]!)) bottom--;
+		if (!plain.slice(bottom + 1, -2).some((line) => /^→ /.test(line)))
+			return UNRECOGNIZED;
+	}
+	let top = bottom - 1;
+	while (top >= 0 && !RULE.test(plain[top]!)) top--;
+	if (top < 0 || bottom - top < 2) return UNRECOGNIZED;
+	return {
+		recognized: true,
+		mode: null,
+		input: plain.slice(top + 1, bottom).some((line) => line.trim())
+			? "draft"
+			: "empty",
+	};
+}
+
 export function readScreen(harness: ScreenHarness, ansi: string): Screen {
 	switch (harness) {
+		case "antigravity":
+			return readAntigravity(ansi);
+		case "omp":
+			return readOmp(ansi);
+		case "pi":
+			return readPi(ansi);
 		case "claude":
 			return readClaude(ansi);
 		case "codex":

@@ -31,13 +31,14 @@ export interface ControlApi {
 		description?: string;
 		source?: string;
 		sourceInfo?: { path?: string };
+		path?: string;
 	}>;
 }
 
 /**
  * The extension's answer to a `control` request from the daemon
  * (src/service/controls.ts): its commands, omp's plan mode, or a command
- * line to run (pi only, while idle).
+ * line to run while idle. OMP exposes installed skills by file path.
  */
 export async function answerControl(
 	req: { kind?: string; mode?: string; line?: string },
@@ -56,7 +57,7 @@ export async function answerControl(
 				name: c.name,
 				description: c.description,
 				source: c.source,
-				path: c.sourceInfo?.path,
+				path: c.sourceInfo?.path ?? c.path,
 			})),
 		};
 	}
@@ -105,18 +106,66 @@ export async function answerControl(
 		return { result: "ok", mode: planOn() ? "plan" : "default" };
 	}
 	if (req.kind === "command" && typeof req.line === "string") {
-		if (harness !== "pi" || !pi.sendUserMessage)
-			return {
-				result: "unsupported",
-				detail: `${harness} runs commands only when typed in its terminal`,
-			};
-		// With `deliverAs` (a run in progress) pi takes it as plain text.
+		if (!pi.sendUserMessage || (harness !== "pi" && harness !== "omp"))
+			return { result: "unsupported", detail: "This host cannot submit input" };
 		if (ctx?.isIdle && !ctx.isIdle())
 			return {
 				result: "busy",
-				detail: "pi runs a turn; send the command when it is idle",
+				detail: "Send the command when the session is idle",
 			};
-		pi.sendUserMessage(req.line, { expandPromptTemplates: true });
+		let submission: unknown;
+		if (harness === "omp") {
+			const [, name, args] = /^\/(\S+)(?:\s+(.+))?$/.exec(req.line) ?? [];
+			const entry = pi
+				.getCommands?.()
+				.find((c) => c.name === name && c.source === "skill");
+			if (!entry?.path)
+				return {
+					result: "unsupported",
+					detail: "This command needs the OMP terminal",
+				};
+			submission = pi.sendUserMessage(
+				`Read the installed skill at ${JSON.stringify(entry.path)} and follow its instructions.${args ? `\n\nUser request: ${args}` : ""}`,
+			);
+		} else {
+			submission = pi.sendUserMessage(req.line, {
+				expandPromptTemplates: true,
+			});
+		}
+		// Some host APIs resolve after the whole model turn. Report receipt once
+		// the session becomes busy, without timing out a long skill invocation.
+		if (
+			submission &&
+			typeof (submission as PromiseLike<unknown>).then === "function" &&
+			ctx?.isIdle
+		) {
+			let timer: ReturnType<typeof setInterval> | undefined;
+			try {
+				await Promise.race([
+					Promise.resolve(submission),
+					new Promise<void>((resolve, reject) => {
+						const start = Date.now();
+						timer = setInterval(() => {
+							try {
+								if (!ctx.isIdle?.()) resolve();
+								else if (Date.now() - start >= 3500)
+									reject(
+										new Error(
+											"The host did not confirm that it started the command.",
+										),
+									);
+							} catch (error) {
+								reject(error);
+							}
+						}, 50);
+					}),
+				]);
+			} finally {
+				clearInterval(timer);
+			}
+		} else {
+			await submission;
+		}
 		return { result: "ok" };
 	}
 	return { result: "unsupported", detail: "unknown request" };

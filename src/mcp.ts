@@ -5,7 +5,6 @@ import { messageText } from "./format.ts";
 import { idleCompactor } from "./gc.ts";
 import { gitInfoAsync } from "./git.ts";
 import { ACP_IDENTITY_ENV, acpRegistration } from "./harnesses/acp-identity.ts";
-import { nativeWakeCommand } from "./harnesses/catalog.ts";
 import { codexToolThreadId } from "./harnesses/codex-ident.ts";
 import { IDENTS, identFor } from "./harnesses/ident.ts";
 import { detectRegistration } from "./identity.ts";
@@ -25,6 +24,23 @@ import { VERSION } from "./version.ts";
 
 /** This MCP process, for sessions with no pid (see `generationOf`). */
 const PROCESS_GEN = `${process.pid}.${Date.now().toString(36)}`;
+
+/** These providers multiplex tools, so a missing or foreign ID cannot borrow the ACP root. */
+export function assertManagedAcpToolSession(
+	registration: Pick<Registration, "harness" | "sessionId">,
+	meta: ToolMeta,
+) {
+	const context = identFor(registration.harness)?.toolSessions;
+	if (registration.harness !== "codex" && !context) return;
+	const nativeSession =
+		registration.harness === "codex"
+			? codexToolThreadId(meta)
+			: context?.sessionId(meta);
+	if (!nativeSession || nativeSession !== registration.sessionId)
+		throw new Error(
+			"The MCP host did not verify that this call belongs to the managed session.",
+		);
+}
 
 /** Debug lines, appended in order without blocking (PULSAR_DEBUG only). */
 let debugTail: Promise<void> = Promise.resolve();
@@ -98,6 +114,13 @@ export class Session {
 				registration: this.registration,
 			});
 			this.me = r.agent;
+			const reg = this.registration;
+			if (reg.meta?.acp !== "1")
+				void identFor(reg.harness)
+					?.onSessionReady?.(reg)
+					.catch((err) =>
+						debug(`native delivery setup failed: ${(err as Error).message}`),
+					);
 		} catch (e) {
 			const reg = this.registration;
 			const late =
@@ -238,13 +261,9 @@ export async function runMcp() {
 	const active = idleCompactor(IDLE_GC_MS);
 	const managed = !!process.env[ACP_IDENTITY_ENV];
 	const base = managed ? null : await detectRegistration("mcp");
-	const wakeCommand = nativeWakeCommand(base?.harness);
-	const instructions = wakeCommand
-		? `${PULSAR_TOOL_INSTRUCTIONS}\n- If set_identity reports reach: pull, run ${wakeCommand} once in your command tool so messages can wake this conversation.`
-		: PULSAR_TOOL_INSTRUCTIONS;
 	const server = new McpStdioServer(
 		{ name: "pulsar", version: VERSION },
-		instructions,
+		PULSAR_TOOL_INSTRUCTIONS,
 	);
 	server.cliArgs = identFor(base?.harness ?? "unknown")?.cliArgs === true;
 
@@ -332,13 +351,7 @@ export async function runMcp() {
 			const registration = await acpRegistration("mcp");
 			if (!registration)
 				throw new Error("The managed ACP session is unavailable");
-			const nativeSession = identFor(
-				registration.harness,
-			)?.toolSessions?.sessionId(meta);
-			if (nativeSession && nativeSession !== registration.sessionId)
-				throw new Error(
-					"This ACP tool connection is bound to a different session.",
-				);
+			assertManagedAcpToolSession(registration, meta);
 			baseSession ??= new Session(registration, onMessage);
 			return baseSession;
 		}

@@ -2,7 +2,29 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { Daemon } from "../src/daemon.ts";
 import pulsarExtension, { backgroundWork, endKind } from "../src/extension.ts";
+import { pulsarRuntime } from "../src/lazy.ts";
 import { operator, startDaemon, until } from "./helpers.ts";
+
+test("an embedded managed OMP provider leaves the ACP connection in charge", () => {
+	const argv = process.argv;
+	const old = process.env.PULSAR_ACP_IDENTITY;
+	try {
+		process.argv = ["bun", "/$bunfs/root/omp-darwin-arm64", "acp"];
+		process.env.PULSAR_ACP_IDENTITY = "/private/identity";
+		pulsarExtension({
+			sendMessage: () => {},
+			on: () => {
+				throw new Error("registered duplicate native extension");
+			},
+		});
+		expect(pulsarRuntime("/some/omp", process.argv[1])).toBe("node");
+		expect(pulsarRuntime("/some/bun", "/some/cli.ts")).toBe("/some/bun");
+	} finally {
+		process.argv = argv;
+		if (old === undefined) delete process.env.PULSAR_ACP_IDENTITY;
+		else process.env.PULSAR_ACP_IDENTITY = old;
+	}
+});
 
 type Job = { type: string };
 // biome-ignore lint/suspicious/noExplicitAny: a fake host context

@@ -892,7 +892,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "You are gemini@work (<self>)\nharness: gemini\nmodel: -\nactivity: -\nbranch: -\nproject: work\ntags: harness:gemini, project:work, machine:<m>\ninbound: accept\nreach: pull\nunread: 0"
+						"text": "You are copilot@work (<self>)\nharness: copilot\nmodel: -\nactivity: -\nbranch: -\nproject: work\ntags: harness:copilot, project:work, machine:<m>\ninbound: accept\nreach: pull\nunread: 0"
 					}
 				]
 			},
@@ -906,7 +906,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "You are gemini@work (<self>)\nharness: gemini\nmodel: -\nactivity: -\nbranch: -\nproject: work\ntags: harness:gemini, project:work, machine:<m>\ninbound: accept\nreach: pull\nunread: 0"
+						"text": "You are copilot@work (<self>)\nharness: copilot\nmodel: -\nactivity: -\nbranch: -\nproject: work\ntags: harness:copilot, project:work, machine:<m>\ninbound: accept\nreach: pull\nunread: 0"
 					}
 				]
 			},
@@ -920,7 +920,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "You are gemini@work (<self>)\nharness: gemini\nmodel: -\nactivity: -\nbranch: -\nproject: work\ntags: harness:gemini, project:work, machine:<m>\ninbound: accept\nreach: pull\nunread: 0"
+						"text": "You are copilot@work (<self>)\nharness: copilot\nmodel: -\nactivity: -\nbranch: -\nproject: work\ntags: harness:copilot, project:work, machine:<m>\ninbound: accept\nreach: pull\nunread: 0"
 					}
 				]
 			},
@@ -934,7 +934,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "You are gemini@work (<self>)\nharness: gemini\nmodel: -\nactivity: -\nbranch: -\nproject: work\ntags: harness:gemini, project:work, machine:<m>\ninbound: accept\nreach: pull\nunread: 0"
+						"text": "You are copilot@work (<self>)\nharness: copilot\nmodel: -\nactivity: -\nbranch: -\nproject: work\ntags: harness:copilot, project:work, machine:<m>\ninbound: accept\nreach: pull\nunread: 0"
 					}
 				]
 			},
@@ -948,7 +948,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "2 agents (*):\n- gemini@work · [gemini] · project=work · unknown · pull-only\n  id: <self>\n- pi@work · [pi] · project=work · branch=main · unknown · push\n  id: pi:conf-peer\nYou are gemini@work (<self>)."
+						"text": "2 agents (*):\n- copilot@work · [copilot] · project=work · unknown · pull-only\n  id: <self>\n- pi@work · [pi] · project=work · branch=main · unknown · push\n  id: pi:conf-peer\nYou are copilot@work (<self>)."
 					}
 				]
 			},
@@ -962,7 +962,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "1 agent (harness=pi):\n- pi@work · [pi] · project=work · branch=main · unknown · push\n  id: pi:conf-peer\nYou are gemini@work (<self>)."
+						"text": "1 agent (harness=pi):\n- pi@work · [pi] · project=work · branch=main · unknown · push\n  id: pi:conf-peer\nYou are copilot@work (<self>)."
 					}
 				]
 			},
@@ -976,7 +976,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "- gemini@work (<self>) <m>/work [unknown]\n    unknown\n- pi@work (pi:conf-peer) <m>/work [unknown]\n    unknown · branch main"
+						"text": "- copilot@work (<self>) <m>/work [unknown]\n    unknown\n- pi@work (pi:conf-peer) <m>/work [unknown]\n    unknown · branch main"
 					}
 				]
 			},
@@ -1063,7 +1063,7 @@
 				"content": [
 					{
 						"type": "text",
-						"text": "You are gemini@work · doing: testing · tags: harness:gemini, project:work, machine:<m>, role:test · inbound: accept"
+						"text": "You are copilot@work · doing: testing · tags: harness:copilot, project:work, machine:<m>, role:test · inbound: accept"
 					}
 				]
 			},

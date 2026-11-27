@@ -281,11 +281,14 @@ export const useApproval = (requestId: string | null) =>
  * The approval card for an agent: its pending prompt, or for a minute after
  * it ended, the outcome.
  */
-export function useApprovalItem(agentId: string): AttentionItem | undefined {
+export function useApprovalItem(
+	agentId: string,
+	knownAgent?: (id: string) => AgentRow | null,
+): AttentionItem | undefined {
 	const { items } = useNeedsYou();
 	const seen = useApprovals();
 	const now = useNow();
-	return approvalItemFrom(agentId, items, seen, now);
+	return approvalItemFrom(agentId, items, seen, now, knownAgent);
 }
 
 export function approvalItemFrom(

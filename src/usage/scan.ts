@@ -10,6 +10,7 @@ import { usageHarnesses } from "../harnesses/catalog.ts";
 import type { LimitState } from "../http/wire.ts";
 import { lazyCrypto } from "../lazy.ts";
 import type { Store } from "../store.ts";
+import { headAsync } from "../util.ts";
 import { replaceAntigravityUsage } from "./antigravity.ts";
 import {
 	askOpencodeUsage,
@@ -192,7 +193,17 @@ export class UsageScanner {
 			if (!root) continue;
 			const source = usageSources[h];
 			if (source.providers) this.providers[h] = await source.providers(root);
-			found.push(...(await this.find(h, root, since)));
+			if (h === "omp" && root === roots.pi) continue;
+			const files = await this.find(h, root, since);
+			if (h === "pi" && root === roots.omp) {
+				// Both CLIs accept PI_CODING_AGENT_DIR. OMP prepends a title record to its session.
+				for (const file of files) {
+					const prefix = await headAsync(file.path, 512).catch(() => "");
+					if (/^\s*\{\s*"type"\s*:\s*"title"/.test(prefix))
+						file.harness = "omp";
+				}
+			}
+			found.push(...files);
 		}
 		this.retagLocal();
 		// Newest first: today's numbers show before the backlog is read.

@@ -824,6 +824,19 @@
 .ds-tool-q {
 	color: var(--ds-syn-string);
 }
+.ds-file-path {
+	display: inline-flex;
+	max-width: 100%;
+	vertical-align: bottom;
+}
+.ds-file-path > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ds-file-path .ds-path-base {
+	flex: 0 0 auto;
+	max-width: 100%;
+}
 .ds-path-dir {
 	color: var(--ds-text-3);
 }

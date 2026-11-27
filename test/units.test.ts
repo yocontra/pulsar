@@ -531,7 +531,7 @@ describe("harness detection", () => {
 		],
 		["pi --model x", "pi"],
 		["/Applications/Cursor.app/Contents/MacOS/Cursor", "cursor"],
-		["node /usr/lib/node_modules/@google/gemini-cli/dist/index.js", "gemini"],
+		["node /usr/lib/node_modules/@google/gemini-cli/dist/index.js", null],
 		["/Applications/Visual Studio Code.app/Contents/MacOS/Electron", "vscode"],
 		["node server.js", null],
 		["vim pi.txt", null],

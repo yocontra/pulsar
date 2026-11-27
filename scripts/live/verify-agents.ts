@@ -22,7 +22,7 @@
  * - status: Claude's own session record disagrees with the agent's status
  *
  * `--scanned-only` checks only Claude and OpenCode, the harnesses the daemon
- * finds by scanning; omp, pi, Codex, Cursor and Gemini appear only once they
+ * finds by scanning; omp, pi, Codex, Cursor and Copilot appear only once they
  * connect (for a scratch daemon of a new build that no agent connects to).
  *
  * Exit code 1 when there is a mismatch.
@@ -56,7 +56,7 @@ type Harness =
 	| "opencode"
 	| "opencode-serve"
 	| "cursor"
-	| "gemini";
+	| "copilot";
 
 interface Proc {
 	pid: number;
@@ -139,7 +139,8 @@ function classify(p: Proc): Harness | null {
 		return "omp";
 	if (exe === "pi" || /\/bin\/pi$/.test(argv[1] ?? "")) return "pi";
 	if (exe === "cursor-agent") return "cursor";
-	if (exe === "gemini" || /\/bin\/gemini$/.test(argv[1] ?? "")) return "gemini";
+	if (exe === "copilot" || /\/bin\/copilot$/.test(argv[1] ?? ""))
+		return "copilot";
 	return null;
 }
 
@@ -423,7 +424,7 @@ async function main() {
 			row.logAt = mtime(await piSessionFile(`.${h}`, row.cwd));
 			rows.push(row);
 		}
-	for (const h of ["codex", "codex-app-server", "cursor", "gemini"] as const)
+	for (const h of ["codex", "codex-app-server", "cursor", "copilot"] as const)
 		for (const p of byHarness.get(h) ?? []) rows.push(simpleRow(h, p));
 	rows.push(...(await opencodeRows(procs, byHarness.get("opencode") ?? [])));
 

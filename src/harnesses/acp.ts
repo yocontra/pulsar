@@ -35,9 +35,11 @@ import type { TranscriptEvent } from "../transcripts/types.ts";
 import { PROTOCOL_VERSION, type Registration } from "../types.ts";
 import { AcpUsageWriter, loadAcpUsage } from "../usage/acp.ts";
 import { VERSION } from "../version.ts";
+import { AcpChildren, readAcpChildren } from "./acp-children.ts";
 import { AcpCommandCatalog } from "./acp-commands.ts";
 import { AcpSessionControls } from "./acp-controls.ts";
 import { ACP_IDENTITY_ENV } from "./acp-identity.ts";
+import { permissionArguments } from "./acp-permission.ts";
 import { antigravityQuestion, elicitationQuestions } from "./acp-questions.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
 import { acpTranscriptPath } from "./acp-transcript.ts";
@@ -59,6 +61,7 @@ const MAX_QUEUE = 64;
 const MAX_RECEIPTS = MAX_QUEUE * 4;
 const MAX_PROMPT_BYTES = 256 * 1024;
 const MAX_OUTPUT_BACKLOG = 256 * 1024;
+const MAX_SETUP_NOTIFICATION_BYTES = 1024 * 1024;
 const MAX_PERMISSION_REQUESTS = 16;
 const MAX_TEXT = 64 * 1024;
 const TRANSCRIPT_UPDATE_MS = 250;
@@ -97,6 +100,7 @@ function supportsHostOwnedSteering(initialized: InitializeResponse): boolean {
 
 type Turn = {
 	prompt?: Prompt;
+	childSessionId?: string;
 	cancelled: boolean;
 	delivered: boolean;
 	printed: boolean;
@@ -120,6 +124,7 @@ class Bridge {
 		sessionId: string;
 		update: SessionUpdate;
 	}> = [];
+	private setupNotificationBytes = 0;
 	private switchingMode = false;
 	private usageObserved = false;
 	private usageWriter?: AcpUsageWriter;
@@ -138,6 +143,8 @@ class Bridge {
 	private sessionId?: string;
 	private transcript?: number;
 	private turn?: Turn;
+	private children?: AcpChildren;
+	private readonly childInteractions = new Map<string, Turn>();
 	private detachedTimeout?: ReturnType<typeof setTimeout>;
 	private detachedSettled = false;
 	private draining?: Promise<void>;
@@ -159,25 +166,42 @@ class Bridge {
 			home: options.env?.HOME,
 		});
 		this.app = new ClientApp()
-			.onRequest("session/request_permission", ({ params: request }) =>
-				this.permission(request),
+			.onRequest("session/request_permission", ({ params: request, signal }) =>
+				this.permission(request, signal),
 			)
-			.onRequest("elicitation/create", ({ params: request }) =>
-				this.elicitation(request),
+			.onRequest("elicitation/create", ({ params: request, signal }) =>
+				this.elicitation(request, signal),
 			)
 			.onNotification("session/update", ({ params: { sessionId, update } }) => {
 				if (this.stopping) return;
 				if (!this.ready) {
 					// Agents may publish their catalog before the setup response.
 					if (
-						this.setupUpdates.length < 24 &&
+						this.setupUpdates.length < 200 &&
 						(update.sessionUpdate === "available_commands_update" ||
 							update.sessionUpdate === "config_option_update" ||
-							update.sessionUpdate === "current_mode_update")
-					)
-						this.setupUpdates.push({ sessionId, update });
+							update.sessionUpdate === "current_mode_update" ||
+							update.sessionUpdate === "subagent_update" ||
+							update.sessionUpdate === "session_message" ||
+							update.sessionUpdate === "session_message_chunk" ||
+							update.sessionUpdate === "agent_message_chunk" ||
+							update.sessionUpdate === "agent_thought_chunk" ||
+							update.sessionUpdate === "user_message_chunk" ||
+							update.sessionUpdate === "tool_call" ||
+							update.sessionUpdate === "tool_call_update")
+					) {
+						const bytes = Buffer.byteLength(JSON.stringify(update));
+						if (
+							this.setupNotificationBytes + bytes <=
+							MAX_SETUP_NOTIFICATION_BYTES
+						) {
+							this.setupNotificationBytes += bytes;
+							this.setupUpdates.push({ sessionId, update });
+						}
+					}
 					return;
 				}
+				if (this.childUpdate(sessionId, update)) return;
 				if (sessionId === this.sessionId) this.sessionUpdate(update);
 			});
 		this.daemon.on("control", (data) => {
@@ -218,8 +242,11 @@ class Bridge {
 			});
 		});
 		this.daemon.on("interrupt", (data) => {
-			const { requestId } = data as { requestId: string };
-			void this.cancel().then(
+			const { requestId, childSessionId } = data as {
+				requestId: string;
+				childSessionId?: string;
+			};
+			void this.cancel(childSessionId).then(
 				(result) => this.notify("interrupt_result", { requestId, result }),
 				(error) =>
 					this.notify("interrupt_result", {
@@ -246,7 +273,7 @@ class Bridge {
 			"initialize",
 			{
 				protocolVersion: ACP_PROTOCOL_VERSION,
-				clientCapabilities: { elicitation: { form: {} } },
+				clientCapabilities: { elicitation: { form: {} }, subagents: {} },
 				clientInfo: { name: "pulsar", version: VERSION },
 			},
 			startup,
@@ -307,11 +334,20 @@ class Bridge {
 			throw new Error("ACP returned an invalid session ID");
 
 		this.controls.install(state);
-		this.applySetupUpdates(this.sessionId);
 		const path = acpTranscriptPath(this.options.harness, this.sessionId);
 		await ensureDir(dirname(path));
 		stopSignal.throwIfAborted();
 		this.transcript = openSync(path, "a", 0o600);
+		this.children = new AcpChildren(
+			this.options.harness,
+			this.sessionId,
+			() => {
+				if (!this.ready || this.stopping) return;
+				this.refreshCapabilities();
+				this.notify("acp.children", {});
+			},
+			await readAcpChildren(this.options.harness, this.sessionId),
+		);
 		const usageSession = {
 			harness: this.options.harness,
 			sessionId: this.sessionId,
@@ -351,6 +387,7 @@ class Bridge {
 		});
 		await rename(pendingPath, this.identityPath);
 		this.ready = true;
+		this.children.persist();
 		this.applySetupUpdates(this.sessionId);
 		this.refreshCapabilities();
 		void this.commands.refresh().then(() => this.refreshCapabilities());
@@ -619,7 +656,18 @@ class Bridge {
 		for (const cancel of turn.permissions.values()) cancel();
 	}
 
-	async cancel(): Promise<"not-running" | "interrupted"> {
+	async cancel(
+		childSessionId?: string,
+	): Promise<"not-running" | "interrupted"> {
+		if (childSessionId !== undefined) {
+			if (!this.connection || !this.children?.canCancel(childSessionId))
+				return "not-running";
+			this.cancelChildInteractions(childSessionId);
+			await this.connection.agent.notify("session/cancel", {
+				sessionId: childSessionId,
+			});
+			return "interrupted";
+		}
 		const turn = this.turn;
 		if (!turn || !this.connection || !this.sessionId) return "not-running";
 		turn.cancelled = true;
@@ -633,10 +681,11 @@ class Bridge {
 
 	private async permission(
 		request: RequestPermissionRequest,
+		signal: AbortSignal,
 	): Promise<RequestPermissionResponse> {
 		const cancelled = { outcome: { outcome: "cancelled" } } as const;
 		const ids = new Set(request.options.map((option) => option.optionId));
-		if (ids.size !== request.options.length) return cancelled;
+		if (signal.aborted || ids.size !== request.options.length) return cancelled;
 		const allow = request.options.find(
 			(option) => option.kind === "allow_once",
 		);
@@ -655,7 +704,7 @@ class Bridge {
 		) {
 			const question = antigravityQuestion(request);
 			if (!question) return cancelled;
-			const answer = await this.interaction(turn, {
+			const answer = await this.interaction(turn, signal, {
 				kind: "question",
 				tool: "Antigravity question",
 				prompt: question.prompt,
@@ -666,20 +715,21 @@ class Bridge {
 					: undefined;
 			return selected ? select(selected) : cancelled;
 		}
-		if (!allow || request.toolCall.rawInput == null)
-			return deny ? select(deny.optionId) : cancelled;
-		const result = await this.interaction(turn, {
+		const args = permissionArguments(request.toolCall);
+		if (!allow || args == null) return deny ? select(deny.optionId) : cancelled;
+		const result = await this.interaction(turn, signal, {
 			kind: "permission",
 			tool: request.toolCall.title ?? request.toolCall.kind ?? "ACP tool",
-			input: { arguments: request.toolCall.rawInput, option: allow.name },
+			input: { arguments: args, option: allow.name },
 		});
-		if (turn.cancelled) return cancelled;
+		if (signal.aborted || turn.cancelled) return cancelled;
 		if (result?.decision === "allow-once") return select(allow.optionId);
 		return deny ? select(deny.optionId) : cancelled;
 	}
 
 	private async elicitation(
 		request: CreateElicitationRequest,
+		signal: AbortSignal,
 	): Promise<CreateElicitationResponse> {
 		if (!("sessionId" in request)) return { action: "cancel" };
 		const form = elicitationQuestions(request);
@@ -687,7 +737,7 @@ class Bridge {
 		const turn = this.turnForInteraction(request.sessionId);
 		if (!turn) return { action: "cancel" };
 		this.confirmDelivery(turn);
-		const answer = await this.interaction(turn, {
+		const answer = await this.interaction(turn, signal, {
 			kind: "question",
 			tool: "ACP question",
 			prompt: form.prompt,
@@ -702,22 +752,35 @@ class Bridge {
 
 	private async interaction(
 		turn: Turn,
+		signal: AbortSignal,
 		request: Pick<InteractionRequest, "kind" | "tool"> &
 			Partial<Pick<InteractionRequest, "input" | "prompt">>,
 	): Promise<InteractionResult | null> {
 		if (
+			signal.aborted ||
 			!this.daemon.connected ||
-			turn.permissions.size >= MAX_PERMISSION_REQUESTS
+			turn.permissions.size >= MAX_PERMISSION_REQUESTS ||
+			(turn.childSessionId &&
+				this.childPermissionCount() >= MAX_PERMISSION_REQUESTS)
 		)
 			return null;
 		const ref = randomUUID();
+		const scope = turn.childSessionId
+			? { childSessionId: turn.childSessionId }
+			: {};
+		if (turn.childSessionId)
+			this.childInteractions.set(turn.childSessionId, turn);
 		const stopped = new Promise<null>((done) => {
 			turn.permissions.set(ref, () => {
-				this.notify("interaction.local", { ref });
+				this.notify("interaction.local", { ref, ...scope });
 				done(null);
 			});
 		});
+		const cancel = turn.permissions.get(ref)!;
+		signal.addEventListener("abort", cancel, { once: true });
 		try {
+			if (turn.childSessionId) await this.children?.flush();
+			if (signal.aborted || turn.cancelled || this.stopping) return null;
 			const result = await Promise.race([
 				stopped,
 				this.daemon
@@ -725,6 +788,7 @@ class Bridge {
 						"interaction.ask",
 						{
 							ref,
+							...scope,
 							...request,
 							timeoutMs: PERMISSION_TIMEOUT_MS,
 						},
@@ -734,8 +798,15 @@ class Bridge {
 			]);
 			return turn.cancelled ? null : (result?.result ?? null);
 		} finally {
+			signal.removeEventListener("abort", cancel);
 			turn.permissions.delete(ref);
-			if (!turn.prompt && this.detachedSettled && !turn.permissions.size)
+			if (turn.childSessionId) {
+				if (
+					!turn.permissions.size &&
+					this.childInteractions.get(turn.childSessionId) === turn
+				)
+					this.childInteractions.delete(turn.childSessionId);
+			} else if (!turn.prompt && this.detachedSettled && !turn.permissions.size)
 				setImmediate(() => {
 					if (this.detachedSettled && !turn.permissions.size)
 						this.finishDetached(turn);
@@ -744,8 +815,32 @@ class Bridge {
 	}
 
 	private applySetupUpdates(sessionId: string) {
+		this.setupNotificationBytes = 0;
 		for (const pending of this.setupUpdates.splice(0)) {
+			if (this.childUpdate(pending.sessionId, pending.update)) continue;
 			if (pending.sessionId === sessionId) this.controls.update(pending.update);
+		}
+	}
+
+	private childUpdate(sessionId: string, update: SessionUpdate): boolean {
+		try {
+			if (
+				update.sessionUpdate === "subagent_update" &&
+				update.state?.state === "idle" &&
+				this.children?.ownedBy(update.sessionId, sessionId)
+			)
+				this.cancelChildInteractions(update.sessionId);
+			return (
+				this.children?.update(sessionId, update, (event) =>
+					this.record(event),
+				) ?? false
+			);
+		} catch (error) {
+			console.error("ACP child update could not be recorded", error);
+			return (
+				sessionId !== this.sessionId ||
+				update.sessionUpdate === "subagent_update"
+			);
 		}
 	}
 
@@ -754,6 +849,7 @@ class Bridge {
 		return {
 			acpModes: this.controls.selection?.modes.length ? "1" : "0",
 			acpCommands: commands.size ? "1" : "0",
+			acpSubagents: this.children?.observed ? "1" : "0",
 			acpSkills: [...commands.values()].some(({ entry }) => entry.skill)
 				? "1"
 				: "0",
@@ -809,6 +905,20 @@ class Bridge {
 	}
 
 	private turnForInteraction(sessionId: unknown): Turn | undefined {
+		if (!this.ready || this.stopping) return;
+		if (typeof sessionId === "string" && this.children?.announced(sessionId)) {
+			let turn = this.childInteractions.get(sessionId);
+			if (!turn && this.childInteractions.size < MAX_PERMISSION_REQUESTS) {
+				turn = {
+					childSessionId: sessionId,
+					cancelled: false,
+					delivered: true,
+					printed: false,
+					permissions: new Map(),
+				};
+			}
+			return turn?.cancelled ? undefined : turn;
+		}
 		if (
 			!this.ready ||
 			this.stopping ||
@@ -820,6 +930,20 @@ class Bridge {
 			this.turn ??
 			(this.options.harness === "antigravity" ? this.detachedTurn() : undefined)
 		);
+	}
+
+	private childPermissionCount() {
+		return [...this.childInteractions.values()].reduce(
+			(count, turn) => count + turn.permissions.size,
+			0,
+		);
+	}
+
+	private cancelChildInteractions(sessionId: string) {
+		const turn = this.childInteractions.get(sessionId);
+		if (!turn) return;
+		turn.cancelled = true;
+		this.finishPermissions(turn);
 	}
 
 	private detachedTurn(): Turn {
@@ -1122,6 +1246,8 @@ class Bridge {
 
 	async close() {
 		this.stopping = true;
+		for (const id of this.childInteractions.keys())
+			this.cancelChildInteractions(id);
 		clearTimeout(this.reconnect);
 		clearTimeout(this.detachedTimeout);
 		for (const prompt of this.queue) {
@@ -1156,6 +1282,7 @@ class Bridge {
 		}
 		connection?.close();
 		await this.draining;
+		await this.children?.flush();
 		await this.steering;
 		await this.usageWriter?.finish();
 		this.daemon.close();

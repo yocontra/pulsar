@@ -1,4 +1,4 @@
-import { lstat } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { exec } from "../exec.ts";
@@ -63,7 +63,15 @@ export async function antigravityProcess(pid: number | null) {
 			lane: "background",
 		},
 	);
-	return antigravitySession(result.stdout, antigravityConversations());
+	// lsof uses canonical paths even when HOME points through a symlink.
+	const directory = antigravityConversations();
+	const canonical = await realpath(dirname(directory)).catch(() =>
+		dirname(directory),
+	);
+	return antigravitySession(
+		result.stdout,
+		join(canonical, basename(directory)),
+	);
 }
 
 export async function antigravitySession(
@@ -122,6 +130,16 @@ export const antigravityIdent: HarnessIdent = {
 	label: "Google Antigravity",
 	matchProcess: (args) =>
 		/(?:^|\/)agy(?=\s|$)/.test(args.split(/\s/, 1)[0] ?? ""),
+	async onSessionReady({ sessionId }) {
+		if (
+			!sessionId ||
+			process.env.ANTIGRAVITY_CONVERSATION_ID !== sessionId ||
+			!process.env.ANTIGRAVITY_LS_ADDRESS
+		)
+			return;
+		const { startNativeWake } = await import("../native-wake.ts");
+		await startNativeWake("antigravity", sessionId);
+	},
 	async identify({ pid, sessionId, cwd }) {
 		const found = await antigravityProcess(pid);
 		return { sessionId: sessionId ?? found.sessionId, cwd: found.cwd ?? cwd };

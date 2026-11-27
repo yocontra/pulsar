@@ -81,7 +81,7 @@ class Raw {
 	readonly child: ChildProcess;
 	readonly seen: Msg[] = [];
 	private buf = "";
-	constructor(harness = "gemini", session = "conf") {
+	constructor(harness = "copilot", session = "conf") {
 		this.child = spawn(NODE, [CLI, "mcp"], {
 			cwd: work,
 			env: serverEnv(harness, session),
@@ -349,7 +349,7 @@ function normalize(v: unknown, selfId: string): unknown {
 }
 
 async function runScript(): Promise<Record<string, unknown>> {
-	const raw = new Raw("gemini", "conf");
+	const raw = new Raw("copilot", "conf");
 	const { client: peer } = await agentClient(
 		registration({ sessionId: "conf-peer", cwd: work, project: "work" }),
 	);
@@ -525,7 +525,7 @@ describe("differential: same answers as the SDK server", () => {
 });
 
 describe.skipIf(RECORD)("the SDK client", () => {
-	async function client(harness = "gemini", session = "sdk") {
+	async function client(harness = "copilot", session = "sdk") {
 		const transport = new StdioClientTransport({
 			command: NODE,
 			args: [CLI, "mcp"],
@@ -598,7 +598,7 @@ describe.skipIf(RECORD)("the SDK client", () => {
 	});
 
 	test("cancellation and progress tokens", async () => {
-		const { c } = await client("gemini", "sdk-cancel");
+		const { c } = await client("copilot", "sdk-cancel");
 		try {
 			const ac = new AbortController();
 			const pending = c.callTool(
@@ -639,7 +639,7 @@ describe.skipIf(RECORD)("the SDK client", () => {
 	test("exits when stdin closes", async () => {
 		const child = spawn(NODE, [CLI, "mcp"], {
 			cwd: work,
-			env: serverEnv("gemini", "eof"),
+			env: serverEnv("copilot", "eof"),
 			stdio: ["pipe", "ignore", "ignore"],
 		});
 		await Bun.sleep(500);

@@ -205,8 +205,16 @@ export async function scanOpencode(): Promise<Scanned[]> {
 	return out;
 }
 
+function opencodeConfigDir(): string {
+	return (
+		process.env.OPENCODE_CONFIG_DIR ||
+		join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode")
+	);
+}
+
 function opencodeConfig(): string {
-	const dir = join(homedir(), ".config", "opencode");
+	if (process.env.OPENCODE_CONFIG) return process.env.OPENCODE_CONFIG;
+	const dir = opencodeConfigDir();
 	const jsonc = join(dir, "opencode.jsonc");
 	return exists(jsonc) || !exists(join(dir, "opencode.json"))
 		? jsonc
@@ -349,7 +357,8 @@ export const opencode: HarnessDriver = {
 	setup: {
 		detect: (path) =>
 			!!which("opencode", path) ||
-			exists(join(homedir(), ".config", "opencode")),
+			exists(opencodeConfigDir()) ||
+			exists(opencodeConfig()),
 		configured: () => {
 			const cfg = readJsonc(opencodeConfig());
 			return !!(
@@ -376,11 +385,7 @@ export const opencode: HarnessDriver = {
 							}),
 						]
 					: []),
-				...skillFor(
-					"opencode",
-					join(homedir(), ".config", "opencode", "skills"),
-					ctx,
-				),
+				...skillFor("opencode", join(opencodeConfigDir(), "skills"), ctx),
 			];
 		},
 	},

@@ -1,4 +1,5 @@
 import { exec } from "./exec.ts";
+import { lazyCrypto } from "./lazy.ts";
 import type { Agent } from "./types.ts";
 
 /**
@@ -35,9 +36,10 @@ export interface TmuxOptions {
 
 export type TmuxResult = { ok: true } | { ok: false; error: string };
 
-function tmux(args: string[], opts: TmuxOptions = {}) {
+function tmux(args: string[], opts: TmuxOptions = {}, stdin?: string) {
 	return exec("tmux", [...(opts.socket ? ["-L", opts.socket] : []), ...args], {
 		lane: "user",
+		stdin,
 		timeoutMs: opts.timeoutMs ?? 3000,
 	});
 }
@@ -63,6 +65,53 @@ export async function paneOf(
 /** Hops up the process tree `paneOfPid` takes (harness, wrapper, shell...). */
 const PANE_HOPS = 6;
 
+/** The process tmux started in each pane of this server. */
+export async function paneRoots(opts: TmuxOptions = {}) {
+	const r = await tmux(
+		["list-panes", "-a", "-F", "#{pane_id} #{pane_pid}"],
+		opts,
+	);
+	if (!r.ok) return new Map<number, string>();
+	const byPid = new Map<number, string>();
+	for (const line of r.stdout.split("\n")) {
+		const [id, p] = line.trim().split(" ");
+		if (isPane(id) && Number(p) > 0) byPid.set(Number(p), id);
+	}
+	return byPid;
+}
+
+/** Paste only when the receiving program enabled bracketed paste. */
+export async function pasteText(
+	pane: string,
+	pid: number,
+	text: string,
+	opts: TmuxOptions = {},
+) {
+	if (!isPane(pane) || !Number.isSafeInteger(pid) || pid < 1) return false;
+	const buffer = `pulsar-${lazyCrypto().randomUUID()}`;
+	const loaded = await tmux(["load-buffer", "-b", buffer, "-"], opts, text);
+	if (!loaded.ok) return false;
+	try {
+		// tmux checks the pane PID and terminal mode at the moment of paste.
+		// Only generated identifiers enter the tmux command string.
+		const result = await tmux(
+			[
+				"if-shell",
+				"-F",
+				"-t",
+				pane,
+				`#{&&:#{==:#{pane_pid},${pid}},#{bracket_paste_flag}}`,
+				`paste-buffer -r -p -d -b ${buffer} -t ${pane}`,
+				"display-message -p refused",
+			],
+			opts,
+		);
+		return result.ok && !result.stdout.includes("refused");
+	} finally {
+		await tmux(["delete-buffer", "-b", buffer], opts);
+	}
+}
+
 /**
  * The pane whose process is `pid` or one of its near ancestors (a harness
  * started from the pane's shell), or null. Ownership comes from the tree:
@@ -74,16 +123,7 @@ export async function paneOfPid(
 	parentOf: (pid: number) => number | undefined,
 	opts: TmuxOptions = {},
 ): Promise<string | null> {
-	const r = await tmux(
-		["list-panes", "-a", "-F", "#{pane_id} #{pane_pid}"],
-		opts,
-	);
-	if (!r.ok) return null;
-	const byPid = new Map<number, string>();
-	for (const line of r.stdout.split("\n")) {
-		const [id, p] = line.trim().split(" ");
-		if (isPane(id) && Number(p) > 0) byPid.set(Number(p), id);
-	}
+	const byPid = await paneRoots(opts);
 	let p: number | undefined = pid;
 	for (let hops = 0; p && p > 1 && hops < PANE_HOPS; hops++) {
 		const pane = byPid.get(p);

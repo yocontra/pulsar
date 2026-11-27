@@ -1,3 +1,4 @@
+import { withAntigravityWake } from "../setup/antigravity.ts";
 import type { Agent } from "../types.ts";
 import { antigravity } from "./antigravity.ts";
 import { HARNESSES } from "./catalog.ts";
@@ -22,7 +23,14 @@ const native = [claude, codex, opencode, pi, omp, antigravity];
 export const DRIVERS: HarnessDriver[] = HARNESSES.map((h) => ({
 	...identFor(h.id)!,
 	...native.find((d) => d.id === h.id),
-	...("mcp" in h ? { setup: mcpSetup(h, h.mcp) } : {}),
+	...("mcp" in h
+		? {
+				setup:
+					h.id === "antigravity"
+						? withAntigravityWake(mcpSetup(h, h.mcp))
+						: mcpSetup(h, h.mcp),
+			}
+		: {}),
 }));
 
 export function driverFor(id: string): HarnessDriver | null {

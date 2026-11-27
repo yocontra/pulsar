@@ -33,8 +33,9 @@ const Changes = page<{ id: string; file?: string }>(
 export function preloadPage(r: Route): Promise<unknown> {
 	switch (r.view) {
 		case "agent":
-		case "approval":
 			return Agent.preload();
+		case "approval":
+			return r.id.includes("/sub:") ? Subagent.preload() : Agent.preload();
 		case "subagent":
 			return Subagent.preload();
 		case "needs":

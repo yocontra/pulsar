@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { driverFor } from "../src/harnesses/index.ts";
-import { Session } from "../src/mcp.ts";
+import { assertManagedAcpToolSession, Session } from "../src/mcp.ts";
 import { agentClient, registration, startDaemon } from "./helpers.ts";
 
 let env: Awaited<ReturnType<typeof startDaemon>>;
@@ -10,6 +10,26 @@ beforeAll(async () => {
 afterAll(async () => {
 	await env.daemon.stop();
 	env.cleanup();
+});
+
+test("managed multiplexed MCP requests cannot fall back to the parent identity", () => {
+	const root = "11111111-1111-4111-8111-111111111111";
+	const codex = { harness: "codex", sessionId: root };
+	expect(() =>
+		assertManagedAcpToolSession(codex, { threadId: root }),
+	).not.toThrow();
+	expect(() =>
+		assertManagedAcpToolSession(codex, {
+			threadId: "22222222-2222-4222-8222-222222222222",
+		}),
+	).toThrow("did not verify");
+	expect(() => assertManagedAcpToolSession(codex, undefined)).toThrow(
+		"did not verify",
+	);
+	const opencode = { harness: "opencode", sessionId: "ses_test" };
+	expect(() => assertManagedAcpToolSession(opencode, undefined)).toThrow(
+		"did not verify",
+	);
 });
 
 test("a claimed session id moves to the next candidate on a fresh connection", async () => {

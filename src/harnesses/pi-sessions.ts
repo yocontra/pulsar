@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { exec } from "../exec.ts";
 import type { TranscriptSource } from "../transcripts/types.ts";
 import { tailAsync } from "../util.ts";
+import { piAgentDir } from "./pi-paths.ts";
 import type { SessionRef } from "./types.ts";
 
 /**
@@ -75,12 +76,15 @@ function primarySessionFile(path: string, root: string) {
 
 /** The most recently updated primary session file open in a pi or omp process. */
 export async function openSessionFile(
-	dir: string,
+	dir: ".omp" | ".pi",
 	pid: number,
 	home = homedir(),
 	openFiles: OpenFiles = openFilesSource.fn,
 ): Promise<string | null> {
-	const root = join(home, dir, "agent", "sessions");
+	const root = join(
+		piAgentDir(dir === ".omp" ? "omp" : "pi", home),
+		"sessions",
+	);
 	let file: string | null = null;
 	let newest = -1;
 	for (const path of await cachedOpenFiles(pid, openFiles)) {
@@ -121,12 +125,15 @@ async function isFile(path: string): Promise<boolean> {
  * (the agent may have moved to another folder since the session began).
  */
 export async function piSessionFileById(
-	dir: string,
+	dir: ".omp" | ".pi",
 	cwd: string | null,
 	sessionId: string,
 	home = homedir(),
 ): Promise<string | null> {
-	const root = join(home, dir, "agent", "sessions");
+	const root = join(
+		piAgentDir(dir === ".omp" ? "omp" : "pi", home),
+		"sessions",
+	);
 	const cached = byId.get(`${root}\0${sessionId}`);
 	if (cached && (await isFile(cached))) return cached;
 	const suffix = `_${sessionId}.jsonl`;
@@ -165,7 +172,7 @@ export async function piSessionFileById(
  * else the newest. Shared by the pi and omp drivers.
  */
 export async function piSessionFile(
-	dir: string,
+	dir: ".omp" | ".pi",
 	cwd: string | null,
 	sessionId: string | null = null,
 	home = homedir(),
@@ -175,7 +182,10 @@ export async function piSessionFile(
 		if (file) return file;
 	}
 	if (!cwd) return null;
-	const root = join(home, dir, "agent", "sessions");
+	const root = join(
+		piAgentDir(dir === ".omp" ? "omp" : "pi", home),
+		"sessions",
+	);
 	let newest: { file: string; t: number } | null = null;
 	for (const name of sessionFolderNames(cwd, home)) {
 		const folder = join(root, name);
@@ -226,8 +236,11 @@ export async function locatePiStyle(
 		// Extension resume keys can survive a switch. A sole held primary log
 		// identifies the current conversation of a PID-keyed agent directly.
 		const paths = new Set(await cachedOpenFiles(agent.pid, openFiles));
+		const seen = new Set<string>();
 		const held = harnesses.flatMap((h) => {
-			const root = join(home, PI_STYLE[h], "agent", "sessions");
+			const root = join(piAgentDir(h, home), "sessions");
+			if (seen.has(root)) return [];
+			seen.add(root);
 			return [...paths]
 				.filter((path) => primarySessionFile(path, root))
 				.map((path) => ({ h, path }));

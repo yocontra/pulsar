@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { DaemonClient } from "../src/client.ts";
 import { PROTOCOL_VERSION, type Receipt } from "../src/types.ts";
 import {
@@ -23,7 +22,8 @@ test.skipIf(process.platform === "win32")(
 	async () => {
 		const { daemon, home, cleanup } = await startDaemon();
 		const realHome = process.env.HOME;
-		process.env.HOME = realpathSync(home);
+		process.env.HOME = join(home, "linked-home");
+		symlinkSync(home, process.env.HOME);
 		const directory = join(home, ".gemini", "antigravity-cli", "presence");
 		mkdirSync(directory, { recursive: true });
 		const lock = join(directory, `${sessionId}.lock`);
@@ -64,11 +64,33 @@ if (operation === "get-conversation-metadata") {
 			ANTIGRAVITY_AGENTAPI_EXE: helper,
 			WAKE_FIXTURE_CALLS: calls,
 		};
-		const bind = (extraEnv: NodeJS.ProcessEnv = {}) =>
-			promisify(execFile)(process.execPath, [cli, "antigravity-bind"], {
-				env: { ...env, ...extraEnv },
-				timeout: 20_000,
-			});
+		const hook = async (
+			event = "SessionStart",
+			extraEnv: NodeJS.ProcessEnv = {},
+			conversationId = sessionId,
+			invocationNum = 0,
+		) => {
+			const proc = spawn(
+				process.execPath,
+				[cli, "hook", "antigravity-session"],
+				{
+					env: { ...env, ...extraEnv },
+					stdio: ["pipe", "pipe", "pipe"],
+					timeout: 10_000,
+				},
+			);
+			let stdout = "",
+				stderr = "";
+			proc.stdout.on("data", (chunk) => (stdout += chunk));
+			proc.stderr.on("data", (chunk) => (stderr += chunk));
+			const finished = once(proc, "close");
+			proc.stdin.end(
+				JSON.stringify({ hookEventName: event, conversationId, invocationNum }),
+			);
+			const [code] = await finished;
+			if (code !== 0) throw new Error(stderr || `hook exited ${code}`);
+			return JSON.parse(stdout);
+		};
 		const bus = new DaemonClient();
 		const op = await operator();
 		let mcp: DaemonClient | undefined;
@@ -90,6 +112,59 @@ if (operation === "get-conversation-metadata") {
 					body,
 					priority,
 				});
+			const staged = await send("hook test message");
+			const urgent = await send("immediate hook message", "urgent");
+			const unbound = { ANTIGRAVITY_LS_ADDRESS: "" };
+			expect(await hook("PreInvocation", unbound, other)).toEqual({});
+			const midTurn = await hook("PreInvocation", unbound, sessionId, 3);
+			expect(midTurn.injectSteps).toHaveLength(1);
+			expect(
+				daemon.service.registry.view(daemon.service.registry.get(id)!)
+					.capabilities,
+			).toMatchObject({ steer: true, wake: false });
+			expect(midTurn.injectSteps[0].userMessage).toContain(
+				"immediate hook message",
+			);
+			expect(daemon.service.store.receipt(urgent.message.id, id)).toMatchObject(
+				{ state: "delivered", via: "native-hook" },
+			);
+			expect(daemon.service.store.receipt(staged.message.id, id)?.state).toBe(
+				"queued",
+			);
+			const delivery = await Promise.all([
+				hook("PreInvocation", unbound),
+				hook("PreInvocation", unbound),
+			]);
+			expect(
+				delivery.flatMap((d) => d.injectSteps ?? []).map((d) => d.userMessage),
+			).toEqual([expect.stringContaining("hook test message")]);
+			const lost = await send("unconfirmed hook delivery", "urgent");
+			const interrupted = new DaemonClient();
+			await interrupted.connect(false);
+			try {
+				await interrupted.call("hello", {
+					protocol: PROTOCOL_VERSION,
+					registration: { ...reg, role: "cli" },
+				});
+				await expect(
+					interrupted.call("native.hook.collect", {
+						pid: reg.pid,
+						sessionId: other,
+						first: true,
+					}),
+				).rejects.toThrow("does not match");
+				const claimed = await interrupted.call<{
+					messages: Array<{ id: string }>;
+				}>("native.hook.collect", { pid: reg.pid, sessionId, first: true });
+				expect(claimed.messages.map((m) => m.id)).toEqual([lost.message.id]);
+			} finally {
+				interrupted.close();
+			}
+			await until(
+				() =>
+					daemon.service.store.receipt(lost.message.id, id)?.state === "nacked",
+			);
+			expect(await hook("PreInvocation", unbound)).toEqual({});
 			const queued = await send("queued before bind");
 			const fyi = await send("quiet FYI", "fyi");
 			expect(queued.receipts[0]?.state).toBe("queued");
@@ -100,10 +175,18 @@ if (operation === "get-conversation-metadata") {
 					registration: { ...reg, role: "wake", sessionId: other },
 				}),
 			).rejects.toThrow("no longer running");
-			await expect(bind({ EMPTY_METADATA: "1" })).rejects.toThrow(
-				"could not verify",
-			);
-			await bind();
+			await hook("PreInvocation", { EMPTY_METADATA: "1" }, sessionId, 3);
+			await until(() => {
+				try {
+					return readFileSync(calls, "utf8").includes(
+						"get-conversation-metadata",
+					);
+				} catch {
+					return false;
+				}
+			}, 8000);
+			expect(daemon.service.sessions.wakeFor(id)).toBeFalsy();
+			await hook("PreInvocation", {}, sessionId, 3);
 			await until(
 				() =>
 					daemon.service.store.receipt(queued.message.id, id)?.state ===
@@ -114,7 +197,7 @@ if (operation === "get-conversation-metadata") {
 				daemon.service.registry.view(daemon.service.registry.get(id)!)
 					.capabilities,
 			).toMatchObject({ wake: true, stop: false });
-			await bind();
+			await hook("PreInvocation", {}, sessionId, 3);
 			expect(daemon.service.store.receipt(fyi.message.id, id)?.state).toBe(
 				"queued",
 			);

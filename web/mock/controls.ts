@@ -22,7 +22,7 @@ const modeOf = new Map<string, string>();
 export const ranCommands: Array<{ agent: string; line: string }> = [];
 
 /** Agents of these harnesses run "outside tmux" in the mock: nothing can run. */
-const NOT_IN_TMUX = new Set(["cursor", "gemini"]);
+const NOT_IN_TMUX = new Set(["cursor", "copilot"]);
 
 const CUSTOM: CommandEntry[] = [
 	{

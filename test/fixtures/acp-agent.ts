@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 
 const sessionId = "fixture/acp";
+const childSessionId = "fixture/child";
+const grandchildSessionId = "fixture/grandchild";
 const mode = process.env.ACP_FIXTURE_MODE;
 const reply = (id: number, result: unknown) =>
 	process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
@@ -26,6 +28,10 @@ const permissionId = 987;
 const questionPermissionId = 988;
 const elicitationId = 989;
 const detachedPermissionId = 990;
+const childPermissionId = 991;
+const childWaitingPermissionId = 992;
+const childQuestionId = 993;
+const strangerPermissionId = 994;
 let currentMode = "ask";
 const modes = () => ({
 	currentModeId: currentMode,
@@ -60,6 +66,8 @@ for await (const line of lines) {
 		case "initialize":
 			if (!params.clientCapabilities.elicitation?.form)
 				throw new Error("Fixture expected form capability");
+			if (!params.clientCapabilities.subagents)
+				throw new Error("Fixture expected exposed subagent support");
 			reply(id, {
 				protocolVersion: 1,
 				...(mode === "steer"
@@ -221,6 +229,98 @@ for await (const line of lines) {
 				);
 			} else if (text.includes("fixture-hold")) {
 				update("Holding");
+			} else if (text.includes("fixture-child")) {
+				const emitUpdate = (sessionId: string, update: unknown) =>
+					emit("session/update", { sessionId, update });
+				emitUpdate(childSessionId, {
+					sessionUpdate: "agent_message_chunk",
+					content: { type: "text", text: "Unannounced text" },
+				});
+				emitUpdate(sessionId, {
+					sessionUpdate: "subagent_update",
+					sessionId: childSessionId,
+					title: "Fixture child",
+					capabilities: { cancel: {} },
+					state: { state: "running" },
+				});
+				emitUpdate(childSessionId, {
+					sessionUpdate: "subagent_update",
+					sessionId: grandchildSessionId,
+					title: "Fixture grandchild",
+					state: { state: "running" },
+				});
+				emitUpdate(grandchildSessionId, {
+					sessionUpdate: "subagent_update",
+					sessionId: childSessionId,
+					title: "Wrong parent",
+				});
+				emitUpdate(childSessionId, {
+					sessionUpdate: "session_message",
+					messageId: "from-parent",
+					senderSessionId: sessionId,
+					recipientSessionId: childSessionId,
+					content: [{ type: "text", text: "Work for child" }],
+				});
+				for (const text of ["Exact ", "child reply"])
+					emitUpdate(childSessionId, {
+						sessionUpdate: "agent_message_chunk",
+						messageId: "child-reply",
+						content: { type: "text", text },
+					});
+				emitUpdate(sessionId, {
+					sessionUpdate: "session_message",
+					messageId: "from-child",
+					senderSessionId: childSessionId,
+					recipientSessionId: sessionId,
+					content: [{ type: "text", text: "Status for parent" }],
+				});
+				const permissions = [
+					{ optionId: "child-allow", name: "Allow once", kind: "allow_once" },
+					{ optionId: "child-deny", name: "Deny", kind: "reject_once" },
+				];
+				for (const [id, target, title] of [
+					[childPermissionId, childSessionId, "Fixture child permission"],
+					[
+						childWaitingPermissionId,
+						childSessionId,
+						"Fixture child cancellable permission",
+					],
+					[
+						strangerPermissionId,
+						"unannounced-session",
+						"Unannounced permission",
+					],
+				] as const)
+					emit(
+						"session/request_permission",
+						{
+							sessionId: target,
+							options: permissions,
+							toolCall: {
+								title,
+								toolCallId: String(id),
+								rawInput: { operation: "fixture-only" },
+							},
+						},
+						id,
+					);
+				emit(
+					"elicitation/create",
+					{
+						sessionId: grandchildSessionId,
+						mode: "form",
+						message: "Pick a fixture",
+						requestedSchema: {
+							type: "object",
+							required: ["value"],
+							properties: {
+								value: { type: "string", enum: ["Grandchild answer"] },
+							},
+						},
+					},
+					childQuestionId,
+				);
+				update("Parent is still working");
 			} else if (text.includes("fixture-detached")) {
 				emit("session/update", {
 					sessionId,
@@ -334,7 +434,19 @@ for await (const line of lines) {
 						toolCall: {
 							title: "Fixture action",
 							toolCallId: "test",
-							rawInput: { command: "true" },
+							...(text.includes("fixture-permission-diff")
+								? {
+										kind: "edit",
+										content: [
+											{
+												type: "diff",
+												path: "fixture.txt",
+												oldText: null,
+												newText: "approved content",
+											},
+										],
+									}
+								: { rawInput: { command: "true" } }),
 						},
 						options: [
 							{ optionId: "allow", kind: "allow_once", name: "Allow" },
@@ -430,6 +542,19 @@ for await (const line of lines) {
 			break;
 		}
 		case "session/cancel":
+			if (params.sessionId === childSessionId) {
+				emit("session/update", {
+					sessionId,
+					update: {
+						sessionUpdate: "subagent_update",
+						sessionId: childSessionId,
+						state: { state: "idle", stopReason: "cancelled" },
+					},
+				});
+				break;
+			}
+			if (params.sessionId !== sessionId)
+				throw new Error("Unexpected cancel target");
 			if (promptId !== undefined) reply(promptId, { stopReason: "cancelled" });
 			break;
 		case "session/close":
@@ -437,6 +562,18 @@ for await (const line of lines) {
 			reply(id, {});
 			break;
 		default:
+			if (
+				id === childPermissionId ||
+				id === childWaitingPermissionId ||
+				id === strangerPermissionId
+			)
+				process.stderr.write(
+					`Fixture permission ${id} ${result?.outcome?.optionId ?? result?.outcome?.outcome}\n`,
+				);
+			if (id === childQuestionId)
+				process.stderr.write(
+					`Fixture grandchild got ${result?.content?.value}\n`,
+				);
 			if (id === detachedPermissionId) {
 				if (result?.outcome?.outcome === "cancelled")
 					process.stderr.write("Detached question cancelled\n");

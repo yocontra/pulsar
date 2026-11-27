@@ -38,8 +38,12 @@ export class Interrupts {
 		return this.registry.canStop(agent);
 	}
 
-	async stop(principal: Principal, agentId: string): Promise<StopResult> {
-		const agent = this.registry.deliveryAgent(agentId);
+	async stop(
+		principal: Principal,
+		agentId: string,
+		child?: Agent,
+	): Promise<StopResult> {
+		const agent = child ?? this.registry.deliveryAgent(agentId);
 		if (!agent || agent.status === "gone")
 			throw new RpcError("not_found", `no agent ${agentId}`);
 		let outcome: InterruptOutcome;
@@ -71,7 +75,9 @@ export class Interrupts {
 				via: agent.harness,
 				detail: "This session has no supported Stop target",
 			});
-		const ext = this.sessions.extensionFor(agent.id);
+		const owner =
+			agent.meta.acpChild === "1" ? agent.meta.subagentOf! : agent.id;
+		const ext = this.sessions.extensionFor(owner);
 		if (ext) {
 			const requestId = randomBytes(8).toString("base64url");
 			return new Promise((resolve) => {
@@ -85,13 +91,16 @@ export class Interrupts {
 				}, EXTENSION_TIMEOUT_MS);
 				timer.unref?.();
 				this.pending.set(requestId, {
-					agentId: agent.id,
+					agentId: owner,
 					resolve: (o) => {
 						clearTimeout(timer);
 						resolve(o);
 					},
 				});
-				ext.emit("interrupt", { requestId });
+				ext.emit("interrupt", {
+					requestId,
+					...(owner !== agent.id ? { childSessionId: agent.sessionId } : {}),
+				});
 			});
 		}
 		const driver = attachedDriver(agent);

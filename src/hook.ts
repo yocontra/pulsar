@@ -375,6 +375,21 @@ export async function runHook(
 	name: string | undefined,
 	args: readonly string[] = [],
 ) {
+	if (name === "antigravity-session") {
+		const { antigravitySessionHook } = await import(
+			"./harnesses/antigravity-session-hook.ts"
+		);
+		await antigravitySessionHook(
+			await readStdin(),
+			(result) =>
+				new Promise<void>((resolve, reject) => {
+					process.stdout.write(`${JSON.stringify(result)}\n`, (err) =>
+						err ? reject(err) : resolve(),
+					);
+				}),
+		);
+		process.exit(0);
+	}
 	const quit = () => process.exit(0);
 	// Claude kills the hook when the terminal prompt is answered (Escape, No).
 	for (const s of ["SIGTERM", "SIGINT", "SIGHUP"] as const) process.on(s, quit);

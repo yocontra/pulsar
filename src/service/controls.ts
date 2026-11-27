@@ -1,5 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { validAcpModeId } from "../harnesses/acp-controls.ts";
+import {
+	antigravityPane,
+	withAntigravityPane,
+} from "../harnesses/antigravity-pane.ts";
 import { codexControlReady, codexRpc } from "../harnesses/codex-rpc.ts";
 import { driverFor } from "../harnesses/index.ts";
 import {
@@ -86,6 +90,7 @@ export interface ControlPorts {
 
 export const realControlPorts: ControlPorts = {
 	async pane(agent) {
+		if (agent.harness === "antigravity") return antigravityPane(agent);
 		const pane = await paneOf(agent);
 		// Typed keys go only to the agent's own terminal: never to a pane
 		// whose process chain runs another agent first (a session started
@@ -175,6 +180,11 @@ export const MODES: Record<string, ModeOption[]> = {
 		},
 		{ id: "auto", label: "Auto", hint: "Approves safe actions on its own" },
 	],
+	antigravity: [
+		{ id: "default", label: "Default" },
+		{ id: "accept-edits", label: "Accept edits" },
+		plan,
+	],
 	codex: [{ id: "default", label: "Default" }, plan],
 	opencode: [{ id: "build", label: "Build" }, plan],
 	omp: [{ id: "default", label: "Default" }, plan],
@@ -218,7 +228,14 @@ const NO_EXTENSION = "The pulsar extension is not connected in this session.";
 const EXTENSION_TIMEOUT_MS = 5000;
 
 /** Harnesses whose screen Pulsar can read (and so type into safely). */
-const SCREENS: ReadonlySet<string> = new Set(["claude", "codex", "opencode"]);
+const SCREENS: ReadonlySet<string> = new Set([
+	"claude",
+	"codex",
+	"opencode",
+	"pi",
+	"omp",
+	"antigravity",
+]);
 
 /** Remote agents: their home node answers (federation). */
 export interface RemoteControls {
@@ -369,6 +386,46 @@ export class Controls {
 			};
 		}
 		const commands = await this.catalogs.list(agent);
+		if (agent.status === "gone")
+			return {
+				agentId: agent.id,
+				harness: agent.harness,
+				commands: commands.commands,
+				runnable: false,
+				reason: "The agent is gone.",
+			};
+		if (agent.harness === "antigravity" && (await this.ports.pane(agent))) {
+			return {
+				agentId: agent.id,
+				harness: agent.harness,
+				runnable: true,
+				commands: commands.commands.map(
+					({ terminalOnly: _, ...entry }) => entry,
+				),
+				...(commands.stale ? { stale: true } : {}),
+			};
+		}
+		if (agent.harness === "pi" || agent.harness === "omp") {
+			const pane = !agent.meta.subagentOf && (await this.ports.pane(agent));
+			const extension = this.sessions.extensionFor(agent.id);
+			const entries = commands.commands.map((entry) =>
+				pane ||
+				(extension &&
+					entry.source !== "builtin" &&
+					(agent.harness === "pi" || entry.skill))
+					? entry
+					: { ...entry, terminalOnly: true },
+			);
+			const runnable = entries.some((entry) => !entry.terminalOnly);
+			return {
+				agentId: agent.id,
+				harness: agent.harness,
+				commands: entries,
+				runnable,
+				...(commands.stale ? { stale: true } : {}),
+				...(runnable ? {} : { reason: NOT_IN_TMUX }),
+			};
+		}
 		const how = await this.commandPath(agent);
 		return {
 			agentId: agent.id,
@@ -387,16 +444,11 @@ export class Controls {
 		if (agent.status === "gone")
 			return { ok: false, reason: "The agent is gone." };
 		if (agent.harness === "antigravity" && agent.sessionId) return { ok: true };
-		if (agent.harness === "pi" && this.sessions.extensionFor(agent.id))
-			return { ok: true };
 		if (agent.harness === "opencode" && agent.sessionId) return { ok: true };
 		if (!SCREENS.has(agent.harness))
 			return {
 				ok: false,
-				reason:
-					agent.harness === "omp"
-						? "omp runs commands only when typed in its terminal, and Pulsar cannot read it."
-						: "Pulsar cannot run commands for this harness.",
+				reason: "Pulsar cannot run commands for this harness.",
 			};
 		return (await this.ports.pane(agent))
 			? { ok: true }
@@ -594,7 +646,11 @@ export class Controls {
 		const pane = await this.ports.pane(agent);
 		if (!pane || !SCREENS.has(agent.harness))
 			return done({ result: "unsupported", via: "tmux", detail: NOT_IN_TMUX });
-		return done(await this.cycle(agent, pane, target));
+		return done(
+			await (agent.harness === "antigravity"
+				? withAntigravityPane(agent.id, () => this.cycle(agent, pane, target))
+				: this.cycle(agent, pane, target)),
+		);
 	}
 
 	/**
@@ -614,6 +670,15 @@ export class Controls {
 				result: "blocked",
 				via,
 				detail: "The terminal shows a dialog or menu, not the prompt.",
+			};
+		if (
+			agent.harness === "antigravity" &&
+			(first.busy || agent.status === "busy")
+		)
+			return {
+				result: "busy",
+				via,
+				detail: "Switch modes when the session is idle.",
 			};
 		if (first.mode === target) return { result: "ok", via, mode: target };
 		if (first.input === "draft")
@@ -800,7 +865,17 @@ export class Controls {
 				await this.acpAction(agent, { kind: "command", line }, "command"),
 			);
 
-		if (agent.harness === "antigravity" && agent.sessionId)
+		if (agent.harness === "antigravity" && agent.sessionId) {
+			const { commands } = await this.catalogs.list(agent);
+			if (commands.some((c) => c.name === cmd.name && c.terminalOnly)) {
+				const pane = await this.ports.pane(agent);
+				if (pane)
+					return done(
+						await withAntigravityPane(agent.id, () =>
+							this.type(agent, pane, line),
+						),
+					);
+			}
 			return runAntigravityCommand(
 				agent,
 				cmd,
@@ -808,10 +883,31 @@ export class Controls {
 				this.invokeSkill,
 				user,
 			);
+		}
 
-		if (agent.harness === "pi" && this.sessions.extensionFor(agent.id)) {
-			const r = await this.askExtension(agent, { kind: "command", line });
-			return done(extensionOutcome(r, "command"));
+		if (agent.harness === "pi" || agent.harness === "omp") {
+			if (agent.status === "busy")
+				return done({
+					result: "busy",
+					via: "pulsar",
+					detail: "Send the command when the session is idle.",
+				});
+			const pane = !agent.meta.subagentOf && (await this.ports.pane(agent));
+			if (this.sessions.extensionFor(agent.id)) {
+				const { commands } = await this.catalogs.list(agent);
+				const entry = commands.find((c) => c.name === cmd.name);
+				if (
+					entry &&
+					entry.source !== "builtin" &&
+					(agent.harness === "pi" || (!pane && entry.skill))
+				) {
+					const r = await this.askExtension(agent, { kind: "command", line });
+					return done(extensionOutcome(r, "command"));
+				}
+			}
+			return pane
+				? done(await this.type(agent, pane, line))
+				: done({ result: "unsupported", via: "tmux", detail: NOT_IN_TMUX });
 		}
 
 		if (agent.harness === "opencode" && agent.sessionId) {
@@ -854,6 +950,12 @@ export class Controls {
 				result: "blocked",
 				via,
 				detail: "The terminal shows a dialog or menu, not the prompt.",
+			};
+		if (s.busy)
+			return {
+				result: "busy",
+				via,
+				detail: "Send the command when the session is idle.",
 			};
 		if (s.input !== "empty")
 			return {

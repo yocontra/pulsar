@@ -75,13 +75,14 @@ function fakeHome() {
 	homes.push(home);
 	mkdirSync(join(home, ".cursor"));
 	mkdirSync(join(home, ".gemini"));
+	mkdirSync(join(home, ".copilot"));
 	mkdirSync(join(home, ".config", "opencode"), { recursive: true });
 	writeFileSync(
 		join(home, ".config", "opencode", "opencode.jsonc"),
 		'{\n  // keep this comment\n  "mcp": {\n    "servers": {\n      "other": { "type": "local", "command": ["x"] }\n    }\n  }\n}\n',
 	);
 	writeFileSync(
-		join(home, ".gemini", "settings.json"),
+		join(home, ".copilot", "mcp-config.json"),
 		'{ "theme": "dark" }\n',
 	);
 	return home;
@@ -115,21 +116,89 @@ beforeAll(() => {
 describe("pulsar setup", () => {
 	test("--dry-run changes nothing", () => {
 		const home = fakeHome();
-		const before = readFileSync(join(home, ".gemini", "settings.json"), "utf8");
+		const before = readFileSync(
+			join(home, ".copilot", "mcp-config.json"),
+			"utf8",
+		);
 		const r = run(home, [
 			"setup",
 			"--dry-run",
 			"--client",
-			"cursor,gemini,opencode",
+			"cursor,copilot,opencode",
 		]);
 		expect(r.code).toBe(0);
 		expect(r.out).toContain("--dry-run: nothing changed");
-		expect(readFileSync(join(home, ".gemini", "settings.json"), "utf8")).toBe(
-			before,
-		);
+		expect(
+			readFileSync(join(home, ".copilot", "mcp-config.json"), "utf8"),
+		).toBe(before);
 		expect(existsSync(join(home, ".cursor", "mcp.json"))).toBe(false);
 	});
 
+	test("setup and uninstall use the same harness profiles when the shell changes", () => {
+		const home = fakeHome();
+		const bin = join(home, "bin");
+		mkdirSync(bin);
+		const log = join(home, "commands");
+		for (const cli of ["pi", "omp", "codex", "claude"]) {
+			writeFileSync(
+				join(bin, cli),
+				[
+					"#!/bin/sh",
+					'printf "%s|%s|%s|%s|%s|%s\\n" "$0" "$*" "$OMP_PROFILE" "$PI_CODING_AGENT_DIR" "$CODEX_HOME" "$CLAUDE_CONFIG_DIR" >> "$HOME/commands"',
+				].join("\n"),
+				{ mode: 0o755 },
+			);
+		}
+		const env = {
+			PATH: `${bin}:/usr/bin:/bin`,
+			OMP_PROFILE: "audit",
+			PI_CODING_AGENT_DIR: join(home, "pi"),
+			CODEX_HOME: join(home, "codex"),
+			CLAUDE_CONFIG_DIR: join(home, "claude"),
+			OPENCODE_CONFIG: join(home, "alt", "opencode.jsonc"),
+		};
+		const r = run(
+			home,
+			["setup", "--yes", "--client", "omp,pi,claude,codex,opencode"],
+			env,
+		);
+		expect(r.code).toBe(0);
+		const mcp = join(home, ".omp", "profiles", "audit", "agent", "mcp.json");
+		expect(
+			JSON.parse(readFileSync(mcp, "utf8")).mcpServers.pulsar,
+		).toBeDefined();
+		expect(readFileSync(env.OPENCODE_CONFIG, "utf8")).toContain("pulsar");
+		expect(
+			existsSync(join(env.CLAUDE_CONFIG_DIR, "skills", "pulsar", "SKILL.md")),
+		).toBe(true);
+		expect(
+			existsSync(join(env.CODEX_HOME, "skills", "pulsar", "SKILL.md")),
+		).toBe(true);
+		expect(
+			run(home, ["setup", "--uninstall", "--yes"], {
+				PATH: env.PATH,
+				OMP_PROFILE: "other",
+			}).code,
+		).toBe(0);
+		expect(
+			JSON.parse(readFileSync(mcp, "utf8")).mcpServers?.pulsar,
+		).toBeUndefined();
+		const lines = readFileSync(log, "utf8").trim().split("\n");
+		expect(
+			lines
+				.find((x) => x.includes("/omp|plugin uninstall pulsar|"))
+				?.split("|")[2],
+		).toBe("audit");
+		expect(lines.find((x) => x.includes("/pi|remove "))?.split("|")[3]).toBe(
+			env.PI_CODING_AGENT_DIR,
+		);
+		expect(
+			lines.find((x) => x.includes("/codex|mcp remove"))?.split("|")[4],
+		).toBe(env.CODEX_HOME);
+		expect(
+			lines.find((x) => x.includes("/claude|mcp remove"))?.split("|")[5],
+		).toBe(env.CLAUDE_CONFIG_DIR);
+	});
 	test("the mesh is not part of setup unless asked for: --dry-run shows the question, --mesh plans it", () => {
 		const home = fakeHome();
 		// --dry-run returns before anything runs, so no real launchctl or tailscale.
@@ -202,8 +271,8 @@ describe("pulsar setup", () => {
 
 	test("applies, is idempotent, and uninstalls cleanly", () => {
 		const home = fakeHome();
-		const geminiBefore = readFileSync(
-			join(home, ".gemini", "settings.json"),
+		const copilotBefore = readFileSync(
+			join(home, ".copilot", "mcp-config.json"),
 			"utf8",
 		);
 		const opencodeBefore = readFileSync(
@@ -215,7 +284,7 @@ describe("pulsar setup", () => {
 			"setup",
 			"--yes",
 			"--client",
-			"cursor,gemini,opencode",
+			"cursor,copilot,opencode",
 		]);
 		expect(r.out).toContain("✓ [cursor]");
 		// The mesh stays off and setup says how to turn it on.
@@ -232,11 +301,11 @@ describe("pulsar setup", () => {
 		expect(cursor.mcpServers.pulsar.args[1]).toBe("mcp");
 		expect(existsSync(cursor.mcpServers.pulsar.args[0])).toBe(true);
 
-		const gemini = JSON.parse(
-			readFileSync(join(home, ".gemini", "settings.json"), "utf8"),
+		const copilot = JSON.parse(
+			readFileSync(join(home, ".copilot", "mcp-config.json"), "utf8"),
 		);
-		expect(gemini.theme).toBe("dark");
-		expect(gemini.mcpServers.pulsar.command).toBeTruthy();
+		expect(copilot.theme).toBe("dark");
+		expect(copilot.mcpServers.pulsar.command).toBeTruthy();
 
 		const opencode = readFileSync(
 			join(home, ".config", "opencode", "opencode.jsonc"),
@@ -251,8 +320,8 @@ describe("pulsar setup", () => {
 			),
 		).toBe(true);
 		expect(
-			readdirSync(join(home, ".gemini")).some((f) =>
-				f.startsWith("settings.json.bak-pulsar-"),
+			readdirSync(join(home, ".copilot")).some((f) =>
+				f.startsWith("mcp-config.json.bak-pulsar-"),
 			),
 		).toBe(true);
 
@@ -260,19 +329,22 @@ describe("pulsar setup", () => {
 			"setup",
 			"--yes",
 			"--client",
-			"cursor,gemini,opencode",
+			"cursor,copilot,opencode",
 		]);
-		expect(again.out).toContain("✓ [gemini]");
+		expect(again.out).toContain("✓ [copilot]");
 		expect(
-			JSON.parse(readFileSync(join(home, ".gemini", "settings.json"), "utf8"))
-				.mcpServers.pulsar,
+			JSON.parse(
+				readFileSync(join(home, ".copilot", "mcp-config.json"), "utf8"),
+			).mcpServers.pulsar,
 		).toBeTruthy();
 
 		const un = run(home, ["setup", "--uninstall", "--yes"]);
 		expect(un.code).toBe(0);
 		expect(
-			JSON.parse(readFileSync(join(home, ".gemini", "settings.json"), "utf8")),
-		).toEqual(JSON.parse(geminiBefore));
+			JSON.parse(
+				readFileSync(join(home, ".copilot", "mcp-config.json"), "utf8"),
+			),
+		).toEqual(JSON.parse(copilotBefore));
 		expect(
 			readFileSync(
 				join(home, ".config", "opencode", "opencode.jsonc"),
@@ -385,6 +457,101 @@ describe("pulsar setup", () => {
 			existsSync(join(home, ".config", "opencode", "skills", "pulsar")),
 		).toBe(false);
 	}, 60_000);
+});
+
+describe("Antigravity wake hooks", () => {
+	test("setup and updates merge native wake hooks, and uninstall removes only Pulsar's handlers", () => {
+		const home = fakeHome();
+		const config = join(home, ".gemini", "config");
+		mkdirSync(config);
+		mkdirSync(join(home, ".gemini", "antigravity-cli"));
+		const file = join(config, "hooks.json");
+		const group = "pulsar-native-wake";
+		const user = {
+			audit: { Stop: [{ type: "command", command: "user-stop", timeout: 4 }] },
+			[group]: { SessionStart: [{ type: "command", command: "user-start" }] },
+		};
+		const mcp = join(config, "mcp_config.json");
+		const settings = () => JSON.parse(readFileSync(file, "utf8"));
+		writeFileSync(file, JSON.stringify(user, null, 2));
+		const args = ["setup", "--yes", "--client", "antigravity", "--no-mcp"];
+		expect(
+			run(home, ["setup", "--yes", "--all-detected", "--no-mcp", "--dry-run"])
+				.out,
+		).toContain("[antigravity] add a PreInvocation hook");
+		expect(settings()).toEqual(user);
+		const install = {
+			PULSAR_INSTALL_ROOT: join(home, "install path with 'quote"),
+		};
+		expect(run(home, args, install).code).toBe(0);
+		const configured = settings();
+		expect(configured.audit).toEqual(user.audit);
+		expect(configured[group].SessionStart).toEqual([
+			...user[group].SessionStart,
+			{
+				type: "command",
+				command: expect.stringContaining(" hook antigravity-session"),
+				timeout: 5,
+			},
+		]);
+		expect(configured[group].PreInvocation).toEqual([
+			configured[group].SessionStart[1],
+		]);
+		expect(configured[group].SessionStart[1].command).toContain(
+			"install path with '\\''quote",
+		);
+		const hook = spawnSync(
+			"/bin/sh",
+			["-c", configured[group].SessionStart[1].command],
+			{
+				input:
+					'{"hookEventName":"PreInvocation","conversationId":"not-a-conversation"}',
+				env: cliEnv(home, install),
+				encoding: "utf8",
+				timeout: 5000,
+			},
+		);
+		expect(hook.status).toBe(0);
+		expect(JSON.parse(hook.stdout)).toEqual({});
+		expect(existsSync(mcp)).toBe(false);
+
+		const current = readFileSync(file, "utf8");
+		expect(run(home, args, install).code).toBe(0);
+		expect(readFileSync(file, "utf8")).toBe(current);
+		configured[group].PreInvocation[0].command =
+			"/old/node /old/pulsar hook antigravity-session";
+		configured[group].PreInvocation.push({ command: "user-prepare" });
+		writeFileSync(file, JSON.stringify(configured, null, 2));
+		expect(run(home, args, install).code).toBe(0);
+		expect(settings()[group].PreInvocation).toEqual([
+			configured[group].SessionStart[1],
+			{ command: "user-prepare" },
+		]);
+		expect(run(home, ["setup", "--uninstall", "--yes"], install).code).toBe(0);
+		expect(settings()).toEqual({
+			...user,
+			[group]: { ...user[group], PreInvocation: [{ command: "user-prepare" }] },
+		});
+	});
+
+	test("setup leaves malformed hook config intact and reports why", () => {
+		const home = fakeHome();
+		const config = join(home, ".gemini", "config");
+		mkdirSync(config);
+		const file = join(config, "hooks.json");
+		const invalid = '{ "broken": ';
+		writeFileSync(file, invalid);
+		const result = run(home, [
+			"setup",
+			"--yes",
+			"--client",
+			"antigravity",
+			"--no-mcp",
+		]);
+		expect(result.code).toBe(1);
+		expect(result.out).toContain("Invalid JSON");
+		expect(readFileSync(file, "utf8")).toBe(invalid);
+	});
 });
 
 describe("Claude approvals hook", () => {

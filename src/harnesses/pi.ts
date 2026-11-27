@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { cliUndo } from "../setup/actions.ts";
 import {
 	exists,
 	listDir,
@@ -9,6 +10,7 @@ import {
 	which,
 } from "../setup/files.ts";
 import { piTurnFailed } from "../transcripts/turn-outcome.ts";
+import { piAgentDir } from "./pi-paths.ts";
 import { locatePiStyle, piSessionLog } from "./pi-sessions.ts";
 import { parsePi } from "./pi-transcript.ts";
 import { piIdent } from "./simple-ident.ts";
@@ -26,11 +28,10 @@ export const pi: HarnessDriver = {
 	sessionLog: (agent) => piSessionLog("pi", agent),
 
 	setup: {
-		detect: (path) =>
-			!!which("pi", path) || exists(join(homedir(), ".pi", "agent")),
+		detect: (path) => !!which("pi", path) || exists(piAgentDir("pi")),
 		configured: () =>
 			JSON.stringify(
-				readJsonc(join(homedir(), ".pi", "agent", "settings.json")) ?? {},
+				readJsonc(join(piAgentDir("pi"), "settings.json")) ?? {},
 			).includes("pulsar"),
 		plan: (ctx) => [
 			{
@@ -45,7 +46,7 @@ export const pi: HarnessDriver = {
 					}
 					runCli("pi", ["install", ctx.installDir]);
 				},
-				undo: { type: "cli", cmd: "pi", args: ["remove", ctx.installDir] },
+				undo: cliUndo("pi", ["remove", ctx.installDir]),
 			},
 		],
 	},

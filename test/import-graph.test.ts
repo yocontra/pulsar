@@ -65,7 +65,7 @@ const FORBIDDEN = [
 	/codex-rpc\.ts$/,
 	/claude-approvals\.ts$/,
 	/^harnesses\/index\.ts$/,
-	/^harnesses\/(claude|codex|opencode|pi|omp|cursor|gemini|vscode)\.ts$/,
+	/^harnesses\/(claude|codex|opencode|pi|omp|cursor|antigravity|vscode)\.ts$/,
 	/^store\.ts$/,
 ];
 

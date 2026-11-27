@@ -11,7 +11,11 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
-import type { ModificationOptions } from "jsonc-parser/lib/esm/main.js";
+import type {
+	JSONPath,
+	ModificationOptions,
+	ParseError,
+} from "jsonc-parser/lib/esm/main.js";
 
 export type JsoncParser = typeof import("jsonc-parser/lib/esm/main.js");
 let jsonc: JsoncParser | null = null;
@@ -83,25 +87,28 @@ function backup(file: string): string | null {
 	return dest;
 }
 
-export function readJsonc(file: string): unknown {
+export function readJsonc(file: string, strict = false): unknown {
 	if (!existsSync(file)) return undefined;
-	return parser().parse(readFileSync(file, "utf8"), [], {
+	const errors: ParseError[] = [];
+	const value = parser().parse(readFileSync(file, "utf8"), errors, {
 		allowTrailingComma: true,
 	});
+	if (strict && errors.length) throw new Error(`Invalid JSON in ${file}`);
+	return value;
 }
 
 /** Reads a nested value, e.g. getPath(obj, ["mcpServers", "pulsar"]). */
-export function getPath(value: unknown, path: string[]): unknown {
+export function getPath(value: unknown, path: JSONPath): unknown {
 	let current = value;
 	for (const key of path) {
 		if (!current || typeof current !== "object") return undefined;
-		current = (current as Record<string, unknown>)[key];
+		current = (current as Record<string | number, unknown>)[key];
 	}
 	return current;
 }
 
 /** Sets (or with `undefined`, removes) one key in a JSON/JSONC file, keeping comments and layout. */
-export function editJson(file: string, path: string[], value: unknown) {
+export function editJson(file: string, path: JSONPath, value: unknown) {
 	const { applyEdits, modify, parse } = parser();
 	const text = existsSync(file) ? readFileSync(file, "utf8") : "{}\n";
 	if (
@@ -133,17 +140,22 @@ export function editJson(file: string, path: string[], value: unknown) {
 }
 
 /** Runs a harness CLI. Throws with its stderr on failure. */
-export function runCli(cmd: string, args: string[]): string {
+export function runCli(cmd: string, args: string[], env = process.env): string {
 	return execFileSync(cmd, args, {
+		env,
 		encoding: "utf8",
 		stdio: ["ignore", "pipe", "pipe"],
 		timeout: 60_000,
 	});
 }
 
-export function tryCli(cmd: string, args: string[]): boolean {
+export function tryCli(
+	cmd: string,
+	args: string[],
+	env = process.env,
+): boolean {
 	try {
-		runCli(cmd, args);
+		runCli(cmd, args, env);
 		return true;
 	} catch {
 		return false;

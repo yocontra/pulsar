@@ -1,8 +1,7 @@
 import { access, readdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { lazyCrypto } from "../lazy.ts";
-import { type Action, skillFor } from "../setup/actions.ts";
+import { type Action, cliUndo, skillFor } from "../setup/actions.ts";
 import { exists, runCli, setTomlKey, tryCli, which } from "../setup/files.ts";
 import { codexTurnFailed } from "../transcripts/turn-outcome.ts";
 import { MAX_BLOCK_SECONDS } from "../types.ts";
@@ -14,6 +13,7 @@ import {
 	CodexRpcError,
 	codexControlAvailable,
 	codexControlReady,
+	codexHome,
 	codexRpc,
 } from "./codex-rpc.ts";
 import { codexStatuses } from "./codex-status.ts";
@@ -48,10 +48,7 @@ export async function codexRolloutAsync(
 	const missed = codexMisses.get(threadId);
 	if (missed !== undefined && Date.now() - missed < codexMissRetry.ms)
 		return null;
-	const root = join(
-		process.env.CODEX_HOME ?? join(homedir(), ".codex"),
-		"sessions",
-	);
+	const root = join(codexHome(), "sessions");
 	const newest = async (dir: string, n?: number) =>
 		(await readdir(dir)).sort().reverse().slice(0, n);
 	try {
@@ -379,8 +376,7 @@ export const codex: HarnessDriver = {
 	},
 
 	setup: {
-		detect: (path) =>
-			!!which("codex", path) || exists(join(homedir(), ".codex")),
+		detect: (path) => !!which("codex", path) || exists(codexHome()),
 		configured: () => {
 			try {
 				return runCli("codex", ["mcp", "get", "pulsar"]).includes("pulsar");
@@ -406,7 +402,7 @@ export const codex: HarnessDriver = {
 									"mcp",
 								]);
 								// pulsar's tools only message other agents: approve them, and let send await_reply / wait block past 60s.
-								const toml = join(homedir(), ".codex", "config.toml");
+								const toml = join(codexHome(), "config.toml");
 								setTomlKey(
 									toml,
 									"mcp_servers.pulsar",
@@ -420,15 +416,11 @@ export const codex: HarnessDriver = {
 									String(MAX_BLOCK_SECONDS + 100),
 								);
 							},
-							undo: {
-								type: "cli",
-								cmd: "codex",
-								args: ["mcp", "remove", "pulsar"],
-							},
+							undo: cliUndo("codex", ["mcp", "remove", "pulsar"]),
 						} satisfies Action,
 					]
 				: []),
-			...skillFor("codex", join(homedir(), ".codex", "skills"), ctx),
+			...skillFor("codex", join(codexHome(), "skills"), ctx),
 		],
 	},
 };

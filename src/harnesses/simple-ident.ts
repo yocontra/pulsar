@@ -68,15 +68,6 @@ export const cursorIdent = {
 	},
 } satisfies HarnessIdent;
 
-export const geminiIdent = {
-	id: "gemini",
-	label: "Gemini CLI",
-
-	matchProcess(args: string) {
-		return exe(args) === "gemini" || args.includes("@google/gemini-cli");
-	},
-} satisfies HarnessIdent;
-
 export const vscodeIdent = {
 	id: "vscode",
 	label: "VS Code",

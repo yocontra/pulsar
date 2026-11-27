@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { configDir } from "../harnesses/claude-ident.ts";
+import { piAgentDir } from "../harnesses/pi-paths.ts";
 import { type Providers, readProviders } from "./local.ts";
 import type { UsageHarness } from "./parse.ts";
 
@@ -14,7 +15,7 @@ interface UsageSource {
 const stem = (name: string) => name.replace(/\.jsonl$/, "");
 function extensionSource(id: "pi" | "omp"): UsageSource {
 	return {
-		root: () => join(homedir(), `.${id}`, "agent", "sessions"),
+		root: () => join(piAgentDir(id), "sessions"),
 		layout: "projects",
 		children: "",
 		session: (name) => stem(name).replace(/^[^_]*_/, ""),

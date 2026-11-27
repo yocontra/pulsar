@@ -36,6 +36,15 @@ export const ACP_PROVIDERS = [
 			"https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server",
 	},
 	{
+		id: "omp",
+		label: "Oh My Pi",
+		binary: "omp",
+		args: ["acp"],
+		distribution: "native",
+		source:
+			"https://github.com/can1357/oh-my-pi/tree/main/packages/coding-agent/src/modes/acp",
+	},
+	{
 		id: "opencode",
 		label: "OpenCode",
 		binary: "opencode",

@@ -26,7 +26,12 @@ export const isOverlay = (r: Route) =>
 /** The page a route shows (an approval sits on its agent's page). */
 function pageOf(r: Route): Route | null {
 	if (r.view === "approval")
-		return sessionless(r.id) ? null : { view: "agent", id: r.id };
+		return sessionless(r.id)
+			? null
+			: {
+					view: r.id.includes("/sub:") ? "subagent" : "agent",
+					id: r.id,
+				};
 	if (r.view === "node" || r.view === "broadcast") return null;
 	return r;
 }

@@ -83,9 +83,9 @@ const ToolBody = lazy(loadBody);
 
 /** A path with its folder quiet and its file name prominent. */
 export function PathText({ path }: { path: string }) {
-	const i = path.lastIndexOf("/");
+	const i = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
 	return (
-		<span className="ds-path" title={path}>
+		<span className="ds-path ds-file-path" title={path}>
 			{i >= 0 && <span className="ds-path-dir">{path.slice(0, i + 1)}</span>}
 			<span className="ds-path-base">{path.slice(i + 1)}</span>
 		</span>

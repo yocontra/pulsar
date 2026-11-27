@@ -362,7 +362,7 @@ export async function startMcp(
 		probe: opts.probe,
 		env: {
 			// Pull-only: test messages can never be pushed into a real session.
-			PULSAR_HARNESS: "gemini",
+			PULSAR_HARNESS: "copilot",
 			PULSAR_SESSION_ID: opts.session ?? "mem-session",
 		},
 	});

@@ -82,14 +82,14 @@ describe("MCP server", () => {
 
 	test("two harnesses find each other, tag, multicast and reply", async () => {
 		const codex = await mcpClient("codex", "/tmp", "mcp-codex");
-		const gemini = await mcpClient("gemini", "/tmp", "mcp-gemini");
+		const copilot = await mcpClient("copilot", "/tmp", "mcp-copilot");
 
 		const who = textOf(
 			await codex.callTool({ name: "set_identity", arguments: {} }),
 		);
 		expect(who).toContain("codex@");
 
-		await gemini.callTool({
+		await copilot.callTool({
 			name: "set_identity",
 			arguments: { tags_add: ["workstream:docs"] },
 		});
@@ -99,7 +99,7 @@ describe("MCP server", () => {
 				arguments: { selector: "workstream=docs" },
 			}),
 		);
-		expect(listed).toContain("gemini@");
+		expect(listed).toContain("copilot@");
 
 		const sent = textOf(
 			await codex.callTool({
@@ -114,11 +114,11 @@ describe("MCP server", () => {
 		const id = /Sent (m_\w+)/.exec(sent)![1]!;
 
 		const inbox = textOf(
-			await gemini.callTool({ name: "inbox", arguments: {} }),
+			await copilot.callTool({ name: "inbox", arguments: {} }),
 		);
 		expect(inbox).toContain("can you review the README?");
 
-		await gemini.callTool({
+		await copilot.callTool({
 			name: "respond",
 			arguments: { message_id: id, state: "reply", text: "on it" },
 		});

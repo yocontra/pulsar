@@ -8,7 +8,8 @@ import { useSubagent } from "../data/index.ts";
 import { AgentMark } from "../ds/index.ts";
 import { agentColor } from "../lib/agent-color.ts";
 import { observer } from "../lib/signals.ts";
-import { SubagentView } from "../session/SubagentView.tsx";
+import { STATE_WORD } from "../lib/subagents.ts";
+import { SubagentStop, SubagentView } from "../session/SubagentView.tsx";
 import { AgentBar, useUnderGlass } from "./AgentBar.tsx";
 import { IonContent } from "./ionic.ts";
 import { isMaterial } from "./platform.ts";
@@ -26,15 +27,12 @@ function SubagentPageImpl({ id }: { id: string }) {
 				sub={
 					sub && (
 						<>
-							{sub.state === "running"
-								? "Running"
-								: sub.state === "idle"
-									? "Idle"
-									: "Done"}
+							{STATE_WORD[sub.state]}
 							{sub.agentType ? ` · ${sub.agentType}` : ""}
 						</>
 					)
 				}
+				end={sub?.canStop && <SubagentStop sub={sub} />}
 				compactBack={false}
 				className="p-sub-header"
 			/>

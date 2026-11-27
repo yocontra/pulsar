@@ -356,13 +356,9 @@ export class Router {
 		}
 	}
 
-	private async handoff(
-		message: PushMessage,
-		sender: Agent,
-		target: Agent,
-	): Promise<Receipt> {
+	private frame(message: PushMessage, sender: Agent) {
 		const framing = this.registry.messageFraming(message.id, sender);
-		const text = formatPush(
+		return formatPush(
 			message,
 			sender,
 			framing === "verified"
@@ -371,6 +367,75 @@ export class Router {
 					? { kind: "unverified" }
 					: { kind: "agent" },
 		);
+	}
+
+	/** Handoff only unread input. A claim prevents a concurrent inbox read or push from duplicating it. */
+	takeForHook(
+		caller: Caller,
+		target: Agent,
+		first: boolean,
+	): Array<{ id: string; text: string }> {
+		if (target.inbound !== "accept" || caller.closed.aborted) return [];
+		const messages: Array<{ id: string; text: string; attempt: number }> = [];
+		for (const m of this.store.unread(target.id, LIMITS.inboxCap)) {
+			if (
+				m.priority === "fyi" ||
+				(m.priority === "normal" && !first) ||
+				this.activeHandoff(target.id, m.id)
+			)
+				continue;
+			const sender = this.registry.from(m.fromId, m.fromName);
+			if (!sender) continue;
+			const attempt = this.store.receipt(m.id, target.id)?.attempt ?? 1;
+			const text = this.frame(
+				{ ...m, attempt },
+				{ ...sender, name: m.fromName },
+			);
+			const receipt = this.receipt(
+				m.id,
+				target,
+				"sent",
+				"native-hook",
+				"Submitted to the session hook",
+			);
+			this.handedOff(m, target, receipt);
+			messages.push({ id: m.id, text, attempt });
+			if (messages.length === 8) break;
+		}
+		if (messages.length)
+			caller.closed.addEventListener(
+				"abort",
+				() => {
+					for (const m of messages) {
+						const current = this.store.receipt(m.id, target.id);
+						if (
+							current?.state !== "sent" ||
+							current.via !== "native-hook" ||
+							current.attempt !== m.attempt
+						)
+							continue;
+						this.onUncertain(
+							this.receipt(
+								m.id,
+								target,
+								"nacked",
+								"native-hook",
+								"Delivery unknown: the native hook closed before it confirmed submission.",
+							),
+						);
+					}
+				},
+				{ once: true },
+			);
+		return messages;
+	}
+
+	private async handoff(
+		message: PushMessage,
+		sender: Agent,
+		target: Agent,
+	): Promise<Receipt> {
+		const text = this.frame(message, sender);
 		const detail = message.priority === "urgent" ? URGENT_HANDOFF : null;
 		const ext = this.sessions.extensionFor(target.id);
 		if (ext) {

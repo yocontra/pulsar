@@ -90,7 +90,9 @@ function MainPaneImpl({ r }: { r: Route }) {
 		case "agent":
 			return <SessionDesktop id={r.id} />;
 		case "approval":
-			return sessionless(r.id) ? (
+			return r.id.includes("/sub:") ? (
+				<SubagentDesktop id={r.id} mobile={false} />
+			) : sessionless(r.id) ? (
 				<PromptDialog id={r.id} />
 			) : (
 				<SessionDesktop id={r.id} approval />

@@ -58,6 +58,11 @@ const ACP_BINARIES = new Map<LaunchHarness, string>(
 	ACP_PROVIDERS.map(({ id, binary }) => [id, binary]),
 );
 
+/** Native OMP also exposes steering and directly addressable child sessions. */
+function preferredAcpBinary(id: LaunchHarness) {
+	return id === "omp" ? undefined : ACP_BINARIES.get(id);
+}
+
 /** The program run by the login shell in a new tmux pane. */
 export function harnessCommand(
 	h: LaunchHarness,
@@ -70,7 +75,7 @@ export function harnessCommand(
 	const acp = `exec pulsar acp ${entry.id}`;
 	if ("managed" in entry) return acp;
 	const native = `exec ${entry.bin}`;
-	const binary = ACP_BINARIES.get(h);
+	const binary = preferredAcpBinary(h);
 	// Use this pane's PATH so launch remains correct after a cached options
 	// probe or when the login shell chooses a different PATH in this folder.
 	// Keep the selection script portable across login shells.
@@ -1024,7 +1029,7 @@ export class Launches {
 			checked: installed !== null,
 			harnesses: HARNESS_IDS.map((id) => {
 				const entry = LAUNCH_HARNESSES[id];
-				const binary = ACP_BINARIES.get(id);
+				const binary = preferredAcpBinary(id);
 				const acp =
 					binary !== undefined &&
 					installed?.has("pulsar") &&

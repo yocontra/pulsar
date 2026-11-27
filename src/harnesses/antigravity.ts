@@ -2,6 +2,7 @@ import { lstat, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { freshProcessSnapshot, processStart } from "../processes.ts";
+import { paneRoots } from "../tmux.ts";
 import { toolAction } from "../transcripts/activity.ts";
 import type { TranscriptEvent, TranscriptPage } from "../transcripts/types.ts";
 import { antigravityChildSupport } from "./antigravity-children.ts";
@@ -12,6 +13,11 @@ import {
 	antigravityProcess,
 	nativeAntigravityProcess,
 } from "./antigravity-ident.ts";
+import {
+	hasAntigravityPane,
+	interruptAntigravity,
+	wakeAntigravityPane,
+} from "./antigravity-pane.ts";
 import { fields, message, utf8 } from "./antigravity-proto.ts";
 import {
 	antigravitySummaries,
@@ -169,7 +175,12 @@ export async function readAntigravitySession(
 export const antigravity: HarnessDriver = {
 	...antigravityIdent,
 	readSession: readAntigravitySession,
-	model: ({ sessionId }) => antigravityModel(sessionId),
+	push: {
+		canPush: hasAntigravityPane,
+		deliver: (agent, text) => wakeAntigravityPane(agent, text),
+	},
+	canInterrupt: (agent) => hasAntigravityPane(agent) && agent.status === "busy",
+	interrupt: (agent) => interruptAntigravity(agent),
 	subagents: antigravityChildSupport(
 		antigravityConversations,
 		async (id, path) =>
@@ -209,6 +220,9 @@ export const antigravity: HarnessDriver = {
 			const matches = [...table.values()].filter((p) =>
 				nativeAntigravityProcess(p.args),
 			);
+			const panes = matches.length
+				? await paneRoots()
+				: new Map<number, string>();
 			const sessions = await Promise.all(
 				matches.map(async ({ pid }) => {
 					const [{ cwd, sessionId }, birth] = await Promise.all([
@@ -217,6 +231,8 @@ export const antigravity: HarnessDriver = {
 					]);
 					const meta: Record<string, string> = {};
 					if (birth) meta.processStart = birth;
+					const pane = panes.get(pid);
+					if (pane && sessionId) meta.tmux = pane;
 					return {
 						harness: "antigravity",
 						sessionId: sessionId ?? `pid:${pid}`,
@@ -238,7 +254,11 @@ export const antigravity: HarnessDriver = {
 					s.meta.harnessName = info.title;
 					s.meta.harnessNameSource = "auto";
 				}
-				return { ...s, status: info?.status ?? "unknown" };
+				return {
+					...s,
+					model: antigravityModel(s.sessionId),
+					status: info?.status ?? "unknown",
+				};
 			});
 		},
 	},

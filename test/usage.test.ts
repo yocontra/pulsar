@@ -742,3 +742,30 @@ describe("pool report", () => {
 		]);
 	});
 });
+
+test("pi and omp sharing a configured session root count each response under its own harness", async () => {
+	const shared = join(dir, "agent", "sessions");
+	const usage = new Usage(store, {
+		roots: () => ({ ...rootsIn(dir), pi: shared, omp: shared }),
+	});
+	const lines = piLines(T, "local-test", [
+		{ input: 20, output: 2, cacheRead: 0, cacheWrite: 0 },
+	]);
+	write(join(shared, "-work", "1_pi-one.jsonl"), lines);
+	write(join(shared, "-work", "2_omp-one.jsonl"), [
+		'{"type":"title","title":"Test"}',
+		...lines,
+	]);
+	await usage.scanner.scan();
+	await usage.scanner.scan();
+	expect(
+		store.db
+			.prepare(
+				"SELECT harness, session, records FROM usage_hourly ORDER BY harness",
+			)
+			.all(),
+	).toEqual([
+		{ harness: "omp", session: "omp-one", records: 1 },
+		{ harness: "pi", session: "pi-one", records: 1 },
+	]);
+});

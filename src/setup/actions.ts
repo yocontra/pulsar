@@ -17,12 +17,42 @@ export interface SetupContext {
 /** A recorded change, enough to undo it later. */
 export type Undo =
 	| { type: "json"; file: string; path: string[] }
-	| { type: "cli"; cmd: string; args: string[] }
+	| {
+			type: "cli";
+			cmd: string;
+			args: string[];
+			profile?: Record<string, string | null>;
+	  }
 	| { type: "dir"; path: string }
 	/** Hook entries under `hooks.<event>` whose command contains `marker`. */
-	| { type: "hook"; file: string; event: string; marker: string }
+	| {
+			type: "hook";
+			file: string;
+			event: string;
+			marker: string;
+			group?: string;
+	  }
 	/** The `pulsar` command on PATH; removed only if setup wrote it. */
 	| { type: "shim"; path: string };
+
+const profileKeys = {
+	claude: ["CLAUDE_CONFIG_DIR"],
+	codex: ["CODEX_HOME"],
+	omp: ["OMP_PROFILE", "PI_PROFILE", "PI_CONFIG_DIR", "PI_CODING_AGENT_DIR"],
+	pi: ["PI_CODING_AGENT_DIR"],
+} as const;
+
+/** Restore the CLI profile that setup changed even when uninstall runs in a different shell. */
+export function cliUndo(cmd: keyof typeof profileKeys, args: string[]): Undo {
+	return {
+		type: "cli",
+		cmd,
+		args,
+		profile: Object.fromEntries(
+			profileKeys[cmd].map((key) => [key, process.env[key] ?? null]),
+		),
+	};
+}
 
 export interface Action {
 	client: string;
@@ -108,19 +138,70 @@ export function removeHook(file: string, event: string, marker: string) {
 	editJson(file, ["hooks", event], rest.length ? rest : undefined);
 }
 
+/** Edits one flat handler array in a named hooks.json group. */
+export function updateNamedHook(
+	file: string,
+	group: string,
+	event: string,
+	marker: string,
+	hook?: { type: "command"; command: string; timeout: number },
+) {
+	const settings = readJsonc(file, true);
+	const record = (value: unknown) =>
+		value !== null && typeof value === "object" && !Array.isArray(value);
+	if (settings !== undefined && !record(settings))
+		throw new Error(`Expected an object in ${file}`);
+	const entry = getPath(settings, [group]);
+	if (entry !== undefined && !record(entry))
+		throw new Error(`Expected an object for ${group} in ${file}`);
+	const path = [group, event];
+	const existing = getPath(settings, path);
+	if (existing !== undefined && !Array.isArray(existing))
+		throw new Error(`Expected a handler list for ${group}.${event} in ${file}`);
+	const handlers: unknown[] = existing ?? [];
+	const installed: number[] = [];
+	for (const [index, handler] of handlers.entries()) {
+		const command = getPath(handler, ["command"]);
+		if (typeof command === "string" && command.trimEnd().endsWith(marker))
+			installed.push(index);
+	}
+	if (hook) {
+		const primary = installed.shift();
+		if (primary === undefined) {
+			if (existing) editJson(file, [...path, -1], hook);
+			else editJson(file, path, [hook]);
+		} else if (JSON.stringify(handlers[primary]) !== JSON.stringify(hook)) {
+			editJson(file, [...path, primary], hook);
+		}
+	}
+	for (const index of installed.reverse())
+		editJson(file, [...path, index], undefined);
+}
+
 export function undoAction(undo: Undo) {
 	switch (undo.type) {
 		case "json":
 			editJson(undo.file, undo.path, undefined);
 			return;
-		case "cli":
-			tryCli(undo.cmd, undo.args);
+		case "cli": {
+			const env = { ...process.env };
+			// Older setup records used default locations and stored no profile.
+			const defaults = profileKeys[undo.cmd as keyof typeof profileKeys] ?? [];
+			for (const key of defaults) delete env[key];
+			for (const [key, value] of Object.entries(undo.profile ?? {})) {
+				if (value === null) delete env[key];
+				else env[key] = value;
+			}
+			tryCli(undo.cmd, undo.args, env);
 			return;
+		}
 		case "dir":
 			rmSync(undo.path, { recursive: true, force: true });
 			return;
 		case "hook":
-			removeHook(undo.file, undo.event, undo.marker);
+			if (undo.group)
+				updateNamedHook(undo.file, undo.group, undo.event, undo.marker);
+			else removeHook(undo.file, undo.event, undo.marker);
 			return;
 		case "shim":
 			removeShim(undo.path);

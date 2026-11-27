@@ -37,11 +37,13 @@ export const OPS = [
 	/** A harness hook asks the user about a permission prompt (blocks until decided). */
 	"approval.request",
 	"claude.subagent.bind",
+	"native.hook.collect",
 	"claude.subagent.collect",
 	"claude.subagent.confirm",
 	/** The pi/omp extension relays a host dialog (blocks until answered), or says it was answered locally. */
 	"interaction.ask",
 	"interaction.local",
+	"acp.children",
 	/**
 	 * Passkeys: list, and remove (from the socket after a presence check; from
 	 * the app with a passkey session).
@@ -139,10 +141,12 @@ const FED: ReadonlySet<Op> = new Set<Op>(FED_OPS);
 const AGENT_ONLY: ReadonlySet<Op> = new Set<Op>([
 	"approval.request",
 	"claude.subagent.bind",
+	"native.hook.collect",
 	"claude.subagent.collect",
 	"claude.subagent.confirm",
 	"interaction.ask",
 	"interaction.local",
+	"acp.children",
 	"whoami",
 	"set_identity",
 	"set_status",

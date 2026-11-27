@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { managedAcpSubagentDriver } from "../harnesses/acp-children.ts";
 import { attachedDriver, driverFor, pushFor } from "../harnesses/index.ts";
 import type { FoundSubagent, HarnessDriver } from "../harnesses/types.ts";
 import type {
@@ -53,6 +54,13 @@ const STALE_SWEEP_MS = 10 * 60_000;
  * a parent's transcript card can open it.
  */
 export const DONE_KEEP_MS = 24 * 60 * 60_000;
+type ChildDriver = Pick<HarnessDriver, "label" | "subagents" | "transcript">;
+
+function childDriver(agent: Agent): ChildDriver | null {
+	return agent.meta.acp === "1"
+		? managedAcpSubagentDriver
+		: attachedDriver(agent);
+}
 
 interface Entry {
 	stamp: string | null;
@@ -77,7 +85,7 @@ interface Entry {
 
 /** Where a message to a subagent of this harness goes. */
 function messagingFor(
-	driver: HarnessDriver | null | undefined,
+	driver: ChildDriver | null | undefined,
 	parentName: string,
 	child: FoundSubagent,
 	mode: "native" | "pull" | "inbox" | "parent",
@@ -129,7 +137,7 @@ export class Subagents {
 	/** The local agent that can have subagents, or undefined. */
 	private parent(parentId: string): Agent | undefined {
 		const agent = this.registry.get(parentId);
-		return agent && attachedDriver(agent)?.subagents ? agent : undefined;
+		return agent && childDriver(agent)?.subagents ? agent : undefined;
 	}
 
 	private entry(parentId: string): Entry {
@@ -184,7 +192,7 @@ export class Subagents {
 		}
 		const run = (async () => {
 			try {
-				const driver = attachedDriver(agent)!;
+				const driver = childDriver(agent)!;
 				let found: FoundSubagent[] = [];
 				try {
 					found = await driver.subagents!.list(agent);
@@ -220,7 +228,7 @@ export class Subagents {
 					? f
 					: { ...f, state: "done", finishedAt: f.finishedAt ?? f.updatedAt },
 			);
-		const driver = attachedDriver(agent);
+		const driver = childDriver(agent);
 		const hasTranscript = Boolean(
 			driver?.subagents?.transcript || driver?.transcript,
 		);
@@ -268,6 +276,13 @@ export class Subagents {
 				f.parentKey && keys.has(f.parentKey) ? idOf(f.parentKey) : null,
 			hasTranscript:
 				hasTranscript && Boolean(f.file || f.sessionId) && hasSource(driver, f),
+			...(agent.meta.acp === "1"
+				? {
+						canStop:
+							!!f.acpCancel &&
+							this.registry.canStop(this.record(idOf(f.key), agent, f)),
+					}
+				: {}),
 			messaging: messagingFor(
 				driver,
 				agent.name,
@@ -314,7 +329,7 @@ export class Subagents {
 		const now = this.now();
 		for (const agent of this.registry.live()) {
 			if (this.registry.closed) return;
-			const sub = attachedDriver(agent)?.subagents;
+			const sub = childDriver(agent)?.subagents;
 			if (!sub) continue;
 			const e = this.entries.get(agent.id);
 			const running = (e?.counts?.running ?? 0) > 0;
@@ -476,6 +491,26 @@ export class Subagents {
 		return hit ? this.record(id, hit.parent, hit.sub) : undefined;
 	}
 
+	/** An ACP connection can relay interactions only for its announced children. */
+	async acpChildForSession(
+		parent: Agent,
+		sessionId: string,
+	): Promise<Agent | undefined> {
+		if (parent.meta.acp !== "1" || parent.status === "gone") return;
+		let row = this.entries
+			.get(parent.id)
+			?.found.find((child) => child.sessionId === sessionId);
+		if (!row) {
+			await this.refresh(parent.id);
+			row = this.entries
+				.get(parent.id)
+				?.found.find((child) => child.sessionId === sessionId);
+		}
+		return row && row.state !== "done"
+			? this.record(`${parent.id}${SUB_MARK}${row.key}`, parent, row)
+			: undefined;
+	}
+
 	private record(id: string, parent: Agent, sub: FoundSubagent): Agent {
 		return {
 			id,
@@ -483,7 +518,7 @@ export class Subagents {
 			harness: parent.harness,
 			sessionId: sub.sessionId,
 			pid: null,
-			cwd: parent.cwd,
+			cwd: sub.cwd ?? parent.cwd,
 			project: parent.project,
 			branch: parent.branch,
 			...(parent.machine ? { machine: parent.machine } : {}),
@@ -493,7 +528,9 @@ export class Subagents {
 					? "busy"
 					: sub.state === "idle"
 						? "idle"
-						: "gone",
+						: sub.state === "unknown"
+							? "unknown"
+							: "gone",
 			model: null,
 			activity: sub.description,
 			inbound: "accept",
@@ -501,7 +538,13 @@ export class Subagents {
 			reach: "push",
 			lastSeen: sub.updatedAt,
 			createdAt: sub.startedAt,
-			meta: { subagentOf: parent.id, subagentKey: sub.key },
+			meta: {
+				subagentOf: parent.id,
+				subagentKey: sub.key,
+				...(parent.meta.acp === "1"
+					? { acpChild: "1", acpChildCancel: sub.acpCancel ? "1" : "0" }
+					: {}),
+			},
 		};
 	}
 
@@ -628,9 +671,18 @@ export class Subagents {
 		const hit = this.found(agent.id);
 		if (!hit) return null;
 		const { parent, sub } = hit;
-		const driver = driverFor(parent.harness);
+		if (sub.fileAvailable === false) return null;
+		const driver =
+			parent.meta.acp === "1"
+				? managedAcpSubagentDriver
+				: driverFor(parent.harness);
 		const own = await driver?.subagents?.transcript?.(parent, sub);
-		if (own) return { source: own.source, parse: own.parse, cwd: parent.cwd };
+		if (own)
+			return {
+				source: own.source,
+				parse: own.parse,
+				cwd: sub.cwd ?? parent.cwd,
+			};
 		// Codex threads, OpenCode sessions: the harness's own transcript of that session.
 		if (!sub.sessionId || !driver?.transcript) return null;
 		const source = await driver.transcript.locate({
@@ -644,7 +696,8 @@ export class Subagents {
 	}
 }
 
-function hasSource(driver: HarnessDriver | null | undefined, f: FoundSubagent) {
+function hasSource(driver: ChildDriver | null | undefined, f: FoundSubagent) {
+	if (f.fileAvailable !== undefined) return f.fileAvailable;
 	if (driver?.subagents?.transcript && f.file) return true;
 	return Boolean(f.sessionId && driver?.transcript);
 }

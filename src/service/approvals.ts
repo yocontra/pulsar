@@ -469,8 +469,10 @@ export class Approvals {
 	ask(
 		caller: Caller,
 		req: InteractionRequest,
+		child?: Agent,
 	): Promise<InteractionResult | null> {
-		const agent = this.caller(caller, "interaction.ask");
+		const parent = this.caller(caller, "interaction.ask");
+		const agent = child ?? parent;
 		if (!this.answerable()) return Promise.resolve(null);
 		// The passkey signs this hash: it must cover what the card shows (the
 		// question, the plan), not only the (empty) tool input.
@@ -501,8 +503,9 @@ export class Approvals {
 	}
 
 	/** `interaction.local {ref}`: the extension's local dialog answered first. */
-	answeredLocally(caller: Caller, ref: string): boolean {
-		const agent = this.caller(caller, "interaction.ask");
+	answeredLocally(caller: Caller, ref: string, child?: Agent): boolean {
+		const parent = this.caller(caller, "interaction.ask");
+		const agent = child ?? parent;
 		return this.finish(
 			this.extensionId(agent.id, ref),
 			"answered-locally",

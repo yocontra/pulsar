@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { jsonAction, mcpCommand } from "../setup/actions.ts";
+import { cliUndo, jsonAction, mcpCommand } from "../setup/actions.ts";
 import { exists, getPath, readJsonc, runCli, which } from "../setup/files.ts";
 import { piTurnFailed } from "../transcripts/turn-outcome.ts";
 import {
@@ -9,6 +9,7 @@ import {
 	ompSubagentTranscript,
 } from "./more-subagents.ts";
 import { ompActivity } from "./omp-activity.ts";
+import { piAgentDir } from "./pi-paths.ts";
 import { locatePiStyle, piSessionLog } from "./pi-sessions.ts";
 import { parsePi } from "./pi-transcript.ts";
 import { ompIdent } from "./simple-ident.ts";
@@ -34,10 +35,9 @@ export const omp: HarnessDriver = {
 	sessionLog: (agent) => piSessionLog("omp", agent),
 
 	setup: {
-		detect: (path) =>
-			!!which("omp", path) || exists(join(homedir(), ".omp", "agent")),
+		detect: (path) => !!which("omp", path) || exists(piAgentDir("omp")),
 		configured: () =>
-			!!getPath(readJsonc(join(homedir(), ".omp", "agent", "mcp.json")), [
+			!!getPath(readJsonc(join(piAgentDir("omp"), "mcp.json")), [
 				"mcpServers",
 				"pulsar",
 			]),
@@ -46,7 +46,7 @@ export const omp: HarnessDriver = {
 				? [
 						jsonAction(
 							"omp",
-							join(homedir(), ".omp", "agent", "mcp.json"),
+							join(piAgentDir("omp"), "mcp.json"),
 							["mcpServers", "pulsar"],
 							{ type: "stdio", ...mcpCommand(ctx) },
 						),
@@ -56,11 +56,7 @@ export const omp: HarnessDriver = {
 				client: "omp",
 				describe: `omp install ${ctx.installDir.replace(homedir(), "~")} (extension: push delivery, skill)`,
 				apply: () => runCli("omp", ["install", ctx.installDir]),
-				undo: {
-					type: "cli",
-					cmd: "omp",
-					args: ["plugin", "uninstall", "pulsar"],
-				},
+				undo: cliUndo("omp", ["plugin", "uninstall", "pulsar"]),
 			},
 		],
 	},

@@ -490,8 +490,7 @@ function ComposerImpl({
 	const choices = choicesFor(busyRecipient?.capabilities?.steer);
 	const showTiming =
 		!!busyRecipient &&
-		busyRecipient.reach === "push" &&
-		busyRecipient.capabilities?.steer !== false;
+		(busyRecipient.capabilities?.steer ?? busyRecipient.reach === "push");
 	const form = compact ? (
 		<ComposerActionsProvider value={actionsApi}>
 			<Slot name="composer.top" {...slot} />

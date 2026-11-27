@@ -71,7 +71,26 @@ describe("extension control requests", () => {
 		expect(sent).toHaveLength(1);
 	});
 
-	test("omp never runs a command line from here", async () => {
+	test("a command that starts a long turn is acknowledged while the turn is still running", async () => {
+		let idle = true;
+		const pending = new Promise<void>(() => {});
+		const result = await answerControl(
+			{ kind: "command", line: "/test" },
+			{
+				harness: "pi",
+				ctx: { isIdle: () => idle },
+				pi: {
+					sendUserMessage() {
+						idle = false;
+						return pending;
+					},
+				},
+			},
+		);
+		expect(result).toEqual({ result: "ok" });
+	});
+
+	test("omp declines terminal-only commands through the extension", async () => {
 		const sent: string[] = [];
 		expect(
 			await answerControl(
@@ -84,6 +103,36 @@ describe("extension control requests", () => {
 			),
 		).toMatchObject({ result: "unsupported" });
 		expect(sent).toEqual([]);
+	});
+
+	test("OMP sends the exact installed skill path and arguments while idle", async () => {
+		const sent: string[] = [];
+		const host = {
+			harness: "omp",
+			ctx: { isIdle: () => true },
+			pi: {
+				getCommands: () => [
+					{
+						name: "skill:tidy",
+						source: "skill",
+						path: "/custom profile/tidy/SKILL.md",
+					},
+				],
+				sendUserMessage: (s: string) => sent.push(s),
+			},
+		};
+		expect(
+			await answerControl(
+				{ kind: "command", line: "/skill:tidy source files" },
+				host,
+			),
+		).toEqual({ result: "ok" });
+		expect(sent).toEqual([
+			'Read the installed skill at "/custom profile/tidy/SKILL.md" and follow its instructions.\n\nUser request: source files',
+		]);
+		expect(
+			await answerControl({ kind: "command", line: "/skill:missing" }, host),
+		).toMatchObject({ result: "unsupported" });
 	});
 
 	test("omp plan mode: read, enter, exit, and the host's refusal", async () => {

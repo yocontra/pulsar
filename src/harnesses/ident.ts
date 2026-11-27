@@ -4,13 +4,7 @@ import { HARNESSES } from "./catalog.ts";
 import { claudeIdent } from "./claude-ident.ts";
 import { codexIdent } from "./codex-ident.ts";
 import { opencodeIdent } from "./opencode-ident.ts";
-import {
-	cursorIdent,
-	geminiIdent,
-	ompIdent,
-	piIdent,
-	vscodeIdent,
-} from "./simple-ident.ts";
+import { cursorIdent, ompIdent, piIdent, vscodeIdent } from "./simple-ident.ts";
 import type { HarnessIdent } from "./types.ts";
 
 /**
@@ -27,7 +21,6 @@ const native = [
 	piIdent,
 	ompIdent,
 	cursorIdent,
-	geminiIdent,
 	vscodeIdent,
 ];
 export const IDENTS: readonly HarnessIdent[] = HARNESSES.map((h) => {

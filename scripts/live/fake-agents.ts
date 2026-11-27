@@ -141,7 +141,7 @@ const specs: Spec[] = [
 	{ name: "docs-writer", harness: "omp", project: "demo", branch: "docs" },
 	{ name: "api-1", harness: "codex", project: "api", branch: "feat/billing" },
 	{ name: "api-2", harness: "opencode", project: "api", branch: "main" },
-	{ name: "infra", harness: "gemini", project: "infra", branch: "main" },
+	{ name: "infra", harness: "copilot", project: "infra", branch: "main" },
 ];
 for (let i = specs.length; i < N; i++)
 	specs.push({

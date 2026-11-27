@@ -69,10 +69,10 @@ class FakePane {
 	/** Typed text shows only after this many reads (a slow terminal). */
 	lag = 0;
 	private pendingText: string | null = null;
-	readonly harness: "claude" | "codex" | "opencode";
+	readonly harness: "claude" | "codex" | "opencode" | "pi" | "omp";
 	readonly cycle: string[];
 	constructor(
-		harness: "claude" | "codex" | "opencode",
+		harness: "claude" | "codex" | "opencode" | "pi" | "omp",
 		cycle: string[],
 		mode?: string,
 	) {
@@ -91,6 +91,10 @@ class FakePane {
 			return "Quick safety check: trust this folder?\n❯ No, exit\n  Yes, I trust this folder\nEnter to confirm\n";
 		const ph = (s: string) => `\x1b[2m${s}\x1b[0m`;
 		switch (this.harness) {
+			case "pi":
+				return `${RULE}\n${this.input}\n${RULE}\n/tmp/x\n0.0%/66k (auto)    test`;
+			case "omp":
+				return `π > test ▶───\n╰─ ${this.input}`;
 			case "claude":
 				return `${RULE}\n\x1b[39m❯ ${this.input || ph('Try "fix lint errors"')}\n${RULE}\n  ${FOOTER[this.mode] ?? "?"}\n`;
 			case "codex":
@@ -784,6 +788,30 @@ describe("OpenCode", () => {
 });
 
 describe("pi and omp through the extension", () => {
+	for (const harness of ["pi", "omp"] as const) {
+		test(
+			harness +
+				" terminal commands preserve drafts and target only the parent pane",
+			async () => {
+				const pane = new FakePane(harness, ["default"]);
+				const a = agent({ id: `${harness}:1`, harness });
+				const { controls } = rig({ agents: [a], pane });
+				expect((await controls.run(a, "/compact")).result).toBe("ok");
+				expect(pane.submitted).toEqual(["/compact"]);
+				pane.input = "unsent";
+				expect((await controls.run(a, "/compact")).result).toBe("busy");
+				expect(
+					(
+						await controls.run(
+							{ ...a, meta: { subagentOf: "parent" } },
+							"/compact",
+						)
+					).result,
+				).toBe("unsupported");
+				expect(pane.input).toBe("unsent");
+			},
+		);
+	}
 	test("omp plan mode", async () => {
 		const a = agent({ id: "omp:1", harness: "omp" });
 		let plan = false;

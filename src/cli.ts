@@ -16,11 +16,10 @@ const HELP = `Pulsar ${VERSION} — find and message AI agents across every harn
 
 Usage:
   pulsar setup [--yes] [--all-detected] [--client <name>]... [--dry-run] [--no-mcp] [--skills-dir <path>] [--no-approvals] [--mesh] [--uninstall]
-                                  configure your agents (Claude Code, Codex, OpenCode, pi, omp, Cursor, Gemini);
+                                  configure detected harnesses and install session integrations
                                   asks whether to turn on the agent mesh (--mesh: turn it on without asking)
   pulsar acp --list                 list installed ACP executables and catalog entries
   pulsar acp <provider> [--resume <session-id>]   start or resume a managed ACP session
-  pulsar antigravity-bind          enable wake from inside a native Antigravity conversation
   pulsar hosted <provider> [list|view <id>]        read hosted tasks through this machine
   pulsar ls [selector]            list live agents (selector: name, project=x, harness=codex, tag, *)
   pulsar send <to> <message...>   send as "operator" (to: name, selector, or '*')
@@ -47,7 +46,6 @@ Usage:
   pulsar status                   daemon status
   pulsar stop                     stop the daemon (it restarts on next use; not the background service)
   pulsar mcp                      run the MCP server (your agent's config runs this)
-  pulsar hook claude-permission   Claude Code's PermissionRequest hook (\`pulsar mesh on\` installs it)
   pulsar daemon [--service]       run the daemon in the foreground
                                   (--service: launchd/systemd own it; no idle exit, stop refused)
 
@@ -67,11 +65,18 @@ async function operatorClient(autoStart = true) {
 /** Run from a terminal, this is the operator. Run from an agent's shell, it is that agent. */
 async function sayHello(client: DaemonClient) {
 	const { detectRegistration } = await import("./identity.ts");
+	const registration = await detectRegistration("cli");
 	await client.call("hello", {
 		protocol: PROTOCOL_VERSION,
 		version: VERSION,
-		registration: await detectRegistration("cli"),
+		registration,
 	});
+	if (registration.meta?.acp !== "1") {
+		const { identFor } = await import("./harnesses/ident.ts");
+		await identFor(registration.harness)
+			?.onSessionReady?.(registration)
+			.catch(() => {});
+	}
 }
 
 /** Connects to a running daemon without starting one; null when none is running. */
@@ -153,11 +158,11 @@ async function main(argv: string[]) {
 			}
 			return;
 		}
-		case "antigravity-bind": {
-			const { antigravityBind } = await import(
-				"./harnesses/antigravity-bind.ts"
-			);
-			await antigravityBind(rest);
+		case "worker": {
+			if (rest.length !== 1 || rest[0] !== "native-wake" || !process.send)
+				throw new Error("This worker requires a Pulsar session connection.");
+			const { runNativeWakeWorker } = await import("./native-wake.ts");
+			await runNativeWakeWorker();
 			return;
 		}
 		case "mcp": {

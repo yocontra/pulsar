@@ -10,7 +10,7 @@ cd /path/to/project
 pulsar acp antigravity
 ```
 
-New sessions started from the Pulsar app use managed ACP when the provider's ACP executable and `pulsar` are on the launch machine's PATH. Claude Code, Codex, OpenCode, and pi also have direct integrations. If the app cannot find the ACP executable, it starts the original terminal harness. The picker shows the preferred mode that the machine's login shell found.
+New sessions started from the Pulsar app use managed ACP when the provider's ACP executable and `pulsar` are on the launch machine's PATH. Claude Code, Codex, OpenCode, and pi also have direct integrations. If the app cannot find the ACP executable, it starts the original terminal harness. The picker shows the preferred mode that the machine's login shell found. OMP starts natively so you can steer active turns and message its subagents. Use `pulsar acp omp` for a managed OMP session.
 
 Use `pulsar acp <provider> --resume <session-id>` when the provider supports reopening ACP sessions. Run it from the original project directory. Resume existing native sessions with their harness's own resume command. See [Harness support](adapters.md).
 
@@ -20,9 +20,11 @@ Managed sessions can ask questions in the Pulsar app through ACP forms. Supporte
 
 Antigravity can send a reply or ask a question after the original prompt ends. Pulsar records that activity in the same transcript and shows the session as working until the reply ends. Late tool results keep their original tool names. [T3 Code Antigravity adapter reference](https://github.com/pingdotgg/t3code/blob/37d3d199/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.ts#L250-L261)
 
+When a managed provider announces ACP child sessions, Pulsar shows the child tree and a separate transcript for each child. Permission requests and questions appear in the child’s conversation and in Needs You. Stop is available on the session machine when the provider permits cancellation of that child. To send a message to a managed child, use its parent. [ACP subagents](https://agentclientprotocol.com/protocol/v1/subagents)
+
 Normal messages wait for the current turn to finish. FYI messages stay in the inbox. An urgent message can join a running turn when the adapter advertises steering and supports returning unconsumed input to Pulsar. This is available with Codex ACP 2.12.0+ and Claude Agent ACP 0.110.0+. If the adapter returns the input, Pulsar sends it as a regular prompt once the current turn ends. [ACP steering contract](https://github.com/agentclientprotocol/codex-acp/blob/main/docs/steering.md)
 
-On November 26, 2026, all 10 managed providers available on the test Mac initialized over ACP v1 in clean workspaces. Claude Agent ACP 0.110.0 and Codex ACP 2.12.0 advertised steering. Antigravity 1.5.16, OpenCode 2.2.5, Kiro 3.6.0, goose 1.61.0, Droid 1.20.0, Grok Build, Mistral Vibe 3.1.5, and pi-acp 0.0.35 did not advertise it. A live Claude Agent ACP test delivered an urgent message through Pulsar during an active turn against a local model fixture. The isolated Codex ACP session required sign-in before opening a turn.
+On November 26, 2026, 10 managed providers available on the test Mac initialized over ACP v1 in clean workspaces. Claude Agent ACP 0.110.0 and Codex ACP 2.12.0 advertised steering. Antigravity 1.5.16, OpenCode 2.2.5, Kiro 3.6.0, goose 1.61.0, Droid 1.20.0, Grok Build, Mistral Vibe 3.1.5, and pi-acp 0.0.35 did not advertise it. A live Claude Agent ACP test delivered an urgent message through Pulsar during an active turn against a local model fixture. The isolated Codex ACP session required sign-in before opening a turn. OMP 19.1.1 also opened a managed session and answered a Pulsar message using a local model with the native Pulsar extension installed.
 
 When an ACP agent or adapter reports its context window or a cumulative amount in US dollars, the session header shows those values. The cost label identifies the amount reported through ACP. An invoice comes from the provider. The Usage page groups token records from supported session logs by the time of each response. ACP context counters and cumulative session cost stay in the session header.
 
@@ -36,6 +38,7 @@ To check a local installation from this checkout, use `bun scripts/live/acp-smok
 | `antigravity` | `agy acp` | native | [Google Antigravity](https://antigravity.google/docs/cli/acp/) |
 | `cursor` | `cursor-agent acp` | native | [Cursor](https://cursor.com/docs/cli/acp) |
 | `copilot` | `copilot --acp --stdio` | native | [GitHub Copilot](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) |
+| `omp` | `omp acp` | native | [Oh My Pi](https://github.com/can1357/oh-my-pi/tree/main/packages/coding-agent/src/modes/acp) |
 | `opencode` | `opencode acp` | native | [OpenCode](https://opencode.ai/docs/cli/acp/) |
 | `kiro` | `kiro-cli acp` | native | [Kiro CLI](https://kiro.dev/docs/cli/acp/) |
 | `cline` | `cline --acp` | native | [Cline](https://github.com/agentclientprotocol/registry/tree/main/cline) |
@@ -74,7 +77,17 @@ The Cursor CLI installer also provides the `cursor-agent` alias. Kiro uses the A
 
 ## Provider verification
 
-Every listed executable initialized over ACP v1 on macOS arm64. Antigravity and OpenCode also completed prompts.
+Every listed executable initialized over ACP v1 on macOS arm64. In disposable sessions, Pulsar dispatched a slash command and returned a permission denial through five installed providers with a loopback model.
+
+| Provider | Version | Command tested |
+| --- | --- | --- |
+| Claude Agent ACP | 0.110.0 | `/context` |
+| Antigravity CLI | 1.5.18 | `/compact` |
+| OMP | 19.1.1 | `/context` |
+| OpenCode | 2.2.5 | `/compact` |
+| GitHub Copilot with offline BYOK | 1.0.116 | `/context` |
+
+Cursor required a signed-in CLI to create a session. Codex ACP 2.12.0 initialized and failed to synchronize managed preferences during session creation on this Mac. The native Codex app-server integration has separate live steering and stop checks.
 
 The built-in list uses launch commands from provider documentation or the [ACP Registry](https://agentclientprotocol.com/get-started/registry). The registry checks whether its published distributions return authentication methods during the ACP handshake.
 
@@ -86,7 +99,7 @@ Claude Agent ACP 0.110.0, pi ACP 0.0.35, and Amp ACP 0.13.0 created sessions. Co
 
 CodeBuddy 2.186.0 and Qoder CLI 1.1.97 returned ACP v1 during initialization. Each returned a session error in a fresh workspace without credentials.
 
-On November 24, 2026, GitHub Copilot CLI 1.0.115 and Cursor CLI 2026.11.22-e9042b2 both initialized over ACP v1 on macOS arm64. In scratch workspaces, both returned `-32000 Authentication required` from `session/new`. The Pulsar managed bridge reported the sign-in requirement for each provider. Copilot also required authentication when the test supplied the existing GitHub CLI credential, and Cursor CLI reported that it was signed out. Prompt delivery remains unverified for these versions. [GitHub Copilot CLI authentication](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli) · [Cursor CLI ACP](https://cursor.com/docs/cli/acp)
+On November 24, 2026, GitHub Copilot CLI 1.0.115 and Cursor CLI 2026.11.22-e9042b2 both initialized over ACP v1 on macOS arm64. In scratch workspaces, both returned `-32000 Authentication required` from `session/new`. The Pulsar managed bridge reported the sign-in requirement for each provider. Copilot also required authentication when the test supplied the existing GitHub CLI credential, and Cursor CLI reported that it was signed out. These two sign-in checks ended before prompt delivery. [GitHub Copilot CLI authentication](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli) · [Cursor CLI ACP](https://cursor.com/docs/cli/acp)
 
 In isolated macOS arm64 environments, Cline 3.0.75, Kilo 7.8.32, Qwen Code 0.28.4, Auggie 0.37.0, and Kimi CLI 1.52.0 all initialized over ACP v1. Kilo created a session. The other four returned `-32000 Authentication required` from `session/new`. Auggie requires terminal sign-in and reported no ACP authentication methods. These checks stopped after session creation. [ACP Registry distributions](https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json)
 

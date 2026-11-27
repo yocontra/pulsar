@@ -338,6 +338,10 @@ export class PulsarService {
 		});
 		this.registry.discoveredSubagents = () => this.subagents.addressable();
 		this.registry.discoveredSubagent = (id) => this.subagents.localTarget(id);
+		this.registry.approvalSubagent = (id) => {
+			const child = this.subagents.agentFor(id);
+			return child?.meta.acpChild === "1" ? child : undefined;
+		};
 		this.registry.nativeSubagentAliases = () => this.subagents.nativeAliases();
 		this.registry.nativeSubagentTarget = (id) => this.subagents.aliasTarget(id);
 		this.claudeChildHooks = new ClaudeChildHooks({
@@ -1601,6 +1605,38 @@ export class PulsarService {
 						await this.claudeChildHooks.bind(caller, p.proof, p.tool),
 					),
 				};
+			case "native.hook.collect": {
+				const me = registry.self(caller);
+				if (
+					this.sessions.role(caller) !== "cli" ||
+					!me.pid ||
+					!me.sessionId ||
+					me.pid !== p.pid ||
+					me.sessionId !== p.sessionId ||
+					me.status === "gone" ||
+					me.meta.acp === "1" ||
+					me.harness !== "antigravity"
+				)
+					throw new RpcError(
+						"forbidden",
+						"Hook does not match a native conversation.",
+					);
+				if (registry.hasNativeHook(me) && !this.store.unreadCount(me.id))
+					return { messages: [] };
+				const host = await driverFor(me.harness)?.verifyWakeHost?.(
+					me.pid,
+					me.sessionId,
+				);
+				if (!host || caller.closed.aborted)
+					throw new RpcError(
+						"forbidden",
+						"Native conversation is no longer active.",
+					);
+				registry.noteNativeHook(me);
+				return {
+					messages: this.router.takeForHook(caller, me, p.first === true),
+				};
+			}
 			case "claude.subagent.collect":
 				return await this.claudeChildHooks.collect(caller, p);
 			case "claude.subagent.confirm":
@@ -1618,11 +1654,29 @@ export class PulsarService {
 			}
 			case "interaction.ask":
 				return {
-					result: await this.approvals.ask(caller, interactionRequest(p)),
+					result: await this.approvals.ask(
+						caller,
+						interactionRequest(p),
+						await this.acpInteractionChild(caller, p.childSessionId),
+					),
 				};
+			case "acp.children": {
+				const me = registry.self(caller);
+				if (me.meta.acp !== "1" || caller !== this.sessions.extensionFor(me.id))
+					throw new RpcError(
+						"forbidden",
+						"only the owning ACP connection can update subagents",
+					);
+				void this.subagents.refresh(me.id);
+				return { ok: true };
+			}
 			case "interaction.local":
 				return {
-					ok: this.approvals.answeredLocally(caller, String(p.ref ?? "")),
+					ok: this.approvals.answeredLocally(
+						caller,
+						String(p.ref ?? ""),
+						await this.acpInteractionChild(caller, p.childSessionId),
+					),
 				};
 			case "passkeys.list":
 				return { passkeys: this.approvals.listPasskeys(caller.principal) };
@@ -1733,7 +1787,15 @@ export class PulsarService {
 			if (named[0]) id = named[0].id;
 		}
 		this.authorize(principal, "stop", id);
-		return this.interrupts.stop(principal, id);
+		const row = isLocalSubagentId(id)
+			? await this.subagents.row(id)
+			: undefined;
+		const child = row ? this.subagents.agentFor(id) : undefined;
+		return this.interrupts.stop(
+			principal,
+			id,
+			child?.meta.acpChild === "1" ? child : undefined,
+		);
 	}
 
 	/** Request options for stopping an agent on another machine (its home node's challenge). */
@@ -1755,6 +1817,37 @@ export class PulsarService {
 	 * (`{agent, events}`) until it closes. Subscribing happens before the page
 	 * is read, so nothing falls between them (overlap replaces by id).
 	 */
+	private async acpInteractionChild(
+		caller: Caller,
+		sessionId: unknown,
+	): Promise<Agent | undefined> {
+		if (sessionId === undefined) return;
+		const parent = this.registry.self(caller);
+		if (
+			parent.meta.acp !== "1" ||
+			caller !== this.sessions.extensionFor(parent.id) ||
+			typeof sessionId !== "string" ||
+			!sessionId ||
+			sessionId === parent.sessionId ||
+			sessionId.length > 512
+		)
+			throw new RpcError(
+				"forbidden",
+				"the ACP child is not owned by this connection",
+			);
+		const child = await this.subagents.acpChildForSession(parent, sessionId);
+		if (
+			!child ||
+			caller.closed.aborted ||
+			caller !== this.sessions.extensionFor(parent.id)
+		)
+			throw new RpcError(
+				"forbidden",
+				"the ACP child is not owned by this connection",
+			);
+		return child;
+	}
+
 	private async readTranscript(caller: Caller, p: Record<string, unknown>) {
 		const agentId = String(p.agent ?? "");
 		const cursor = typeof p.cursor === "string" ? p.cursor : null;

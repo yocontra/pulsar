@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { access, stat, writeFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
 import { DaemonLock, serviceClaim } from "./daemon-lock.ts";
-import { daemonRuntimeFlags } from "./lazy.ts";
+import { daemonRuntimeFlags, pulsarRuntime } from "./lazy.ts";
 import { checkedSocketPath, currentCli } from "./paths.ts";
 import { type Frame, RpcError, readFrames, writeFrame } from "./rpc.ts";
 
@@ -35,15 +36,17 @@ async function cliEntry(): Promise<string> {
 
 /** Starts the daemon detached, so it outlives the session that started it. */
 async function spawnDaemon() {
+	const runtime = pulsarRuntime();
 	const child = spawn(
-		process.execPath,
-		[...daemonRuntimeFlags(), await cliEntry(), "daemon"],
+		runtime,
+		[...daemonRuntimeFlags(runtime), await cliEntry(), "daemon"],
 		{
 			detached: true,
 			stdio: "ignore",
 			env: process.env,
 		},
 	);
+	await once(child, "spawn");
 	child.unref();
 }
 

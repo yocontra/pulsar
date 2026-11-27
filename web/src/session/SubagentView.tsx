@@ -1,16 +1,23 @@
-import { ChevronRightIcon } from "lucide-react";
-import { useId, useMemo, useState } from "react";
-import { ApiError } from "../api/client.ts";
-import type { SubagentRow } from "../api/types.ts";
+import { ChevronRightIcon, SquareIcon } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { ApiError, api, ProveCancelled } from "../api/client.ts";
+import type { AgentRow, SubagentRow } from "../api/types.ts";
+import { focusPrompt } from "../approval/focus.ts";
+import { PromptInline } from "../approval/PromptInline.tsx";
 import { Composer } from "../components/Composer.tsx";
 import { kindWord, SubagentStateWord } from "../components/SubagentRows.tsx";
 import { useNow } from "../data/clock.ts";
-import { useAgent, useSubagent, useTranscript } from "../data/index.ts";
+import {
+	useAgent,
+	useApprovalItem,
+	useSubagent,
+	useTranscript,
+} from "../data/index.ts";
 import { AgentAvatar, AgentMark } from "../ds/index.ts";
 import { agentColor } from "../lib/agent-color.ts";
 import { age } from "../lib/format.ts";
-import { navigate } from "../lib/router.ts";
-import { findAgent } from "../lib/store.ts";
+import { navigate, route } from "../lib/router.ts";
+import { findAgent, showToast } from "../lib/store.ts";
 import { ConversationView, TranscriptSkeleton } from "./ConversationView.tsx";
 import { Transcript } from "./Transcript.tsx";
 import { TranscriptMissingNotice } from "./TranscriptMissing.tsx";
@@ -45,6 +52,21 @@ export function SubagentView({
 	// subagent with no rollout): final. A running one may still write it.
 	const settled = sub?.hasTranscript === false && sub.state !== "running";
 	const t = useTranscript(sub ? id : null, settled);
+	const lastApprovalAgent = useRef<AgentRow | null>(null);
+	const item = useApprovalItem(id, (agentId) =>
+		lastApprovalAgent.current?.id === agentId
+			? lastApprovalAgent.current
+			: null,
+	);
+	useEffect(() => {
+		if (item) lastApprovalAgent.current = item.agent;
+	}, [item]);
+	const pending = item?.approval?.state === "pending";
+	useEffect(() => {
+		const current = route.peek();
+		if (pending && current.view === "approval" && current.id === id)
+			focusPrompt(id);
+	}, [id, pending]);
 	const missing = t.missing && settled ? ("unsupported" as const) : t.missing;
 	const [shown, setShown] = useState(WINDOW);
 	const windowed = useMemo(
@@ -117,6 +139,7 @@ export function SubagentView({
 					// Its siblings' names here take their colors from the parent's list.
 					subagentsOf={parentId}
 				/>
+				{item?.approval && <PromptInline item={item} mobile={mobile} />}
 			</ConversationView>
 			{sub && messaging && (
 				<p
@@ -181,6 +204,7 @@ export function SubagentHeader({
 				<AgentMark color={sub ? agentColor(sub) : null} />
 				<h1>{sub?.name ?? "Subagent"}</h1>
 				{sub && <SubagentStateWord sub={sub} now={now} />}
+				{sub?.canStop && <SubagentStop sub={sub} />}
 			</div>
 			{sub && (
 				<div className="sub-meta">
@@ -196,6 +220,41 @@ export function SubagentHeader({
 			)}
 			{!sub && <span className="sr-only">{id}</span>}
 		</header>
+	);
+}
+
+export function SubagentStop({ sub }: { sub: SubagentRow }) {
+	const [pending, setPending] = useState(false);
+	const label = `Stop ${sub.name}`;
+	return (
+		<button
+			type="button"
+			className="sub-stop"
+			title={label}
+			aria-label={label}
+			disabled={pending}
+			onClick={async () => {
+				setPending(true);
+				try {
+					const result = await api.stop(sub.id);
+					if (result.result === "interrupted")
+						showToast(`Stopped ${sub.name}'s turn`);
+					else if (result.result === "not-running")
+						showToast(`${sub.name} is idle`);
+					else showToast(result.detail ?? `Could not stop ${sub.name}`, "warn");
+				} catch (error) {
+					if (!(error instanceof ProveCancelled))
+						showToast(
+							error instanceof Error ? error.message : String(error),
+							"warn",
+						);
+				} finally {
+					setPending(false);
+				}
+			}}
+		>
+			<SquareIcon size={15} aria-hidden="true" />
+		</button>
 	);
 }
 

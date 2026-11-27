@@ -28,7 +28,6 @@ const custom: readonly HarnessUi[] = [
 	pi,
 	opencode,
 	cursor,
-	gemini,
 	vscode,
 ];
 
@@ -39,7 +38,8 @@ export const HARNESS_UI: readonly HarnessUi[] = HARNESSES.map((h) => ({
 	...custom.find((ui) => ui.id === h.id),
 }));
 
-const byId = new Map(HARNESS_UI.map((h) => [h.id, h]));
+// Keep the original icon on transcripts archived before Gemini CLI was retired.
+const byId = new Map([...HARNESS_UI, gemini].map((h) => [h.id, h]));
 
 /** The adapter for a harness id; an empty one for harnesses with none. */
 export function harnessUi(id: string | null | undefined): HarnessUi {

@@ -24,8 +24,6 @@ Pulsar's MCP tools reach every live agent on this machine, whatever harness it r
 
 ## Say what you are doing
 
-In a native Antigravity CLI conversation with `pull-only` delivery, run `pulsar antigravity-bind` in the agent’s command tool to enable wake for this conversation. Managed ACP sessions connect automatically.
-
 Call `set_identity` when you start a task, and again when it changes. It returns your name, id, tags and unread count (call it with no arguments to only read them):
 
 ```

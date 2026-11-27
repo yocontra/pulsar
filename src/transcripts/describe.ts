@@ -794,6 +794,13 @@ export function describeCall(
 				facts,
 			};
 		default: {
+			if (lower === "run_workflow")
+				return {
+					kind,
+					verb: v("Ran workflow", "Running workflow"),
+					target: t(str(a.description), "text") ?? t(path, "path"),
+					facts,
+				};
 			const label = toolLabel(name);
 			return {
 				kind,

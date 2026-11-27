@@ -657,7 +657,7 @@ export const api = {
 	 * passkey signs here, and the home node verifies it (one Face ID per Stop).
 	 */
 	stop: async (agentId: string) => {
-		if (!agentId.includes("/"))
+		if (!agentId.split("/sub:", 1)[0]?.includes("/"))
 			return withSession(
 				() =>
 					request<StopResult>(`/agents/${enc(agentId)}/stop`, {

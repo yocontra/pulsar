@@ -7,6 +7,7 @@ import { pidAlive, processSnapshot } from "../processes.ts";
 import {
 	type Action,
 	addHook,
+	cliUndo,
 	mcpCommand,
 	removeHook,
 	type SetupContext,
@@ -348,8 +349,9 @@ export function claudeEnvelope(fromName: string, body: string): string {
 	return `<cross-session-message from-name="${name}">\n${safe}\n</cross-session-message>`;
 }
 
-const claudeJson = () => join(homedir(), ".claude.json");
-const claudeSettings = () => join(homedir(), ".claude", "settings.json");
+const claudeJson = () =>
+	join(process.env.CLAUDE_CONFIG_DIR || homedir(), ".claude.json");
+const claudeSettings = () => join(configDir(), "settings.json");
 
 /** What marks pulsar's PermissionRequest hook in Claude's settings. */
 const APPROVAL_HOOK_MARKER = " hook claude-permission";
@@ -600,8 +602,7 @@ export const claude: HarnessDriver = {
 	},
 
 	setup: {
-		detect: (path) =>
-			!!which("claude", path) || exists(join(homedir(), ".claude")),
+		detect: (path) => !!which("claude", path) || exists(configDir()),
 		configured: () =>
 			!!getPath(readJsonc(claudeJson()), ["mcpServers", "pulsar"]),
 		plan: (ctx) => [
@@ -627,32 +628,29 @@ export const claude: HarnessDriver = {
 									"user",
 								]);
 							},
-							undo: {
-								type: "cli",
-								cmd: "claude",
-								args: ["mcp", "remove", "pulsar", "--scope", "user"],
-							},
+							undo: cliUndo("claude", [
+								"mcp",
+								"remove",
+								"pulsar",
+								"--scope",
+								"user",
+							]),
 						} satisfies Action,
 					]
 				: []),
 			{
 				client: "claude",
-				describe:
-					'set crossSessionInbound: "accept" in ~/.claude/settings.json (lets messages from other agents reach sessions that skip permission prompts, without an approval dialog; they still cannot approve anything)',
+				describe: `set crossSessionInbound: "accept" in ${claudeSettings()} (allow Pulsar messages in sessions that skip permission prompts)`,
 				apply: () =>
-					editJson(
-						join(homedir(), ".claude", "settings.json"),
-						["crossSessionInbound"],
-						"accept",
-					),
+					editJson(claudeSettings(), ["crossSessionInbound"], "accept"),
 				undo: {
 					type: "json",
-					file: join(homedir(), ".claude", "settings.json"),
+					file: claudeSettings(),
 					path: ["crossSessionInbound"],
 				},
 			} satisfies Action,
 			...claudeChildHookActions(ctx),
-			...skillFor("claude", join(homedir(), ".claude", "skills"), ctx),
+			...skillFor("claude", join(configDir(), "skills"), ctx),
 		],
 	},
 };

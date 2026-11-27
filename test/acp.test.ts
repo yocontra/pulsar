@@ -314,6 +314,31 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			authenticator.register(registration),
 		);
 		const pending = () => approvals.pendingFor(agentId)[0];
+		await prompt("fixture-permission-diff");
+		await until(() => pending()?.kind === "permission");
+		const diffRequest = pending()!;
+		expect(diffRequest.input).toMatchObject({
+			arguments: {
+				changes: [
+					{ path: "fixture.txt", oldText: null, newText: "approved content" },
+				],
+			},
+		});
+		const diffOptions = (await approvals.options(
+			user,
+			rp,
+			diffRequest.requestId,
+			"allow-once",
+		)) as { options: { challenge: string } };
+		expect(
+			(
+				await approvals.decide(user, rp, diffRequest.requestId, {
+					decision: "allow-once",
+					assertion: authenticator.assert(diffOptions.options),
+				})
+			).won,
+		).toBe(true);
+		await until(() => Boolean(bridge?.output().includes("Permission allow")));
 		const answerQuestion = async (answer: InteractionAnswer) => {
 			await until(() => pending()?.kind === "question");
 			const requestId = pending()!.requestId;
@@ -422,6 +447,119 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				(await current())?.status === "idle" &&
 				Boolean(bridge?.output().includes("Detached question cancelled")),
 		);
+		await prompt("fixture-child");
+		const children = () => daemon.service.subagents.list(agentId);
+		await until(() =>
+			Boolean(bridge?.output().includes("Parent is still working")),
+		);
+		await until(async () => (await children()).total === 2);
+		const listed = (await children()).items;
+		const childAgent = listed.find(({ name }) => name === "Fixture child")!;
+		const grandchild = listed.find(
+			({ name }) => name === "Fixture grandchild",
+		)!;
+		expect(grandchild.parentSubId).toBe(childAgent.id);
+		expect(childAgent.messaging.mode).toBe("parent");
+		expect(childAgent.canStop).toBe(true);
+		expect(grandchild.canStop).toBe(false);
+		expect((await current())?.capabilities?.subagents).toBe(true);
+		const childHistory = await op.call<TranscriptPageResult>(
+			"transcript.read",
+			{ agent: childAgent.id },
+		);
+		expect(childHistory.events).toContainEqual(
+			expect.objectContaining({ text: "Exact child reply" }),
+		);
+		expect(childHistory.events).toContainEqual(
+			expect.objectContaining({
+				text: "Work for child",
+				from: "Parent session",
+			}),
+		);
+		expect(
+			childHistory.events.some(
+				({ text }) =>
+					text === "Unannounced text" || text === "Status for parent",
+			),
+		).toBe(false);
+		const childApproval = (tool: string) =>
+			approvals.pendingFor(childAgent.id).find((card) => card.tool === tool);
+		await until(
+			() =>
+				Boolean(childApproval("Fixture child permission")) &&
+				approvals.pendingFor(grandchild.id)[0]?.kind === "question",
+		);
+		expect(approvals.pendingFor(agentId)).toEqual([]);
+		expect(daemon.service.registry.needingYou().map(({ id }) => id)).toContain(
+			childAgent.id,
+		);
+		const childRequestId = childApproval("Fixture child permission")!.requestId;
+		const allow = (await approvals.options(
+			user,
+			rp,
+			childRequestId,
+			"allow-once",
+			{},
+		)) as { options: { challenge: string } };
+		expect(
+			await approvals.decide(user, rp, childRequestId, {
+				decision: "allow-once",
+				assertion: authenticator.assert(allow.options),
+			}),
+		).toMatchObject({ won: true, approval: { agentId: childAgent.id } });
+		await until(
+			() =>
+				Boolean(
+					bridge?.output().includes("Fixture permission 991 child-allow"),
+				) &&
+				Boolean(bridge?.output().includes("Fixture permission 994 cancelled")),
+		);
+		expect(await op.call("stop", { agent: grandchild.id })).toMatchObject({
+			result: "unsupported",
+		});
+		expect(await op.call("stop", { agent: childAgent.id })).toMatchObject({
+			result: "interrupted",
+		});
+		await until(
+			async () =>
+				(await children()).items.find(({ id }) => id === childAgent.id)
+					?.canStop === false &&
+				!childApproval("Fixture child cancellable permission") &&
+				Boolean(bridge?.output().includes("Fixture permission 992 cancelled")),
+		);
+		const nestedRequest = approvals.pendingFor(grandchild.id)[0]!;
+		expect(nestedRequest).toMatchObject({
+			kind: "question",
+			agentId: grandchild.id,
+		});
+		const nestedAnswer = {
+			kind: "question",
+			answers: { value: ["Grandchild answer"] },
+		};
+		const nestedProof = (await approvals.options(
+			user,
+			rp,
+			nestedRequest.requestId,
+			"answer",
+			{ answer: nestedAnswer },
+		)) as { options: { challenge: string } };
+		expect(
+			await approvals.decide(user, rp, nestedRequest.requestId, {
+				decision: "answer",
+				answer: nestedAnswer,
+				assertion: authenticator.assert(nestedProof.options),
+			}),
+		).toMatchObject({ won: true });
+		await until(() =>
+			Boolean(
+				bridge?.output().includes("Fixture grandchild got Grandchild answer"),
+			),
+		);
+		expect((await current())?.status).toBe("busy");
+		expect(await op.call("stop", { agent: agentId })).toMatchObject({
+			result: "interrupted",
+		});
+		await until(async () => (await current())?.status === "idle");
 		answerable = false;
 		const held = await op.call<{ message: { id: string } }>("send", {
 			to: agentId,

@@ -40,9 +40,11 @@ export class AcpToolResults {
 	>();
 
 	private readonly limit: number;
+	private readonly pendingLimit: number;
 
-	constructor(limit: number) {
+	constructor(limit: number, pendingLimit = MAX_PENDING_CALLS) {
 		this.limit = limit;
+		this.pendingLimit = pendingLimit;
 	}
 
 	has(id: string): boolean {
@@ -68,7 +70,7 @@ export class AcpToolResults {
 		}
 		if (update.status !== "completed" && update.status !== "failed") {
 			this.pending.set(id, state);
-			if (this.pending.size > MAX_PENDING_CALLS)
+			if (this.pending.size > this.pendingLimit)
 				this.pending.delete(this.pending.keys().next().value!);
 			return null;
 		}

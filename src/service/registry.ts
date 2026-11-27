@@ -106,6 +106,7 @@ export class Registry {
 	private readonly sessions: Sessions;
 	private readonly events: EventBus;
 	private readonly waiters: Waiters;
+	private readonly nativeHooks = new WeakSet<Agent>();
 	private readonly activity = new WeakMap<
 		Agent,
 		{ label: string; resumeKey: string | undefined }
@@ -151,6 +152,7 @@ export class Registry {
 	/** Set by the service to include native addressed child sessions without adding presence. */
 	discoveredSubagents: () => Agent[] = () => [];
 	discoveredSubagent: (id: string) => Agent | undefined = () => undefined;
+	approvalSubagent: (id: string) => Agent | undefined = () => undefined;
 	nativeSubagentAliases: () => Set<string> = () => new Set();
 	nativeSubagentTarget: (id: string) => Agent | undefined = () => undefined;
 
@@ -375,7 +377,12 @@ export class Registry {
 	setNeedsYou(agentId: string, needs: Omit<NeedsYou, "since"> | null) {
 		if (!needs) return this.clearNeedsYou(agentId);
 		// The operator isn't registered; a presence check from a terminal waits on it.
-		if (!this.agents.has(agentId) && agentId !== OPERATOR_ID) return;
+		if (
+			!this.agents.has(agentId) &&
+			agentId !== OPERATOR_ID &&
+			!this.approvalSubagent(agentId)
+		)
+			return;
 		const value: NeedsYou = { ...needs, since: Date.now() };
 		this.needs.set(agentId, value);
 		this.events.emit("attention", { agentId, needsYou: value });
@@ -399,9 +406,29 @@ export class Registry {
 				// The operator waits on a presence check from a terminal.
 				const agent =
 					this.agents.get(id) ??
+					this.approvalSubagent(id) ??
 					(id === OPERATOR_ID ? this.operator() : undefined);
 				return agent && agent.status !== "gone" ? [agent] : [];
 			});
+	}
+
+	/** A verified invocation hook can accept input while the model is working. */
+	hasNativeHook(agent: Agent) {
+		return this.nativeHooks.has(agent);
+	}
+
+	noteNativeHook(agent: Agent) {
+		const current = this.get(agent.id);
+		if (
+			!current ||
+			current.pid !== agent.pid ||
+			current.status === "gone" ||
+			current.meta.processStart !== agent.meta.processStart ||
+			this.nativeHooks.has(current)
+		)
+			return;
+		this.nativeHooks.add(current);
+		this.events.emit("agent", { action: "update", agent: this.view(current) });
 	}
 
 	canSteer(agent: Agent): boolean {
@@ -410,6 +437,8 @@ export class Registry {
 			return agent.meta.acp === "1"
 				? agent.meta.acpSteer === "1"
 				: this.sessions.supports(ext, "steer");
+		if (!this.sessions.wakeFor(agent.id) && this.hasNativeHook(agent))
+			return true;
 		if (this.sessions.wakeFor(agent.id) || this.reachOf(agent) !== "push")
 			return false;
 		return pushFor(agent)?.canSteer?.(agent) === true;
@@ -418,6 +447,17 @@ export class Registry {
 	/** A shared parent process is never a child Stop target. */
 	canStop(agent: Agent): boolean {
 		if (agent.status === "gone" || isRemote(agent)) return false;
+		if (agent.meta.acpChild === "1") {
+			const parent = this.get(agent.meta.subagentOf ?? "");
+			return (
+				agent.meta.acpChildCancel === "1" &&
+				agent.status === "busy" &&
+				!!agent.sessionId &&
+				parent?.meta.acp === "1" &&
+				agent.sessionId !== parent.sessionId &&
+				!!this.sessions.extensionFor(parent.id)
+			);
+		}
 		const ext = this.sessions.extensionFor(agent.id);
 		if (ext)
 			return (
@@ -457,7 +497,8 @@ export class Registry {
 			const child = isLocalSubagentId(agent.id);
 			const inbox =
 				active &&
-				((child && extension && agent.meta.acks === "1") ||
+				(this.hasNativeHook(agent) ||
+					(child && extension && agent.meta.acks === "1") ||
 					this.sessions
 						.forAgent(agent.id)
 						.some((c) => this.sessions.role(c) === "mcp"));
@@ -479,7 +520,9 @@ export class Registry {
 						(!!driver?.liveStatus && !!agent.sessionId) ||
 						!!driver?.scan),
 				transcript: acp || !!driver?.transcript,
-				subagents: !!driver?.subagents && !acp && !child,
+				subagents:
+					!child &&
+					(acp ? agent.meta.acpSubagents === "1" : !!driver?.subagents),
 				...(acp
 					? {
 							resume: agent.meta.acpResume === "1",
@@ -706,6 +749,19 @@ export class Registry {
 			createdAt: existing?.createdAt ?? now,
 			meta: { ...meta, nameFrom },
 		};
+		if (
+			existing &&
+			previousStatus !== "gone" &&
+			existing.pid === agent.pid &&
+			existing.cwd === agent.cwd &&
+			existing.meta.gen === agent.meta.gen &&
+			existing.meta.processStart === agent.meta.processStart &&
+			existing.meta.resumeKey === agent.meta.resumeKey
+		) {
+			const fallback = this.activity.get(existing);
+			if (fallback) this.activity.set(agent, fallback);
+			if (this.nativeHooks.has(existing)) this.nativeHooks.add(agent);
+		}
 		this.finishTags(agent);
 		agent.reach = this.reachOf(agent);
 		// A scan reading idle for a busy agent waits out the settle time.
@@ -1167,9 +1223,18 @@ export class Registry {
 			const read = attachedDriver(agent)?.model;
 			const model = read ? await read(agent) : null;
 			if (this.closed) return;
-			if (model && model !== agent.model) {
+			if (
+				model &&
+				model !== agent.model &&
+				this.get(agent.id) === agent &&
+				agent.status !== "gone"
+			) {
 				agent.model = model;
 				this.finishTags(agent);
+				this.events.emit("agent", {
+					action: "update",
+					agent: this.view(agent),
+				});
 			}
 		}
 	}

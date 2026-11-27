@@ -35,16 +35,18 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 | Native pi and omp | The connected Pulsar extension requests steering. The harness applies the input at its next opportunity. | The extension submits a follow-up. |
 | Managed Claude Agent ACP and Codex ACP | An adapter that advertises steering can accept input into the running prompt. Pulsar requires Claude Agent ACP 0.110.0 or later, or Codex ACP 2.12.0 or later. | The bridge runs one prompt at a time. If the turn ends before steering, the bridge starts a new prompt. |
 | Other managed ACP sessions, including Antigravity | The bridge waits for the current prompt to finish. | Starts a prompt on the same session. |
-| Native Antigravity CLI | The bound client accepts a message with no priority parameter. The client controls when the input appears. | A bound conversation can wake. |
+| Native Antigravity CLI | The session hook delivers urgent input before the next model call. A native host relay accepts input on the schedule set by Antigravity. | The hook delivers normal input at the start of the next turn. A verified host relay or an idle native CLI with its own tmux pane can wake the conversation. |
 | MCP connection only | The agent reads its inbox or receives a message during an active Pulsar wait. | Waits in the inbox. |
 
 **Don't wake** keeps the message in the inbox across all harnesses. A session can read it through Pulsar.
 
-To connect an existing Antigravity conversation, ask the agent in its terminal: “Run `pulsar antigravity-bind` so I can wake this conversation from Pulsar.” The command uses the connection Antigravity supplies to its own command tool. Check for `push` in `pulsar list`. Pulsar reads the native transcript from the conversation database. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
+Pulsar setup installs the Antigravity session hooks. When Antigravity supplies a native host connection, Pulsar connects delivery to the matching conversation automatically. Check its current reach in `pulsar list`. Pulsar reads the native transcript from the conversation database. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
 
-On your phone, open **+ → Skills & Commands**, or type `/` in the message box. In a native Antigravity session, `/skills <name>` searches installed skills and `/help <name>` searches commands. Select a skill, add your request, and send it. A pull-only session receives the request at its next inbox check. A bound session can wake. Commands that need the Antigravity terminal are marked in the picker. [Antigravity CLI commands](https://antigravity.google/docs/cli/reference)
+Native Antigravity child conversations appear under their parent when Antigravity records that relationship. Open a child to read its own transcript, or send a message through its parent. [Antigravity hooks](https://antigravity.google/docs/hooks#antigravity-cli)
 
-When an omp agent has no activity summary, Pulsar uses the latest action from its session log, such as “Ran a command.” The list omits command arguments and message content.
+On your phone, open **+ → Skills & Commands**, or type `/` in the message box. In a native Antigravity session, `/skills <name>` searches installed skills and `/help <name>` searches commands. Select a skill, add your request, and send it. A session with hooks receives queued requests when its next turn starts. A session with a native relay or a verified tmux pane can wake immediately. Commands that require an unavailable terminal are marked in the picker. [Antigravity CLI commands](https://antigravity.google/docs/cli/reference)
+
+When an omp or Antigravity agent has no activity summary, Pulsar uses the latest action from its session log, such as “Ran a command.” The list omits command arguments and message content.
 
 Limits:
 
@@ -99,7 +101,8 @@ Stop interrupts an agent's current turn; the session keeps running. Use the app 
 | OpenCode | `session.interrupt` on the OpenCode service (not a `--standalone` TUI) |
 | pi, omp | The Pulsar extension aborts the run |
 | Managed ACP sessions | The bridge sends `session/cancel` for the active prompt. |
-| Other native sessions, including bound Antigravity CLI | No Stop control. |
+| Native Antigravity | Esc when the confirmed session owns the tmux pane and its empty composer shows a running turn. |
+| Other native sessions | No Stop control. |
 
 For child agents, Pulsar enables Stop on a connected omp child that supports it, or on a verified Codex or OpenCode child session. A Claude tool hook can deliver a child message but cannot stop that child independently.
 
@@ -112,8 +115,9 @@ The app can switch an agent's mode and run slash commands and skills in its sess
 | Claude Code | Manual, Accept edits, Plan, Auto, Bypass permissions | Shift+Tab in its tmux pane, one press at a time, footer read back | Typed into its tmux pane |
 | Codex | Default, Plan | Shift+Tab in its tmux pane (the TUI applies its own effort per mode); else `thread/settings/update` on Codex's app-server daemon with the same per-mode effort (the TUI follows) | Typed into its tmux pane (skills as `$name`) |
 | OpenCode | Build, Plan | Shift+Tab in its pane (only an agent Pulsar started in tmux: OpenCode reports no pid); else the service's `/agent` API (the terminal may not follow) | Server commands and skills through the service; the TUI's own commands typed into its pane |
-| pi | None | — | The Pulsar extension (extension commands, prompt templates, `/skill:name`), when idle |
-| omp | Default, Plan | The Pulsar extension (`sessionModes`) | Not supported (omp runs commands only when typed) |
+| pi | None | — | The extension runs custom commands, templates, and skills. Built-ins use the idle terminal pane. |
+| omp | Default, Plan | The Pulsar extension (`sessionModes`) | Commands and skills use the idle terminal pane. The extension can invoke installed skills for headless sessions. |
+| Antigravity | Default, Accept edits, Plan | Shift+Tab in the exact native session’s idle tmux pane | Built-ins use the owned terminal. Help, changelog, and installed skills also work through Pulsar. |
 | Other native sessions | Not supported | — | — |
 
 Pulsar types only into the agent's own pane: the pane's process must be up the agent's process tree with no other agent between them, so a session started inside another agent's tool call is never typed into. The phone's one-tap Run is offered only for commands that take nothing and keep the session (not `/exit`, `/clear`, `/restart` and the like).
