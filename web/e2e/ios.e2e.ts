@@ -96,16 +96,16 @@ const node = (page: Page, id: string) =>
 	page.locator(`[data-tree-node="${id}"]`);
 const title = (page: Page) => page.locator(".p-nav-title h1");
 
-async function openSession(page: Page) {
+async function openSession(page: Page, name = "codex@apparish") {
 	await home(page);
 	await node(page, "m:studio/p:apparish").locator("ion-item").tap();
 	await page
 		.locator("[data-tree-node] ion-item[data-agent]", {
-			hasText: "codex@apparish",
+			hasText: name,
 		})
 		.first()
 		.tap();
-	await expect(title(page)).toHaveText("codex@apparish");
+	await expect(title(page)).toHaveText(name);
 	await expect(page.getByRole("button", { name: "Back" }).last()).toBeVisible();
 	// The push transition.
 	await page.waitForTimeout(700);
@@ -210,12 +210,9 @@ test.describe("ios gestures", () => {
 	test("long-press a message: Copy in an action sheet, no copy row", async ({
 		page,
 	}) => {
-		await openSession(page);
+		// Keep the message under the finger for the duration of the gesture.
+		await openSession(page, "omp@apparish");
 		await expect(page.locator(".p-agent .ds-msg-actions")).toHaveCount(0);
-		// The agent is working: the mock streams new turns into the
-		// conversation. Press the text of the latest turn that has some (a
-		// turn that just started has none yet, so it has nothing to copy),
-		// at the part of it on screen (a long turn is taller than the screen).
 		const msg = page.locator(".p-agent .ds-turn--assistant .ds-parts p").last();
 		await expect(msg).toBeVisible();
 		await msg.scrollIntoViewIfNeeded();
