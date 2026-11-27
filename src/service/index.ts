@@ -489,6 +489,7 @@ export class PulsarService {
 		});
 		const history = new SessionHistory(this.store, this.registry.machine);
 		this.history = history;
+		this.registry.onSessionClosed = (agent) => history.remember(agent);
 		this.app = new AppApi({
 			history,
 			archivedModel: (agent) =>
@@ -1034,7 +1035,9 @@ export class PulsarService {
 
 	/** Stops background jobs and drops pending waits. The store stays open. */
 	stop() {
+		if (this.stopped) return;
 		this.stopped = true;
+		for (const agent of this.registry.live()) this.history.remember(agent);
 		for (const t of this.timers) clearInterval(t);
 		this.timers = [];
 		this.jobs.stop();

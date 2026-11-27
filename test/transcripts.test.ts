@@ -1299,7 +1299,8 @@ describe("service transcripts", () => {
 	test("saved session links survive restart and cannot receive live messages", async () => {
 		const original = add("with-log");
 		const principal = { kind: "terminal" } as const;
-		await service.app.agent(principal, original.id);
+		const closed = add("closed-before-shutdown");
+		service.registry.markGone(closed);
 		service.stop();
 		service = new PulsarService({
 			store,
@@ -1368,7 +1369,9 @@ describe("service transcripts", () => {
 			(await service.app.agent(principal, original.id)).openSessions,
 		).toEqual([{ id: sibling.id, name: sibling.name }]);
 		add("with-log");
-		expect(service.app.savedSessions(principal, "").items).toEqual([]);
+		expect(
+			service.app.savedSessions(principal, "").items.map((s) => s.id),
+		).toEqual([closed.id]);
 		expect(
 			(await service.app.agent(principal, original.id)).archived,
 		).toBeUndefined();

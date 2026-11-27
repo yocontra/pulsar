@@ -119,6 +119,7 @@ export class Registry {
 	onRelease: (agent: Agent) => void = () => {};
 	/** Set by the service: an agent's session ended (tracked messages wait for it). */
 	onGone?: (agent: Agent) => void;
+	onSessionClosed?: (agent: Agent) => void;
 	/** Set by the service: an agent is new to this daemon or back from gone. */
 	onBack?: (agent: Agent) => void;
 	/** The rest of the pool (federation); null on a node with no pool links. */
@@ -1016,6 +1017,7 @@ export class Registry {
 		const was = old.status;
 		old.status = "gone";
 		old.lastSeen = Date.now();
+		this.onSessionClosed?.(old);
 		if (was !== "gone") this.emitStatus(old, was, old.lastSeen);
 		this.events.emit("agent", { action: "gone", agent: toPublic(old) });
 		this.events.emit("agent", { action: "update", agent: toPublic(current) });
@@ -1037,6 +1039,7 @@ export class Registry {
 		agent.lastSeen = Date.now();
 		this.events.emit("agent", { action: "gone", agent: toPublic(agent) });
 		this.waiters.resolveGone(agent);
+		this.onSessionClosed?.(agent);
 		this.onGone?.(agent);
 	}
 
