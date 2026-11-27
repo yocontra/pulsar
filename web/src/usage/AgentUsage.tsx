@@ -38,17 +38,22 @@ export default function AgentUsage({ agentId }: { agentId: string }) {
 		u.cost === null && u.tokens.records > 0
 			? `${compact(total)} ${tokenSourcesLabel(tokenSources)} · ${costSourcesLabel(costSources)}`
 			: costSourcesLabel(costSources);
-	const scopeLabel =
-		u.byModel?.length && label === "API estimate"
-			? "Session API estimate"
-			: label;
-	const costLabel =
-		u.cost === null ? label : `${money(u.cost)} · ${scopeLabel}`;
 	const dates = new Intl.DateTimeFormat(undefined, {
 		month: "short",
 		day: "numeric",
 		year: "numeric",
 	});
+	const period =
+		u.period && dates.formatRange(u.period.firstHour, u.period.lastHour);
+	const scopeLabel =
+		u.byModel?.length && label === "API estimate"
+			? u.period &&
+				dates.format(u.period.firstHour) !== dates.format(u.period.lastHour)
+				? `API estimate · ${period}`
+				: "Session API estimate"
+			: label;
+	const costLabel =
+		u.cost === null ? label : `${money(u.cost)} · ${scopeLabel}`;
 	return (
 		<span className="usage-agent" data-high={pct !== null && pct >= 80}>
 			{pct !== null && c?.window && (
@@ -88,11 +93,7 @@ export default function AgentUsage({ agentId }: { agentId: string }) {
 							aria-label="Session usage by model"
 						>
 							<strong>Session usage by model</strong>
-							{u.period && (
-								<p>
-									{dates.formatRange(u.period.firstHour, u.period.lastHour)}
-								</p>
-							)}
+							{period && <p>{period}</p>}
 							<table>
 								<thead>
 									<tr>

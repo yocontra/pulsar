@@ -249,7 +249,9 @@ test.describe("usage page", () => {
 			});
 		});
 		await page.goto(`/#/a/${encodeURIComponent(id)}`);
-		await page.getByRole("button", { name: /\$12.00.*estimate/i }).click();
+		const estimate = page.getByRole("button", { name: /\$12.00.*estimate/i });
+		await expect(estimate).toContainText(/Nov.*9.*23/);
+		await estimate.click();
 		const detail = page.getByRole("dialog", { name: "Session usage by model" });
 		await expect(
 			detail.getByRole("row", { name: /claude-fable-5-2/ }),
