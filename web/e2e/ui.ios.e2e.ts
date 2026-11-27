@@ -47,7 +47,11 @@ async function home(page: Page) {
 	await page.locator('[data-node="m:studio"]').waitFor();
 }
 
-type Screen = [name: string, open: (page: Page, id: string) => Promise<void>];
+type Screen = [
+	name: string,
+	open: (page: Page, id: string) => Promise<void>,
+	sheetTitle?: string,
+];
 const SCREENS: Screen[] = [
 	["home", home],
 	[
@@ -78,6 +82,7 @@ const SCREENS: Screen[] = [
 			await page.getByRole("button", { name: "Broadcast…" }).tap();
 			await page.getByTestId("match-count").waitFor();
 		},
+		"Broadcast",
 	],
 ];
 
@@ -367,6 +372,7 @@ test.describe("phone UI", () => {
 						await page.getByRole("button", { name: /^Prove Human/ }).tap();
 						await page.getByRole("dialog", { name: "Prove Human" }).waitFor();
 					},
+					"Prove Human",
 				],
 				[
 					"approval",
@@ -377,26 +383,26 @@ test.describe("phone UI", () => {
 					},
 				],
 			];
-			for (const [name, open] of screens) {
+			for (const [name, open, sheetTitle] of screens) {
 				await open(page, id);
-				// Ionic's page and sheet transitions: measure the colors at rest.
-				await animationsDone(page);
-				// The center of a sheet can be a colored recipient badge. Its
-				// title sits directly on the sheet surface in both themes.
-				const title = page
-					.getByRole("dialog")
-					.last()
-					.getByRole("heading")
-					.first();
-				const box = (await title.isVisible())
-					? await title.boundingBox()
+				const title = sheetTitle
+					? page.getByRole("heading", { name: sheetTitle, exact: true })
 					: null;
+				// Ionic can mount sheet content before exposing the dialog to accessibility.
+				if (title) await expect(title).toBeInViewport();
+				await animationsDone(page);
+				const box = await title?.boundingBox();
+				if (title && !box)
+					throw Error(
+						`The ${name} title disappeared before the surface measurement`,
+					);
 				const lum = await pageLuminance(
 					page,
 					box
 						? { x: box.x + box.width / 2, y: box.y + box.height / 2 }
 						: undefined,
 				);
+
 				if (scheme === "dark") expect(lum, name).toBeLessThan(0.05);
 				else expect(lum, name).toBeGreaterThan(0.8);
 				expect(
