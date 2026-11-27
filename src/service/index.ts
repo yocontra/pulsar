@@ -1038,6 +1038,8 @@ export class PulsarService {
 		if (this.stopped) return;
 		this.stopped = true;
 		for (const agent of this.registry.live()) this.history.remember(agent);
+		// Socket close callbacks can arrive after the owner closes the store.
+		this.registry.onSessionClosed = undefined;
 		for (const t of this.timers) clearInterval(t);
 		this.timers = [];
 		this.jobs.stop();

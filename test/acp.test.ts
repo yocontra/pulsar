@@ -19,6 +19,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 	let daemon = env.daemon;
 	let op = await operator();
 	const agy = join(env.home, "agy");
+	const workspace = join(env.home, "project");
 	const cli = new URL("../src/cli.ts", import.meta.url).pathname;
 	const fixture = new URL("./fixtures/acp-agent.ts", import.meta.url).pathname;
 	writeFileSync(
@@ -31,7 +32,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		"fixture-command",
 		"fixture-native-skill",
 	]) {
-		const skill = join(env.home, ".agents", "skills", name);
+		const skill = join(workspace, ".agents", "skills", name);
 		mkdirSync(skill, { recursive: true });
 		writeFileSync(
 			join(skill, "SKILL.md"),
@@ -45,7 +46,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			process.execPath,
 			[cli, "acp", "antigravity", ...(resume ? ["--resume", resume] : [])],
 			{
-				cwd: env.home,
+				cwd: workspace,
 				env: {
 					...process.env,
 					HOME: env.home,

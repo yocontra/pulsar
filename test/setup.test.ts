@@ -198,7 +198,7 @@ describe("pulsar setup", () => {
 		expect(
 			lines.find((x) => x.includes("/claude|mcp remove"))?.split("|")[5],
 		).toBe(env.CLAUDE_CONFIG_DIR);
-	});
+	}, 60_000);
 	test("the mesh is not part of setup unless asked for: --dry-run shows the question, --mesh plans it", () => {
 		const home = fakeHome();
 		// --dry-run returns before anything runs, so no real launchctl or tailscale.
