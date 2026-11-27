@@ -136,4 +136,5 @@ These checks used temporary workspaces on macOS. [Paseo catalog comparison](pase
 | Hoplite 3.5.2 | Dropped client-supplied MCP servers. Sign-in remained incomplete. |
 | Minion Code 0.1.45 | Failed to import its ACP dependency. Pinning the SDK to 0.12.1 let a test session register, but the provider did not start the supplied MCP server. |
 | Nova 1.1.59 and 1.1.69 | Node could not resolve the local user record on the test machine. Both builds stopped before ACP initialization. |
+| TRAE CLI 0.217.0 | Initialized over ACP. Creating a session required Enterprise SSO or a personal access token. The managed test ended before registration and prompt delivery. |
 | VTCode 0.96.14 | Reused one session ID for unrelated workspaces. Pulsar refused the second concurrent registration. |
