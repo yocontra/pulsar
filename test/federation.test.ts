@@ -18,11 +18,13 @@ import { readSse } from "../src/federation/sse.ts";
 import { driverFor } from "../src/harnesses/index.ts";
 import type { HarnessDriver } from "../src/harnesses/types.ts";
 import type {
+	AgentRow,
 	AgentsPage,
 	ChangesSummary,
 	FileDiff,
 	Page,
 	ReceiptsPage,
+	SavedSessionHit,
 	TreeNode,
 } from "../src/http/wire.ts";
 import type { Caller } from "../src/service/caller.ts";
@@ -595,6 +597,85 @@ describe("messaging across machines", () => {
 });
 
 describe("forwarded user actions", () => {
+	test("search finds a saved conversation on its home after both registries forget it", async () => {
+		const archived = pi(c, "federated-archived", "offsite notebook");
+		const sibling = pi(c, "federated-sibling", "same folder");
+		await c.service.app.agent(VERIFIED, archived.id);
+		c.service.registry.delete(archived.id);
+		const address = `${c.service.machineId}/${archived.id}`;
+		expect(c.service.registry.find(archived.id)).toBeUndefined();
+		await until(() => !b.service.registry.find(address), 8000);
+		const local = await api<{ items: SavedSessionHit[] }>(
+			"b",
+			"/sessions/saved?q=offsite&scope=local",
+		);
+		expect(local.body.items).toEqual([]);
+		const matches = await api<{ items: SavedSessionHit[] }>(
+			"b",
+			"/sessions/saved?q=offsite",
+		);
+		expect(matches.body.items).toEqual([
+			expect.objectContaining({ id: address, machine: "c" }),
+		]);
+		const path = `/agents/${encodeURIComponent(matches.body.items[0]!.id)}`;
+		const details = await api<AgentRow>("b", path);
+		expect(details.body).toMatchObject({
+			id: address,
+			address,
+			machineId: c.service.machineId,
+			archived: true,
+			state: "offline",
+			wake: "refuses",
+			canStop: false,
+			openSessions: [
+				{ id: `${c.service.machineId}/${sibling.id}`, name: sibling.name },
+			],
+		});
+		const page = await api<{ events: TranscriptEvent[] }>(
+			"b",
+			`${path}/transcript`,
+		);
+		expect(page.body.events.length).toBeGreaterThan(0);
+		expect((await api("b", path, {}, "intruder")).status).toBe(403);
+		expect(
+			(await api("b", "/sessions/saved?q=offsite", {}, "intruder")).status,
+		).toBe(403);
+		expect(
+			(
+				await api(
+					"b",
+					"/agents/" +
+						encodeURIComponent(`${c.service.machineId}/pi:no-such-session`),
+				)
+			).status,
+		).toBe(404);
+		const here = pi(b, "offsite-backup", "offsite notebook local");
+		await b.service.app.agent(VERIFIED, here.id);
+		b.service.registry.delete(here.id);
+		tailnet.partition("b", "c");
+		try {
+			const withoutPeer = await api<{ items: SavedSessionHit[] }>(
+				"b",
+				"/sessions/saved?q=offsite",
+			);
+			expect(withoutPeer.body.items.map((s) => s.id)).toEqual([here.id]);
+		} finally {
+			tailnet.heal("b", "c");
+		}
+		const peer = b.fed.state.peers.get(c.service.machineId)!;
+		const features = peer.hello!.features;
+		try {
+			peer.hello!.features = features.filter((f) => f !== "saved-sessions");
+			const older = await api<{ items: SavedSessionHit[] }>(
+				"b",
+				"/sessions/saved?q=offsite&scope=peers",
+			);
+			expect(older.body.items).toEqual([]);
+		} finally {
+			peer.hello!.features = features;
+		}
+		c.service.registry.delete(sibling.id);
+	});
 	test("B pages and follows a transcript of an agent on C", async () => {
 		const logged = pi(c, "fed-log-1", "logger");
 		const address = `${c.service.machineId}/${logged.id}`;

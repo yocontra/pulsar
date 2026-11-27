@@ -1,6 +1,7 @@
 import type { PoolDiagnostics } from "../federation/diagnostics.ts";
 import type { RemoteHosted } from "../federation/hosted.ts";
 import type {
+	AgentRow,
 	Approval,
 	ApprovalDecision,
 	AskRequest,
@@ -18,6 +19,7 @@ import type {
 	MessageHit,
 	NeedsYou,
 	QueueItem,
+	SavedSessionHit,
 	SubagentCounts,
 	SubagentList,
 	Wake,
@@ -114,6 +116,11 @@ export interface PoolView extends ActingRelay {
 		answers: { machineId: string; hits: MessageHit[] }[];
 		missing: string[];
 	}>;
+	searchSavedSessions?(
+		query: string,
+		as: Principal,
+	): Promise<SavedSessionHit[]>;
+	savedAgent?(address: string, as: Principal): Promise<AgentRow>;
 	/** Message search in one remote agent's transcript, on its home node (ids are pool addresses). */
 	searchAgentMessages?(
 		address: string,

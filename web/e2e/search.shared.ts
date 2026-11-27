@@ -57,37 +57,53 @@ export function searchSuite(platform: "desktop" | "phone") {
 		request,
 	}) => {
 		const id = await agentId(request, "name=apparish-auth");
-		await page.route("**/api/v1/sessions/saved?*", (route) =>
-			route.fulfill({
+		const remote = await agentId(request, "machine=mbp-a");
+		const peerReply = Promise.withResolvers<void>();
+		await page.route("**/api/v1/sessions/saved?*", async (route) => {
+			const peer =
+				new URL(route.request().url()).searchParams.get("scope") === "peers";
+			if (peer) await peerReply.promise;
+			await route.fulfill({
 				json: {
 					items: [
 						{
-							id,
-							name: "Saved auth investigation",
+							id: peer ? remote : id,
+							name: peer ? "Remote notebook" : "Saved auth investigation",
 							project: "apparish",
 							harness: "claude",
 							lastSeen: Date.now(),
+							...(peer ? { machine: "mbp-a" } : {}),
 						},
 					],
 				},
-			}),
-		);
+			});
+		});
 		await ready(page);
 		if (phone) {
 			await page.getByLabel("Search agents and messages").fill("apparish");
-			await page.getByText("Saved auth investigation", { exact: true }).click();
+			await expect(
+				page.getByText("Saved auth investigation", { exact: true }),
+			).toBeVisible();
+			peerReply.resolve();
+			await page.getByText("Remote notebook", { exact: true }).click();
 		} else {
 			await page.locator("button.d-nav-item", { hasText: "Search" }).click();
 			const dialog = page.getByRole("dialog", { name: "Search the pool" });
 			await dialog.getByLabel("Search").fill("apparish");
+			await expect(
+				dialog
+					.getByRole("option")
+					.filter({ hasText: "Saved auth investigation" }),
+			).toBeVisible();
+			peerReply.resolve();
 			await dialog
 				.getByRole("option")
-				.filter({ hasText: "Saved auth investigation" })
+				.filter({ hasText: "Remote notebook" })
 				.click();
 		}
 		await expect
 			.poll(() => decodeURIComponent(new URL(page.url()).hash))
-			.toBe(`#/a/${id}`);
+			.toBe(`#/a/${remote}`);
 	});
 
 	test(`a message hit opens its session at the match with the find bar (${platform})`, async ({

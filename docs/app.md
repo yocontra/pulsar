@@ -238,7 +238,7 @@ Cmd-Shift-B (or Broadcast… on a phone) opens the builder. Pick values in the f
 
 ## Search messages
 
-To reopen a closed conversation, search for its session name, project, or harness. Choose it under **Saved conversations on this machine**. This uses saved session metadata and also works when transcript text indexing is off.
+To reopen a closed conversation, search for its session name, project, or harness. Choose it under **Saved conversations on this machine** or **Saved conversations on other machines**. Other machines must be online and support saved conversation search. This uses saved session metadata and also works when transcript text indexing is off.
 
 Cmd-K searches what you and your agents wrote, on every machine: type a word of 3 letters or more and matching messages show under **In messages**, each with the agent, a snippet ("You:" for your own words, "Agent:" for the agent's) and when it was written. On a phone, type in the search field on the Agents tab: it filters the list, and matching messages show under it in **In messages**; **See all** opens them on a page of their own. Choosing a message opens its session at that message, with the find bar open.
 

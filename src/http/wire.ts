@@ -59,6 +59,8 @@ export interface NeedsYou {
 }
 
 export interface SavedSessionHit {
+	/** Home machine of a federated result. */
+	machine?: string;
 	id: string;
 	name: string;
 	harness: string;

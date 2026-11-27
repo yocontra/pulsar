@@ -187,6 +187,7 @@ export const FED_FEATURES = [
 	"deliver",
 	"receipts",
 	"transcripts",
+	"saved-sessions",
 	"stop",
 	RECEIPTS2,
 ];
@@ -221,6 +222,8 @@ export function fedReceipt(r: Receipt, receipts2: boolean): FedReceipt {
 
 /** A user action on an agent, forwarded to the agent's home node. */
 export type FedAction =
+	| { op: "sessions.saved"; q: string }
+	| { op: "sessions.detail"; agent: string }
 	| { op: "transcript.page"; agent: string; cursor: string | null }
 	| { op: "transcript.image"; agent: string; imageId: string }
 	/** The agent's subagents (newer nodes; older ones answer bad_request). */

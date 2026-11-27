@@ -1,5 +1,6 @@
 import type { Identity } from "../http/identity.ts";
 import type {
+	AgentRow,
 	AskRequest,
 	AskResponse,
 	DecideResponse,
@@ -7,6 +8,7 @@ import type {
 	NeedsYou,
 	QueueItem,
 	QueueState,
+	SavedSessionHit,
 	SubagentCounts,
 	SubagentList,
 	Wake,
@@ -514,6 +516,99 @@ export class Federation implements PoolView {
 			}),
 		);
 		return { answers, missing };
+	}
+
+	/** Search each reachable home directly. Bound concurrent requests and the full search. */
+	async searchSavedSessions(
+		query: string,
+		as: Principal,
+	): Promise<SavedSessionHit[]> {
+		const peers = [...this.state.peers.values()].filter(
+			(p) =>
+				p.link === "tailnet" && p.hello?.features.includes("saved-sessions"),
+		);
+		const remaining = peers.values();
+		const deadline = Date.now() + Math.min(2500, this.iv.askTimeoutMs);
+		const hits: SavedSessionHit[] = [];
+		const worker = async () => {
+			for (const peer of remaining) {
+				const timeout = deadline - Date.now();
+				if (timeout <= 0) break;
+				try {
+					const r = await this.act(
+						`${peer.machineId}/`,
+						{ op: "sessions.saved", q: query },
+						as,
+						timeout,
+					);
+					if (!Array.isArray(r.items)) continue;
+					for (const item of r.items.slice(0, 30) as SavedSessionHit[]) {
+						if (
+							!item ||
+							typeof item.id !== "string" ||
+							!item.id ||
+							item.id.length > 512 ||
+							item.id.includes("/") ||
+							(item.project !== null && typeof item.project !== "string") ||
+							typeof item.name !== "string" ||
+							typeof item.harness !== "string" ||
+							!Number.isFinite(item.lastSeen)
+						)
+							continue;
+						hits.push({
+							...item,
+							id: `${peer.machineId}/${item.id}`,
+							machine: peer.name,
+						});
+					}
+				} catch {
+					/* A peer can leave or change version during a search. */
+				}
+			}
+		};
+		await Promise.all(
+			Array.from({ length: Math.min(8, peers.length) }, worker),
+		);
+		return hits;
+	}
+
+	async savedAgent(address: string, as: Principal): Promise<AgentRow> {
+		const slash = address.indexOf("/");
+		const machineId = address.slice(0, slash);
+		const localId = address.slice(slash + 1);
+		const peer = this.state.peers.get(machineId);
+		if (!peer || !localId || localId.includes("/"))
+			throw new RpcError("not_found", "No such conversation");
+		if (
+			peer.link === "tailnet" &&
+			!peer.hello?.features.includes("saved-sessions")
+		)
+			throw new RpcError(
+				"unsupported",
+				"This machine does not share saved conversations",
+			);
+		const r = await this.act(
+			address,
+			{ op: "sessions.detail", agent: localId },
+			as,
+		);
+		const row = r.row as AgentRow | undefined;
+		if (
+			row?.id !== localId ||
+			row.machineId !== machineId ||
+			row.address !== address
+		)
+			throw new RpcError(
+				"not_found",
+				"The home machine returned a different conversation",
+			);
+		return {
+			...row,
+			id: address,
+			openSessions: row.openSessions
+				?.filter((s) => typeof s.id === "string" && s.id && !s.id.includes("/"))
+				.map((s) => ({ ...s, id: `${machineId}/${s.id}` })),
+		};
 	}
 
 	/** Message search on every reachable peer, each over its own agents. */
@@ -1847,7 +1942,11 @@ export class Federation implements PoolView {
 						"forbidden",
 						`${who.node} is not one of your own nodes; it can't act for you`,
 					);
-				return this.transcriptStream(url.searchParams, peer.machineId, who);
+				return await this.transcriptStream(
+					url.searchParams,
+					peer.machineId,
+					who,
+				);
 			}
 			if (path === "/fed/v1/changes" && req.method === "GET") {
 				authorize(principal, "fed.act");
@@ -1992,19 +2091,22 @@ export class Federation implements PoolView {
 	}
 
 	/** One local agent's live transcript, for the user a peer forwards. */
-	private transcriptStream(
+	private async transcriptStream(
 		q: URLSearchParams,
 		machineId: string,
 		who: Identity,
-	): Response {
+	): Promise<Response> {
 		const user = this.forwardedUser({
 			login: q.get("login"),
 			node: q.get("node"),
 		});
 		const agent = q.get("agent") ?? "";
 		authorize(user, "transcript.read", agent);
-		if (!this.knows(agent))
-			throw new RpcError("not_found", `no agent ${agent}`);
+		if (!this.knows(agent)) {
+			if (!agent || agent.includes("/") || agent.length > 512)
+				throw new RpcError("not_found", "No such conversation");
+			await this.service.app.agent(user, agent);
+		}
 		const release = this.holdStream(
 			`transcript:${machineId}`,
 			MAX_TRANSCRIPTS_PER_PEER,
@@ -2408,9 +2510,32 @@ export class Federation implements PoolView {
 			ok: true,
 		});
 		switch (action?.op) {
+			case "sessions.saved": {
+				authorize(user, "agents");
+				if (typeof action.q !== "string" || action.q.length > 200)
+					return fail("bad_request", "Invalid saved conversation query");
+				return { ok: true, ...this.service.app.savedSessions(user, action.q) };
+			}
+			case "sessions.detail": {
+				authorize(user, "agents");
+				if (
+					typeof action.agent !== "string" ||
+					!action.agent ||
+					action.agent.length > 512 ||
+					action.agent.includes("/")
+				)
+					return fail("bad_request", "Expected a local conversation ID");
+				return {
+					ok: true,
+					row: await this.service.app.agent(user, action.agent),
+				};
+			}
 			case "transcript.page": {
 				authorize(user, "transcript.read", action.agent);
-				if (!this.knows(String(action.agent)))
+				if (
+					typeof action.agent !== "string" ||
+					(!isLocalSubagentId(action.agent) && action.agent.includes("/"))
+				)
 					return fail("not_found", `no agent ${String(action.agent)}`);
 				const page = await this.service.transcripts.page(
 					String(action.agent),
@@ -2427,7 +2552,10 @@ export class Federation implements PoolView {
 			}
 			case "transcript.image": {
 				authorize(user, "transcript.read", action.agent);
-				if (!this.knows(String(action.agent)))
+				if (
+					typeof action.agent !== "string" ||
+					(!isLocalSubagentId(action.agent) && action.agent.includes("/"))
+				)
 					return fail("not_found", `no agent ${String(action.agent)}`);
 				const image = await this.service.transcripts.image(
 					String(action.agent),

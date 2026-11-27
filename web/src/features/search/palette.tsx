@@ -8,7 +8,12 @@ import { ago } from "../../lib/format.ts";
 import type { PaletteResult } from "../../lib/registry.tsx";
 import { navigate } from "../../lib/router.ts";
 import { can } from "../../lib/store.ts";
-import { savedSessions, searchable, searchMessages } from "./api.ts";
+import {
+	type SavedScope,
+	savedSessions,
+	searchable,
+	searchMessages,
+} from "./api.ts";
 import { Snippet } from "./Snippet.tsx";
 import { openHit } from "./state.ts";
 import "./search.css";
@@ -39,12 +44,13 @@ export async function messageResults(
 
 export async function savedResults(
 	q: string,
+	scope: SavedScope,
 	signal: AbortSignal,
 ): Promise<PaletteResult[]> {
-	return (await savedSessions(q, signal)).map((s) => ({
+	return (await savedSessions(q, scope, signal)).map((s) => ({
 		key: s.id,
 		label: s.name,
-		sub: s.project ?? s.harness,
+		sub: [s.machine, s.project ?? s.harness].filter(Boolean).join(" · "),
 		icon: <AgentAvatar harness={s.harness} size="sm" />,
 		trail: ago(s.lastSeen),
 		run: () => navigate({ view: "agent", id: s.id }),

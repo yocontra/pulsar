@@ -18,6 +18,7 @@ import {
 	searchMessages,
 } from "./api.ts";
 import { Snippet } from "./Snippet.tsx";
+import { type SavedScope, savedScopes } from "./scopes.ts";
 import { openHit } from "./state.ts";
 import "./search.css";
 
@@ -89,11 +90,20 @@ export function HitRow({
 }
 
 export function SavedSessions({ query }: { query: string }) {
-	const q = query.trim();
+	return (
+		<>
+			{(["local", "peers"] as const).map((scope) => (
+				<SavedGroup key={scope} q={query.trim()} scope={scope} />
+			))}
+		</>
+	);
+}
+
+function SavedGroup({ q, scope }: { q: string; scope: SavedScope }) {
 	const saved = useQuery(
 		{
-			queryKey: ["savedSessions", q],
-			queryFn: ({ signal }) => savedSessions(q, signal),
+			queryKey: ["savedSessions", q, scope],
+			queryFn: ({ signal }) => savedSessions(q, scope, signal),
 			retry: false,
 			staleTime: 5000,
 		},
@@ -101,14 +111,14 @@ export function SavedSessions({ query }: { query: string }) {
 	);
 	if (!saved.data?.length) return null;
 	return (
-		<GroupedList title="Saved conversations on this machine">
+		<GroupedList title={savedScopes[scope]}>
 			{saved.data.map((s) => (
 				<ListItem
 					link
 					linkComponent="button"
 					key={s.id}
 					title={s.name}
-					text={s.project ?? s.harness}
+					text={[s.machine, s.project ?? s.harness].filter(Boolean).join(" · ")}
 					after={ago(s.lastSeen)}
 					onClick={() => navigate({ view: "agent", id: s.id })}
 				/>

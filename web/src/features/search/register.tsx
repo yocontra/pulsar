@@ -12,13 +12,16 @@ import {
 	type SlotProps,
 } from "../../lib/registry.tsx";
 
-registerPaletteProvider({
-	id: "search.sessions",
-	group: "Saved conversations on this machine",
-	order: 90,
-	search: async (q, signal) =>
-		(await import("./palette.tsx")).savedResults(q, signal),
-});
+import { savedScopes } from "./scopes.ts";
+
+for (const scope of ["local", "peers"] as const)
+	registerPaletteProvider({
+		id: `search.sessions.${scope}`,
+		group: savedScopes[scope],
+		order: scope === "local" ? 90 : 91,
+		search: async (q, signal) =>
+			(await import("./palette.tsx")).savedResults(q, scope, signal),
+	});
 
 registerPaletteProvider({
 	id: "search.messages",

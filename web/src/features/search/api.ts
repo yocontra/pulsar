@@ -42,10 +42,18 @@ export function searchMessages(
 	});
 }
 
-export async function savedSessions(q: string, signal?: AbortSignal) {
+import type { SavedScope } from "./scopes.ts";
+
+export type { SavedScope };
+
+export async function savedSessions(
+	q: string,
+	scope: SavedScope,
+	signal?: AbortSignal,
+) {
 	const res = await request<{ items: SavedSessionHit[] }>(
-		`/sessions/saved?${new URLSearchParams({ q })}`,
+		`/sessions/saved?${new URLSearchParams({ q, scope })}`,
 		{ signal },
 	);
-	return res.items;
+	return scope === "peers" ? res.items.filter((s) => !!s.machine) : res.items;
 }

@@ -160,6 +160,27 @@ export class AppApi {
 		let agent = current();
 		if (agent) this.history.remember(agent);
 		if (agent && agent.status !== "gone") return this.views.row(agent);
+		const parts = splitAddress(id);
+		const pool = this.registry.pool;
+		if (
+			parts &&
+			parts.machineId !== this.machine().id &&
+			pool?.savedAgent &&
+			!parts.localId.includes("/") &&
+			(!agent || pool.machine(parts.machineId)?.link === "tailnet")
+		) {
+			try {
+				return await pool.savedAgent(id, p);
+			} catch (e) {
+				if (
+					!agent ||
+					!(e instanceof RpcError) ||
+					(e.code !== "not_found" && e.code !== "unsupported")
+				)
+					throw e;
+				return this.views.row(agent);
+			}
+		}
 		const saved = await this.history.resolve(id);
 		agent = current();
 		if (agent && agent.status !== "gone") return this.views.row(agent);
@@ -229,6 +250,23 @@ export class AppApi {
 	attention(p: Principal) {
 		authorize(p, "attention");
 		return this.views.attention();
+	}
+
+	async searchSavedSessions(
+		p: Principal,
+		query: string,
+		scope: "all" | "local" | "peers" = "all",
+	) {
+		authorize(p, "agents");
+		const local = scope === "peers" ? [] : this.savedSessions(p, query).items;
+		if (scope === "local") return { items: local };
+		const peers =
+			(await this.registry.pool?.searchSavedSessions?.(query, p)) ?? [];
+		return {
+			items: [...local, ...peers]
+				.sort((a, b) => b.lastSeen - a.lastSeen || a.id.localeCompare(b.id))
+				.slice(0, 30),
+		};
 	}
 
 	savedSessions(p: Principal, query: string) {

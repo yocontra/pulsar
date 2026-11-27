@@ -152,7 +152,7 @@ Built-in commands in the `/` menu come from a list kept per CLI version (src/har
 
 ## Session links and saved conversations
 
-On the machine that owns a conversation, a session link can open its transcript after the process exits or Pulsar restarts. Pulsar saves supported conversations when you open them, when the process closes or switches sessions, and when its daemon shuts down. Search by name, project, or harness on desktop or phone to reopen a saved conversation on this machine. The live agent list still shows current sessions. A native Antigravity link from an older installation also works when the ID inside its conversation database matches the link.
+A local or pool session link can open the conversation’s transcript after the process exits or Pulsar restarts. Pulsar saves supported conversations when you open them, when the process closes or switches sessions, and when its daemon shuts down. Search by name, project, or harness on desktop or phone to reopen a saved conversation on this machine or a reachable pool machine that supports saved conversation search. The live agent list still shows current sessions. A native Antigravity link from an older installation also works when the ID inside its conversation database matches the link.
 
 A saved conversation shows **Session closed**. Another terminal in the same project can have a different conversation open. Pulsar links to open sessions in the same project. **Resume session** opens the saved ID in its original workspace for native Antigravity and managed ACP providers that reported resume or load support.
 

@@ -240,6 +240,10 @@ const Q = {
 		q: optionalText(200),
 		top: limit(8, 100),
 	}),
+	saved: z.object({
+		q: z.string().max(200).default(""),
+		scope: z.enum(["all", "local", "peers"]).default("all"),
+	}),
 	search: z.object({ q: z.string().max(200).default("") }),
 	searchMessages: z.object({
 		q: z.string().max(200).default(""),
@@ -1001,9 +1005,10 @@ export class HttpTransport {
 			return c.json(svc.children(who(c), c.req.param("nodeId"), q));
 		});
 		api.get("/attention", (c) => c.json(svc.attention(who(c))));
-		api.get("/sessions/saved", (c) =>
-			c.json(svc.savedSessions(who(c), parse(Q.search, c.req.query()).q)),
-		);
+		api.get("/sessions/saved", async (c) => {
+			const { q, scope } = parse(Q.saved, c.req.query());
+			return c.json(await svc.searchSavedSessions(who(c), q, scope));
+		});
 		api.get("/recent", (c) => {
 			const q = parse(Q.recent, c.req.query());
 			return c.json(svc.recent(who(c), q.limit));
