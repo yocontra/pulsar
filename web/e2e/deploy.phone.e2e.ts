@@ -62,10 +62,10 @@ test.describe("a deploy under an open phone app", () => {
 		const a = stageBuild();
 		await serve(request, { root: a.root, webBuild: NO_UPDATE });
 		await openApp(page);
+		const seen = await watch(page);
 		// Deploy: the daemon runs the current build; build A stays installed
 		// next to it, as `pulsar setup` keeps older builds.
 		await serve(request, { previous: [a.root], webBuild: NO_UPDATE });
-		const seen = await watch(page);
 		await page.getByTestId("tab-usage").click();
 		await expect(usageTotal(page)).toHaveText(/^\$[\d,.]+$/);
 		expect(seen).toEqual({ loads: 0, failed: false });
@@ -80,8 +80,8 @@ test.describe("a deploy under an open phone app", () => {
 		const a = stageBuild();
 		await serve(request, { root: a.root, webBuild: NO_UPDATE });
 		await openApp(page);
-		await serve(request, { webBuild: NO_UPDATE });
 		const seen = await watch(page);
+		await serve(request, { webBuild: NO_UPDATE });
 		await page.getByTestId("tab-usage").click();
 		await expect(usageTotal(page)).toHaveText(/^\$[\d,.]+$/);
 		// One reload into the current build; never "Try Again".
