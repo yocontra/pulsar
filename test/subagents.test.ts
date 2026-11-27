@@ -45,6 +45,7 @@ import {
 	registration,
 	restoreEnv,
 	startDaemon,
+	until,
 } from "./helpers.ts";
 import {
 	agentRecord,
@@ -933,6 +934,31 @@ process.stdout.write(JSON.stringify(r[key] ?? {}));
 					{ messageId: sent.message.id, body: "right child" },
 				);
 				expect(response.message.fromId).toBe(a.agent.id);
+				const waiting = issuer.call("wait", {
+					for: `idle:${a.agent.id}`,
+					timeoutSeconds: 8,
+				});
+				await until(() => daemon.service.waiters.size === 1);
+				a.client.close();
+				await until(() => !daemon.service.registry.get(a.agent.id)?.registered);
+				expect(daemon.service.waiters.size).toBe(1);
+				const source = readFileSync(routes, "utf8");
+				try {
+					writeFileSync(
+						routes,
+						JSON.stringify({
+							...JSON.parse(source),
+							"session.active": { data: {} },
+						}),
+					);
+					await daemon.service.subagents.refresh("opencode:ses_lead");
+					expect(await waiting).toMatchObject({
+						event: "idle",
+						agent: { id: a.agent.id },
+					});
+				} finally {
+					writeFileSync(routes, source);
+				}
 			} finally {
 				issuer.close();
 				a.client.close();

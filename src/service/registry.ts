@@ -953,6 +953,8 @@ export class Registry {
 		// still serves them (an OpenCode session that finished its run is idle).
 		// One that appeared while this scan ran is not judged by it.
 		for (const agent of this.agents.values()) {
+			// Native scanners enumerate host sessions; child lifecycle comes from the child adapter.
+			if (isLocalSubagentId(agent.id)) continue;
 			const detected = byPid.get(agent.pid ?? provenMcpHosts.get(agent) ?? 0);
 			if (
 				agent.harness === "unknown" &&
@@ -1107,7 +1109,8 @@ export class Registry {
 		this.noteStatus(agent, was);
 		agent.lastSeen = Date.now();
 		this.events.emit("agent", { action: "gone", agent: toPublic(agent) });
-		this.waiters.resolveGone(agent);
+		// A child transport can close while its provider continues running the task.
+		if (!isLocalSubagentId(agent.id)) this.waiters.resolveGone(agent);
 		this.onSessionClosed?.(agent);
 		this.onGone?.(agent);
 	}
