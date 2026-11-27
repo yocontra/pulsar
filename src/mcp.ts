@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DaemonClient } from "./client.ts";
@@ -270,7 +269,8 @@ export async function runMcp() {
 	const active = idleCompactor(IDLE_GC_MS);
 	const managed = !!process.env[ACP_IDENTITY_ENV];
 	const base = managed ? null : await detectRegistration("mcp");
-	if (base?.harness === "antigravity") base.nativeHostToken = randomUUID();
+	if (base?.harness === "antigravity")
+		base.nativeHostToken = crypto.randomUUID();
 	const server = new McpStdioServer(
 		{ name: "pulsar", version: VERSION },
 		PULSAR_TOOL_INSTRUCTIONS,
