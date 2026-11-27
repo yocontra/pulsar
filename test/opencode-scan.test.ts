@@ -59,7 +59,7 @@ stub(
 	join(bin, "ps"),
 	`#!/bin/sh
 echo "${SERVICE_PID} ${TUI_IDLE} ${SERVICE_EXE} serve --service"
-echo "${TUI_IDLE} 1 opencode"
+echo "${TUI_IDLE} 1 opencode --session ses_old"
 echo "${TUI_BUSY} 1 /usr/local/bin/opencode /work/busy"
 echo "${TUI_STANDALONE} 1 opencode --standalone"
 echo "${RUN} 1 opencode run hi"
@@ -81,6 +81,7 @@ stub(
 );
 
 const SESSIONS: Record<string, unknown> = {
+	ses_old: { id: "ses_old", location: { directory: "/work/idle" } },
 	ses_busy: {
 		id: "ses_busy",
 		title: "busy one",
@@ -234,6 +235,39 @@ describe("OpenCode scan", () => {
 		// Straight from the service: no `opencode` process.
 		expect(httpHits).toBeGreaterThan(0);
 		expect(existsSync(cliLog)).toBe(false);
+	});
+
+	test("a resumed TUI must name the same session as its sole workspace tab", async () => {
+		const path = join(stateDir, "opencode/latest/tui");
+		mkdirSync(path, { recursive: true });
+		const file = join(path, "tabs.json");
+		const setTabs = (ids: string[]) =>
+			writeFileSync(
+				file,
+				JSON.stringify({
+					global: { tabs: [] },
+					cwd: {
+						"/work/idle": { tabs: ids.map((sessionID) => ({ sessionID })) },
+					},
+				}),
+			);
+		try {
+			setTabs(["ses_old"]);
+			const selected = byId(await scanOpencode());
+			expect(selected.ses_old).toMatchObject({
+				pid: null,
+				meta: { sessionFrom: "tab", tuiPid: String(TUI_IDLE) },
+			});
+			expect(selected.ses_new).toBeUndefined();
+			for (const tabs of [["ses_old", "ses_new"], ["ses_new"]]) {
+				setTabs(tabs);
+				const ambiguous = byId(await scanOpencode());
+				expect(ambiguous.ses_old).toBeUndefined();
+				expect(ambiguous.ses_new?.meta.sessionFrom).toBe("folder");
+			}
+		} finally {
+			rmSync(file, { force: true });
+		}
 	});
 
 	test("when HTTP is refused, `opencode api` runs from the service's executable, not PATH's", async () => {

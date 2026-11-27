@@ -748,7 +748,8 @@ export class Launches {
 			);
 			if (agent) {
 				// The launcher knows the pane: Stop and typing reach it.
-				if (agent.meta.tmux !== pane) agent.meta.tmux = pane;
+				if (agent.meta.sessionFrom !== "tab" && agent.meta.tmux !== pane)
+					agent.meta.tmux = pane;
 				if (agent.id !== s.agentId) this.d.onAgent?.(agent.id);
 				if (!named && run.params.name) {
 					this.d.registry.setIdentity(agent, { name: run.params.name });
@@ -883,7 +884,14 @@ export class Launches {
 				}
 				return false;
 			};
-			const child = candidates.find((a) => a.pid !== null && under(a.pid));
+			const child = candidates.find(
+				(a) =>
+					(a.pid !== null && under(a.pid)) ||
+					(!!resumeSessionId &&
+						a.harness === "opencode" &&
+						a.meta.sessionFrom === "tab" &&
+						under(Number(a.meta.tuiPid))),
+			);
 			if (child) return child;
 		}
 		if (resumeSessionId || managed === true) return null;

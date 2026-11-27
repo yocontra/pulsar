@@ -555,6 +555,46 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 		});
 	}
 
+	test("OpenCode can confirm its exact tab in the launched pane without taking control of its shared service", async () => {
+		const driver = driverFor("opencode")!;
+		const id = "ses_ArchivedTerminal123";
+		using _saved = spyOn(driver, "readSession").mockResolvedValue({
+			cwd: project,
+			lastSeen: Date.now(),
+		});
+		using _scan = spyOn(driver.scan!, "sessions").mockReturnValue([]);
+		const started = await home.service.launches.start(VERIFIED, {
+			harness: "opencode",
+			cwd: project,
+			workspace: "current",
+			nonce: nonce(),
+			resumeSessionId: id,
+		});
+		await until(() => now(home, started.id).step === "waiting", 5000);
+		const pid = tmux(
+			"display-message",
+			"-p",
+			"-t",
+			`=${started.session}:`,
+			"#{pane_pid}",
+		).trim();
+		const exact = home.service.registry.upsert({
+			harness: "opencode",
+			sessionId: id,
+			pid: null,
+			cwd: project,
+			project: "demo",
+			branch: "main",
+			tags: [],
+			meta: { sessionFrom: "tab", tuiPid: pid },
+			registered: false,
+			status: "idle",
+		});
+		await until(() => now(home, started.id).step === "done", 5000);
+		expect(now(home, started.id).agentId).toBe(exact.id);
+		expect(exact.meta.tmux).toBeUndefined();
+	});
+
 	test("the login shell passes an opaque provider session id as one literal argument", () => {
 		const id = "space and 'quotes' + $(uname) + `pwd`";
 		const command = harnessCommand("cursor", ["/usr/bin/printf", "%s", id]);

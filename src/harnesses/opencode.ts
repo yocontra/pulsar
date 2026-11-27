@@ -7,6 +7,7 @@ import { type ProcessInfo, processSnapshot } from "../processes.ts";
 import { jsonAction, skillFor } from "../setup/actions.ts";
 import { exists, getPath, readJsonc, which } from "../setup/files.ts";
 import { type Agent, isFolderGuess } from "../types.ts";
+import { headAsync } from "../util.ts";
 import { listOpencodeSubagents } from "./more-subagents.ts";
 import {
 	opencodeGet,
@@ -122,12 +123,44 @@ async function processCwds(
 const dirOf = (info: SessionInfo | null) =>
 	info?.location?.directory ?? info?.directory ?? null;
 
+/** A launch argument alone becomes stale after a tab switch. Require the live
+ * TUI's original ID to agree with its project's single tab as well. */
+function requestedTab(args: string): string | null {
+	const argv = args.split(/\s+/);
+	const flag = argv.findIndex((arg) => arg === "--session" || arg === "-s");
+	const id = flag > 0 ? argv[flag + 1] : undefined;
+	return id && nativeOpencodeId(id) ? id : null;
+}
+
+async function soleTabs(): Promise<Map<string, string>> {
+	const state =
+		process.env.XDG_STATE_HOME || join(homedir(), ".local", "state");
+	const tabs = new Map<string, string>();
+	try {
+		const rows = JSON.parse(
+			await headAsync(
+				join(state, "opencode/latest/tui/tabs.json"),
+				1024 * 1024,
+			),
+		);
+		if (rows.global?.tabs?.length) return tabs;
+		for (const [cwd, value] of Object.entries(rows.cwd ?? {})) {
+			const list = (value as { tabs?: { sessionID?: string }[] } | null)?.tabs;
+			const id =
+				Array.isArray(list) && list.length === 1
+					? list[0]?.sessionID
+					: undefined;
+			if (typeof id === "string" && nativeOpencodeId(id)) tabs.set(cwd, id);
+		}
+	} catch {}
+	return tabs;
+}
+
 /**
  * OpenCode sessions, from its shared server: every root session running
- * now, and for each TUI with no running session in its folder, that
- * folder's most recently updated session, idle. The service does not say
- * which session a TUI shows, so that one is a guess from the folder (marked
- * `meta.sessionFrom = "folder"`, with the TUI's pid in `meta.tuiPid`).
+ * now and explicit TUI sessions whose single native workspace tab matches the
+ * requested session ID. Other idle TUIs can supply a folder guess (marked
+ * `meta.sessionFrom = "folder"`) when their folder has no active session.
  */
 export async function scanOpencode(): Promise<Scanned[]> {
 	const table = await processSnapshot();
@@ -186,9 +219,41 @@ export async function scanOpencode(): Promise<Scanned[]> {
 	const tuis = opencodeTuis(table);
 	if (tuis.length === 0) return out;
 	const cwds = await processCwds(tuis.map((t) => t.pid));
+	const tabs = tuis.some((t) => requestedTab(t.args))
+		? await soleTabs()
+		: new Map<string, string>();
+	const counts = new Map<string, number>();
+	for (const cwd of cwds.values())
+		if (cwd) counts.set(cwd, (counts.get(cwd) ?? 0) + 1);
 	for (const tui of tuis) {
 		const cwd = cwds.get(tui.pid);
-		if (!cwd || busyDirs.has(cwd)) continue;
+		if (!cwd) continue;
+		const requested = requestedTab(tui.args);
+		if (requested && counts.get(cwd) === 1 && tabs.get(cwd) === requested) {
+			const existing = out.find(
+				(row) => row.sessionId === requested && row.cwd === cwd,
+			);
+			if (existing) {
+				existing.meta.tuiPid = String(tui.pid);
+				existing.meta.sessionFrom = "tab";
+				continue;
+			}
+			const info = await opencodeGet<SessionInfo>(
+				table,
+				`/api/session/${requested}`,
+			);
+			if (info?.id === requested && !info.parentID && dirOf(info) === cwd) {
+				taken.add(requested);
+				out.push(
+					scanned(requested, info, "idle", {
+						tuiPid: String(tui.pid),
+						sessionFrom: "tab",
+					}),
+				);
+				continue;
+			}
+		}
+		if (busyDirs.has(cwd)) continue;
 		const list = await opencodeGet<SessionInfo[]>(
 			table,
 			`/api/session?directory=${encodeURIComponent(cwd)}&parentID=null&limit=10&order=desc`,

@@ -162,7 +162,7 @@ A saved conversation shows **Session closed**. Another terminal in the same proj
 | Antigravity | Opens the verified conversation ID with `agy --conversation`. |
 | Claude Code | Checks the session ID and workspace in the Claude transcript, then runs `claude --resume <uuid>`. |
 | Codex | Checks the rollout for the saved parent thread, then runs `codex resume <uuid>`. |
-| OpenCode | Looks up the parent session in the OpenCode database, then runs `opencode --session <id>`. |
+| OpenCode | Looks up the parent session in the OpenCode database, then runs `opencode --session <id>`. Pulsar can confirm an idle TUI when its requested ID matches the workspace’s sole open tab and a single TUI owns that workspace. |
 | pi and OMP | Checks the full session ID in the journal header and passes that file’s absolute path to `--session` in the same harness. |
 
 Disposable terminal tests confirmed the previous conversation and its next model turn in Claude Code 2.1.331, OpenCode 2.2.5, pi 1.5.0 and OMP 19.1.1. Codex 0.172.0 exposes the exact-ID command. Its macOS preferences initialization blocked the live model-turn check in the test environment.
