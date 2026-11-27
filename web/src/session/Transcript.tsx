@@ -35,6 +35,7 @@ import { clock, duration, fullDate, plural } from "../lib/format.ts";
 import { linkPrs } from "../lib/links.ts";
 import { sentHere } from "../lib/sent.ts";
 import { AttachedFiles } from "./AttachedFiles.tsx";
+import { Checklist } from "./Checklist.tsx";
 import { CodeBlock } from "./CodeBlock.tsx";
 import { FileRefAgent } from "./file-ref.tsx";
 import { InlineCode } from "./highlight.tsx";
@@ -498,13 +499,20 @@ function PartView({ part, next }: { part: Item; next?: Item }) {
 					className={`ev msg r-${part.ev.role} ds-prose${live ? " streaming" : ""}`}
 					data-ev-id={part.ev.id}
 				>
-					{text && (
-						<MessageResponse
-							isAnimating={live}
-							caret={live ? "circle" : undefined}
-						>
-							{text}
-						</MessageResponse>
+					{part.ev.checklist ? (
+						<Checklist
+							items={part.ev.checklist}
+							omitted={part.ev.checklistOmitted}
+						/>
+					) : (
+						text && (
+							<MessageResponse
+								isAnimating={live}
+								caret={live ? "circle" : undefined}
+							>
+								{text}
+							</MessageResponse>
+						)
 					)}
 					<EventMedia ev={part.ev} />
 				</div>

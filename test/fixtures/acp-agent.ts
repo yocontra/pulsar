@@ -127,6 +127,8 @@ for await (const line of lines) {
 		case "initialize":
 			if (!params.clientCapabilities.elicitation?.form)
 				throw new Error("Fixture expected form capability");
+			if (!params.clientCapabilities.plan)
+				throw new Error("Missing plan capability");
 			if (!params.clientCapabilities.subagents)
 				throw new Error("Fixture expected exposed subagent support");
 			reply(id, {
@@ -381,6 +383,17 @@ for await (const line of lines) {
 					sessionUpdate: "session_info_update",
 					title: "Child subject",
 				});
+				for (const [target, label] of [
+					[sessionId, "Root step"],
+					[childSessionId, "Child step"],
+					["unannounced-session", "Foreign step"],
+				]) {
+					for (const status of ["pending", "completed", "completed"])
+						emitUpdate(target!, {
+							sessionUpdate: "plan",
+							entries: [{ content: label, priority: "high", status }],
+						});
+				}
 				emitUpdate("unannounced-session", {
 					sessionUpdate: "session_info_update",
 					title: "Wrong subject",

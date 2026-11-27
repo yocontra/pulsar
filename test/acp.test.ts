@@ -659,6 +659,15 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			(await childHistory()).events.some((e) => e.text === "Exact child reply"),
 		);
 		const childPage = await childHistory();
+		const rootPlans = lifecycle.events.filter((event) => event.checklist);
+		const childPlans = childPage.events.filter((event) => event.checklist);
+		expect(rootPlans.map((event) => event.checklist)).toEqual([
+			[{ text: "Root step", priority: "high", status: "done" }],
+		]);
+		expect(childPlans.map((event) => event.checklist)).toEqual([
+			[{ text: "Child step", priority: "high", status: "done" }],
+		]);
+		expect(rootPlans[0]!.id).not.toBe(childPlans[0]!.id);
 		expect(childPage.events).toContainEqual(
 			expect.objectContaining({
 				text: "Work for child",

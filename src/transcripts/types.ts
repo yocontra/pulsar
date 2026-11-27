@@ -150,6 +150,12 @@ export interface ImageSource {
 	encoding: "base64" | "data-url" | "blob";
 }
 
+export interface TranscriptTodo {
+	text: string;
+	status: "done" | "active" | "todo" | "cancelled";
+	priority?: "high" | "medium" | "low";
+}
+
 export interface TranscriptEvent {
 	/**
 	 * Stable id from the source (`<recordId>#<blockIndex>` when one record has
@@ -166,6 +172,9 @@ export interface TranscriptEvent {
 	kind: TranscriptKind;
 	text: string;
 	tool?: TranscriptTool;
+	/** An empty checklist clears the previous snapshot at this event ID. */
+	checklist?: TranscriptTodo[];
+	checklistOmitted?: number;
 	model?: string;
 	/**
 	 * Who sent a peer message (its name as the sender gave it), or the

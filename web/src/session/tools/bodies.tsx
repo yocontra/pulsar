@@ -7,9 +7,6 @@
 
 import {
 	CheckIcon,
-	CircleCheckIcon,
-	CircleDashedIcon,
-	CircleIcon,
 	CircleSlashIcon,
 	ExternalLinkIcon,
 	FileIcon,
@@ -23,7 +20,6 @@ import {
 	type Question,
 	questions,
 	shellCommand,
-	type Todo,
 	type ToolKind,
 	todos,
 	toolPath,
@@ -32,6 +28,7 @@ import { messageContent } from "../../../../src/transcripts/tool-text.ts";
 import type { ToolDetail } from "../../api/types.ts";
 import { MessageResponse } from "../../components/ai-elements/message.tsx";
 import { plural } from "../../lib/format.ts";
+import { Checklist } from "../Checklist.tsx";
 import { CodeBlock, TerminalBlock } from "../CodeBlock.tsx";
 import { Diff } from "../Diff.tsx";
 import { langForPath } from "../highlight.tsx";
@@ -591,26 +588,6 @@ export function FetchBody(p: BodyProps) {
 }
 
 // ------------------------------------------------------------------ plans
-
-const TODO_ICON: Record<Todo["status"], ReactNode> = {
-	done: <CircleCheckIcon aria-label="Done" />,
-	active: <CircleDashedIcon aria-label="In progress" />,
-	todo: <CircleIcon aria-label="To do" />,
-	cancelled: <CircleSlashIcon aria-label="Cancelled" />,
-};
-
-export function Checklist({ items }: { items: Todo[] }) {
-	return (
-		<ul className="ds-todos">
-			{items.map((t, i) => (
-				<li key={i} className={`t-${t.status}`}>
-					{TODO_ICON[t.status]}
-					<span>{t.text}</span>
-				</li>
-			))}
-		</ul>
-	);
-}
 
 export function TodoBody(p: BodyProps) {
 	const list = todos(p.input);

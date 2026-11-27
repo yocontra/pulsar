@@ -10,6 +10,7 @@ import { isAbsolute } from "node:path";
 import type { SessionUpdate, SubagentUpdate } from "@agentclientprotocol/sdk";
 import type { TranscriptEvent } from "../transcripts/types.ts";
 import type { Agent } from "../types.ts";
+import { AcpPlans, isPlanUpdate } from "./acp-plan.ts";
 import { compactionEvent, conversationTitle } from "./acp-session-info.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
 import {
@@ -46,6 +47,7 @@ type Child = {
 };
 
 export class AcpChildren {
+	private readonly plans = new AcpPlans();
 	private readonly rootMessages = new Map<string, Message>();
 	private readonly history = new Map<string, Metadata>();
 	private readonly children = new Map<string, Child>();
@@ -112,6 +114,14 @@ export class AcpChildren {
 		if (!child) return false;
 		const record = (event: Omit<TranscriptEvent, "ts">) =>
 			this.recordChild(child, event);
+		if (isPlanUpdate(update)) {
+			const event = this.plans.apply(session, update);
+			if (event) {
+				child.lastChunk = undefined;
+				record(event);
+			}
+			return true;
+		}
 		const type = update.sessionUpdate;
 		switch (type) {
 			case "session_info_update":

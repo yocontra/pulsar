@@ -5,7 +5,7 @@
  */
 import { execCalls, isShell, shellCommand } from "./command.ts";
 import { messageContent } from "./tool-text.ts";
-import type { ToolDetail } from "./types.ts";
+import type { ToolDetail, TranscriptTodo } from "./types.ts";
 
 export { shellCommand };
 
@@ -158,10 +158,7 @@ export function toolPath(input: unknown): string {
 	);
 }
 
-export interface Todo {
-	text: string;
-	status: "done" | "active" | "todo" | "cancelled";
-}
+export type Todo = TranscriptTodo;
 
 function todoStatus(v: unknown): Todo["status"] {
 	const s = str(v).toLowerCase();

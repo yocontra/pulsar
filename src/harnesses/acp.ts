@@ -46,6 +46,7 @@ import { AcpCommandCatalog } from "./acp-commands.ts";
 import { type AcpSelectorCommand, AcpSessionControls } from "./acp-controls.ts";
 import { ACP_IDENTITY_ENV } from "./acp-identity.ts";
 import { permissionArguments } from "./acp-permission.ts";
+import { AcpPlans, isPlanUpdate } from "./acp-plan.ts";
 import { antigravityQuestion, elicitationQuestions } from "./acp-questions.ts";
 import { compactionEvent, conversationTitle } from "./acp-session-info.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
@@ -132,6 +133,7 @@ class Bridge {
 	private readonly daemon = new DaemonClient();
 	private readonly controls = new AcpSessionControls();
 	private readonly commands: AcpCommandCatalog;
+	private readonly plans = new AcpPlans();
 	private readonly tools = new AcpToolResults(MAX_TEXT);
 	private readonly setupUpdates: Array<{
 		sessionId: string;
@@ -281,6 +283,7 @@ class Bridge {
 				protocolVersion: ACP_PROTOCOL_VERSION,
 				clientCapabilities: {
 					session: { compaction: {}, notices: {} },
+					plan: {},
 					elicitation: { form: {} },
 					subagents: {},
 				},
@@ -1010,6 +1013,9 @@ class Bridge {
 				// replay must not crowd out announcements or child transcripts.
 				if (sessionId === this.options.sessionId) return;
 				break;
+			case "plan":
+			case "plan_update":
+			case "plan_removed":
 			case "notice":
 			case "compaction_update":
 			case "subagent_update":
@@ -1034,7 +1040,8 @@ class Bridge {
 				if (
 					pending.update.sessionUpdate === "session_info_update" ||
 					pending.update.sessionUpdate === "compaction_update" ||
-					pending.update.sessionUpdate === "usage_update"
+					pending.update.sessionUpdate === "usage_update" ||
+					isPlanUpdate(pending.update)
 				)
 					this.sessionUpdate(pending.update);
 				else this.controls.update(pending.update);
@@ -1140,6 +1147,15 @@ class Bridge {
 					this.refreshCapabilities();
 				}
 			}
+		} else if (isPlanUpdate(update) && this.sessionId) {
+			const event = this.plans.apply(this.sessionId, update);
+			if (!event) return;
+			if (this.turn) {
+				this.confirmDelivery(this.turn);
+				this.writeBlock(this.turn);
+				this.turn.block = undefined;
+			}
+			this.record(event);
 		} else if (update.sessionUpdate === "compaction_update") {
 			const event = compactionEvent(update);
 			if (event) this.record(event);

@@ -122,6 +122,7 @@ export function buildItems(events: TranscriptEvent[]): Item[] {
 	};
 
 	for (const ev of events) {
+		if (ev.checklist?.length === 0) continue;
 		if (ev.sidechain) {
 			const task =
 				typeof ev.sidechain === "string" ? tasks.get(ev.sidechain) : undefined;
