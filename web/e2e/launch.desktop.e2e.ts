@@ -6,6 +6,7 @@ import {
 	test,
 	withPasskey,
 } from "./fixtures.ts";
+import { launchSettingsTest } from "./launch-settings.shared.ts";
 
 /**
  * New agent (features/launch) on the desktop: the draft in the session
@@ -191,3 +192,5 @@ test("Cmd-K and a project's menu open the draft", async ({ page }) => {
 		"Project: billing",
 	);
 });
+
+launchSettingsTest();

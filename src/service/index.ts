@@ -524,7 +524,8 @@ export class PulsarService {
 			acting: this.acting,
 			machineId: () => this.machineId,
 			machine: () => this.machine,
-			send: async (user, agentId, body) => {
+			commands: (id) => this.controls.commands(id),
+			send: async (user, agentId, body, confirm) => {
 				const r = (await this.app.send(user, {
 					ids: [agentId],
 					body,
@@ -532,7 +533,24 @@ export class PulsarService {
 					expectReply: false,
 					dryRun: false,
 				})) as SendDone;
-				return r.receipts[0]?.state ?? null;
+				const initial = r.receipts[0]?.state ?? null;
+				if (!confirm || initial !== "sent") return initial;
+				const until = Date.now() + 15_000;
+				while (Date.now() < until) {
+					const receipt = this.store.receipt(r.message.id, agentId);
+					if (receipt && receipt.state !== "sent") {
+						if (
+							receipt.detail &&
+							["nacked", "queued", "dead"].includes(receipt.state)
+						)
+							throw new Error(receipt.detail);
+						return receipt.state;
+					}
+					await new Promise((resolve) => setTimeout(resolve, 100));
+				}
+				throw new Error(
+					"The provider did not confirm receipt of the first message.",
+				);
 			},
 			onAgent: (id) => this.interest.note(id),
 			...opts.launch,

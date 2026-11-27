@@ -2,10 +2,12 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 
-const sessionId = "fixture/acp";
+const mode = process.env.ACP_FIXTURE_MODE;
+const sessionId = mode?.startsWith("launch-settings")
+	? "fixture/configured"
+	: "fixture/acp";
 const childSessionId = "fixture/child";
 const grandchildSessionId = "fixture/grandchild";
-const mode = process.env.ACP_FIXTURE_MODE;
 const reply = (id: number, result: unknown) =>
 	process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
 const emit = (method: string, params: unknown, id?: number) =>
@@ -92,6 +94,19 @@ const config = () => [
 		],
 	},
 ];
+
+if (mode === "launch-settings-drift") {
+	process.on("SIGUSR1", () => {
+		currentModel = "fixture-base";
+		emit("session/update", {
+			sessionId,
+			update: {
+				sessionUpdate: "config_option_update",
+				configOptions: [modelOption(), effortOption()],
+			},
+		});
+	});
+}
 
 for await (const line of lines) {
 	const { id, method, params, result } = JSON.parse(line);
@@ -238,6 +253,7 @@ for await (const line of lines) {
 				if (!effortOption().options.some(({ value }) => value === params.value))
 					throw new Error("Unexpected reasoning effort");
 				currentEffort = params.value;
+				if (mode === "launch-settings-conflict") currentModel = "fixture-base";
 			} else {
 				if (mode !== "resume" || params.configId !== "fixture.mode")
 					throw new Error("Fixture expected legacy mode selection");
@@ -254,7 +270,12 @@ for await (const line of lines) {
 			const attachment = /^Attached: (.+) \(text\/plain, \d+ B\)$/m.exec(
 				text,
 			)?.[1];
-			if (attachment) {
+			if (text.includes("fixture-first-settings")) {
+				update(
+					`First prompt used ${modelOption().currentValue} with ${currentEffort} reasoning`,
+				);
+				reply(id, { stopReason: "end_turn" });
+			} else if (attachment) {
 				update(await readFile(attachment, "utf8"));
 				reply(id, { stopReason: "end_turn" });
 			} else if (text.includes("/model fixture-base")) {

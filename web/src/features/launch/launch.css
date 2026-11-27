@@ -536,3 +536,26 @@ html.md .lp-page .lp-opt {
 	min-height: 56px;
 	font-size: 16px;
 }
+
+.ld-settings {
+	font-size: 0.875rem;
+	margin-block: 0.75rem;
+}
+
+.ld-settings summary {
+	cursor: pointer;
+}
+
+.ld-settings label {
+	display: inline-flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	margin: 0.35rem 0.75rem 0.35rem 0;
+}
+
+.ld-settings input {
+	max-width: 100%;
+	border: 1px solid var(--border);
+	border-radius: 0.5rem;
+	padding: 0.35rem 0.5rem;
+}

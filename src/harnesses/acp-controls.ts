@@ -101,6 +101,10 @@ export class AcpSessionControls {
 		if (configOptions) this.config(configOptions);
 	}
 
+	current(kind: AcpSelectorCommand): string | null {
+		return this.selectors[kind]?.current ?? null;
+	}
+
 	commandChoices(
 		command: AcpSelectorCommand,
 	): { value: string; label: string }[] {

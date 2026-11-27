@@ -151,9 +151,9 @@ export function stepText(s: LaunchState): string {
 		case "worktree":
 			return "Setting up worktree…";
 		case "starting":
-			return `Starting ${h}…`;
+			return s.detail ?? `Starting ${h}…`;
 		case "waiting":
-			return `Waiting for ${h}…`;
+			return s.detail ?? `Waiting for ${h}…`;
 		case "terminal":
 			return "Waiting in the terminal";
 		case "sending":

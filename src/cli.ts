@@ -19,7 +19,7 @@ Usage:
                                   configure detected harnesses and install session integrations
                                   asks whether to turn on the agent mesh (--mesh: turn it on without asking)
   pulsar acp --list                 list installed ACP executables and catalog entries
-  pulsar acp <provider> [--resume <session-id>]   start or resume a managed ACP session
+  pulsar acp <provider> [--resume <session-id> | --model <id> --effort <level>]   start or resume a managed ACP session
   pulsar hosted <provider> [list|view <id>]        read hosted tasks through this machine
   pulsar ls [selector]            list live agents (selector: name, project=x, harness=codex, tag, *)
   pulsar send <to> <message...>   send as "operator" (to: name, selector, or '*')
@@ -120,21 +120,36 @@ async function main(argv: string[]) {
 				return;
 			}
 			const provider = ACP_PROVIDERS.find((p) => p.id === rest[0]);
-			if (
-				!provider ||
-				(rest.length !== 1 &&
-					!(rest.length === 3 && rest[1] === "--resume" && rest[2]))
-			)
-				fail(
-					`usage: pulsar acp <${ACP_PROVIDERS.map((p) => p.id).join("|")}> [--resume <session-id>]`,
-				);
+			const usage = `usage: pulsar acp <${ACP_PROVIDERS.map((p) => p.id).join("|")}> [--resume <session-id> | --model <id> --effort <level>]`;
+			if (!provider) fail(usage);
+			const { validAcpModeId } = await import("./harnesses/acp-controls.ts");
+			const values = new Map<string, string>();
+			for (let i = 1; i < rest.length; i += 2) {
+				const key = rest[i]!;
+				const value = rest[i + 1];
+				if (
+					!["--resume", "--model", "--effort"].includes(key) ||
+					values.has(key) ||
+					!value ||
+					/\p{Cc}/u.test(value) ||
+					(key !== "--resume" &&
+						(!validAcpModeId(value) || value.trim() !== value))
+				)
+					fail(usage);
+				values.set(key, value);
+			}
+			const sessionId = values.get("--resume");
+			const model = values.get("--model");
+			const effort = values.get("--effort");
+			if (sessionId && (model || effort)) fail(usage);
 			const { runAcpBridge } = await import("./harnesses/acp.ts");
 			await runAcpBridge({
 				command: [provider.binary, ...provider.args],
 				...("env" in provider ? { env: provider.env } : {}),
 				harness: provider.id,
 				cwd: process.cwd(),
-				sessionId: rest[2],
+				sessionId,
+				...(model || effort ? { settings: { model, effort } } : {}),
 			});
 			return;
 		}

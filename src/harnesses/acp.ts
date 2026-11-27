@@ -24,6 +24,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import { DaemonClient } from "../client.ts";
 import { gitInfoAsync } from "../git.ts";
+import type { LaunchSettings } from "../http/wire.ts";
 import { ensureDir, stateDir } from "../paths.ts";
 import { parsePush } from "../push-frame.ts";
 import type {
@@ -53,6 +54,7 @@ export interface AcpBridgeOptions {
 	name?: string;
 	sessionId?: string;
 	initialPrompt?: string;
+	settings?: LaunchSettings;
 }
 
 const SETUP_TIMEOUT_MS = 30_000;
@@ -99,6 +101,7 @@ function supportsHostOwnedSteering(initialized: InitializeResponse): boolean {
 }
 
 type Turn = {
+	confirmLaunch?: boolean;
 	prompt?: Prompt;
 	childSessionId?: string;
 	cancelled: boolean;
@@ -154,6 +157,8 @@ class Bridge {
 	private retryMs = 500;
 	private stopping = false;
 	private ready = false;
+	private startupConfig = false;
+	private firstPrompt = true;
 	private capabilities?: AgentCapabilities;
 	private registration?: Registration;
 
@@ -175,6 +180,14 @@ class Bridge {
 			.onNotification("session/update", ({ params: { sessionId, update } }) => {
 				if (this.stopping) return;
 				if (!this.ready) {
+					if (
+						this.startupConfig &&
+						sessionId === this.sessionId &&
+						update.sessionUpdate === "config_option_update"
+					) {
+						this.controls.update(update);
+						return;
+					}
 					// Agents may publish their catalog before the setup response.
 					if (
 						this.setupUpdates.length < 200 &&
@@ -334,6 +347,12 @@ class Bridge {
 			throw new Error("ACP returned an invalid session ID");
 
 		this.controls.install(state);
+		await this.configureStartup(
+			connection,
+			this.sessionId,
+			startup.cancellationSignal,
+		);
+
 		const path = acpTranscriptPath(this.options.harness, this.sessionId);
 		await ensureDir(dirname(path));
 		stopSignal.throwIfAborted();
@@ -360,6 +379,7 @@ class Bridge {
 			this.refreshCapabilities();
 		});
 		const git = await gitInfoAsync(this.options.cwd, { lane: "user" });
+		this.checkLaunchSettings();
 		this.registration = {
 			harness: this.options.harness,
 			sessionId: this.sessionId,
@@ -394,6 +414,40 @@ class Bridge {
 		void this.commands.refresh().then(() => this.refreshCapabilities());
 		this.drainQueue();
 		return { sessionId: this.sessionId, connection };
+	}
+
+	private async configureStartup(
+		connection: ClientConnection,
+		sessionId: string,
+		signal: AbortSignal,
+	) {
+		const settings = this.options.settings;
+		if (!settings) return;
+		for (const pending of this.setupUpdates.splice(0)) {
+			if (
+				pending.sessionId === sessionId &&
+				pending.update.sessionUpdate === "config_option_update"
+			)
+				this.controls.update(pending.update);
+			else this.setupUpdates.push(pending);
+		}
+		this.startupConfig = true;
+		for (const kind of ["model", "effort"] as const) {
+			const target = settings[kind];
+			if (target === undefined) continue;
+			signal.throwIfAborted();
+			const result = await this.controls.select(
+				connection.agent,
+				sessionId,
+				target,
+				kind,
+			);
+			if (result.result !== "ok")
+				throw new Error(
+					`Could not confirm launch ${kind}: ${result.detail ?? "provider refused the setting"}`,
+				);
+		}
+		this.checkLaunchSettings();
 	}
 
 	private async connectDaemon() {
@@ -445,6 +499,7 @@ class Bridge {
 		accepted: boolean,
 		reason?: string,
 		steer = false,
+		rejected = steer,
 	) {
 		if (this.receipts.size >= MAX_RECEIPTS) {
 			const oldest = this.receipts.keys().next().value;
@@ -458,7 +513,7 @@ class Bridge {
 						params: { messageId, via: steer ? "acp-steer" : "acp" },
 					}
 				: {
-						method: steer ? "msg.nack" : "nack",
+						method: rejected ? "msg.nack" : "nack",
 						params: { messageId, reason },
 					},
 		);
@@ -609,8 +664,24 @@ class Bridge {
 		while (!this.stopping && !this.steering) {
 			const prompt = this.queue.shift();
 			if (!prompt) return;
+			const confirmLaunch = this.firstPrompt && !!this.options.settings;
+			if (confirmLaunch) {
+				try {
+					this.checkLaunchSettings();
+				} catch (error) {
+					const detail = (error as Error).message;
+					console.error(detail);
+					if (prompt.messageId) {
+						this.receipt(prompt.messageId, false, detail, false, true);
+						this.received.delete(prompt.messageId);
+					}
+					continue;
+				}
+			}
+			this.firstPrompt = false;
 			const turn: Turn = {
 				prompt,
+				confirmLaunch,
 				cancelled: false,
 				delivered: false,
 				printed: false,
@@ -625,7 +696,8 @@ class Bridge {
 					prompt: [{ type: "text", text: prompt.providerText ?? prompt.text }],
 				});
 				this.confirmDelivery(turn);
-				if (prompt.messageId) this.receipt(prompt.messageId, true);
+				if (prompt.messageId && !turn.confirmLaunch)
+					this.receipt(prompt.messageId, true);
 				this.writeBlock(turn);
 				if (result.stopReason === "cancelled") {
 					this.record({
@@ -640,8 +712,14 @@ class Bridge {
 				const detail = String(error).slice(0, MAX_TEXT);
 				console.error(detail);
 				this.record({ role: "system", kind: "system", text: detail });
-				if (prompt.messageId)
-					this.receipt(prompt.messageId, turn.delivered, detail);
+				if (prompt.messageId && !(turn.confirmLaunch && turn.delivered))
+					this.receipt(
+						prompt.messageId,
+						turn.delivered,
+						detail,
+						false,
+						turn.confirmLaunch,
+					);
 			} finally {
 				this.finishPermissions(turn);
 				if (prompt.messageId) this.received.delete(prompt.messageId);
@@ -849,9 +927,20 @@ class Bridge {
 		return this.commands.list(this.controls.catalog());
 	}
 
+	private checkLaunchSettings() {
+		for (const kind of ["model", "effort"] as const) {
+			const target = this.options.settings?.[kind];
+			if (target !== undefined && this.controls.current(kind) !== target)
+				throw new Error(
+					`The provider did not retain the requested launch ${kind}; prompt not sent.`,
+				);
+		}
+	}
+
 	private runtimeMeta() {
 		const commands = this.commandCatalog();
 		return {
+			acpEffort: this.controls.current("effort") ?? "",
 			acpModes: this.controls.selection?.modes.length ? "1" : "0",
 			acpCommands: commands.size ? "1" : "0",
 			acpSubagents: this.children?.observed ? "1" : "0",
@@ -1116,7 +1205,10 @@ class Bridge {
 	private confirmDelivery(turn: Turn) {
 		if (turn.delivered) return;
 		turn.delivered = true;
-		if (turn.prompt?.messageId) this.recordPrompt(turn.prompt);
+		if (turn.prompt?.messageId) {
+			this.recordPrompt(turn.prompt);
+			if (turn.confirmLaunch) this.receipt(turn.prompt.messageId, true);
+		}
 	}
 
 	stopTerminalOutput() {

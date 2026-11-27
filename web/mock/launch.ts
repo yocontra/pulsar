@@ -75,6 +75,17 @@ function options(machine: string): LaunchOptions {
 			...x,
 			// The mock's machines lack omp, to show the mark.
 			installed: x.id !== "omp",
+			...(x.id === "codex"
+				? {
+						mode: "acp" as const,
+						settings: {
+							model: [
+								{ value: `${machine}-model`, label: `Model on ${machine}` },
+							],
+							effort: [{ value: "high", label: "High" }],
+						},
+					}
+				: {}),
 		})),
 	};
 }
@@ -114,6 +125,14 @@ function advance(id: string, ctx: LaunchCtx) {
 		case "worktree":
 			return next("starting");
 		case "starting":
+			if (
+				(r.params.model && r.params.model !== `${s.machine}-model`) ||
+				(r.params.effort && r.params.effort !== "high")
+			)
+				return next("failed", {
+					error:
+						"The provider refused first-turn settings; your message was not sent.",
+				});
 			if (r.params.cwd.includes("fail"))
 				return next("failed", {
 					error: `${HARNESSES.find((h) => h.id === s.harness)?.label} exited: command not found`,

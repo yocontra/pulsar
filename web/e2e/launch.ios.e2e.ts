@@ -1,4 +1,5 @@
 import { expect, ready, test } from "./fixtures.ts";
+import { launchSettingsTest } from "./launch-settings.shared.ts";
 
 /**
  * New agent on the phone: Home's header button, the full-screen draft with
@@ -49,3 +50,5 @@ test("the phone's draft: chips, picker pages, and Prove Human to start", async (
 	await expect(box).toHaveValue("hello from the phone");
 	await expect(page.getByRole("button", { name: "Start agent" })).toBeEnabled();
 });
+
+launchSettingsTest();

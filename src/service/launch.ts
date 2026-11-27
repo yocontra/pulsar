@@ -5,14 +5,17 @@ import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { exec } from "../exec.ts";
 import { runGit, worktreeRoot } from "../git-write.ts";
 import { ACP_PROVIDERS } from "../harnesses/acp-catalog.ts";
+import { validAcpModeId } from "../harnesses/acp-controls.ts";
 import { launchable } from "../harnesses/catalog.ts";
 import { driverFor } from "../harnesses/index.ts";
 import type {
+	CommandCatalog,
 	LaunchHarness,
 	LaunchOptions,
 	LaunchParams,
 	LaunchProject,
 	LaunchRefs,
+	LaunchSettings,
 	LaunchState,
 } from "../http/wire.ts";
 import { processSnapshot } from "../processes.ts";
@@ -32,8 +35,8 @@ import type { Registry } from "./registry.ts";
  * The home node starts the harness in a new detached tmux session through
  * the operator's login shell (`$SHELL -lic "exec <harness>"`), so it gets
  * the PATH and environment of a terminal, not the daemon's (launchd and
- * systemd give the daemon a bare one). The command is fixed per harness: no
- * flags from the app, none that skip permission prompts.
+ * systemd give the daemon a bare one). The app can request provider settings
+ * through the managed bridge. The launcher passes no permission bypass flags.
  *
  * The op returns as soon as the request checks out (federation gives a
  * relayed act a few seconds); the launch then goes on here and reports each
@@ -177,6 +180,8 @@ export function parseLaunchParams(raw: unknown): LaunchParams {
 		"base",
 		"prompt",
 		"name",
+		"model",
+		"effort",
 	]);
 	for (const k of Object.keys(o))
 		if (!allowed.has(k))
@@ -208,12 +213,28 @@ export function parseLaunchParams(raw: unknown): LaunchParams {
 			throw new RpcError("bad_request", `launch: bad branch name ${ref}`);
 	const prompt = str(o, "prompt", LIMITS.maxBody);
 	const name = str(o, "name", 80)?.trim() || undefined;
+	const model = str(o, "model", 128);
+	const effort = str(o, "effort", 128);
+	for (const [key, value] of Object.entries({ model, effort })) {
+		if (
+			value !== undefined &&
+			(!validAcpModeId(value) || value !== value.trim())
+		)
+			throw new RpcError("bad_request", `launch: bad ${key}`);
+	}
+	if ((model || effort) && !preferredAcpBinary(harness as LaunchHarness))
+		throw new RpcError(
+			"bad_request",
+			"First-turn settings require a managed ACP launch",
+		);
 	const resumeSessionId = str(o, "resumeSessionId", 200);
 	if (
 		resumeSessionId !== undefined &&
 		(workspace !== "current" ||
 			prompt ||
 			name ||
+			model ||
+			effort ||
 			!resumeSessionId ||
 			resumeSessionId.includes("%2F") ||
 			/\p{Cc}/u.test(resumeSessionId) ||
@@ -234,6 +255,8 @@ export function parseLaunchParams(raw: unknown): LaunchParams {
 		...(base ? { base } : {}),
 		...(prompt?.trim() ? { prompt } : {}),
 		...(name ? { name } : {}),
+		...(model ? { model } : {}),
+		...(effort ? { effort } : {}),
 	};
 }
 
@@ -285,7 +308,9 @@ export interface LaunchDeps {
 		user: VerifiedUser,
 		agentId: string,
 		body: string,
+		confirm?: boolean,
 	) => Promise<ReceiptState | null>;
+	commands?: (id: string) => Promise<CommandCatalog>;
 	/**
 	 * The launched agent showed up (a local id here; a pool address for a
 	 * launch followed on another machine): the operator started it, so its
@@ -352,10 +377,10 @@ export class Launches {
 		return sh && isAbsolute(sh) ? sh : "/bin/sh";
 	}
 
-	private command(h: LaunchHarness, resumeArgs?: string[]): string {
-		if (this.d.command) return this.d.command(h, resumeArgs);
+	private command(h: LaunchHarness, args?: string[]): string {
+		if (this.d.command) return this.d.command(h, args);
 
-		return harnessCommand(h, resumeArgs);
+		return harnessCommand(h, args);
 	}
 
 	/**
@@ -635,11 +660,27 @@ export class Launches {
 					`Couldn't create the worktree: ${r.message}`,
 				);
 		}
-		this.set(run, { step: "starting", detail: null });
+		const { model, effort } = run.params;
+		const configured = !!(model || effort);
+		const args = configured
+			? [
+					"pulsar",
+					"acp",
+					s.harness,
+					...(model ? ["--model", model] : []),
+					...(effort ? ["--effort", effort] : []),
+				]
+			: run.resume?.args;
+		this.set(run, {
+			step: "starting",
+			detail: configured
+				? "Confirming first-turn settings with the provider"
+				: null,
+		});
 		const started = await newSession(
 			s.session!,
 			s.cwd,
-			[this.shell(), "-lic", this.command(s.harness, run.resume?.args)],
+			[this.shell(), "-lic", this.command(s.harness, args)],
 			this.d.tmux,
 		);
 		if (!started.ok)
@@ -663,7 +704,7 @@ export class Launches {
 				return this.fail(
 					run,
 					user,
-					`${label} exited${tail ? `: ${tail.slice(0, 300)}` : ""}`,
+					`${label} exited${configured ? " before confirming first-turn settings" : ""}${tail ? `: ${tail.slice(0, 300)}` : ""}${configured && s.prompt ? "; your message was not sent" : ""}`,
 				);
 			}
 			quiet = text === last ? quiet + 1 : 0;
@@ -673,7 +714,7 @@ export class Launches {
 				shellPid,
 				t0,
 				run.params.resumeSessionId,
-				run.resume?.acp,
+				configured ? true : run.resume?.acp,
 			);
 			if (agent) {
 				// The launcher knows the pane: Stop and typing reach it.
@@ -713,11 +754,22 @@ export class Launches {
 				readyFrom = Date.now();
 				quiet = 0;
 			}
-			this.set(run, { step: "waiting", detail: null, agentId });
+			const confirmed =
+				!!agent &&
+				(!model || agent.model === model) &&
+				(!effort || agent.meta.acpEffort === effort);
+			this.set(run, {
+				step: "waiting",
+				detail:
+					configured && !confirmed
+						? "Waiting for the provider to confirm first-turn settings"
+						: null,
+				agentId,
+			});
 			// Ready: a message would reach the session now (its Pulsar
 			// connection or a push path, not only an inbox), and it is idle.
 			const ready =
-				!!agent &&
+				confirmed &&
 				(!run.params.prompt ||
 					(agent.reach === "push" &&
 						(agent.status === "idle" ||
@@ -727,11 +779,13 @@ export class Launches {
 				return this.fail(
 					run,
 					user,
-					agent && agent.reach !== "push"
-						? `${label} started, but Pulsar can't reach its session to send your message. Run \`pulsar doctor\` on ${s.machine}.`
-						: agent
-							? `${label} didn't become ready${s.prompt ? "; your message was not sent" : ""}`
-							: `${label} started but didn't connect to Pulsar. Run \`pulsar doctor\` on ${s.machine}.`,
+					configured && !confirmed
+						? `The provider did not confirm first-turn settings${s.prompt ? "; your message was not sent" : ""}.`
+						: agent && agent.reach !== "push"
+							? `${label} started, but Pulsar can't reach its session to send your message. Run \`pulsar doctor\` on ${s.machine}.`
+							: agent
+								? `${label} didn't become ready${s.prompt ? "; your message was not sent" : ""}`
+								: `${label} started but didn't connect to Pulsar. Run \`pulsar doctor\` on ${s.machine}.`,
 				);
 		}
 
@@ -740,7 +794,7 @@ export class Launches {
 			this.set(run, { step: "sending" });
 			let state: ReceiptState | null;
 			try {
-				state = await this.d.send(user, agentId, run.params.prompt);
+				state = await this.d.send(user, agentId, run.params.prompt, configured);
 			} catch (e) {
 				return this.fail(
 					run,
@@ -779,6 +833,7 @@ export class Launches {
 				(a) =>
 					a.harness === s.harness &&
 					a.status !== "gone" &&
+					(managed !== true || a.meta.acp === "1") &&
 					(!resumeSessionId ||
 						(a.sessionId === resumeSessionId &&
 							(a.meta.acp === "1") === managed)),
@@ -800,7 +855,7 @@ export class Launches {
 			const child = candidates.find((a) => a.pid !== null && under(a.pid));
 			if (child) return child;
 		}
-		if (resumeSessionId) return null;
+		if (resumeSessionId || managed === true) return null;
 		const recent = candidates.filter(
 			(a) => a.pid === null && a.cwd === s.cwd && a.createdAt >= since,
 		);
@@ -1027,23 +1082,59 @@ export class Launches {
 			home: homedir(),
 			projects,
 			checked: installed !== null,
-			harnesses: HARNESS_IDS.map((id) => {
-				const entry = LAUNCH_HARNESSES[id];
-				const binary = preferredAcpBinary(id);
-				const acp =
-					binary !== undefined &&
-					installed?.has("pulsar") &&
-					installed.has(binary);
-				const native = !("managed" in entry) && installed?.has(entry.bin);
-				const mode = acp ? "acp" : native ? "native" : undefined;
-				return {
-					id,
-					label: entry.label,
-					installed: mode !== undefined,
-					...(mode ? { mode } : {}),
-				};
-			}),
+			harnesses: await Promise.all(
+				HARNESS_IDS.map(async (id) => {
+					const entry = LAUNCH_HARNESSES[id];
+					const binary = preferredAcpBinary(id);
+					const acp =
+						binary !== undefined &&
+						installed?.has("pulsar") &&
+						installed.has(binary);
+					const native = !("managed" in entry) && installed?.has(entry.bin);
+					const mode = acp ? "acp" : native ? "native" : undefined;
+					return {
+						id,
+						label: entry.label,
+						installed: mode !== undefined,
+						...(mode ? { mode } : {}),
+						...(acp ? { settings: await this.settingHints(id) } : {}),
+					};
+				}),
+			),
 		};
+	}
+
+	private async settingHints(
+		harness: LaunchHarness,
+	): Promise<NonNullable<LaunchOptions["harnesses"][number]["settings"]>> {
+		if (!this.d.commands) return {};
+		const sample = this.d.registry
+			.live()
+			.find(
+				(agent) =>
+					agent.harness === harness &&
+					agent.meta.acp === "1" &&
+					agent.reach === "push",
+			);
+		if (!sample) return {};
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const wait = new Promise<null>((done) => {
+			timer = setTimeout(() => done(null), 500);
+		});
+		const catalog = await Promise.race([
+			this.d.commands(sample.id).catch(() => null),
+			wait,
+		]).finally(() => clearTimeout(timer));
+		const hints: Partial<
+			Record<keyof LaunchSettings, { value: string; label: string }[]>
+		> = {};
+		for (const kind of ["model", "effort"] as const) {
+			const choices = catalog?.commands.find(
+				({ name }) => name === kind,
+			)?.argumentChoices;
+			if (choices?.length) hints[kind] = choices.slice(0, 100);
+		}
+		return hints;
 	}
 
 	/**

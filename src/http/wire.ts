@@ -1760,7 +1760,12 @@ export type LaunchHarness = import("../harnesses/catalog.ts").Launchable["id"];
  * covers a digest of exactly this object). `nonce`: the client's id for one
  * press of Send, so a repeat starts nothing new.
  */
-export interface LaunchParams {
+export interface LaunchSettings {
+	model?: string;
+	effort?: string;
+}
+
+export interface LaunchParams extends LaunchSettings {
 	nonce: string;
 	/** An absolute folder on that machine (`~/` is its home). */
 	cwd: string;
@@ -1846,6 +1851,10 @@ export interface LaunchOptions {
 		installed: boolean;
 		/** Preferred launch path found on this machine; older peers omit it. */
 		mode?: "acp" | "native";
+		/** This node can verify explicit settings before a managed agent starts its first turn. */
+		settings?: Partial<
+			Record<keyof LaunchSettings, { value: string; label: string }[]>
+		>;
 	}[];
 	/**
 	 * False while the login shell is still looking (a slow rc file): then

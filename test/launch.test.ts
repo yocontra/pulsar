@@ -195,6 +195,7 @@ function register(
 	harness: LaunchHarness = "pi",
 	sessionId?: string,
 	managed = false,
+	settings?: { model: string; effort: string },
 ) {
 	const pid = Number(
 		tmux("display-message", "-p", "-t", `=${s.session}:`, "#{pane_pid}").trim(),
@@ -206,12 +207,17 @@ function register(
 		principal: { kind: "terminal" },
 		closed: controller.signal,
 		emit: (event, data) => {
-			if (event === "push")
+			if (event === "push") {
 				sends.push({
 					node: n.name,
 					agentId,
 					body: String((data as { text?: unknown }).text ?? ""),
 				});
+				if (settings) {
+					const id = (data as { message: { id: string } }).message.id;
+					setTimeout(() => n.service.mailbox.ack(agent, id, "acp"), 10);
+				}
+			}
 		},
 	};
 	n.service.attach(caller);
@@ -224,7 +230,16 @@ function register(
 			cwd: s.cwd,
 			project: "demo",
 			...(sessionId ? { sessionId } : {}),
-			...(managed ? { meta: { acp: "1", acpResume: "1" } } : {}),
+			...(managed
+				? {
+						meta: {
+							acp: "1",
+							acpResume: "1",
+							...(settings ? { acpEffort: settings.effort } : {}),
+						},
+					}
+				: {}),
+			...(settings ? { model: settings.model } : {}),
 		}),
 	);
 	agentId = agent.id;
@@ -374,6 +389,25 @@ describe("launch params and commands", () => {
 			{ ...ok, workspace: "worktree", base: "--upload-pack=x" },
 			{ ...ok, prompt: 5 },
 		];
+		expect(
+			parseLaunchParams({
+				...ok,
+				harness: "antigravity",
+				model: "vendor/model",
+				effort: "high",
+			}),
+		).toMatchObject({ model: "vendor/model", effort: "high" });
+		expect(() =>
+			parseLaunchParams({ ...ok, harness: "omp", model: "vendor/model" }),
+		).toThrow("require a managed ACP launch");
+		expect(() =>
+			parseLaunchParams({
+				...ok,
+				harness: "antigravity",
+				resumeSessionId: "old",
+				effort: "high",
+			}),
+		).toThrow("Cannot resume");
 		for (const b of bad) expect(() => parseLaunchParams(b)).toThrow(/launch:/);
 	});
 
@@ -1100,6 +1134,80 @@ describe.skipIf(!HAS_TMUX)("launching on another machine", () => {
 		} finally {
 			close();
 			tmux("kill-session", "-t", `=${now(home, localId).session}`);
+		}
+	});
+
+	test("configured launch waits for the exact settings on the signed target machine", async () => {
+		mode = "plain";
+		const params = {
+			nonce: nonce(),
+			cwd: project,
+			harness: "antigravity",
+			workspace: "current",
+			model: "fixture-plan",
+			effort: "high",
+			prompt: "settings on first remote prompt",
+		};
+		expect(
+			await code(
+				relay.service.launches.launch(
+					USER,
+					"home",
+					{ ...params, model: "modified" },
+					await sign(params),
+				),
+			),
+		).not.toBe("ok");
+		const s = await relay.service.launches.launch(
+			USER,
+			"home",
+			params,
+			await sign(params),
+		);
+		const hid = home.service.machineId;
+		expect(s.id.startsWith(`${hid}/`)).toBe(true);
+		const localId = s.id.slice(hid.length + 1);
+		await until(() => now(home, localId)?.step === "waiting", 5000);
+		expect(resumedArgs.at(-1)).toEqual([
+			"pulsar",
+			"acp",
+			"antigravity",
+			"--model",
+			"fixture-plan",
+			"--effort",
+			"high",
+		]);
+		const target = now(home, localId);
+		const { agent, close } = register(
+			home,
+			target,
+			"antigravity",
+			"fixture-settings",
+			true,
+			{
+				model: "fixture-base",
+				effort: "high",
+			},
+		);
+		try {
+			home.service.registry.setStatus(agent, "idle");
+			await until(() => now(home, localId).agentId === agent.id, 5000);
+			expect(sends.some(({ agentId }) => agentId === agent.id)).toBe(false);
+			agent.model = "fixture-plan";
+			await until(() => now(relay, s.id).step === "done", 8000);
+			expect(now(relay, s.id)).toMatchObject({
+				agentId: `${hid}/${agent.id}`,
+				sent: true,
+			});
+			expect(sends.filter(({ agentId }) => agentId === agent.id)).toEqual([
+				expect.objectContaining({
+					node: "home",
+					body: expect.stringContaining(params.prompt),
+				}),
+			]);
+		} finally {
+			close();
+			tmux("kill-session", "-t", `=${target.session}`);
 		}
 	});
 

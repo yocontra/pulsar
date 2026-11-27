@@ -41,10 +41,16 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 	}
 	let bridge: ReturnType<typeof launch> | undefined;
 
-	function launch(resume?: string, mode?: string) {
+	function launch(resume?: string, mode?: string, settings: string[] = []) {
 		const child = spawn(
 			process.execPath,
-			[cli, "acp", "antigravity", ...(resume ? ["--resume", resume] : [])],
+			[
+				cli,
+				"acp",
+				"antigravity",
+				...(resume ? ["--resume", resume] : []),
+				...settings,
+			],
 			{
 				cwd: workspace,
 				env: {
@@ -895,6 +901,74 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		expect(bridge.output()).toContain(
 			"does not advertise ACP session resume or load",
 		);
+		const configuredId = "antigravity:fixture%2Fconfigured";
+		const settings = ["--model", "fixture-plan", "--effort", "high"];
+		bridge = launch(undefined, "launch-settings-conflict", settings);
+		expect(await bridge.exit).toBe(1);
+		expect(bridge.output()).toContain(
+			"did not retain the requested launch model",
+		);
+		expect(daemon.service.sessions.extensionFor(configuredId)).toBeUndefined();
+
+		bridge = launch(undefined, "launch-settings", ["--model", "unadvertised"]);
+		expect(await bridge.exit).toBe(1);
+		expect(bridge.output()).toContain("Could not confirm launch model");
+		expect(bridge.output()).toContain("fixture-base, fixture-plan");
+		expect(daemon.service.sessions.extensionFor(configuredId)).toBeUndefined();
+
+		bridge = launch(undefined, "launch-settings-drift", settings);
+		await until(
+			() =>
+				bridge?.output().includes("ACP session fixture/configured") === true,
+		);
+		const providerPid = daemon.service.registry.get(configuredId)?.pid;
+		expect(providerPid).toBeGreaterThan(0);
+		process.kill(providerPid!, "SIGUSR1");
+		await until(
+			() => daemon.service.registry.get(configuredId)?.model === "fixture-base",
+		);
+		const refused = await op.call<{ message: { id: string } }>("send", {
+			to: configuredId,
+			body: "fixture-first-settings",
+		});
+		await until(
+			() =>
+				daemon.store.receipt(refused.message.id, configuredId)?.state ===
+				"nacked",
+		);
+		expect(bridge.output()).not.toContain("First prompt used");
+		expect(bridge.output()).toContain(
+			"did not retain the requested launch model",
+		);
+		bridge.child.kill("SIGTERM");
+		expect(await bridge.exit).toBe(0);
+
+		bridge = launch(undefined, "launch-settings", settings);
+		await until(
+			() =>
+				bridge?.output().includes("ACP session fixture/configured") === true,
+		);
+		expect(daemon.service.registry.get(configuredId)?.model).toBe(
+			"fixture-plan",
+		);
+		const first = await op.call<{ message: { id: string } }>("send", {
+			to: configuredId,
+			body: "fixture-first-settings",
+		});
+		await until(
+			() =>
+				bridge
+					?.output()
+					.includes("First prompt used fixture-plan with high reasoning") ===
+				true,
+		);
+		await until(
+			() =>
+				daemon.store.receipt(first.message.id, configuredId)?.state ===
+				"delivered",
+		);
+		bridge.child.kill("SIGTERM");
+		expect(await bridge.exit).toBe(0);
 	} catch (error) {
 		throw new Error(bridge?.output(), { cause: error });
 	} finally {

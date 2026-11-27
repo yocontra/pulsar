@@ -7,13 +7,14 @@ import {
 	RotateCcwIcon,
 	TerminalIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, ProveCancelled } from "../../api/client.ts";
 import type {
 	LaunchHarness,
 	LaunchOptions,
 	LaunchParams,
 	LaunchRefs,
+	LaunchSettings,
 	LaunchState,
 } from "../../api/types.ts";
 import {
@@ -95,6 +96,8 @@ function DraftImpl({
 	const [cwd, setCwd] = useState<string | null>(params.cwd || null);
 	const [extraPaths, setExtraPaths] = useState<string[]>([]);
 	const [harness, setHarness] = useState<LaunchHarness | null>(null);
+	const [settings, setSettings] = useState<LaunchSettings>({});
+	const settingsId = useId();
 	const [workspace, setWorkspace] = useState<"current" | "worktree">("current");
 	const [refs, setRefs] = useState<LaunchRefs | null>(null);
 	const [refsLoading, setRefsLoading] = useState(false);
@@ -272,6 +275,9 @@ function DraftImpl({
 								: workspace === "worktree" && !base
 									? "Choose a base branch before creating a worktree."
 									: null;
+	const settingsOptions = opts?.harnesses.find(
+		(entry) => entry.id === harness,
+	)?.settings;
 	const busy = phase === "starting" || (!!launch && launch.step !== "failed");
 
 	async function submit(text: string) {
@@ -286,6 +292,12 @@ function DraftImpl({
 			workspace,
 			...(workspace === "worktree" && base ? { base } : {}),
 			...(text.trim() ? { prompt: text } : {}),
+			...(settingsOptions && settings.model?.trim()
+				? { model: settings.model.trim() }
+				: {}),
+			...(settingsOptions && settings.effort?.trim()
+				? { effort: settings.effort.trim() }
+				: {}),
 		};
 		try {
 			const s = await startLaunch(machine, p);
@@ -348,6 +360,7 @@ function DraftImpl({
 				onChange={(m) => {
 					if (m === machine) return;
 					setMachine(m);
+					setSettings({});
 					setCwd(null);
 					setExtraPaths([]);
 					setRefs(null);
@@ -371,7 +384,11 @@ function DraftImpl({
 					harness ? <HarnessGlyph harness={harness} size={14} /> : undefined
 				}
 				display={harness ? HARNESS_LABEL[harness] : "Harness"}
-				onChange={(v) => setHarness(v as LaunchHarness)}
+				onChange={(v) => {
+					if (v === harness) return;
+					setHarness(v as LaunchHarness);
+					setSettings({});
+				}}
 				testId="launch-harness"
 			/>
 			<Picker
@@ -465,6 +482,45 @@ function DraftImpl({
 			<div className="ld-body">
 				<div className="ld-hero">{hero}</div>
 				{mobile && <div className="ld-chips">{controls}</div>}
+				{settingsOptions && !busy && (
+					<details
+						className="ld-settings"
+						key={JSON.stringify([machine, harness])}
+						open={settings.model || settings.effort ? true : undefined}
+					>
+						<summary>First-turn settings</summary>
+						<p className="muted">
+							Leave blank for the provider default. The provider checks your
+							choices before it receives the first message.
+						</p>
+						{(["model", "effort"] as const).map((kind) => (
+							<label key={kind}>
+								{kind === "model" ? "Model ID" : "Reasoning effort"}
+								<input
+									type="text"
+									maxLength={128}
+									autoCapitalize="none"
+									autoComplete="off"
+									spellCheck={false}
+									value={settings[kind] ?? ""}
+									placeholder="Provider default"
+									list={`${settingsId}-${kind}`}
+									onChange={(e) =>
+										setSettings({ ...settings, [kind]: e.currentTarget.value })
+									}
+								/>
+								<datalist id={`${settingsId}-${kind}`}>
+									{settingsOptions[kind]?.map(({ value, label }) => (
+										<option key={value} value={value}>
+											{label}
+										</option>
+									))}
+								</datalist>
+							</label>
+						))}
+					</details>
+				)}
+
 				{timeline}
 				{error && (
 					<p className="ld-error" role="alert">
