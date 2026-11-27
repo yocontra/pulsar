@@ -5,6 +5,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { queryClient } from "../../data/runtime.ts";
 import { AgentAvatar } from "../../ds/index.ts";
 import { ago } from "../../lib/format.ts";
 import { navigate } from "../../lib/router.ts";
@@ -89,12 +90,15 @@ export function HitRow({
 
 export function SavedSessions({ query }: { query: string }) {
 	const q = query.trim();
-	const saved = useQuery({
-		queryKey: ["savedSessions", q],
-		queryFn: ({ signal }) => savedSessions(q, signal),
-		retry: false,
-		staleTime: 5000,
-	});
+	const saved = useQuery(
+		{
+			queryKey: ["savedSessions", q],
+			queryFn: ({ signal }) => savedSessions(q, signal),
+			retry: false,
+			staleTime: 5000,
+		},
+		queryClient,
+	);
 	if (!saved.data?.length) return null;
 	return (
 		<GroupedList title="Saved conversations on this machine">
