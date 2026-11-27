@@ -1,4 +1,4 @@
-import { agentId, expect, test } from "./fixtures.ts";
+import { agentId, expect, scrollConversationUp, test } from "./fixtures.ts";
 
 export function sessionViewport(mobile: boolean) {
 	test("short and long sessions fill the viewport and keep the composer docked", async ({
@@ -87,10 +87,28 @@ export function sessionViewport(mobile: boolean) {
 				}
 			} else {
 				await expect.poll(overflow).toBeGreaterThan(100);
+				// The newest turn is attached before the initial follow-to-bottom
+				// completes. Confirm it has landed before the reader scrolls away.
+				await expect
+					.poll(() =>
+						scroller.evaluate(
+							(el) => el.scrollHeight - el.clientHeight - el.scrollTop,
+						),
+					)
+					.toBeLessThan(2);
 				const before = await dock.boundingBox();
-				await scroller.evaluate((el) => {
-					el.scrollTop = 0;
-				});
+				if (mobile) {
+					await scrollConversationUp(scroller, "top");
+				} else {
+					await scroller.hover();
+					await page.mouse.wheel(
+						0,
+						-(await scroller.evaluate((el) => el.scrollHeight)),
+					);
+				}
+				await expect(
+					session.getByRole("button", { name: "Jump to latest" }),
+				).toBeVisible();
 				await expect
 					.poll(() => scroller.evaluate((el) => el.scrollTop))
 					.toBeLessThan(2);

@@ -1,5 +1,11 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { agentId, expect, ready, test } from "./fixtures.ts";
+import {
+	agentId,
+	expect,
+	ready,
+	scrollConversationUp,
+	test,
+} from "./fixtures.ts";
 
 /**
  * Where the conversation keeps the operator as it changes (scroll anchoring
@@ -57,17 +63,6 @@ const moved = (page: Page) =>
 		);
 	});
 
-/**
- * Scroll up as the operator does: a wheel turn up first, which
- * use-stick-to-bottom takes as leaving the end (a bare scrollTop change
- * during a resize is not), then to `y` (a function of the current scrollTop).
- */
-const scrollUp = (page: Page, by: number | "top") =>
-	scroller(page).evaluate((s, by) => {
-		s.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
-		s.scrollTop = by === "top" ? 0 : Math.max(0, s.scrollTop - by);
-	}, by);
-
 async function open(
 	page: Page,
 	request: APIRequestContext,
@@ -107,7 +102,7 @@ export function anchoringSuite(platform: "desktop" | "phone") {
 		request,
 	}) => {
 		const id = await open(page, request, "status=idle machine=edge-19");
-		await scrollUp(page, 1200);
+		await scrollConversationUp(scroller(page), 1200);
 		await page.waitForTimeout(400);
 		await onScreen(page);
 		const text = reply(`below ${Date.now().toString(36)}`);
@@ -123,7 +118,7 @@ export function anchoringSuite(platform: "desktop" | "phone") {
 		request,
 	}) => {
 		await open(page, request, "status=idle machine=edge-19");
-		await scrollUp(page, 1200);
+		await scrollConversationUp(scroller(page), 1200);
 		await page.waitForTimeout(400);
 		await onScreen(page);
 		// A turn above the screen grows (as a turn's changes or an image load).
@@ -149,7 +144,7 @@ export function anchoringSuite(platform: "desktop" | "phone") {
 		// the phone short of it, which is not what this test is about.
 		await open(page, request, "name=apparish-auth", false);
 		const earlier = page.locator(".load-earlier");
-		await scrollUp(page, "top");
+		await scrollConversationUp(scroller(page), "top");
 		await expect(earlier).toBeInViewport();
 		await page.waitForTimeout(400);
 		await onScreen(page);

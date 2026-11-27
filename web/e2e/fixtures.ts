@@ -2,6 +2,7 @@ import {
 	type APIRequestContext,
 	test as base,
 	expect,
+	type Locator,
 	type Page,
 } from "@playwright/test";
 import { type E2EWorkerOptions, startServer } from "./infra.ts";
@@ -296,3 +297,14 @@ export async function resetPasskeys(request: APIRequestContext) {
 		headers: { "X-Pulsar": "1" },
 	});
 }
+
+/**
+ * Scroll up as the operator does: a wheel turn up first, which
+ * use-stick-to-bottom takes as leaving the end (a bare scrollTop change
+ * during a resize is not), then to `y` (a function of the current scrollTop).
+ */
+export const scrollConversationUp = (scroller: Locator, by: number | "top") =>
+	scroller.evaluate((s, by) => {
+		s.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
+		s.scrollTop = by === "top" ? 0 : Math.max(0, s.scrollTop - by);
+	}, by);
