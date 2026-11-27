@@ -1,6 +1,9 @@
+import { createHash, randomUUID } from "node:crypto";
 import type { SessionUpdate, ToolCallContent } from "@agentclientprotocol/sdk";
+import { toolPath } from "../transcripts/describe.ts";
 import { MAX_PENDING_CALLS } from "../transcripts/summary.ts";
 import type { TranscriptEvent } from "../transcripts/types.ts";
+import { antigravityToolInput } from "./antigravity-steps.ts";
 
 type Update = Extract<
 	SessionUpdate,
@@ -32,12 +35,24 @@ function readableContent(items: ToolCallContent[], limit: number): string {
 	return text;
 }
 
+interface ToolState {
+	callEventId: string;
+	name: string;
+	title: string;
+	rawInput?: unknown;
+	path?: string;
+	inputTruncated: boolean;
+	content: string;
+	raw: string;
+	kind?: Update["kind"];
+	exitCode?: number;
+}
+
+type ToolEvent = Omit<TranscriptEvent, "ts">;
+
 /** ACP updates replace individual fields. A completion can carry only its status. */
 export class AcpToolResults {
-	private readonly pending = new Map<
-		string,
-		{ name: string; content: string; raw: string }
-	>();
+	private readonly pending = new Map<string, ToolState>();
 
 	private readonly limit: number;
 	private readonly pendingLimit: number;
@@ -51,42 +66,107 @@ export class AcpToolResults {
 		return this.pending.has(id.slice(0, 500));
 	}
 
-	apply(update: Update): Omit<TranscriptEvent, "ts"> | null {
+	apply(update: Update, harness: string, child = false): ToolEvent[] {
 		const id = update.toolCallId.slice(0, 500);
-		const state = this.pending.get(id) ?? {
-			name: "ACP tool",
+		const state: ToolState = this.pending.get(id) ?? {
+			callEventId: child
+				? `acp:child-tool:${createHash("sha256").update(update.toolCallId).digest("hex")}`
+				: randomUUID(),
+			name: "",
+			title: "",
+			inputTruncated: false,
 			content: "",
 			raw: "",
 		};
-		state.name = (update.name ?? update.title ?? state.name).slice(0, 200);
+		if (update.name) state.name = update.name.slice(0, 200);
+		if (update.title) state.title = update.title.slice(0, 500);
+		if (update.kind) state.kind = update.kind;
+		const name = state.name || state.title.slice(0, 200) || "ACP tool";
+		if (update.rawInput !== undefined) {
+			state.inputTruncated =
+				Buffer.byteLength(JSON.stringify(update.rawInput)) > this.limit;
+			state.rawInput = state.inputTruncated ? undefined : update.rawInput;
+		}
+		if (update.locations) state.path = update.locations[0]?.path.slice(0, 4096);
 		if (update.content)
 			state.content = readableContent(update.content, this.limit);
 		if (update.rawOutput !== undefined) {
 			const raw = update.rawOutput;
-			state.raw = (typeof raw === "string" ? raw : JSON.stringify(raw)).slice(
-				0,
-				this.limit + 1,
-			);
+			const shell = state.kind === "execute" || name === "run_command";
+			const structured =
+				shell && raw && typeof raw === "object" && !Array.isArray(raw)
+					? (raw as Record<string, unknown>)
+					: null;
+			const output = structured?.output ?? structured?.text;
+			const code = structured?.exitCode ?? structured?.exit_code;
+			state.exitCode =
+				typeof code === "number" && Number.isSafeInteger(code)
+					? code
+					: undefined;
+			state.raw = (
+				typeof raw === "string"
+					? raw
+					: typeof output === "string"
+						? output
+						: JSON.stringify(raw)
+			).slice(0, this.limit + 1);
 		}
-		if (update.status !== "completed" && update.status !== "failed") {
+		const done = update.status === "completed" || update.status === "failed";
+		const events: ToolEvent[] = [];
+		if (
+			update.sessionUpdate === "tool_call" ||
+			update.name ||
+			update.title ||
+			update.rawInput !== undefined ||
+			update.locations
+		) {
+			let input =
+				harness === "antigravity"
+					? antigravityToolInput(name, state.rawInput)
+					: state.rawInput;
+			if (
+				state.path &&
+				!toolPath(input) &&
+				(input == null || (typeof input === "object" && !Array.isArray(input)))
+			)
+				input = { ...(input as object), path: state.path };
+			events.push({
+				id: state.callEventId,
+				role: "tool",
+				kind: "tool_call",
+				text: state.title || name,
+				tool: {
+					name,
+					callId: id,
+					input,
+					done,
+					...(state.inputTruncated ? { truncated: true } : {}),
+				},
+			});
+		}
+		if (!done) {
 			this.pending.set(id, state);
 			if (this.pending.size > this.pendingLimit)
 				this.pending.delete(this.pending.keys().next().value!);
-			return null;
+			return events;
 		}
 		this.pending.delete(id);
 		const text = state.content || state.raw;
-		return {
+		events.push({
 			id: `acp:tool:${id}:result`,
 			role: "tool",
 			kind: "tool_result",
 			text: text.slice(0, this.limit),
 			tool: {
-				name: state.name,
+				name,
 				callId: id,
 				isError: update.status === "failed",
 				truncated: text.length > this.limit,
+				...(state.exitCode === undefined
+					? {}
+					: { detail: { exitCode: state.exitCode } }),
 			},
-		};
+		});
+		return events;
 	}
 }

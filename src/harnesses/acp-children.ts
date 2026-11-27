@@ -140,21 +140,10 @@ export class AcpChildren {
 				break;
 			}
 			case "tool_call":
-				child.lastChunk = undefined;
-				record({
-					id: `acp:child-tool:${hash(update.toolCallId)}`,
-					role: "tool",
-					kind: "tool_call",
-					text: update.title.slice(0, 500),
-					tool: {
-						name: (update.name ?? update.title).slice(0, 200),
-						callId: update.toolCallId.slice(0, 500),
-					},
-				});
-				this.toolResult(child, update, record);
-				break;
 			case "tool_call_update":
-				this.toolResult(child, update, record);
+				if (update.sessionUpdate === "tool_call") child.lastChunk = undefined;
+				for (const event of child.tools.apply(update, this.harness, true))
+					record(event);
 				break;
 		}
 		return true;
@@ -238,18 +227,6 @@ export class AcpChildren {
 				text: state.text.slice(0, MAX_TEXT),
 				from: state.from,
 			});
-	}
-
-	private toolResult(
-		child: Child,
-		update: Extract<
-			SessionUpdate,
-			{ sessionUpdate: "tool_call" | "tool_call_update" }
-		>,
-		record: (event: Omit<TranscriptEvent, "ts">) => void,
-	) {
-		const result = child.tools.apply(update);
-		if (result) record(result);
 	}
 
 	private announce(parent: string, update: SubagentUpdate) {

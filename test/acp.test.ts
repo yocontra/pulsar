@@ -801,6 +801,11 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			`${"A".repeat(32 * 1024 - 1)}🚀${"B".repeat(40 * 1024)}end-of-reply`,
 		);
 		expect(
+			extended.events
+				.filter((e) => e.kind === "tool_call" && e.tool?.callId === "read")
+				.at(-1)?.tool?.input,
+		).toEqual({ offset: 4, path: "fixture.ts" });
+		expect(
 			extended.events.filter(
 				(e) => e.kind === "tool_result" && e.tool?.callId !== "late-tool",
 			),

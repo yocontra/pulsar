@@ -1222,22 +1222,8 @@ class Bridge {
 			{ sessionUpdate: "tool_call" | "tool_call_update" }
 		>,
 	) {
-		if (update.sessionUpdate === "tool_call") {
-			const { title, toolCallId, rawInput, status } = update;
-			this.record({
-				role: "tool",
-				kind: "tool_call",
-				text: title,
-				tool: {
-					name: (update.name ?? title).slice(0, 200),
-					callId: toolCallId.slice(0, 500),
-					input: rawInput,
-					done: status === "completed" || status === "failed",
-				},
-			});
-		}
-		const result = this.tools.apply(update);
-		if (result) this.record(result);
+		for (const event of this.tools.apply(update, this.options.harness))
+			this.record(event);
 	}
 
 	private writeBlock(turn: Turn) {

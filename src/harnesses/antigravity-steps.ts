@@ -17,7 +17,7 @@ type Base = Pick<TranscriptEvent, "id" | "ts">;
 
 // Convert agy's built-in tool arguments to the fields the shared transcript UI reads.
 // MCP tools keep their own argument names.
-function toolInput(name: string, input: unknown) {
+export function antigravityToolInput(name: string, input: unknown) {
 	const args = obj(input);
 	if (!args) return input;
 	const names: Record<string, Record<string, string>> = {
@@ -83,7 +83,7 @@ function nativeTool(descriptor: WireFields) {
 					: args.Arguments,
 		};
 	}
-	return { name, input: toolInput(name, input) };
+	return { name, input: antigravityToolInput(name, input) };
 }
 
 /** Public tool steps, task notices and errors in a native conversation. */

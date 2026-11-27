@@ -511,6 +511,8 @@ for await (const line of lines) {
 					sessionUpdate: "tool_call_update",
 					toolCallId: "read",
 					status: "in_progress",
+					locations: [{ path: "fixture.ts" }],
+					rawInput: { offset: 4 },
 					content: [
 						{
 							type: "content",
