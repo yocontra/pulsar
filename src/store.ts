@@ -390,6 +390,12 @@ CREATE TABLE IF NOT EXISTS usage_native_responses (
 CREATE INDEX IF NOT EXISTS usage_native_owner ON usage_native_responses(response,at,session);
 `),
 	},
+	{
+		ensure: (db) =>
+			db.exec(`CREATE TABLE IF NOT EXISTS usage_claude_adjusted (
+				key INTEGER PRIMARY KEY, at INTEGER NOT NULL
+			)`),
+	},
 ];
 
 /** The schema version this pulsar writes. */

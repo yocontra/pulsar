@@ -19,6 +19,12 @@ export interface UsageRecord {
 	cacheWrite5m: number;
 	cacheWrite1h: number;
 	output: number;
+	/** Extra Claude usage for this provider message, kept separate for replay. */
+	claudeAdjustment?: {
+		sessionId?: string;
+		executor: UsageRecord;
+		advisors: UsageRecord[];
+	};
 	/**
 	 * A provider message id seen in more than one line or file (Claude writes
 	 * one line per content block, and a resumed session copies old lines):
@@ -46,6 +52,8 @@ export interface FileState {
 	total?: CodexTotals;
 	/** Tokens in the latest request's context, and the window when the harness says. */
 	context?: { used: number; window: number | null };
+	claudeIterations?: true;
+	claudeReplayUntil?: number;
 }
 
 export type UsageHarness =
@@ -143,12 +151,93 @@ function claudeLine(d: Json, state: FileState): UsageRecord | null {
 	};
 	const id = str(m.id);
 	if (id) r.dedupeId = id;
+	r.claudeAdjustment = claudeIterations(u, r);
+	if (r.claudeAdjustment)
+		r.claudeAdjustment.sessionId = str(d.sessionId) ?? undefined;
+	const adjustment = r.claudeAdjustment?.executor;
 	state.model = model;
 	state.context = {
-		used: r.input + r.cacheRead + r.cacheWrite5m + r.cacheWrite1h,
+		used:
+			r.input +
+			r.cacheRead +
+			r.cacheWrite5m +
+			r.cacheWrite1h +
+			(adjustment
+				? adjustment.input +
+					adjustment.cacheRead +
+					adjustment.cacheWrite5m +
+					adjustment.cacheWrite1h
+				: 0),
 		window: null,
 	};
-	return empty(r) ? null : r;
+	return empty(r) && !r.claudeAdjustment ? null : r;
+}
+
+/** Only replace the top-level counts when a complete iteration ledger agrees. */
+function claudeIterations(
+	u: Json,
+	base: UsageRecord,
+): UsageRecord["claudeAdjustment"] {
+	if (!Array.isArray(u.iterations) || !u.iterations.length) return;
+	const { t, model } = base;
+	const counts = (used: Json, name: string): UsageRecord => {
+		const cache = obj(used.cache_creation);
+		return {
+			t,
+			model: name,
+			input: num(used.input_tokens),
+			cacheRead: num(used.cache_read_input_tokens),
+			cacheWrite5m: cache
+				? num(cache.ephemeral_5m_input_tokens)
+				: num(used.cache_creation_input_tokens),
+			cacheWrite1h: num(cache?.ephemeral_1h_input_tokens),
+			output: num(used.output_tokens),
+		};
+	};
+	const keys = [
+		"input",
+		"cacheRead",
+		"cacheWrite5m",
+		"cacheWrite1h",
+		"output",
+	] as const;
+	const executor = counts({}, model);
+	const all = counts({}, model);
+	const advisors: UsageRecord[] = [];
+	let hasExecutor = false;
+	for (const raw of u.iterations) {
+		const used = obj(raw);
+		if (!used) return;
+		const advisor = used.type === "advisor_message";
+		if (!advisor && used.type !== "message" && used.type !== "compaction")
+			return;
+		const name = advisor ? str(used.model) : model;
+		if (!name) return;
+		const row = counts(used, name);
+		if (
+			typeof used.cache_creation_input_tokens === "number" &&
+			row.cacheWrite5m + row.cacheWrite1h !== used.cache_creation_input_tokens
+		)
+			return;
+		for (const key of keys) {
+			all[key] += row[key];
+			if (!advisor) executor[key] += row[key];
+		}
+		if (!advisor) hasExecutor = true;
+		if (advisor && !empty(row)) advisors.push(row);
+	}
+	const agrees = (row: UsageRecord) =>
+		row.input === base.input &&
+		row.cacheRead === base.cacheRead &&
+		row.output === base.output &&
+		row.cacheWrite5m + row.cacheWrite1h === num(u.cache_creation_input_tokens);
+	// Claude's API ordinarily reports the executor aggregate. A full
+	// aggregate can also be split when it reconciles with the exact ledger.
+	if (!hasExecutor || !(agrees(executor) || agrees(all))) return;
+	const delta = { ...executor };
+	for (const key of keys) delta[key] -= base[key];
+	if (keys.every((key) => delta[key] === 0) && !advisors.length) return;
+	return { executor: delta, advisors };
 }
 
 interface CodexTotals {

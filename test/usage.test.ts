@@ -203,6 +203,98 @@ describe("parsers", () => {
 });
 
 describe("scanner", () => {
+	test("Claude replays executor cache and advisor pricing once without counting prior messages again", async () => {
+		const a = claudeFile("advisor");
+		const old = claudeLine({
+			id: "msg_adv",
+			t: T,
+			input: 10,
+			read: 100,
+			w5m: 20,
+			w1h: 7,
+			output: 9,
+		});
+		const anonymous = JSON.parse(
+			claudeLine({ id: "msg_anon", t: T, input: 4, output: 0 }),
+		);
+		delete anonymous.message.id;
+		write(a, [old, JSON.stringify(anonymous)]);
+		await usage.scanner.scan();
+		expect(totals()).toMatchObject({
+			records: 2,
+			input: 14,
+			cacheWrite5m: 20,
+			cacheWrite1h: 7,
+		});
+
+		const row = JSON.parse(old);
+		Object.assign(row.message.usage, {
+			cache_creation_input_tokens: 32,
+			iterations: [
+				{
+					type: "message",
+					input_tokens: 10,
+					cache_read_input_tokens: 100,
+					output_tokens: 9,
+					cache_creation: {
+						ephemeral_5m_input_tokens: 25,
+						ephemeral_1h_input_tokens: 7,
+					},
+				},
+				{
+					type: "advisor_message",
+					model: "claude-fable-5-2",
+					input_tokens: 300,
+					output_tokens: 40,
+				},
+			],
+		});
+		const historical = [
+			JSON.stringify(row),
+			JSON.stringify(anonymous),
+			JSON.stringify(row),
+		];
+		write(a, historical);
+		const bytes = Buffer.byteLength(`${historical.join("\n")}\n`);
+		store.db
+			.prepare(
+				"UPDATE usage_files SET offset=?, size=?, state=json_remove(state,'$.claudeIterations') WHERE path=?",
+			)
+			.run(bytes, bytes, a);
+		append(a, `${claudeLine({ id: "msg_new", t: T, input: 2, output: 0 })}\n`);
+		await usage.scanner.scan();
+		expect(totals()).toEqual({
+			records: 4,
+			input: 316,
+			cacheRead: 100,
+			cacheWrite5m: 25,
+			cacheWrite1h: 7,
+			output: 49,
+		});
+		expect(usage.local("7d", 0).rows).toContainEqual(
+			expect.objectContaining({
+				model: "claude-fable-5-2",
+				input: 300,
+				output: 40,
+				records: 1,
+			}),
+		);
+		write(claudeFile("fork"), [JSON.stringify(row)]);
+		const corrected = totals();
+		await usage.scanner.scan();
+		expect(totals()).toEqual(corrected);
+		await usage.scanner.scan();
+		expect(totals()).toEqual(corrected);
+		// Some exporters roll both models into the top-level counters. The
+		// exact iteration ledger still bills each model once.
+		row.message.id = "msg_aggregate";
+		row.message.usage.input_tokens = 310;
+		row.message.usage.output_tokens = 49;
+		write(claudeFile("aggregate"), [JSON.stringify(row)]);
+		await usage.scanner.scan();
+		expect(totals()).toMatchObject({ input: 626, output: 98, records: 6 });
+	});
+
 	test("a file rewritten shorter is read again from the start; old ids stay counted once", async () => {
 		const a = claudeFile("s-rw");
 		write(a, [

@@ -212,7 +212,13 @@ export class UsageScanner {
 		await this.backfillLimits(found, known, now);
 		for (const f of found) {
 			const k = known.get(f.path);
-			if (k && k.size === f.size && k.mtime === f.mtime) continue;
+			if (
+				k &&
+				k.size === f.size &&
+				k.mtime === f.mtime &&
+				(f.harness !== "claude" || k.state.claudeIterations)
+			)
+				continue;
 			await this.readFile(f, k, since);
 		}
 		if (roots.antigravity)
@@ -506,6 +512,15 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 			offset = 0;
 			state = {};
 		}
+		// Replay Claude's original rows through its dedupe ledger once, adding
+		// only advisor usage and corrected cache splits to existing aggregates.
+		if (f.harness === "claude" && !state.claudeIterations) {
+			state = {
+				claudeIterations: true,
+				...(offset ? { claudeReplayUntil: offset } : {}),
+			};
+			offset = 0;
+		}
 		const fh = await open(f.path, "r").catch(() => null);
 		if (!fh) return;
 		try {
@@ -533,12 +548,19 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 					carryLen = 0;
 					start = nl + 1;
 					offset = chunkAt + start;
+					const replay = offset <= (state.claudeReplayUntil ?? 0);
+					if (!replay) delete state.claudeReplayUntil;
 					const rec = line
-						? parseLine(f.harness, line, state, batch.onLimit)
+						? parseLine(
+								f.harness,
+								line,
+								state,
+								replay ? undefined : batch.onLimit,
+							)
 						: null;
 					if (rec && rec.t >= since) {
 						this.tag(rec, f.harness);
-						batch.add(rec, state, f.harness);
+						batch.add(rec, state, f.harness, replay);
 					}
 				}
 				if (start < bytesRead) {
@@ -617,6 +639,12 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 			const seen = db.prepare(
 				"INSERT OR IGNORE INTO usage_seen (key, at) VALUES (?, ?)",
 			);
+			const adjustment = db.prepare(
+				"INSERT OR IGNORE INTO usage_claude_adjusted (key, at) VALUES (?, ?)",
+			);
+			const original = db.prepare("SELECT at FROM usage_seen WHERE key = ?");
+			const historical = db.prepare(`SELECT 1 FROM usage_hourly
+				WHERE hour=? AND harness='claude' AND model=? AND project=? AND session=?`);
 			const upsert = db.prepare(`
 INSERT INTO usage_hourly (hour, harness, model, project, session, input, cache_read, cache_write_5m, cache_write_1h, output, records)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -631,24 +659,46 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 				string,
 				UsageRecord & { hour: number; n: number; project: string }
 			>();
-			for (const { rec, project } of batch.items) {
-				if (rec.dedupeId) {
-					const r = seen.run(dedupeKey(f.harness, rec.dedupeId), rec.t);
-					if (Number(r.changes) === 0) continue;
-				}
+			const add = (rec: UsageRecord, project: string, n: number) => {
 				const hour = Math.floor(rec.t / HOUR) * HOUR;
 				const key = `${hour}\0${rec.model}\0${project}`;
 				const s = sums.get(key);
 				if (!s) {
-					sums.set(key, { ...rec, hour, n: 1, project });
-					continue;
+					sums.set(key, { ...rec, hour, n, project });
+					return;
 				}
 				s.input += rec.input;
 				s.cacheRead += rec.cacheRead;
 				s.cacheWrite5m += rec.cacheWrite5m;
 				s.cacheWrite1h += rec.cacheWrite1h;
 				s.output += rec.output;
-				s.n++;
+				s.n += n;
+			};
+			for (const { rec, project, replay } of batch.items) {
+				const key = rec.dedupeId ? dedupeKey(f.harness, rec.dedupeId) : null;
+				const fresh =
+					!replay &&
+					(key === null || Number(seen.run(key, rec.t).changes) !== 0);
+				if (fresh) add(rec, project, 1);
+				const extra = rec.claudeAdjustment;
+				if (!extra) continue;
+				if (
+					!fresh &&
+					(key === null ||
+						(extra.sessionId && extra.sessionId !== f.session) ||
+						Number(original.get(key)?.at) !== rec.t ||
+						!historical.get(
+							Math.floor(rec.t / HOUR) * HOUR,
+							rec.model,
+							project,
+							f.session,
+						))
+				)
+					continue;
+				if (key !== null && Number(adjustment.run(key, rec.t).changes) === 0)
+					continue;
+				add(extra.executor, project, 0);
+				for (const advisor of extra.advisors) add(advisor, project, 1);
 			}
 			for (const s of sums.values())
 				upsert.run(
@@ -701,6 +751,7 @@ ON CONFLICT (path) DO UPDATE SET
 		const db = this.store.db;
 		db.prepare("DELETE FROM usage_hourly WHERE hour < ?").run(before);
 		db.prepare("DELETE FROM usage_seen WHERE at < ?").run(before);
+		db.prepare("DELETE FROM usage_claude_adjusted WHERE at < ?").run(before);
 		db.prepare("DELETE FROM usage_native_responses WHERE at < ?").run(before);
 		db.prepare("DELETE FROM usage_files WHERE mtime < ?").run(before);
 	}
@@ -708,14 +759,19 @@ ON CONFLICT (path) DO UPDATE SET
 
 /** What one commit adds: records with the folder they ran in, and the newest limit readings. */
 class Batch {
-	items: { rec: UsageRecord; project: string }[] = [];
+	items: { rec: UsageRecord; project: string; replay: boolean }[] = [];
 	lastAt: number | null = null;
 	limits = new Map<string, LimitState>();
 	/** The newest answer per harness and account (a reached limit before it is over). */
 	answered = new Map<string, number>();
 	readonly onLimit = (s: LimitState) => mergeLimits(this.limits, [s]);
-	add(rec: UsageRecord, state: FileState, harness: UsageHarness) {
-		this.items.push({ rec, project: state.cwd ?? "" });
+	add(
+		rec: UsageRecord,
+		state: FileState,
+		harness: UsageHarness,
+		replay: boolean,
+	) {
+		this.items.push({ rec, project: state.cwd ?? "", replay });
 		this.answer(rec, harness);
 		if (this.lastAt === null || rec.t > this.lastAt) this.lastAt = rec.t;
 	}
