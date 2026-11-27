@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ProveCancelled } from "../../api/client.ts";
 import type { AgentRow, LaunchHarness } from "../../api/types.ts";
 import { useAgent } from "../../data/index.ts";
+import { navigate } from "../../lib/router.ts";
 import { observer } from "../../lib/signals.ts";
 import { can } from "../../lib/store.ts";
 import {
@@ -20,8 +21,11 @@ export default observer(function ResumeSession({ agent }: { agent: AgentRow }) {
 	const launch = launches.value.get(launchId);
 	const row = useAgent(agent.id);
 	useEffect(() => {
-		if (launch?.step === "done") void row.refetch();
-	}, [launch?.step]);
+		if (launch?.step !== "done") return;
+		if (launch.agentId && launch.agentId !== agent.id)
+			navigate({ view: "agent", id: launch.agentId }, { replace: true });
+		else void row.refetch();
+	}, [launch?.step, launch?.agentId, agent.id]);
 	if (!can("launch") || !agent.cwd || !agent.sessionId) return null;
 	const pending = starting || (!!launch && launch.step !== "failed");
 	async function resume() {

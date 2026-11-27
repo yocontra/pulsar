@@ -19,6 +19,20 @@ type Binding = Pick<
 	| "meta"
 >;
 
+/** A pi-style process can host several conversations over its lifetime. */
+export function archiveAddress(agent: Agent): string | null {
+	if (agent.sessionId && !agent.sessionId.startsWith("pid:")) return agent.id;
+	const key = agent.meta.resumeKey;
+	if (
+		(agent.harness !== "pi" && agent.harness !== "omp") ||
+		!key?.startsWith(`${agent.harness}:`)
+	)
+		return null;
+	const sessionId = key.slice(agent.harness.length + 1);
+	if (!/^[a-zA-Z0-9_-]{1,190}$/.test(sessionId)) return null;
+	return key;
+}
+
 /** Transcript references for links opened on this machine. Never used for delivery. */
 export class SessionHistory {
 	constructor(store: Store, machine: string) {
@@ -36,20 +50,21 @@ export class SessionHistory {
 	}
 
 	remember(agent: Agent) {
+		const id = archiveAddress(agent);
 		if (
-			!agent.sessionId ||
+			!id ||
 			agent.id.includes("/") ||
 			agent.meta.machineId ||
 			agent.meta.subagentOf ||
 			isFolderGuess(agent) ||
-			agent.sessionId.startsWith("pid:") ||
 			(!driverFor(agent.harness)?.transcript && agent.meta.acp !== "1")
 		)
 			return;
-		this.save(agent.id, {
+		this.save(id, {
 			name: agent.name,
 			harness: agent.harness,
-			sessionId: agent.sessionId,
+			sessionId:
+				id === agent.id ? agent.sessionId : id.slice(agent.harness.length + 1),
 			cwd: agent.cwd,
 			project: agent.project,
 			branch: agent.branch,

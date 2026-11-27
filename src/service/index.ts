@@ -1617,6 +1617,7 @@ export class PulsarService {
 				const me = registry.self(caller);
 				const key = String(p.key ?? "").slice(0, 200);
 				if (key && me.meta.resumeKey !== key) {
+					this.history.remember(me);
 					me.meta.resumeKey = key;
 					await this.deliveries.back(me);
 				}

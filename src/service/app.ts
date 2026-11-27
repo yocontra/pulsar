@@ -34,7 +34,7 @@ import { LIMITS } from "./limits.ts";
 import type { Mailbox } from "./mailbox.ts";
 import { splitAddress, splitSubagentId } from "./pool.ts";
 import type { Registry } from "./registry.ts";
-import type { SessionHistory } from "./session-history.ts";
+import { archiveAddress, type SessionHistory } from "./session-history.ts";
 import { forParentBody, type Subagents } from "./subagents.ts";
 import { delivered, normalPriority } from "./util.ts";
 import { type Views, wakeTotals } from "./views.ts";
@@ -181,28 +181,33 @@ export class AppApi {
 				return this.views.row(agent);
 			}
 		}
-		const saved = await this.history.resolve(id);
+		const saved = await this.history.resolve(
+			(agent && archiveAddress(agent)) || id,
+		);
 		agent = current();
 		if (agent && agent.status !== "gone") return this.views.row(agent);
 		if (!saved) {
 			if (agent) return this.views.row(agent);
 			throw new RpcError("not_found", `no agent ${id}`);
 		}
+		const live = this.registry.live();
+		const alreadyOpen = live.some((a) => archiveAddress(a) === saved.id);
 		const row = this.views.row({
 			...saved,
+			id: agent?.id ?? saved.id,
 			model: this.archivedModel(saved) ?? saved.model,
 		});
 		if (row.capabilities)
 			row.capabilities.resume = !!(
+				!alreadyOpen &&
 				saved.cwd &&
 				saved.sessionId &&
 				(saved.meta.acp === "1"
 					? saved.meta.acpResume === "1"
-					: driverFor(saved.harness)?.resumeArgs?.(saved.sessionId))
+					: driverFor(saved.harness)?.nativeResume?.valid(saved.sessionId))
 			);
 		const openSessions = saved.cwd
-			? this.registry
-					.live()
+			? live
 					.filter(
 						(a) =>
 							a.id !== saved.id &&
@@ -210,8 +215,7 @@ export class AppApi {
 							a.harness === saved.harness &&
 							a.cwd === saved.cwd &&
 							!isFolderGuess(a) &&
-							a.sessionId &&
-							!a.sessionId.startsWith("pid:"),
+							archiveAddress(a),
 					)
 					.map(({ id, name }) => ({ id, name }))
 			: [];
@@ -274,7 +278,7 @@ export class AppApi {
 		return {
 			items: this.history.search(
 				query,
-				this.registry.live().map((a) => a.id),
+				this.registry.live().map((a) => archiveAddress(a) ?? a.id),
 			),
 		};
 	}

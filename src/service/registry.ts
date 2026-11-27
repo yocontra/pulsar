@@ -693,6 +693,13 @@ export class Registry {
 		// (set_identity, PULSAR_NAME) > the harness's own session name, which it
 		// follows through renames > `<harness>@<project>`.
 		const meta = { ...(existing?.meta ?? {}), ...input.meta };
+		if (
+			existing &&
+			!existing.sessionId &&
+			existing.meta.resumeKey &&
+			existing.meta.resumeKey !== meta.resumeKey
+		)
+			this.onSessionClosed?.(existing);
 		const fromHarness = this.harnessNameFor(meta);
 		const selfNamed =
 			existing?.meta.nameFrom === "self" ||

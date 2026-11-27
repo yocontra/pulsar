@@ -1376,6 +1376,47 @@ describe("service transcripts", () => {
 		).toBeUndefined();
 	});
 
+	test("process-based hosts archive each conversation and exclude the active one from search", async () => {
+		const principal = { kind: "terminal" } as const;
+		for (const harness of ["pi", "omp"]) {
+			const row = (key: string) =>
+				service.registry.upsert({
+					harness,
+					sessionId: null,
+					pid: process.pid,
+					cwd: "/work/demo",
+					project: "demo",
+					branch: null,
+					tags: [],
+					meta: { resumeKey: key },
+					registered: true,
+				});
+			const first = row(`${harness}:first`);
+			await service.app.agent(principal, first.id);
+			expect(service.app.savedSessions(principal, harness).items).toEqual([]);
+			const next = row(`${harness}:second`);
+			expect(
+				service.app.savedSessions(principal, harness).items.map((x) => x.id),
+			).toEqual([`${harness}:first`]);
+			service.registry.markGone(next);
+			for (const suffix of ["first", "second"]) {
+				const id = `${harness}:${suffix}`;
+				await expect(service.app.agent(principal, id)).resolves.toMatchObject({
+					id,
+					archived: true,
+					pid: null,
+				});
+			}
+			await expect(
+				service.app.agent(principal, next.id),
+			).resolves.toMatchObject({
+				id: next.id,
+				sessionId: "second",
+				archived: true,
+			});
+		}
+	});
+
 	test("agents without a transcript, unknown agents, bad cursors", async () => {
 		const bare = add("no-log");
 		// The harness keeps transcripts; this one is not found (yet).
