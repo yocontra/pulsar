@@ -62,6 +62,7 @@ describe("authorize matrix", () => {
 	const agentOnly = new Set<Op>([
 		"native.hook.collect",
 		"acp.children",
+		"acp.notice",
 		"claude.subagent.bind",
 		"claude.subagent.collect",
 		"claude.subagent.confirm",
