@@ -38,7 +38,7 @@ The sidebar (the Agents tab on a phone) lists every agent as a tree: machines, t
 
 ## A session
 
-In a managed ACP session, type `/model ` or `/effort ` to see the choices offered by that provider. Select a value, then send the command. A busy provider may require the current turn to finish first.
+In a managed ACP session or a native Pi or OMP session with the Pulsar extension, type `/model ` or `/effort ` to see the choices the current session supports. Select a value, then send the command. A busy provider may require the current turn to finish first.
 
 Open an agent to watch its session live: your prompts, its replies and thinking (collapsed), tool calls as one line each (Edit and Write expand to a diff), code with highlighting, math, Mermaid diagrams, tables and images. Older events load with "Load earlier". Agent text is shown as text: raw HTML, scripts and remote images never run or load. Web links open in a new tab. A link to a file path (`/Users/…/report.html`, `./src/a.ts`, `file://…`) is not a web page: click it to open the file in Changes when the agent changed it, or to copy the path.
 
