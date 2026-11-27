@@ -12,6 +12,8 @@ pulsar acp antigravity
 
 New sessions started from the Pulsar app use managed ACP when the provider's ACP executable and `pulsar` are on the launch machine's PATH. Claude Code, Codex, OpenCode, and pi also have direct integrations. If the app cannot find the ACP executable, it starts the original terminal harness. The picker shows the preferred mode that the machine's login shell found. OMP starts natively so you can steer active turns and message its subagents. Use `pulsar acp omp` for a managed OMP session.
 
+**New agent** can set the model and reasoning effort before the first prompt on a managed launch. If the provider rejects the selection, Pulsar keeps the draft. Tests with Antigravity 1.5.18 and OpenCode 2.2.5 confirmed the selected settings on the first conversational request. Each provider also sent the prompt to its own title generator using a separate model.
+
 Use `pulsar acp <provider> --resume <session-id>` when the provider supports reopening ACP sessions. Run it from the original project directory. Resume existing native sessions with their harness's own resume command. See [Harness support](adapters.md).
 
 The slash menu in a managed Antigravity session includes commands from the provider and skills installed on the session machine. Select a skill and enter any arguments. When the provider has no corresponding slash command, Pulsar asks Antigravity to read and apply the installed skill. [Antigravity skill locations](https://antigravity.google/docs/skills)
