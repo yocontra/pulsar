@@ -37,7 +37,7 @@ import { AcpUsageWriter, loadAcpUsage } from "../usage/acp.ts";
 import { VERSION } from "../version.ts";
 import { AcpChildren, readAcpChildren } from "./acp-children.ts";
 import { AcpCommandCatalog } from "./acp-commands.ts";
-import { AcpSessionControls } from "./acp-controls.ts";
+import { type AcpSelectorCommand, AcpSessionControls } from "./acp-controls.ts";
 import { ACP_IDENTITY_ENV } from "./acp-identity.ts";
 import { permissionArguments } from "./acp-permission.ts";
 import { antigravityQuestion, elicitationQuestions } from "./acp-questions.ts";
@@ -846,23 +846,7 @@ class Bridge {
 	}
 
 	private commandCatalog() {
-		const advertised = this.controls.commands;
-		const argumentChoices = this.controls.modelChoices;
-		if (!argumentChoices.length) return this.commands.list(advertised);
-		const native = advertised.find(({ name }) => name === "model");
-		return this.commands.list([
-			{
-				...native,
-				name: "model",
-				source: "agent",
-				args: "<model>",
-				argumentChoices,
-				description: native
-					? "Switch to an advertised model, or run /model alone for the provider command."
-					: "Switch to an advertised model.",
-			},
-			...advertised.filter(({ name }) => name !== "model"),
-		]);
+		return this.commands.list(this.controls.catalog());
 	}
 
 	private runtimeMeta() {
@@ -1071,10 +1055,21 @@ class Bridge {
 			if (!name || line.length > 4000 || /\p{Cc}/u.test(line))
 				return { result: "unsupported", detail: "Invalid ACP command." };
 			const args = line.slice(name.length + 1).trim();
-			if (name === "model" && this.controls.modelChoices.length) {
-				if (args) return this.selectConfig(args, "model");
-				if (!this.controls.commands.some(({ name }) => name === "model"))
-					return { result: "unsupported", detail: this.controls.modelHelp() };
+			if (name === "model" || name === "effort") {
+				const choices = this.controls.commandChoices(name);
+				const native = this.controls.commands.find(
+					(entry) => entry.name === name,
+				);
+				if (choices.length) {
+					if (args && choices.some(({ value }) => value === args))
+						return this.selectConfig(args, name);
+					// A provider can also support a native /effort subcommand such as "status".
+					if (!native || (args && !(name === "effort" && native.args)))
+						return {
+							result: "unsupported",
+							detail: this.controls.commandHelp(name),
+						};
+				}
 			}
 
 			const command = this.commandCatalog().get(name);
@@ -1098,7 +1093,10 @@ class Bridge {
 		return { result: "unsupported", detail: "Unknown ACP control request." };
 	}
 
-	private async selectConfig(target: string, kind: "mode" | "model") {
+	private async selectConfig(
+		target: string,
+		kind: "mode" | AcpSelectorCommand,
+	) {
 		if (!this.connection || !this.sessionId) return { result: "unsupported" };
 		this.switchingConfig = true;
 		try {

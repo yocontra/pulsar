@@ -236,6 +236,39 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			via: "acp",
 		});
 		await until(async () => (await current())?.model === "fixture-plan");
+		const effort = () =>
+			control()
+				.commands(agentId)
+				.then((catalog) =>
+					catalog.commands.find(({ name }) => name === "effort"),
+				);
+		expect(await effort()).toMatchObject({
+			argumentChoices: [
+				{ value: "low", label: "Low" },
+				{ value: "high", label: "High" },
+			],
+			description: expect.stringContaining("Current: Low"),
+		});
+		expect(await runCommand("/effort high")).toMatchObject({
+			result: "ok",
+			via: "acp",
+		});
+		expect(await effort()).toMatchObject({
+			description: expect.stringContaining("Current: High"),
+		});
+		expect((await current())?.model).toBe("fixture-plan");
+		expect((await control().modes(agentId)).current).toBe("plan-v2");
+		expect(await runCommand("/effort status")).toMatchObject({ result: "ok" });
+		await until(
+			async () =>
+				(await current())?.status === "idle" &&
+				Boolean(
+					bridge
+						?.output()
+						.includes("Fixture native effort command called: high"),
+				),
+		);
+		expect(await runCommand("/effort low")).toMatchObject({ result: "ok" });
 		await prompt("/model fixture-base");
 		await until(
 			async () =>
@@ -834,6 +867,10 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			expect(await runCommand("/model")).toMatchObject({
 				result: "unsupported",
 				detail: expect.stringContaining("fixture-base, fixture-plan"),
+			});
+			expect(await runCommand("/effort missing")).toMatchObject({
+				result: "unsupported",
+				detail: expect.stringContaining("low, high"),
 			});
 			await selectPlan();
 			if (mode === "resume") {

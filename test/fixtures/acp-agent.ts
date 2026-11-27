@@ -34,6 +34,7 @@ const childQuestionId = 993;
 const strangerPermissionId = 994;
 let currentMode = "ask";
 let currentModel: string | undefined;
+let currentEffort = "low";
 const modes = () => ({
 	currentModeId: currentMode,
 	availableModes: [
@@ -59,8 +60,20 @@ const modelOption = () => ({
 		},
 	],
 });
+const effortOption = () => ({
+	id: "fixture.thinking",
+	name: "Reasoning",
+	category: "thought_level",
+	type: "select",
+	currentValue: currentEffort,
+	options: [
+		{ value: "low", name: "Low" },
+		{ value: "high", name: "High" },
+	],
+});
 const config = () => [
 	modelOption(),
+	effortOption(),
 	{
 		id: "fixture.mode",
 		name: "Session mode",
@@ -167,7 +180,14 @@ for await (const line of lines) {
 							sessionUpdate: "available_commands_update",
 							availableCommands: [
 								...(mode === "steer"
-									? [{ name: "model", description: "Native model menu" }]
+									? [
+											{ name: "model", description: "Native model menu" },
+											{
+												name: "effort",
+												description: "Native reasoning effort",
+												input: { hint: "status" },
+											},
+										]
 									: []),
 								{
 									name: "fixture-command",
@@ -184,7 +204,8 @@ for await (const line of lines) {
 					reply(id, {
 						...(method === "session/new" ? { sessionId } : {}),
 						modes: modes(),
-						configOptions: mode === "resume" ? config() : [modelOption()],
+						configOptions:
+							mode === "resume" ? config() : [modelOption(), effortOption()],
 					});
 				}
 				if (data.id === 2) mcpResult?.(data.result.content[0].text);
@@ -213,13 +234,18 @@ for await (const line of lines) {
 				)
 					throw new Error("Unknown ACP model sent to provider");
 				currentModel = params.value;
+			} else if (params.configId === "fixture.thinking") {
+				if (!effortOption().options.some(({ value }) => value === params.value))
+					throw new Error("Unexpected reasoning effort");
+				currentEffort = params.value;
 			} else {
 				if (mode !== "resume" || params.configId !== "fixture.mode")
 					throw new Error("Fixture expected legacy mode selection");
 				currentMode = params.value;
 			}
 			reply(id, {
-				configOptions: mode === "resume" ? config() : [modelOption()],
+				configOptions:
+					mode === "resume" ? config() : [modelOption(), effortOption()],
 			});
 			break;
 		case "session/prompt": {
@@ -233,6 +259,9 @@ for await (const line of lines) {
 				reply(id, { stopReason: "end_turn" });
 			} else if (text.includes("/model fixture-base")) {
 				update("Fixture received model syntax as prompt text");
+				reply(id, { stopReason: "end_turn" });
+			} else if (text === "/effort" || text === "/effort status") {
+				update(`Fixture native effort command called: ${currentEffort}`);
 				reply(id, { stopReason: "end_turn" });
 			} else if (text === "/model") {
 				update("Fixture native model command called");

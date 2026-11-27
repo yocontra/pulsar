@@ -48,11 +48,12 @@ function commandEntry(command: AvailableCommand): CommandEntry[] {
 	];
 }
 
+export type AcpSelectorCommand = "model" | "effort";
 type Selection = { current: string; modes: ModeOption[]; configId?: string };
 
 function configSelection(
 	options: SessionConfigOption[],
-	category: "mode" | "model",
+	category: "mode" | "model" | "thought_level",
 ): Selection | null {
 	const option = options.find(
 		(item) => item.category === category && item.type === "select",
@@ -73,7 +74,10 @@ function configSelection(
 export class AcpSessionControls {
 	private configured: Selection | null = null;
 	private legacy: Selection | null = null;
-	private models: Selection | null = null;
+	private selectors: Record<AcpSelectorCommand, Selection | null> = {
+		model: null,
+		effort: null,
+	};
 	commands: CommandEntry[] = [];
 	model: string | null = null;
 
@@ -97,24 +101,55 @@ export class AcpSessionControls {
 		if (configOptions) this.config(configOptions);
 	}
 
-	get modelChoices(): { value: string; label: string }[] {
+	commandChoices(
+		command: AcpSelectorCommand,
+	): { value: string; label: string }[] {
 		return (
-			this.models?.modes.flatMap(({ id, label }) =>
+			this.selectors[command]?.modes.flatMap(({ id, label }) =>
 				id === id.trim() ? [{ value: id, label }] : [],
 			) ?? []
 		);
 	}
 
+	catalog(): CommandEntry[] {
+		const entries = new Map(this.commands.map((entry) => [entry.name, entry]));
+		for (const name of ["model", "effort"] as const) {
+			const argumentChoices = this.commandChoices(name);
+			if (!argumentChoices.length) continue;
+			const native = entries.get(name);
+			const label = name === "model" ? "model" : "reasoning effort";
+			const selected = argumentChoices.find(
+				({ value }) => value === this.selectors[name]?.current,
+			);
+			const detail = native
+				? `Choose the ${label}, or run /${name} alone for the provider command.`
+				: `Choose the ${label}.`;
+			entries.set(name, {
+				...native,
+				name,
+				source: "agent",
+				args: name === "model" ? "<model>" : "<level>",
+				argumentChoices,
+				description: selected
+					? `${detail} Current: ${selected.label}.`
+					: detail,
+			});
+		}
+		return [...entries.values()];
+	}
+
 	private config(options: SessionConfigOption[]) {
-		this.models = configSelection(options, "model");
-		if (validAcpModeId(this.models?.current)) this.model = this.models.current;
+		this.selectors.model = configSelection(options, "model");
+		this.selectors.effort = configSelection(options, "thought_level");
+		if (validAcpModeId(this.selectors.model?.current))
+			this.model = this.selectors.model.current;
 		this.configured = configSelection(options, "mode");
 	}
 
-	modelHelp(): string {
-		const ids = this.modelChoices.map(({ value }) => value);
+	commandHelp(command: AcpSelectorCommand): string {
+		const ids = this.commandChoices(command).map(({ value }) => value);
 		const listed = ids.slice(0, 8).join(", ");
-		return `Use /model <id>. Available: ${listed}${ids.length > 8 ? `, and ${ids.length - 8} more` : ""}`;
+		return `Use /${command} <id>. Available: ${listed}${ids.length > 8 ? `, and ${ids.length - 8} more` : ""}`;
 	}
 
 	update(update: SessionUpdate): boolean {
@@ -140,20 +175,20 @@ export class AcpSessionControls {
 		agent: ClientContext,
 		sessionId: string,
 		target: string,
-		kind: "mode" | "model" = "mode",
+		kind: "mode" | AcpSelectorCommand = "mode",
 	) {
-		const selection = kind === "model" ? this.models : this.selection;
+		const selection = kind === "mode" ? this.selection : this.selectors[kind];
 		if (!selection?.modes.some((item) => item.id === target)) {
 			return {
 				result: "unsupported",
 				detail:
-					kind === "model"
-						? this.modelHelp()
+					kind !== "mode"
+						? this.commandHelp(kind)
 						: "The agent did not advertise this ACP mode.",
 			};
 		}
 		if (selection.current === target)
-			return kind === "model"
+			return kind !== "mode"
 				? { result: "ok" }
 				: { result: "ok", mode: target };
 		const options = {
@@ -180,12 +215,12 @@ export class AcpSessionControls {
 			if (this.legacy === selection)
 				this.legacy = { ...selection, current: target };
 		}
-		if (kind === "model") {
-			return this.models?.current === target
+		if (kind !== "mode") {
+			return this.selectors[kind]?.current === target
 				? { result: "ok" }
 				: {
 						result: "failed",
-						detail: "The ACP agent did not report the selected model.",
+						detail: `The ACP agent did not report the selected ${kind}.`,
 					};
 		}
 		const mode = this.selection?.current;
