@@ -818,7 +818,7 @@ export const api = {
 			body: { response },
 		}),
 	subscribe: (streamId: string, sub: Subscription) =>
-		request<{ ok: boolean }>(`/subscriptions/${enc(streamId)}`, {
+		request<{ ok: boolean }>(`/subscriptions/${enc(streamId)}?ifOpen=1`, {
 			method: "PUT",
 			body: sub,
 		}),

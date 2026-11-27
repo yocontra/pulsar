@@ -1746,6 +1746,12 @@ describe("live updates", () => {
 			body: JSON.stringify({}),
 		});
 		expect(res.status).toBe(404);
+		const retired = await api("/api/v1/subscriptions/nope?ifOpen=1", {
+			method: "PUT",
+			body: JSON.stringify({}),
+		});
+		expect(retired.status).toBe(200);
+		expect(await retired.json()).toEqual({ ok: false });
 		const bad = await api("/api/v1/subscriptions/nope", {
 			method: "PUT",
 			body: JSON.stringify({ window: { group: "planets" } }),

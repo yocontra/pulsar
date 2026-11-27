@@ -1666,13 +1666,16 @@ export class HttpTransport {
 		api.put("/subscriptions/:streamId", async (c) => {
 			this.service.authorize(who(c), "subscribe");
 			const sub = parse(SubscriptionBody, await jsonBody(c));
-			if (
-				!this.hub.setSubscription(c.req.param("streamId"), who(c).login, sub, {
-					opened: true,
-				})
-			)
+			const ok = this.hub.setSubscription(
+				c.req.param("streamId"),
+				who(c).login,
+				sub,
+				{ opened: true },
+			);
+			// A reconnect or deploy can retire the stream while this conditional PUT is in flight.
+			if (!ok && c.req.query("ifOpen") !== "1")
 				throw new RpcError("not_found", "no such stream; open /events again");
-			return c.json({ ok: true });
+			return c.json({ ok });
 		});
 		app.route("/api/v1", api);
 		app.all("/api/*", (c) =>

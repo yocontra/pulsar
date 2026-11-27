@@ -127,7 +127,7 @@ interface Rig {
 const rigs: Rig[] = [];
 
 function rig(
-	applySubscription: (sub: Subscription) => Promise<void> = async () => {},
+	applySubscription: (sub: Subscription) => Promise<boolean> = async () => true,
 ): Rig {
 	const client = new QueryClient({
 		defaultOptions: { queries: { retry: false, staleTime: 0 } },
@@ -140,7 +140,7 @@ function rig(
 		transport: t.transport,
 		subscribe: async (_id, sub) => {
 			subs.push(sub);
-			await applySubscription(sub);
+			return applySubscription(sub);
 		},
 		debounceMs: 0,
 		frame: (fn) => fn(),
@@ -170,12 +170,26 @@ afterEach(() => {
 	focusManager.setFocused(undefined);
 });
 
+test("a retired stream does not acknowledge query coverage", async () => {
+	let accepted = false;
+	const r = rig(async () => accepted);
+	await connect(r);
+	const count = r.subs.length;
+	await r.live.flush();
+	expect(r.subs.length).toBe(count + 1);
+	accepted = true;
+	await r.live.flush();
+	await r.live.flush();
+	expect(r.subs.length).toBe(count + 2);
+});
+
 test("a session subscription waits for any older replacement on the same stream", async () => {
 	const first = Promise.withResolvers<void>();
 	let applied: Subscription | undefined;
 	const r = rig(async (sub) => {
 		if (!sub.session) await first.promise;
 		applied = sub;
+		return true;
 	});
 	await connect(r);
 	const observer = observeLive(r.client, r.live, {

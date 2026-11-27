@@ -3428,7 +3428,10 @@ async function route(
 	if (req.method === "PUT" && seg[0] === "subscriptions" && seg[1]) {
 		const sub = parseSubscription(await jsonBody(req));
 		const s = streams.get(seg[1]);
-		if (!s) throw notFound("no such stream; open /events again");
+		if (!s) {
+			if (q.get("ifOpen") === "1") return json({ ok: false });
+			throw notFound("no such stream; open /events again");
+		}
 		setSubscription(s, sub);
 		return json({ ok: true });
 	}

@@ -38,7 +38,7 @@ export const queryClient = createQueryClient();
 export const live = new LiveSync({
 	client: queryClient,
 	transport: openEvents,
-	subscribe: (id, sub) => api.subscribe(id, sub),
+	subscribe: (id, sub) => api.subscribe(id, sub).then((reply) => reply.ok),
 	frame: (fn) =>
 		typeof requestAnimationFrame === "function"
 			? requestAnimationFrame(fn)

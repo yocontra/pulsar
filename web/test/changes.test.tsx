@@ -160,7 +160,7 @@ describe("data", () => {
 		const live = new LiveSync({
 			client,
 			transport: () => ({ close() {} }),
-			subscribe: async () => {},
+			subscribe: async () => true,
 			frame: (fn) => fn(),
 		});
 		const summary = {

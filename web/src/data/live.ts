@@ -65,7 +65,7 @@ type Listeners = {
 export interface LiveOptions {
 	client: QueryClient;
 	transport: Transport;
-	subscribe: (streamId: string, sub: Subscription) => Promise<unknown>;
+	subscribe: (streamId: string, sub: Subscription) => Promise<boolean>;
 	/** Debounce for subscription changes (ms). */
 	debounceMs?: number;
 	/** Batches transcript events (one animation frame in the browser). */
@@ -285,8 +285,9 @@ export class LiveSync {
 		const epoch = this.subscriptionEpoch;
 		const done = this.opts
 			.subscribe(id, sub)
-			.then(() => {
-				if (this.streamId !== id || this.subscriptionEpoch !== epoch) return;
+			.then((ok) => {
+				if (!ok || this.streamId !== id || this.subscriptionEpoch !== epoch)
+					return;
 				this.ackedKey = key;
 				const desired = this.current();
 				this.setAcked(
