@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { agentId, expect, ready, test } from "./fixtures.ts";
+import { openChildFromCard } from "./subagent-card.shared.ts";
 
 /**
  * Subagents in the desktop app (web/mock/subagents.ts): apparish-auth runs
@@ -225,22 +226,8 @@ test.describe("subagents (desktop)", () => {
 		await page.goto(`/#/a/${encodeURIComponent(auth)}`);
 		await expect(page.locator(".d-session-head h1")).toBeVisible();
 		await expect(page.locator(".tree [data-subagent]")).toHaveCount(0);
-		const cards = page.locator(".ds-task");
 		const sub = `${auth}/sub:a2fix`;
-		const link = page.locator(`[data-subagent-link="${sub}"]`);
-		// New mock turns can push the finished subagent's parent call onto
-		// the previous page, even when its result is on the newest page.
-		await expect(cards.first()).toBeVisible();
-		const newestCount = await cards.count();
-		await page.getByRole("button", { name: "Load earlier messages" }).click();
-		await expect.poll(() => cards.count()).toBeGreaterThan(newestCount);
-		// Open cards from the newest back until this subagent's link shows.
-		for (let i = (await cards.count()) - 1; i >= 0; i--) {
-			if (await link.count()) break;
-			await cards.nth(i).locator(".ds-tool-head").click();
-		}
-		await expect(link).toContainText("Write the regression test");
-		await link.click();
+		await openChildFromCard(page, sub);
 		const view = page.locator(`[data-subagent-page="${sub}"]`);
 		await expect(view.locator(".sub-title h1")).toHaveText(
 			"Write the regression test",
@@ -255,21 +242,23 @@ test.describe("subagents (desktop)", () => {
 		request,
 	}) => {
 		const auth = await agentId(request, "name=apparish-auth");
+		// Exercise a short newest page even when this test runs on a fresh mock.
+		await page.route("**/api/v1/agents/*/transcript", async (route) => {
+			const upstream = await route.fetch();
+			const data = await upstream.json();
+			const kept = 1;
+			await route.fulfill({
+				response: upstream,
+				json: {
+					...data,
+					events: data.events.slice(-kept),
+					cursor: String(Number(data.cursor ?? 0) + data.events.length - kept),
+				},
+			});
+		});
 		await page.goto(`/#/a/${encodeURIComponent(auth)}`);
 		await expect(page.locator(".d-session-head h1")).toBeVisible();
-		// Earlier tests in the run add turns to this transcript (a newer task
-		// card may be last): open cards from the last until one links out.
-		const cards = page.locator(".ds-task");
-		await expect(cards.first()).toBeVisible();
-		// The running explorer's card: other cards link to other subagents.
-		const link = page.locator('[data-subagent-link$="/sub:a1explore"]');
-		for (let i = (await cards.count()) - 1; i >= 0; i--) {
-			if (await link.count()) break;
-			await cards.nth(i).locator(".ds-tool-head").click();
-		}
-		await expect(link).toBeVisible();
-		await expect(link).toContainText("Find other refresh callers");
-		await link.click();
+		await openChildFromCard(page, `${auth}/sub:a1explore`);
 		await expect(
 			page.locator(
 				`[data-subagent-page="${auth}/sub:a1explore"] .sub-title h1`,

@@ -1,4 +1,5 @@
 import { agentId, expect, ready, test } from "./fixtures.ts";
+import { openChildFromCard } from "./subagent-card.shared.ts";
 
 /**
  * Subagents on the phone (web/mock/subagents.ts): the agent page lists them
@@ -82,18 +83,8 @@ test.describe("subagents (phone)", () => {
 		await ready(page);
 		await page.goto(`/#/a/${encodeURIComponent(auth)}`);
 		await expect(page.locator(".p-nav-title h1")).toHaveText("apparish-auth");
-		const cards = page.locator(".ds-task");
-		await expect(cards.last()).toBeVisible();
 		const sub = `${auth}/sub:a2fix`;
-		const link = page.locator(`[data-subagent-link="${sub}"]`);
-		// Earlier tests add newer task cards: open cards from the newest back
-		// until this subagent's link shows.
-		for (let i = (await cards.count()) - 1; i >= 0; i--) {
-			if (await link.count()) break;
-			await cards.nth(i).locator(".ds-tool-head").click();
-		}
-		await expect(link).toContainText("Write the regression test");
-		await link.click();
+		await openChildFromCard(page, sub);
 		await expect(page).toHaveURL(new RegExp(`#/s/${encodeURIComponent(sub)}$`));
 		await expect(page.locator(".p-nav-title h1").last()).toHaveText(
 			"Write the regression test",

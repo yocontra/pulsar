@@ -558,6 +558,7 @@ function PartView({ part, next }: { part: Item; next?: Item }) {
 						/>
 					}
 					steps={part.steps}
+					callId={part.call.tool?.callId}
 					tool={part.call.tool?.name}
 					running={!part.result && !part.call.tool?.done}
 					result={part.result?.text}
@@ -680,6 +681,7 @@ function taskName(input: unknown): string | null {
 
 /** A subagent's run, folded: its steps render as a nested thread. */
 export function SubagentCard({
+	callId,
 	title,
 	mark,
 	steps,
@@ -690,6 +692,7 @@ export function SubagentCard({
 	link,
 	children,
 }: {
+	callId?: string;
 	title: string;
 	/** The subagent's color dot (session/subagent-colors.tsx), before the title. */
 	mark?: ReactNode;
@@ -708,6 +711,7 @@ export function SubagentCard({
 		<Collapsible.Root
 			className={`ev tool task ds-tool ds-task k-task${failed ? " is-error" : ""}`}
 			data-tool={tool}
+			data-call-id={callId}
 		>
 			<Collapsible.Trigger className="ds-tool-head">
 				<span className="ds-tool-icon" aria-hidden="true">
