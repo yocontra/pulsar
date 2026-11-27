@@ -1,4 +1,10 @@
-import { agentId, expect, ready, test } from "./fixtures.ts";
+import {
+	agentId,
+	expect,
+	ready,
+	scrollConversationUp,
+	test,
+} from "./fixtures.ts";
 import { realtime } from "./live.shared.ts";
 
 /**
@@ -35,12 +41,32 @@ test("every showcase diagram renders as it scrolls into view, with no console er
 	}, id);
 	const blocks = page.locator('[data-streamdown="mermaid-block"]');
 	await expect(blocks).toHaveCount(KINDS.length);
+	const scroller = page
+		.getByRole("log", { name: "Conversation with diagram-showcase" })
+		.locator(":scope > div")
+		.first();
+	await expect
+		.poll(() =>
+			scroller.evaluate(
+				(el) => el.scrollHeight - el.clientHeight - el.scrollTop,
+			),
+		)
+		.toBeLessThan(2);
+	await scrollConversationUp(scroller, 240);
+	await expect(
+		page.getByRole("button", { name: "Jump to latest" }),
+	).toBeVisible();
 	// Newest (bottom) first, as the operator scrolls up through the reply.
 	for (let i = KINDS.length - 1; i >= 0; i--) {
 		const block = blocks.nth(i);
 		const svg = block.locator(`svg[aria-roledescription="${KINDS[i]}"]`);
-		await block.scrollIntoViewIfNeeded();
-		await expect(svg).toBeVisible({ timeout: 15_000 });
+		// A diagram or code block above this one can finish rendering and
+		// move it offscreen before its lazy renderer observes it.
+		await expect(async () => {
+			await block.scrollIntoViewIfNeeded();
+			await expect(block).toBeInViewport({ timeout: 1000 });
+			await expect(svg).toBeInViewport({ timeout: 1000 });
+		}).toPass({ timeout: 15000 });
 		// The pan/zoom frame fits it once its width is known: wait for that.
 		const fit = () =>
 			svg.evaluate((el) => {
