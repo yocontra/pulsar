@@ -56,7 +56,7 @@ export interface TailscalePeer {
 
 export type TailscaleState =
 	| { kind: "missing" }
-	| { kind: "not-running"; detail: string }
+	| { kind: "unknown"; detail: string }
 	| { kind: "stopped"; control?: ControlPlane }
 	| { kind: "logged-out"; control?: ControlPlane }
 	| { kind: "needs-approval"; control?: ControlPlane }
@@ -107,12 +107,16 @@ export function parseTailscaleState(json: unknown): TailscaleState {
 			return { kind: "stopped" };
 		default:
 			return {
-				kind: "not-running",
+				kind: "unknown",
 				detail: `Tailscale is ${s.BackendState ?? "not answering"}`,
 			};
 	}
 	const self = parseStatusSelf(json);
-	if (!self) return { kind: "logged-out" };
+	if (!self)
+		return {
+			kind: "unknown",
+			detail: "the running backend returned no device DNS name",
+		};
 	const owner = s.Self?.UserID;
 	const peers: TailscalePeer[] = Object.values(s.Peer ?? {}).map((p) => {
 		const dnsName = stripDot(p.DNSName ?? "");
@@ -153,7 +157,7 @@ export async function readTailscale(
 	// `status` exits non-zero when stopped or logged out but still prints JSON.
 	if (json && typeof json === "object" && "BackendState" in json) {
 		const state = parseTailscaleState(json);
-		if (state.kind === "missing" || state.kind === "not-running") return state;
+		if (state.kind === "missing" || state.kind === "unknown") return state;
 		const control = await readControlPlane(
 			run,
 			state.kind === "running" ? state.suffix : null,
@@ -161,7 +165,7 @@ export async function readTailscale(
 		return { ...state, control };
 	}
 	return {
-		kind: "not-running",
+		kind: "unknown",
 		detail: (r.stderr || r.stdout).trim().split("\n")[0] || "no answer",
 	};
 }
@@ -176,8 +180,8 @@ export function tailscaleFix(
 			return null;
 		case "missing":
 			return "Tailscale is not installed. Install it from https://tailscale.com/download and sign in.";
-		case "not-running":
-			return `Tailscale is not running (${state.detail}). ${platform === "darwin" ? "Open the Tailscale app." : "Start it: sudo systemctl enable --now tailscaled"}`;
+		case "unknown":
+			return `Could not verify Tailscale status (${state.detail}). Check with \`tailscale status\`.`;
 		case "stopped":
 			return `Tailscale is disconnected. Connect it: tailscale up${platform === "darwin" ? " (or switch it on in the Tailscale app)" : ""}`;
 		case "logged-out": {

@@ -428,7 +428,9 @@ async function doctorChecks(
 		const self = await tailscaleSelf();
 		// The operator's own certificate replaces `tailscale cert` (the mesh checks inspect it).
 		const ownCert = tlsSetting(readSettings()) !== null;
-		if (!self) bad("remote access: Tailscale is not running or not logged in");
+		// The mesh checks below report the reason when the local CLI cannot read status.
+		if (!self)
+			note("remote access: could not verify this device’s Tailscale identity");
 		else if (!self.ownerLogin)
 			bad("remote access: this node has no Tailscale user (a tagged node)");
 		else if (!ownCert && !self.certDomains.includes(self.dnsName)) {

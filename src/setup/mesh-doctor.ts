@@ -162,7 +162,7 @@ export async function meshChecks(
 		certDays: null,
 	};
 	const fix = tailscaleFix(ts, env.platform);
-	if (fix) bad(fix);
+	if (fix) (ts.kind === "unknown" ? note : bad)(fix);
 	if (ts.kind === "running") {
 		ok(
 			`Tailscale ${ts.version}: ${ts.self.dnsName}${ts.self.ownerLogin ? ` (${ts.self.ownerLogin})` : ""}, control server ${controlLabel(ts.control)}`,
@@ -208,6 +208,10 @@ export async function meshChecks(
 			bad(
 				`background service file ${where} is missing`,
 				"run `pulsar mesh on`",
+			);
+		else if (svc.inspectionError)
+			note(
+				`Could not verify background service status (${svc.inspectionError})`,
 			);
 		else if (!svc.loaded)
 			bad(`background service not loaded (${where})`, "run `pulsar mesh on`");

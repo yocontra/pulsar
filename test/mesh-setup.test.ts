@@ -214,6 +214,24 @@ describe("service install", () => {
 		expect(readServiceRecord(env.stateDir)).toBeNull();
 	});
 
+	test("systemd distinguishes an unavailable user bus from a missing unit", async () => {
+		let result = { ok: false, stdout: "", stderr: "Failed to connect to bus" };
+		const { env } = fakeEnv("linux", (_, args) =>
+			args[1] === "show" ? result : OK,
+		);
+		await installService(env);
+		expect(await serviceStatus(env)).toMatchObject({
+			loaded: null,
+			running: null,
+			inspectionError: result.stderr,
+		});
+		result = { ok: false, stdout: "LoadState=not-found", stderr: "" };
+		expect(await serviceStatus(env)).toMatchObject({
+			loaded: false,
+			running: false,
+		});
+	});
+
 	test("only the service recorded in this state folder is touched", async () => {
 		const { env, calls } = fakeEnv("darwin");
 		// A plist from another install (the user's real one, say) without our record.
@@ -389,7 +407,7 @@ describe("pulsar mesh on", () => {
 				stdout: "",
 				stderr: "failed to connect to local tailscaled",
 			},
-			"Tailscale is not running (failed to connect to local tailscaled). Open the Tailscale app.",
+			"Could not verify Tailscale status (failed to connect to local tailscaled). Check with `tailscale status`.",
 		],
 		[
 			"stopped",
@@ -639,6 +657,7 @@ describe("pulsar doctor: mesh checks", () => {
 		ts?: RunResult | Record<string, unknown>;
 		lsof?: string;
 		running?: boolean;
+		launchError?: string;
 		remoteOn?: boolean;
 		certDays?: number;
 		installed?: boolean;
@@ -650,8 +669,13 @@ describe("pulsar doctor: mesh checks", () => {
 			if (cmd === "lsof")
 				return { ok: !!opts.lsof, stdout: opts.lsof ?? "", stderr: "" };
 			if (cmd === "launchctl" && args[0] === "print")
-				return opts.running === false
-					? FAIL
+				return opts.launchError || opts.running === false
+					? {
+							...FAIL,
+							stderr:
+								opts.launchError ??
+								'Could not find service "io.github.yocontra.pulsar" in domain for user gui: 501',
+						}
 					: {
 							ok: true,
 							stdout: "\tstate = running\n\tpid = 777\n",
@@ -714,6 +738,24 @@ describe("pulsar doctor: mesh checks", () => {
 			certDays: expect.any(Number),
 		});
 		expect(lastFacts!.certDays).toBeGreaterThanOrEqual(89);
+	});
+
+	test("unreadable Tailscale preferences and launchd domain are unknown", async () => {
+		const lines = await doctor({
+			ts: { ok: false, stdout: "", stderr: "Failed to load preferences." },
+			launchError: "Could not print domain: 141: Reentrancy avoided",
+			lsof: "p1\nn100.101.102.103:7337\n",
+		});
+		expect(lines).toContain(
+			"· Could not verify Tailscale status (Failed to load preferences.). Check with `tailscale status`.",
+		);
+		expect(lastFacts?.tailscale.state).toBe("unknown");
+		expect(lines).toContain(
+			"· Could not verify background service status (Could not print domain: 141: Reentrancy avoided)",
+		);
+		expect(lines).toContain(
+			"✓ HTTPS on Tailscale addresses only (100.101.102.103:7337)",
+		);
 	});
 
 	test("problems each get a one-line fix", async () => {

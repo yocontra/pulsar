@@ -436,8 +436,9 @@ export interface ServiceStatus {
 	kind: ServiceKind;
 	file: string;
 	fileExists: boolean;
-	loaded: boolean;
-	running: boolean;
+	inspectionError?: string;
+	loaded: boolean | null;
+	running: boolean | null;
 	pid: number | null;
 	/** ProgramArguments / ExecStart as written in the file. */
 	args: string[];
@@ -453,14 +454,23 @@ export async function serviceStatus(
 	const text = fileExists ? readFileSync(rec.file, "utf8") : "";
 	if (rec.kind === "launchd") {
 		const r = await env.run("launchctl", ["print", launchdTarget(env)]);
+		const detail = (r.stderr || r.stdout).trim().split("\n")[0];
+		const loaded = r.ok
+			? true
+			: /could not find service/i.test(r.stderr)
+				? false
+				: null;
 		const state = /^\s*state = (\S+)/m.exec(r.stdout)?.[1];
 		const pid = Number(/^\s*pid = (\d+)/m.exec(r.stdout)?.[1]);
 		return {
 			kind: rec.kind,
 			file: rec.file,
 			fileExists,
-			loaded: r.ok,
-			running: r.ok && state === "running",
+			...(loaded === null && {
+				inspectionError: detail || "launchctl print failed",
+			}),
+			loaded,
+			running: loaded === null ? null : loaded && state === "running",
 			pid: Number.isInteger(pid) && pid > 0 ? pid : null,
 			args: plistArgs(text),
 		};
@@ -479,12 +489,23 @@ export async function serviceStatus(
 	const prop = (k: string) =>
 		new RegExp(`^${k}=(.*)$`, "m").exec(r.stdout)?.[1];
 	const pid = Number(prop("MainPID"));
+	const loadState = prop("LoadState");
+	const loaded =
+		loadState && (r.ok || loadState === "not-found")
+			? loadState === "loaded"
+			: null;
 	return {
 		kind: rec.kind,
 		file: rec.file,
 		fileExists,
-		loaded: r.ok && prop("LoadState") === "loaded",
-		running: r.ok && prop("ActiveState") === "active",
+		...(loaded === null && {
+			inspectionError:
+				r.stderr.trim().split("\n")[0] ||
+				"systemctl show did not return LoadState",
+		}),
+		loaded,
+		running:
+			loaded === null ? null : loaded && prop("ActiveState") === "active",
 		pid: pid > 0 ? pid : null,
 		args: unitArgs(text),
 	};
