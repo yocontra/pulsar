@@ -88,6 +88,7 @@ interface Cached {
 	logMtime: number;
 	/** The last record's timestamp (ms): when it last worked. */
 	lastAt: number;
+	endedTurn: boolean;
 }
 
 /** Each subagent's meta and start time, kept while its meta file is unchanged. */
@@ -148,15 +149,36 @@ export function lastTimestamp(tail: string, whole: boolean): number | null {
 	return null;
 }
 
-async function readLastAt(file: string, size: number): Promise<number | null> {
+/** Only an assistant end_turn at the tip of this child's own transcript proves idle.
+ * A later user/tool record, an incomplete line, or a different branch invalidates it. */
+function endedTurn(tail: string, whole: boolean, key: string): boolean {
+	if (!tail.endsWith("\n")) return false;
+	const end = tail.trimEnd();
+	const start = end.lastIndexOf("\n");
+	if (!whole && start < 0) return false;
+	try {
+		const row = JSON.parse(end.slice(start + 1));
+		return (
+			row.type === "assistant" &&
+			row.agentId === key &&
+			row.message?.role === "assistant" &&
+			row.message.stop_reason === "end_turn"
+		);
+	} catch {
+		return false;
+	}
+}
+
+async function readLastActivity(file: string, size: number, key: string) {
 	for (const n of TAIL_STEPS) {
 		const tail = await tailAsync(file, n);
 		claudeSubagentReads.bytes += tail.length;
 		const whole = size <= n;
-		const t = lastTimestamp(tail, whole);
-		if (t !== null || whole) return t;
+		const time = lastTimestamp(tail, whole);
+		if (time !== null || whole || n === TAIL_STEPS.at(-1))
+			return { time, endedTurn: endedTurn(tail, whole, key) };
 	}
-	return null;
+	return { time: null, endedTurn: false };
 }
 
 interface Team {
@@ -282,13 +304,16 @@ export async function listClaudeSubagents(
 				logSize: hit?.logSize ?? -1,
 				logMtime: hit?.logMtime ?? -1,
 				lastAt: hit?.lastAt ?? log.mtimeMs,
+				endedTurn: hit?.endedTurn ?? false,
 			};
 			if (cache.size >= CACHE_MAX) cache.clear();
 			cache.set(file, hit);
 		}
 		if (hit.logSize !== log.size || hit.logMtime !== log.mtimeMs) {
 			// No timestamp in reach (one huge last record): the write time.
-			hit.lastAt = (await readLastAt(file, log.size)) ?? log.mtimeMs;
+			const activity = await readLastActivity(file, log.size, key);
+			hit.lastAt = activity.time ?? log.mtimeMs;
+			hit.endedTurn = activity.endedTurn;
 			hit.logSize = log.size;
 			hit.logMtime = log.mtimeMs;
 		}
@@ -349,6 +374,14 @@ export async function listClaudeSubagents(
 			agentType: meta.agentType,
 			description: meta.name ? meta.description : null,
 			state,
+			waitStatus:
+				meta.finished || parentGone
+					? "gone"
+					: hit.endedTurn && (!meta.teammate || live.has(file))
+						? "idle"
+						: state === "running"
+							? "busy"
+							: "unknown",
 			startedAt: hit.startedAt,
 			updatedAt: hit.lastAt,
 			finishedAt: state === "done" ? hit.lastAt : null,

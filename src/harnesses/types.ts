@@ -53,6 +53,8 @@ export interface FoundSubagent {
 	agentType: string | null;
 	description: string | null;
 	state: SubagentState;
+	/** Status for waiters when the display state also uses age or inactivity. */
+	waitStatus?: AgentStatus;
 	startedAt: number;
 	updatedAt: number;
 	finishedAt: number | null;

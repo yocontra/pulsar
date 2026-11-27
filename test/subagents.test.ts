@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
+	appendFileSync,
 	chmodSync,
 	mkdirSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	utimesSync,
 	writeFileSync,
@@ -313,6 +315,41 @@ describe("Claude Code subagents", () => {
 		expect(sub?.finishedAt).toBe(Date.parse("2026-11-10T10:00:00.000Z"));
 	});
 
+	test("only an explicit end of the current transcript turn establishes idle", async () => {
+		const parent = agentRecord({ sessionId: "a1111111" });
+		const folder = claudeSessionDir(parent.cwd, parent.sessionId)!;
+		const key = "aa01",
+			file = join(folder, "subagents", `agent-${key}.jsonl`);
+		writeClaudeSub(
+			folder,
+			key,
+			{ agentType: "worker" },
+			{ mtime: now - TASK_QUIET_MS - 10_000 },
+		);
+		const status = async () =>
+			(await listClaudeSubagents(parent, now))[0]?.waitStatus;
+		expect(await status()).toBe("unknown");
+		appendFileSync(
+			file,
+			rec({
+				type: "assistant",
+				agentId: key,
+				message: { role: "assistant", stop_reason: "end_turn" },
+			}),
+		);
+		expect(await status()).toBe("idle");
+		appendFileSync(
+			file,
+			rec({
+				type: "user",
+				agentId: key,
+				message: { role: "user", content: "continue" },
+			}),
+		);
+		expect(await status()).not.toBe("idle");
+		writeClaudeSub(folder, key, { finished: true });
+		expect(await status()).toBe("gone");
+	});
 	test("lastTimestamp skips untimestamped and cut lines", () => {
 		const a = rec({ type: "user", timestamp: "2026-11-10T10:00:00.000Z" });
 		const b = rec({ type: "data-flow-records", records: [] });
@@ -463,7 +500,11 @@ describe("omp subagents", () => {
 		const by = new Map(found.map((f) => [f.key, f]));
 		expect([...by.keys()].sort()).toEqual(["Builder", "Ghost", "Scout"]);
 		expect(by.get("Scout")?.state).toBe("done");
-		expect(by.get("Ghost")?.state).toBe("done");
+		expect(by.get("Ghost")).toMatchObject({
+			state: "done",
+			waitStatus: "unknown",
+		});
+		expect(by.get("Scout")?.waitStatus).toBe("gone");
 		expect(by.get("Builder")?.state).toBe("running");
 		expect(by.get("Builder")?.startedAt).toBe(
 			Date.parse("2026-11-10T10:05:00.000Z"),
@@ -681,7 +722,11 @@ describe("Codex subagents (fake app-server)", () => {
 		]);
 		expect(by.get("t-wait")?.state).toBe("idle");
 		// Idle longer than IDLE_MAX_MS: done.
-		expect(by.get("t-old")?.state).toBe("done");
+		expect(by.get("t-old")).toMatchObject({
+			state: "done",
+			waitStatus: "idle",
+		});
+		expect(by.get("t-grand")?.waitStatus).toBe("unknown");
 		expect(by.get("t-child")).toMatchObject({
 			name: "Ada",
 			kind: "thread",
@@ -821,9 +866,32 @@ process.stdout.write(JSON.stringify(r[key] ?? {}));
 		// Idle while recently updated; with no time or long quiet, done.
 		expect(found.find((f) => f.key === "ses_kid3")?.state).toBe("idle");
 		expect(found.find((f) => f.key === "ses_kid2")?.state).toBe("done");
-		expect(found.find((f) => f.key === "ses_kid4")?.state).toBe("done");
+		expect(found.find((f) => f.key === "ses_kid4")).toMatchObject({
+			state: "done",
+			waitStatus: "idle",
+		});
 	});
 
+	test("an unavailable activity report cannot mark a child idle", async () => {
+		const source = readFileSync(routes, "utf8");
+		try {
+			writeFileSync(
+				routes,
+				JSON.stringify({
+					...JSON.parse(source),
+					"session.active": { data: null },
+				}),
+			);
+			const children = await listOpencodeSubagents(
+				agentRecord({ harness: "opencode", sessionId: "ses_lead" }),
+			);
+			expect(
+				children.find((child) => child.key === "ses_kid1")?.waitStatus,
+			).toBe("unknown");
+		} finally {
+			writeFileSync(routes, source);
+		}
+	});
 	test("native MCP child calls use the same identity as direct delivery", async () => {
 		const { daemon, cleanup } = await startDaemon();
 		try {

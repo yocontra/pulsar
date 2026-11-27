@@ -178,23 +178,22 @@ export async function listOmpSubagents(
 				startedAt = Number.isFinite(t) ? t : st.birthtimeMs || st.mtimeMs;
 			}
 			const tail = sessionId ? await tailAsync(file, 4096) : "";
+			const last = jsonLines(tail).at(-1);
 			ompSubagentReads.bytes += tail.length;
 			hit = {
 				size: st.size,
 				mtimeMs: st.mtimeMs,
 				startedAt: startedAt ?? st.birthtimeMs,
 				sessionId,
-				exited: /"customType"\s*:\s*"session_exit"/.test(tail),
+				exited: last?.type === "custom" && last.customType === "session_exit",
 			};
 			if (ompCache.size > 4000) ompCache.clear();
 			ompCache.set(file, hit);
 		}
 		if (!hit.sessionId) continue;
-		const done =
-			hit.exited ||
-			results.has(`${key}.md`) ||
-			agent.status === "gone" ||
-			now - st.mtimeMs >= OMP_QUIET_MS;
+		const finished =
+			hit.exited || results.has(`${key}.md`) || agent.status === "gone";
+		const done = finished || now - st.mtimeMs >= OMP_QUIET_MS;
 		out.push({
 			key,
 			name: key,
@@ -202,6 +201,7 @@ export async function listOmpSubagents(
 			agentType: null,
 			description: null,
 			state: done ? "done" : "running",
+			waitStatus: finished ? "gone" : done ? "unknown" : "busy",
 			startedAt: hit.startedAt,
 			updatedAt: st.mtimeMs,
 			finishedAt: done ? st.mtimeMs : null,
@@ -324,6 +324,14 @@ export async function listCodexSubagents(
 			agentType: text(t.agentRole, 80),
 			description: text(t.preview, 300),
 			state,
+			waitStatus:
+				agent.status === "gone"
+					? "gone"
+					: status === "active"
+						? "busy"
+						: status === "idle"
+							? "idle"
+							: "unknown",
 			startedAt: ms(t.createdAt),
 			updatedAt,
 			finishedAt: state === "done" ? updatedAt : null,
@@ -429,6 +437,16 @@ export async function listOpencodeSubagents(
 			agentType: text(s.agent, 80),
 			description: null,
 			state,
+			waitStatus:
+				agent.status === "gone"
+					? "gone"
+					: !active || typeof active !== "object" || Array.isArray(active)
+						? "unknown"
+						: !Object.hasOwn(active, s.id)
+							? "idle"
+							: active[s.id]?.type === "running"
+								? "busy"
+								: "unknown",
 			startedAt: ms(s.time?.created),
 			updatedAt,
 			finishedAt: state === "done" ? updatedAt : null,
