@@ -1,10 +1,10 @@
 import { lstat, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { freshProcessSnapshot, processStart } from "../processes.ts";
 import { toolAction } from "../transcripts/activity.ts";
 import type { TranscriptEvent, TranscriptPage } from "../transcripts/types.ts";
+import { antigravityChildSupport } from "./antigravity-children.ts";
 import {
 	ANTIGRAVITY_SESSION_ID,
 	antigravityConversations,
@@ -13,8 +13,12 @@ import {
 	nativeAntigravityProcess,
 } from "./antigravity-ident.ts";
 import { fields, message, utf8 } from "./antigravity-proto.ts";
-import { antigravitySummaries } from "./antigravity-status.ts";
+import {
+	antigravitySummaries,
+	savedAntigravitySummary,
+} from "./antigravity-status.ts";
 import { antigravityStepEvents } from "./antigravity-steps.ts";
+import { antigravityModel } from "./antigravity-usage.ts";
 import type { HarnessDriver } from "./types.ts";
 
 const PAGE_SIZE = 100;
@@ -131,28 +135,6 @@ export function antigravitySource(path: string, sessionId: string) {
 	};
 }
 
-function savedWorkspace(uris: unknown): string | null {
-	if (typeof uris !== "string") return null;
-	try {
-		const values: unknown = JSON.parse(uris);
-		if (Array.isArray(values)) {
-			for (const value of values) {
-				if (typeof value !== "string") continue;
-				try {
-					const url = new URL(value);
-					if (url.protocol === "file:" && !url.hostname)
-						return fileURLToPath(url);
-				} catch {
-					// Another workspace in the list can still identify the local project.
-				}
-			}
-		}
-	} catch {
-		// Some older summaries do not have a workspace list.
-	}
-	return null;
-}
-
 export async function readAntigravitySession(
 	sessionId: string,
 	directory = antigravityConversations(),
@@ -178,41 +160,23 @@ export async function readAntigravitySession(
 	} finally {
 		db?.close();
 	}
-	let summaries: InstanceType<typeof DatabaseSync> | undefined;
-	try {
-		summaries = new DatabaseSync(
-			join(dirname(directory), "conversation_summaries.db"),
-			{ readOnly: true },
-		);
-		const summary = summaries
-			.prepare(
-				"SELECT workspace_uris, title, last_modified_time FROM conversation_summaries WHERE conversation_id = ?",
-			)
-			.get(sessionId);
-		if (summary) {
-			const name =
-				typeof summary.title === "string" ? summary.title.trim() : "";
-			const time =
-				typeof summary.last_modified_time === "string"
-					? Date.parse(summary.last_modified_time)
-					: NaN;
-			return {
-				cwd: savedWorkspace(summary.workspace_uris),
-				...(name ? { name } : {}),
-				lastSeen: Number.isFinite(time) ? time : info.mtimeMs,
-			};
-		}
-	} catch {
-		// The conversation database can outlive its summary.
-	} finally {
-		summaries?.close();
-	}
-	return { cwd: null, lastSeen: info.mtimeMs };
+	return {
+		lastSeen: info.mtimeMs,
+		...savedAntigravitySummary(directory, sessionId),
+	};
 }
 
 export const antigravity: HarnessDriver = {
 	...antigravityIdent,
 	readSession: readAntigravitySession,
+	model: ({ sessionId }) => antigravityModel(sessionId),
+	subagents: antigravityChildSupport(
+		antigravityConversations,
+		async (id, path) =>
+			(await readAntigravitySession(id, dirname(path)))
+				? { source: antigravitySource(path, id), parse: () => [] }
+				: null,
+	),
 	async activity({ sessionId }) {
 		if (!sessionId || !ANTIGRAVITY_SESSION_ID.test(sessionId)) return null;
 		const path = join(antigravityConversations(), `${sessionId}.db`);

@@ -1,9 +1,16 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import {
+	ANTIGRAVITY_SESSION_ID,
+	antigravityConversations,
+} from "../harnesses/antigravity-ident.ts";
+import { savedAntigravitySummary } from "../harnesses/antigravity-status.ts";
+import { antigravityUsage } from "../harnesses/antigravity-usage.ts";
 import { usageHarnesses } from "../harnesses/catalog.ts";
 import type { LimitState } from "../http/wire.ts";
 import { lazyCrypto } from "../lazy.ts";
 import type { Store } from "../store.ts";
+import { replaceAntigravityUsage } from "./antigravity.ts";
 import {
 	askOpencodeUsage,
 	claudeStatePath,
@@ -34,6 +41,8 @@ import { usageSources } from "./sources.ts";
  * the two limit sources that are not session files (src/usage/limit-sources.ts).
  */
 export type UsageRoots = Record<UsageHarness, string | null> & {
+	/** Antigravity stores each conversation in a WAL-backed SQLite DB. */
+	antigravity?: string | null;
 	/** Claude Code's `.claude.json` (its cached `/usage` answer). */
 	claudeState: string | null;
 	/** OpenCode's database (OpenCode Go hard stops). */
@@ -48,6 +57,7 @@ export function defaultRoots(): UsageRoots {
 		...(Object.fromEntries(
 			usageHarnesses.map((h) => [h, usageSources[h].root()]),
 		) as Record<UsageHarness, string>),
+		antigravity: antigravityConversations(),
 		claudeState: claudeStatePath(),
 		opencodeDb: opencodeDbPath(),
 		opencodeUsage: askOpencodeUsage,
@@ -194,6 +204,8 @@ export class UsageScanner {
 			if (k && k.size === f.size && k.mtime === f.mtime) continue;
 			await this.readFile(f, k, since);
 		}
+		if (roots.antigravity)
+			await this.readAntigravity(roots.antigravity, known, since);
 		await this.readOtherLimits(roots, now);
 		this.prune(now);
 		this.scannedAt = Date.now();
@@ -537,6 +549,49 @@ ON CONFLICT (hour, harness, model, project, session) DO UPDATE SET
 		}
 	}
 
+	private async readAntigravity(
+		directory: string,
+		known: Map<string, FileRow>,
+		since: number,
+	) {
+		for (const file of await dir(directory)) {
+			if (!file.isFile() || !file.name.endsWith(".db")) continue;
+			const session = file.name.slice(0, -3);
+			if (!ANTIGRAVITY_SESSION_ID.test(session)) continue;
+			const path = join(directory, file.name);
+			const [db, wal] = await Promise.all([
+				stat(path).catch(() => null),
+				stat(`${path}-wal`).catch(() => null),
+			]);
+			if (!db) continue;
+			const mtime = Math.max(db.mtimeMs, wal?.mtimeMs ?? 0);
+			const size = db.size + (wal?.size ?? 0);
+			const prior = known.get(path);
+			if (
+				mtime < since ||
+				(prior?.offset === -1 && prior.mtime === mtime && prior.size === size)
+			)
+				continue;
+			let result: Awaited<ReturnType<typeof antigravityUsage>>;
+			try {
+				result = await antigravityUsage(path, session);
+			} catch {
+				continue;
+			} // A native DB can disappear or rotate during discovery.
+			if (!result) continue;
+			result.state.cwd =
+				savedAntigravitySummary(directory, session).cwd ?? undefined;
+			replaceAntigravityUsage(
+				this.store,
+				{ path, session, mtime, size },
+				result.records.filter((r) => r.t >= since),
+				result.state,
+			);
+			this.stored++;
+			this.onCommit?.();
+		}
+	}
+
 	/** Rows, seen ids and the file's offset, together. */
 	private commit(
 		f: Found,
@@ -635,6 +690,7 @@ ON CONFLICT (path) DO UPDATE SET
 		const db = this.store.db;
 		db.prepare("DELETE FROM usage_hourly WHERE hour < ?").run(before);
 		db.prepare("DELETE FROM usage_seen WHERE at < ?").run(before);
+		db.prepare("DELETE FROM usage_native_responses WHERE at < ?").run(before);
 		db.prepare("DELETE FROM usage_files WHERE mtime < ?").run(before);
 	}
 }

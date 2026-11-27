@@ -62,6 +62,12 @@ export interface FoundSubagent {
 	sessionId: string | null;
 	/** Its own log file, when it has one (Claude, omp). */
 	file: string | null;
+	/** This driver verified whether a child transcript artifact exists. */
+	fileAvailable?: boolean;
+	/** Working directory explicitly reported for this child. */
+	cwd?: string | null;
+	/** Managed ACP negotiated cancellation for this child on the parent connection. */
+	acpCancel?: boolean;
 	/** This specific child exposes a verified addressed delivery path. */
 	direct?: boolean;
 }
@@ -204,6 +210,7 @@ export type HarnessIdent = Pick<
 	| "label"
 	| "matchProcess"
 	| "identify"
+	| "onSessionReady"
 	| "lateSession"
 	| "currentSession"
 	| "toolSessions"
@@ -223,6 +230,9 @@ export interface HarnessDriver {
 	 * processes.
 	 */
 	matchProcess(args: string): boolean;
+
+	/** Connect any native delivery channel supplied by the harness to its client process. */
+	onSessionReady?(registration: Registration): Promise<void>;
 
 	/** What the MCP server (or CLI) learns about its session at start. */
 	identify?(ctx: IdentifyContext): Promise<Identity>;

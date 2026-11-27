@@ -141,6 +141,7 @@ div.ds-job-result,
 	transform: rotate(90deg);
 }
 .ds-job-result pre {
+	max-inline-size: var(--ds-code-measure);
 	margin: 4px 0;
 	padding: 8px;
 	max-height: 18rem;

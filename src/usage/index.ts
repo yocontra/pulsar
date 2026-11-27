@@ -48,7 +48,7 @@ const PERIOD_MS: Record<UsagePeriod, number> = {
 /** The `meta` key holding the operator's price edits. */
 const PRICES_KEY = "usage.prices";
 /** Harnesses whose session files are read (agents of others have no usage). */
-const USAGE_HARNESSES = new Set(["claude", "codex", "pi", "omp"]);
+const USAGE_HARNESSES = new Set([...Object.keys(usageSources), "antigravity"]);
 
 /** One machine's usage, unpriced: what a peer sends (`act: usage.rows`). */
 export interface LocalUsage {
@@ -416,7 +416,7 @@ FROM usage_hourly WHERE harness = ? AND session = ? GROUP BY model`,
 		const file = this.store.db
 			.prepare(
 				`SELECT model, context_used, context_window FROM usage_files
-WHERE harness = ? AND session = ? AND context_used IS NOT NULL
+WHERE harness = ? AND session = ? AND (context_used IS NOT NULL OR (harness = 'antigravity' AND model IS NOT NULL))
 ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 			)
 			.get(harness, sessionId, sessionId) as Row | undefined;
@@ -431,12 +431,13 @@ ORDER BY (path LIKE '%' || ? || '.jsonl') DESC, last_at DESC LIMIT 1`,
 				: {}),
 			tokens: models.reduce<UsageTokens>(addTokens, ZERO),
 			models,
-			context: file
-				? {
-						used: Number(file.context_used) || 0,
-						window: Number(file.context_window) || null,
-					}
-				: null,
+			context:
+				file && file.context_used != null
+					? {
+							used: Number(file.context_used) || 0,
+							window: Number(file.context_window) || null,
+						}
+					: null,
 			model: file?.model ? String(file.model) : null,
 			limits: this.limits.forHarness(agent.harness),
 			...acpFields,

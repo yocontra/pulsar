@@ -378,6 +378,18 @@ CREATE TABLE IF NOT EXISTS search_state (
 				"CREATE TABLE IF NOT EXISTS session_history (id TEXT PRIMARY KEY, binding TEXT NOT NULL)",
 			),
 	},
+	{
+		ensure: (db) =>
+			db.exec(`
+CREATE TABLE IF NOT EXISTS usage_native_responses (
+	session TEXT NOT NULL, response TEXT NOT NULL, at INTEGER NOT NULL,
+	model TEXT NOT NULL, input INTEGER NOT NULL, cache_read INTEGER NOT NULL,
+	cache_write INTEGER NOT NULL, output INTEGER NOT NULL,
+	PRIMARY KEY(session,response)
+);
+CREATE INDEX IF NOT EXISTS usage_native_owner ON usage_native_responses(response,at,session);
+`),
+	},
 ];
 
 /** The schema version this pulsar writes. */
