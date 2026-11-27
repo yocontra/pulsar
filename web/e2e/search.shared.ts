@@ -85,7 +85,9 @@ export function searchSuite(platform: "desktop" | "phone") {
 				.filter({ hasText: "Saved auth investigation" })
 				.click();
 		}
-		await expect(page).toHaveURL(new RegExp(encodeURIComponent(id) + "$"));
+		await expect
+			.poll(() => decodeURIComponent(new URL(page.url()).hash))
+			.toBe(`#/a/${id}`);
 	});
 
 	test(`a message hit opens its session at the match with the find bar (${platform})`, async ({

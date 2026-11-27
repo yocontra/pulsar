@@ -38,6 +38,8 @@ The sidebar (the Agents tab on a phone) lists every agent as a tree: machines, t
 
 ## A session
 
+In a managed ACP session, type `/model ` or `/effort ` to see the choices offered by that provider. Select a value, then send the command. A busy provider may require the current turn to finish first.
+
 Open an agent to watch its session live: your prompts, its replies and thinking (collapsed), tool calls as one line each (Edit and Write expand to a diff), code with highlighting, math, Mermaid diagrams, tables and images. Older events load with "Load earlier". Agent text is shown as text: raw HTML, scripts and remote images never run or load. Web links open in a new tab. A link to a file path (`/Users/…/report.html`, `./src/a.ts`, `file://…`) is not a web page: click it to open the file in Changes when the agent changed it, or to copy the path.
 
 A turn that edited files ends with "Changed 3 files +42 −7". Open it to list the files with their lines added and removed; click a file for its diff, or **Show all diffs** for the whole turn. It is built from the turn's edit tool calls (subagents' edits included), not from git, and shows once the turn ends.
@@ -235,6 +237,8 @@ Each machine checks for itself. An action on an agent on another machine asks fo
 Cmd-Shift-B (or Broadcast… on a phone) opens the builder. Pick values in the facets (machine, project, harness, model, branch, status, PR, role, tags) or type a selector; the match count and a preview update live, and each preview row says whether the message will wake the agent. **Dry run** shows who would get it, per machine. Sends to many agents ask you to confirm, and sending to everyone (`*`) asks you to type the count. Results stream in with receipts and replies.
 
 ## Search messages
+
+To reopen a closed conversation, search for its session name, project, or harness. Choose it under **Saved conversations on this machine**. This uses saved session metadata and also works when transcript text indexing is off.
 
 Cmd-K searches what you and your agents wrote, on every machine: type a word of 3 letters or more and matching messages show under **In messages**, each with the agent, a snippet ("You:" for your own words, "Agent:" for the agent's) and when it was written. On a phone, type in the search field on the Agents tab: it filters the list, and matching messages show under it in **In messages**; **See all** opens them on a page of their own. Choosing a message opens its session at that message, with the find bar open.
 
