@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 import type { SessionUpdate } from "@agentclientprotocol/sdk";
 import type { TranscriptEvent, TranscriptTodo } from "../transcripts/types.ts";
 
-type PlanUpdate = Extract<
+export type AcpPlanUpdate = Extract<
 	SessionUpdate,
 	{ sessionUpdate: "plan" | "plan_update" | "plan_removed" }
 >;
 
-export function isPlanUpdate(update: SessionUpdate): update is PlanUpdate {
+export function isPlanUpdate(update: SessionUpdate): update is AcpPlanUpdate {
 	return (
 		update.sessionUpdate === "plan" ||
 		update.sessionUpdate === "plan_update" ||
@@ -15,14 +15,19 @@ export function isPlanUpdate(update: SessionUpdate): update is PlanUpdate {
 	);
 }
 
-export function acpPlanEvent(
-	sessionId: string,
-	update: PlanUpdate,
-): Omit<TranscriptEvent, "ts"> {
+export function planKey(sessionId: string, update: AcpPlanUpdate): string {
 	const plan = update.sessionUpdate === "plan_update" ? update.plan : update;
-	const id = createHash("sha256")
+	return createHash("sha256")
 		.update(JSON.stringify([sessionId, "planId" in plan ? plan.planId : null]))
 		.digest("hex");
+}
+
+export function acpPlanEvent(
+	sessionId: string,
+	update: AcpPlanUpdate,
+): Omit<TranscriptEvent, "ts"> {
+	const plan = update.sessionUpdate === "plan_update" ? update.plan : update;
+	const id = planKey(sessionId, update);
 	const event = {
 		id: `acp:plan:${id}`,
 		role: "assistant",
@@ -77,7 +82,7 @@ export function acpPlanEvent(
 export class AcpPlans {
 	private readonly latest = new Map<string, string>();
 
-	apply(sessionId: string, update: PlanUpdate) {
+	apply(sessionId: string, update: AcpPlanUpdate) {
 		const event = acpPlanEvent(sessionId, update);
 		const digest = createHash("sha256")
 			.update(JSON.stringify(event))

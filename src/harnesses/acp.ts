@@ -46,7 +46,8 @@ import { AcpCommandCatalog } from "./acp-commands.ts";
 import { type AcpSelectorCommand, AcpSessionControls } from "./acp-controls.ts";
 import { ACP_IDENTITY_ENV } from "./acp-identity.ts";
 import { permissionArguments } from "./acp-permission.ts";
-import { AcpPlans, isPlanUpdate } from "./acp-plan.ts";
+import { AcpPlans, isPlanUpdate, planKey } from "./acp-plan.ts";
+import { acpPrompt } from "./acp-prompt.ts";
 import { antigravityQuestion, elicitationQuestions } from "./acp-questions.ts";
 import { compactionEvent, conversationTitle } from "./acp-session-info.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
@@ -138,12 +139,14 @@ class Bridge {
 	private readonly setupUpdates: Array<{
 		sessionId: string;
 		update: SessionUpdate;
+		plan?: { key: string; bytes: number };
 	}> = [];
 	// Provider replay and session metadata arrive on the same stream. Keep
 	// separate limits so a long transcript cannot displace the controls.
 	private readonly setupBudget = {
 		history: { count: 0, bytes: 0 },
 		metadata: { count: 0, bytes: 0 },
+		plans: { count: 0, bytes: 0 },
 	};
 	private switchingConfig = false;
 	private usageObserved = false;
@@ -996,6 +999,7 @@ class Bridge {
 
 	private bufferSetupUpdate(sessionId: string, update: SessionUpdate) {
 		let budget = this.setupBudget.history;
+		let key: string | undefined;
 		switch (update.sessionUpdate) {
 			case "available_commands_update":
 			case "config_option_update":
@@ -1015,7 +1019,19 @@ class Bridge {
 				break;
 			case "plan":
 			case "plan_update":
-			case "plan_removed":
+			case "plan_removed": {
+				budget = this.setupBudget.plans;
+				key = planKey(sessionId, update);
+				const index = this.setupUpdates.findIndex(
+					(item) => item.plan?.key === key,
+				);
+				if (index >= 0) {
+					budget.count--;
+					budget.bytes -= this.setupUpdates[index]!.plan!.bytes;
+					this.setupUpdates.splice(index, 1);
+				}
+				break;
+			}
 			case "notice":
 			case "compaction_update":
 			case "subagent_update":
@@ -1030,7 +1046,11 @@ class Bridge {
 		if (budget.bytes + bytes > MAX_SETUP_NOTIFICATION_BYTES) return;
 		budget.count++;
 		budget.bytes += bytes;
-		this.setupUpdates.push({ sessionId, update });
+		this.setupUpdates.push({
+			sessionId,
+			update,
+			...(key && { plan: { key, bytes } }),
+		});
 	}
 
 	private applySetupUpdates(sessionId: string) {

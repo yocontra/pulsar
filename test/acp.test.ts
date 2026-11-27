@@ -1036,6 +1036,14 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 					"Early conversation title",
 				);
 				await until(async () => (await usage()).context?.used === 511);
+				const loaded = await op.call<TranscriptPageResult>("transcript.read", {
+					agent: agentId,
+				});
+				expect(
+					loaded.events
+						.filter((event) => event.text.startsWith("Loaded plan revision"))
+						.map((event) => event.text),
+				).toEqual(["Loaded plan revision 200"]);
 			}
 			if (mode === "resume") {
 				await until(async () => (await current())?.model === "fixture-plan");

@@ -213,6 +213,15 @@ for await (const line of lines) {
 								sessionUpdate: "agent_message_chunk",
 								content: { type: "text", text: "Previously recorded" },
 							});
+						for (let i = 0; i <= 200; i++)
+							emitUpdate(sessionId, {
+								sessionUpdate: "plan_update",
+								plan: {
+									type: "markdown",
+									planId: "restore",
+									content: `Loaded plan revision ${i}`,
+								},
+							});
 						emitUpdate(sessionId, {
 							sessionUpdate: "usage_update",
 							used: 511,

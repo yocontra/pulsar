@@ -15,6 +15,43 @@ import { agentId, expect, test } from "./fixtures.ts";
 export function blocksSuite(platform: "desktop" | "phone") {
 	const shots = process.env.PULSAR_BLOCK_SHOTS;
 
+	test("a provider plan renders its checklist and clears removed steps", async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=omp@apparish");
+		const event = { role: "assistant", kind: "text", ts: Date.now() };
+		await page.route("**/transcript", (route) =>
+			route.fulfill({
+				json: {
+					available: true,
+					cursor: null,
+					events: [
+						{ ...event, id: "plan-cleared", text: "", checklist: [] },
+						{
+							...event,
+							id: "plan-current",
+							text: "Provider plan",
+							checklist: [
+								{
+									text: "Compare invoices",
+									status: "active",
+									priority: "high",
+								},
+								{ text: "Read the ledger", status: "done", priority: "low" },
+							],
+						},
+					],
+				},
+			}),
+		);
+		await page.goto(`/#/a/${encodeURIComponent(id)}`);
+		const list = page.locator('[data-ev-id="plan-current"] .ds-todos');
+		await expect(list.locator("li.t-active")).toHaveText("Compare invoices");
+		await expect(list.locator("li.t-done")).toHaveText("Read the ledger");
+		await expect(page.locator('[data-ev-id="plan-cleared"]')).toHaveCount(0);
+	});
+
 	/** Opens every closed card and waits for the lazy bodies. */
 	async function openAll(page: Page) {
 		const conv = page.locator(".ds-conv").first();
