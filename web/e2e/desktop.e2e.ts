@@ -111,10 +111,13 @@ test.describe("desktop", () => {
 		);
 		// Assistant turns have a Copy button that shows on hover, and the
 		// right-click menu offers the same.
-		// New turns keep streaming in (every 700 ms in the mock) and the view
-		// follows them, so the newest turn can change, or scroll out from
-		// under a mouse that hasn't moved: hover again on each check.
-		const turn = page.locator(".ds-turn--assistant").last();
+		// A tool-only turn has nothing to copy. Keep the same text-bearing turn
+		// selected as new events arrive and the transcript follows them.
+		const messageId = await page
+			.locator(".ds-turn--assistant:has(.ds-parts p)")
+			.last()
+			.getAttribute("data-msg-id");
+		const turn = page.locator(`[data-msg-id=${JSON.stringify(messageId)}]`);
 		const copy = turn.getByRole("button", { name: "Copy message" });
 		await expect(copy).toBeAttached();
 		await expect
