@@ -32,6 +32,7 @@ import type {
 import { agentIdOf, type Caller, OPERATOR_ID } from "./caller.ts";
 import type { EventBus } from "./events.ts";
 import { LIMITS } from "./limits.ts";
+import { NativeHookProofs } from "./native-hook-proofs.ts";
 import {
 	isAddress,
 	isLocalSubagentId,
@@ -106,7 +107,7 @@ export class Registry {
 	private readonly sessions: Sessions;
 	private readonly events: EventBus;
 	private readonly waiters: Waiters;
-	private readonly nativeHooks = new WeakSet<Agent>();
+	private readonly nativeHooks: NativeHookProofs;
 	private readonly activity = new WeakMap<
 		Agent,
 		{ label: string; resumeKey: string | undefined }
@@ -122,6 +123,7 @@ export class Registry {
 	onSessionClosed?: (agent: Agent) => void;
 	/** Set by the service: an agent is new to this daemon or back from gone. */
 	onBack?: (agent: Agent) => void;
+	onNativeHookChange?: (agent: Agent) => void;
 	/** The rest of the pool (federation); null on a node with no pool links. */
 	pool: PoolView | null = null;
 	/** Remote agents with display names, rebuilt when the pool or local names change. */
@@ -144,6 +146,25 @@ export class Registry {
 		this.sessions = deps.sessions;
 		this.events = deps.events;
 		this.waiters = deps.waiters;
+		this.nativeHooks = new NativeHookProofs(
+			this.store,
+			(apply) => {
+				const agents = this.live().filter(
+					(agent) => agent.harness === "antigravity",
+				);
+				const previous = agents.map((agent) => this.hasNativeHook(agent));
+				apply();
+				for (const [index, agent] of agents.entries()) {
+					if (previous[index] === this.hasNativeHook(agent)) continue;
+					this.events.emit("agent", {
+						action: "update",
+						agent: this.view(agent),
+					});
+					this.onNativeHookChange?.(agent);
+				}
+			},
+			() => this.closed,
+		);
 	}
 
 	get(id: string): Agent | undefined {
@@ -425,18 +446,32 @@ export class Registry {
 		);
 	}
 
-	noteNativeHook(agent: Agent) {
+	refreshNativeHooks() {
+		return this.nativeHooks.refresh();
+	}
+
+	noteNativeHook(agent: Agent, birth: string | null, revision: unknown) {
 		const current = this.get(agent.id);
 		if (
 			!current ||
 			current.pid !== agent.pid ||
 			current.status === "gone" ||
-			current.meta.processStart !== agent.meta.processStart ||
-			this.nativeHooks.has(current)
+			current.meta.processStart !== agent.meta.processStart
 		)
 			return;
-		this.nativeHooks.add(current);
-		this.events.emit("agent", { action: "update", agent: this.view(current) });
+		if (
+			birth &&
+			current.meta.processStart &&
+			birth !== current.meta.processStart
+		)
+			return;
+		const existed = this.nativeHooks.has(current);
+		this.nativeHooks.observe(current, birth, revision);
+		if (!existed)
+			this.events.emit("agent", {
+				action: "update",
+				agent: this.view(current),
+			});
 	}
 
 	wakeRelay(agent: Agent) {
@@ -789,7 +824,7 @@ export class Registry {
 				this.activity.set(agent, fallback);
 			// Hook proof follows the live process and session. Registrations can
 			// report different spellings of its working directory.
-			if (this.nativeHooks.has(existing)) this.nativeHooks.add(agent);
+			this.nativeHooks.transfer(existing, agent);
 		}
 		this.finishTags(agent);
 		agent.reach = this.reachOf(agent);

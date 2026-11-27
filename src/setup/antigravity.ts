@@ -1,13 +1,12 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
+import {
+	antigravityHookCommand,
+	antigravityHookPath,
+	ANTIGRAVITY_HOOK_EVENTS as EVENTS,
+	ANTIGRAVITY_HOOK_GROUP as GROUP,
+	ANTIGRAVITY_HOOK_MARKER as MARKER,
+} from "../harnesses/antigravity-hook-config.ts";
 import type { HarnessDriver } from "../harnesses/types.ts";
 import { updateNamedHook } from "./actions.ts";
-
-const GROUP = "pulsar-native-wake";
-const MARKER = " hook antigravity-session";
-const EVENTS = ["SessionStart", "PreInvocation"];
-const shellQuote = (text: string) =>
-	/^[\w@%+=:,./-]+$/.test(text) ? text : `'${text.replace(/'/g, "'\\''")}'`;
 
 /** Antigravity loads global hooks from config/hooks.json, separate from MCP. */
 export function withAntigravityWake(
@@ -16,10 +15,10 @@ export function withAntigravityWake(
 	return {
 		...setup,
 		plan(ctx) {
-			const file = join(homedir(), ".gemini", "config", "hooks.json");
+			const file = antigravityHookPath();
 			const hook = {
 				type: "command" as const,
-				command: `exec ${shellQuote(ctx.node)} ${shellQuote(ctx.cli)}${MARKER}`,
+				command: antigravityHookCommand(ctx.node, ctx.cli),
 				timeout: 5,
 			};
 			return [

@@ -45,6 +45,7 @@ import {
 } from "../machine.ts";
 import { stateDir } from "../paths.ts";
 import { nativeProvider, type PresenceProvider } from "../presence/native.ts";
+import { processStart } from "../processes.ts";
 import { RpcError } from "../rpc.ts";
 import type { Store } from "../store.ts";
 import type { ResolvedTranscript } from "../transcripts/tailer.ts";
@@ -342,6 +343,9 @@ export class PulsarService {
 			registry: this.registry,
 			events: this.events,
 		});
+		this.registry.onNativeHookChange = (agent) => {
+			void this.subagents.refresh(agent.id);
+		};
 		this.registry.discoveredSubagents = () => this.subagents.addressable();
 		this.registry.discoveredSubagent = (id) => this.subagents.localTarget(id);
 		this.registry.approvalSubagent = (id) => {
@@ -903,6 +907,14 @@ export class PulsarService {
 		this.queue.start();
 		this.lag.start();
 		const jobs = this.jobs;
+		jobs.every(
+			"native-hooks",
+			2_000,
+			() => this.registry.refreshNativeHooks(),
+			{
+				runNow: true,
+			},
+		);
 		if (this.scan) {
 			// Each harness scanner on its own timer, plus one run now.
 			for (const { id, scan } of this.registry.scanners())
@@ -1785,8 +1797,14 @@ export class PulsarService {
 						"forbidden",
 						"Native conversation is no longer active.",
 					);
+				const birth =
+					root === me && typeof p.hookRevision === "string"
+						? await processStart(root.pid, "user")
+						: null;
+				if (birth) await registry.refreshNativeHooks();
+				if (caller.closed.aborted || this.stopped) return { messages: [] };
 				const firstObservation = !registry.hasNativeHook(me);
-				registry.noteNativeHook(me);
+				registry.noteNativeHook(me, birth, p.hookRevision);
 				if (firstObservation) await this.subagents.refresh(root.id);
 				return {
 					messages: this.router.takeForHook(caller, me, p.first === true),

@@ -1,6 +1,7 @@
 import { DaemonClient } from "../client.ts";
 import { startNativeWake } from "../native-wake.ts";
 import { PROTOCOL_VERSION } from "../types.ts";
+import { antigravityHookConfig } from "./antigravity-hook-config.ts";
 import { antigravityBinding } from "./antigravity-wake.ts";
 
 type HookOutput = { injectSteps?: Array<{ userMessage: string }> };
@@ -48,12 +49,14 @@ export async function antigravitySessionHook(
 					? `antigravity:${binding.rootSessionId}/sub:${binding.sessionId}`
 					: `antigravity:${binding.sessionId}`;
 				if (agent.id === expected) {
+					const config = await antigravityHookConfig();
 					({ messages } = await client.call<{ messages: HookMessage[] }>(
 						"native.hook.collect",
 						{
 							pid: binding.pid,
 							sessionId: binding.sessionId,
 							first: start || input.invocationNum === 0,
+							hookRevision: config?.installed ? config.revision : undefined,
 						},
 						1000,
 					));
