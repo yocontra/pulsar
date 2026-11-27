@@ -84,7 +84,7 @@ function replaceText(
 /** The agent's `/` list, loaded once the menu or sheet first needs it. */
 function useCatalog(agent: AgentRow | null, want: boolean) {
 	const agentId = agent?.id;
-	const capabilities = `${agent?.capabilities?.commands}/${agent?.capabilities?.skills}`;
+	const capabilities = `${agent?.capabilities?.commands}/${agent?.capabilities?.skills}/${agent?.model ?? ""}`;
 	const [cat, setCat] = useState<CommandCatalog | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	useEffect(() => {

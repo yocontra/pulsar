@@ -35,7 +35,13 @@ export function catalogFor(
 	};
 	// A starting or reconnecting harness may advertise its commands later.
 	void p.then((c) => {
-		if (!c.runnable || !c.commands.length) forget();
+		// A provider can change the available effort levels when its model changes.
+		if (
+			!c.runnable ||
+			!c.commands.length ||
+			c.commands.some((entry) => entry.argumentChoices?.length)
+		)
+			forget();
 	}, forget);
 	return p;
 }
