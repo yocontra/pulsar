@@ -287,6 +287,29 @@ describe("delivery rules", () => {
 		expect((await waiting).event).toBe("idle");
 	});
 
+	test("an idle wait with multiple matching agents requires a specific target", async () => {
+		const observer = await spawnAgent();
+		const first = await spawnAgent({ harness: "omp" });
+		const second = await spawnAgent({ harness: "codex" });
+		await first.client.call("set_identity", { name: "audit-first" });
+		await second.client.call("set_identity", { name: "audit-second" });
+		await first.client.call("set_status", { status: "idle" });
+		await second.client.call("set_status", { status: "busy" });
+		await expect(
+			observer.client.call("wait", { for: "idle:audit-*" }),
+		).rejects.toThrow("matches 2 agents");
+		const waiting = observer.client.call<{ event: string; agent: PublicAgent }>(
+			"wait",
+			{ for: `idle:${second.agent.id}`, timeoutSeconds: 5 },
+		);
+		await roundTrip(observer.client);
+		await second.client.call("set_status", { status: "idle" });
+		expect(await waiting).toMatchObject({
+			event: "idle",
+			agent: { id: second.agent.id },
+		});
+	});
+
 	test("an idle wait ends when the agent's session ends", async () => {
 		const a = await spawnAgent();
 		const b = await spawnAgent();

@@ -524,7 +524,14 @@ export class Mailbox {
 			kind = "idle";
 			const name = forWhat.slice(5);
 			// Any agent in the pool; a remote one's idle comes from its home node's deltas.
-			const agent = this.registry.resolvePool(name, me)[0];
+			const matches = this.registry.resolvePool(name, me);
+			const exactId = matches.find((candidate) => candidate.id === name);
+			if (!exactId && matches.length > 1)
+				throw new RpcError(
+					"ambiguous",
+					`"${name}" matches ${matches.length} agents. Wait for a specific ID, such as idle:${matches[0]!.id}.`,
+				);
+			const agent = exactId ?? matches[0];
 			if (!agent)
 				throw new RpcError("no_recipients", `no live agent matches "${name}"`);
 			if (agent.status === "idle")
