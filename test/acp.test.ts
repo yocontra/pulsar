@@ -2,9 +2,11 @@ import { expect, test } from "bun:test";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { readdir, readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { Daemon } from "../src/daemon.ts";
 import { cleanFedAgent } from "../src/federation/state.ts";
+import { acpTranscriptPath } from "../src/harnesses/acp-transcript.ts";
 import type { AttachmentUpload, InteractionAnswer } from "../src/http/wire.ts";
 import { SessionHistory } from "../src/service/session-history.ts";
 import type { TranscriptPageResult } from "../src/service/transcripts.ts";
@@ -41,8 +43,14 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		);
 	}
 	let bridge: ReturnType<typeof launch> | undefined;
+	const bridges = new Set<ReturnType<typeof launch>>();
 
-	function launch(resume?: string, mode?: string, settings: string[] = []) {
+	function launch(
+		resume?: string,
+		mode?: string,
+		settings: string[] = [],
+		cwd = workspace,
+	) {
 		const child = spawn(
 			process.execPath,
 			[
@@ -53,7 +61,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				...settings,
 			],
 			{
-				cwd: workspace,
+				cwd,
 				env: {
 					...process.env,
 					HOME: env.home,
@@ -70,8 +78,13 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		child.stderr.on("data", (chunk) => {
 			output += String(chunk);
 		});
-		const exit = new Promise<number | null>((done) => child.once("exit", done));
-		return { child, exit, output: () => output };
+		const exit = new Promise<number | null>((done) =>
+			child.once("close", done),
+		);
+		const entry = { child, exit, output: () => output };
+		bridges.add(entry);
+		void exit.then(() => bridges.delete(entry));
+		return entry;
 	}
 
 	const sessionId = "fixture/acp";
@@ -136,8 +149,26 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 	}
 
 	try {
-		bridge = launch(undefined, "steer");
+		bridge = launch(undefined, "invalid-id");
+		expect(await bridge.exit).toBe(1);
+		expect(bridge.output()).toContain("ACP returned an invalid session ID");
+
+		const starts = [launch(undefined, "steer"), launch(undefined, "steer")];
+		await until(
+			() => starts.some(({ child }) => child.exitCode !== null),
+			5000,
+		);
+		const rejected = starts.find(({ child }) => child.exitCode !== null)!;
+		expect(await rejected.exit).toBe(1);
+		expect(rejected.output()).toMatch(
+			/already recorded|live in another process/,
+		);
+		bridge = starts.find((entry) => entry !== rejected)!;
 		await session();
+		const duplicate = launch(undefined, "collision-watch");
+		expect(await duplicate.exit).toBe(1);
+		expect(duplicate.output()).toContain("is live in another process");
+		expect(duplicate.output()).not.toContain("Fixture received session/close");
 		expect((await current())?.capabilities?.steer).toBe(true);
 		await until(async () => (await current())?.status === "idle");
 		const sendIdle = (body: string, priority: "normal" | "fyi") =>
@@ -905,6 +936,44 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		expect(await bridge.exit).toBe(0);
 		await until(async () => (await current())?.status !== "idle");
 
+		const archive = join(env.home, "acp");
+		const snapshot = async () =>
+			Promise.all(
+				(await readdir(archive))
+					.sort()
+					.map(
+						async (name) =>
+							[name, await readFile(join(archive, name), "utf8")] as const,
+					),
+			);
+		const original = await snapshot();
+		expect(original.some(([name]) => name.endsWith(".usage.json"))).toBe(true);
+		expect(original.some(([name]) => name.endsWith(".children.json"))).toBe(
+			true,
+		);
+		const anotherWorkspace = join(env.home, "another-project");
+		mkdirSync(anotherWorkspace);
+		for (const cwd of [workspace, anotherWorkspace]) {
+			bridge = launch(undefined, undefined, [], cwd);
+			expect(await bridge.exit).toBe(1);
+			expect(bridge.output()).toContain("Pulsar has already recorded");
+			expect(bridge.output()).toContain("--resume");
+			expect(await snapshot()).toEqual(original);
+			expect((await current())?.status).not.toBe("idle");
+		}
+		const rootTranscript = acpTranscriptPath("antigravity", sessionId);
+		const backup = join(env.home, "saved-transcript");
+		await rename(rootTranscript, backup);
+		try {
+			const sidecars = await snapshot();
+			bridge = launch();
+			expect(await bridge.exit).toBe(1);
+			expect(bridge.output()).toContain("Pulsar has already recorded");
+			expect(await snapshot()).toEqual(sidecars);
+		} finally {
+			await rename(backup, rootTranscript);
+		}
+
 		for (const mode of ["resume", "load"]) {
 			bridge = launch(sessionId, mode);
 			await session();
@@ -964,24 +1033,23 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		expect(daemon.service.sessions.extensionFor(configuredId)).toBeUndefined();
 
 		bridge = launch(undefined, "launch-settings-drift", settings);
+		const driftId = "antigravity:fixture%2Fdrift";
 		await until(
-			() =>
-				bridge?.output().includes("ACP session fixture/configured") === true,
+			() => bridge?.output().includes("ACP session fixture/drift") === true,
 		);
-		const providerPid = daemon.service.registry.get(configuredId)?.pid;
+		const providerPid = daemon.service.registry.get(driftId)?.pid;
 		expect(providerPid).toBeGreaterThan(0);
 		process.kill(providerPid!, "SIGUSR1");
 		await until(
-			() => daemon.service.registry.get(configuredId)?.model === "fixture-base",
+			() => daemon.service.registry.get(driftId)?.model === "fixture-base",
 		);
 		const refused = await op.call<{ message: { id: string } }>("send", {
-			to: configuredId,
+			to: driftId,
 			body: "fixture-first-settings",
 		});
 		await until(
 			() =>
-				daemon.store.receipt(refused.message.id, configuredId)?.state ===
-				"nacked",
+				daemon.store.receipt(refused.message.id, driftId)?.state === "nacked",
 		);
 		expect(bridge.output()).not.toContain("First prompt used");
 		expect(bridge.output()).toContain(
@@ -1016,13 +1084,15 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		);
 		bridge.child.kill("SIGTERM");
 		expect(await bridge.exit).toBe(0);
+		await until(() => !daemon.service.sessions.extensionFor(configuredId));
+		bridge = launch(undefined, "launch-settings", ["--model", "unadvertised"]);
+		expect(await bridge.exit).toBe(1);
+		expect(bridge.output()).toContain("Pulsar has already recorded");
 	} catch (error) {
 		throw new Error(bridge?.output(), { cause: error });
 	} finally {
-		if (bridge && bridge.child.exitCode === null) {
-			bridge.child.kill("SIGTERM");
-			await bridge.exit;
-		}
+		for (const entry of bridges) entry.child.kill("SIGTERM");
+		await Promise.all([...bridges].map((entry) => entry.exit));
 		op.close();
 		await daemon.stop();
 		env.cleanup();

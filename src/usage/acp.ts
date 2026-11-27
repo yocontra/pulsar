@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
-import { acpTranscriptPath } from "../harnesses/acp-transcript.ts";
+import {
+	acpTranscriptPath,
+	acpUsagePath,
+} from "../harnesses/acp-transcript.ts";
 import type { UsageCostSource } from "../http/wire.ts";
 
 interface Session {
@@ -23,10 +26,7 @@ type AcpUsageUpdate = {
 };
 
 function pathOf({ harness, sessionId }: Session) {
-	return acpTranscriptPath(harness, sessionId).replace(
-		/\.jsonl$/,
-		".usage.json",
-	);
+	return acpUsagePath(acpTranscriptPath(harness, sessionId));
 }
 
 function costOf(value: unknown): AcpUsage["cost"] {

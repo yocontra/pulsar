@@ -7,7 +7,9 @@ const loadOnly = ["load", "wrong-load", "process-local-load"].includes(
 	mode ?? "",
 );
 const sessionId = mode?.startsWith("launch-settings")
-	? "fixture/configured"
+	? mode === "launch-settings-drift"
+		? "fixture/drift"
+		: "fixture/configured"
 	: "fixture/acp";
 const childSessionId = "fixture/child";
 const grandchildSessionId = "fixture/grandchild";
@@ -145,6 +147,10 @@ for await (const line of lines) {
 		case "session/new":
 		case "session/resume":
 		case "session/load": {
+			if (mode === "invalid-id") {
+				reply(id, { sessionId: { invalid: true } });
+				break;
+			}
 			if (method !== "session/new" && params.sessionId !== sessionId)
 				throw new Error("Fixture session id mismatch");
 			if (mode === "resume" && method !== "session/resume")
@@ -693,6 +699,8 @@ for await (const line of lines) {
 			if (promptId !== undefined) reply(promptId, { stopReason: "cancelled" });
 			break;
 		case "session/close":
+			if (mode === "collision-watch")
+				process.stderr.write("Fixture received session/close\n");
 			mcp?.kill();
 			reply(id, {});
 			break;

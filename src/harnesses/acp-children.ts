@@ -12,7 +12,11 @@ import type { TranscriptEvent } from "../transcripts/types.ts";
 import type { Agent } from "../types.ts";
 import { compactionEvent, conversationTitle } from "./acp-session-info.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
-import { acpTranscript, acpTranscriptPath } from "./acp-transcript.ts";
+import {
+	acpChildrenIndexPath,
+	acpTranscript,
+	acpTranscriptPath,
+} from "./acp-transcript.ts";
 import type { FoundSubagent, HarnessDriver } from "./types.ts";
 
 const MAX_CHILDREN = 200;
@@ -25,7 +29,7 @@ const hash = (value: string) =>
 const validId = (id: string) =>
 	id.length > 0 && id.length <= 512 && !/\p{Cc}/u.test(id);
 const indexFile = (harness: string, rootId: string) =>
-	`${acpTranscriptPath(harness, rootId)}.children.json`;
+	acpChildrenIndexPath(acpTranscriptPath(harness, rootId));
 const logFile = (harness: string, rootId: string, key: string) =>
 	`${acpTranscriptPath(harness, rootId)}.${key}.jsonl`;
 type Metadata = Omit<FoundSubagent, "file" | "direct"> & {

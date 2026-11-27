@@ -15,6 +15,10 @@ export function acpTranscriptPath(harness: string, sessionId: string): string {
 	return join(stateDir(), "acp", `${key}.jsonl`);
 }
 
+export const acpUsagePath = (path: string) =>
+	path.replace(/\.jsonl$/, ".usage.json");
+export const acpChildrenIndexPath = (path: string) => `${path}.children.json`;
+
 export const acpTranscript: TranscriptSupport<SessionRef> = {
 	needsSession: true,
 	async locate({ harness, sessionId }) {

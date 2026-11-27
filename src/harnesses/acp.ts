@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, openSync, writeSync } from "node:fs";
-import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
@@ -27,13 +27,18 @@ import { gitInfoAsync } from "../git.ts";
 import type { LaunchSettings } from "../http/wire.ts";
 import { ensureDir, stateDir } from "../paths.ts";
 import { parsePush } from "../push-frame.ts";
+import { RpcError } from "../rpc.ts";
 import type {
 	InteractionRequest,
 	InteractionResult,
 } from "../service/approvals.ts";
 import { autoTags, envTags } from "../tags.ts";
 import type { TranscriptEvent } from "../transcripts/types.ts";
-import { PROTOCOL_VERSION, type Registration } from "../types.ts";
+import {
+	PROTOCOL_VERSION,
+	type PublicAgent,
+	type Registration,
+} from "../types.ts";
 import { AcpUsageWriter, loadAcpUsage } from "../usage/acp.ts";
 import { VERSION } from "../version.ts";
 import { AcpChildren, readAcpChildren } from "./acp-children.ts";
@@ -44,7 +49,11 @@ import { permissionArguments } from "./acp-permission.ts";
 import { antigravityQuestion, elicitationQuestions } from "./acp-questions.ts";
 import { compactionEvent, conversationTitle } from "./acp-session-info.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
-import { acpTranscriptPath } from "./acp-transcript.ts";
+import {
+	acpChildrenIndexPath,
+	acpTranscriptPath,
+	acpUsagePath,
+} from "./acp-transcript.ts";
 import { antigravitySkillPrompt } from "./antigravity-commands.ts";
 
 export interface AcpBridgeOptions {
@@ -326,13 +335,14 @@ class Bridge {
 			this.capabilities?.loadSession === true && !processLocalLoad;
 		startup.cancellationSignal.throwIfAborted();
 		let state: LoadSessionResponse | undefined;
+		let sessionId: unknown = requestedId;
 		if (!requestedId) {
 			const opened = await connection.agent.request<NewSessionResponse>(
 				"session/new",
 				session,
 				startup,
 			);
-			this.sessionId = opened.sessionId;
+			sessionId = opened?.sessionId;
 			state = opened;
 		} else {
 			if (!canResume && processLocalLoad)
@@ -348,21 +358,33 @@ class Bridge {
 				{ ...session, sessionId: requestedId },
 				startup,
 			);
-			if (state && "sessionId" in state && state.sessionId !== requestedId)
+			if (
+				state &&
+				typeof state === "object" &&
+				"sessionId" in state &&
+				state.sessionId !== requestedId
+			)
 				throw new Error(
 					`${this.options.harness} returned a different session ID while reopening the conversation`,
 				);
-			this.sessionId = requestedId;
 		}
 		if (
-			!this.sessionId ||
-			this.sessionId.length > 200 ||
+			typeof sessionId !== "string" ||
+			!sessionId ||
+			sessionId.length > 200 ||
 			// The registry escapes "/" as "%2F" in its local agent id.
 			// Do not let an already escaped id alias another provider session.
-			this.sessionId.includes("%2F") ||
-			/\p{Cc}/u.test(this.sessionId)
+			sessionId.includes("%2F") ||
+			/\p{Cc}/u.test(sessionId)
 		)
 			throw new Error("ACP returned an invalid session ID");
+		const path = acpTranscriptPath(this.options.harness, sessionId);
+		if (!requestedId && this.options.settings)
+			await this.checkArchivePaths(
+				[path, acpUsagePath(path), acpChildrenIndexPath(path)],
+				sessionId,
+			);
+		this.sessionId = sessionId;
 
 		this.controls.install(state);
 		await this.configureStartup(
@@ -371,10 +393,13 @@ class Bridge {
 			startup.cancellationSignal,
 		);
 
-		const path = acpTranscriptPath(this.options.harness, this.sessionId);
+		const git = await gitInfoAsync(this.options.cwd, { lane: "user" });
+		this.checkLaunchSettings();
 		await ensureDir(dirname(path));
 		stopSignal.throwIfAborted();
-		this.transcript = openSync(path, "a", 0o600);
+		this.transcript = requestedId
+			? openSync(path, "a", 0o600)
+			: await this.claimTranscript(path, this.sessionId, stopSignal);
 		this.children = new AcpChildren(
 			this.options.harness,
 			this.sessionId,
@@ -383,21 +408,22 @@ class Bridge {
 				this.refreshCapabilities();
 				this.notify("acp.children", {});
 			},
-			await readAcpChildren(this.options.harness, this.sessionId),
+			requestedId
+				? await readAcpChildren(this.options.harness, this.sessionId)
+				: undefined,
 		);
 		const usageSession = {
 			harness: this.options.harness,
 			sessionId: this.sessionId,
 		};
-		const previousUsage = await loadAcpUsage(usageSession);
+		const previousUsage = requestedId ? await loadAcpUsage(usageSession) : null;
 		this.usageObserved = !!(previousUsage?.context || previousUsage?.cost);
 		this.usageWriter = new AcpUsageWriter(usageSession, () => {
 			if (this.usageObserved || this.stopping) return;
 			this.usageObserved = true;
 			this.refreshCapabilities();
 		});
-		const git = await gitInfoAsync(this.options.cwd, { lane: "user" });
-		this.checkLaunchSettings();
+		if (requestedId) this.checkLaunchSettings();
 		this.registration = {
 			harness: this.options.harness,
 			sessionId: this.sessionId,
@@ -434,6 +460,79 @@ class Bridge {
 		void this.commands.refresh().then(() => this.refreshCapabilities());
 		this.drainQueue();
 		return { sessionId: this.sessionId, connection };
+	}
+
+	private async claimTranscript(
+		path: string,
+		sessionId: string,
+		stopSignal: AbortSignal,
+	) {
+		await this.checkArchivePaths(
+			[acpUsagePath(path), acpChildrenIndexPath(path)],
+			sessionId,
+		);
+		stopSignal.throwIfAborted();
+		this.checkLaunchSettings();
+		// The transcript reserves the identity before registration. A failed
+		// registration can have an uncertain outcome, so keep the claim.
+		try {
+			return openSync(path, "ax", 0o600);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			throw await this.reusedSessionId(sessionId);
+		}
+	}
+
+	private async checkArchivePaths(paths: string[], sessionId: string) {
+		for (const path of paths) {
+			try {
+				await lstat(path);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+				throw error;
+			}
+			throw await this.reusedSessionId(sessionId);
+		}
+	}
+
+	private async reusedSessionId(sessionId: string) {
+		// The failed bridge does not own this id and must never send session/close.
+		this.sessionId = undefined;
+		const harness = this.options.harness;
+		const client = new DaemonClient();
+		try {
+			await client.connect(false);
+			await client.call(
+				"hello",
+				{
+					protocol: PROTOCOL_VERSION,
+					registration: { role: "cli" },
+				},
+				1000,
+			);
+			const live = (
+				await client.call<PublicAgent[]>(
+					"list",
+					{ selector: `harness=${harness}` },
+					1000,
+				)
+			).find(
+				(agent) => agent.harness === harness && agent.sessionId === sessionId,
+			);
+			if (live)
+				return new RpcError(
+					"session_claimed",
+					`${live.id} is live in another process; a client may only speak as its own session`,
+				);
+		} catch {
+			// Even without the daemon, an existing archive remains reserved.
+		} finally {
+			client.close();
+		}
+		return new RpcError(
+			"session_claimed",
+			`ACP returned a session ID that Pulsar has already recorded for ${harness}: ${sessionId}. Reopen the saved conversation with --resume if intended.`,
+		);
 	}
 
 	private async configureStartup(
