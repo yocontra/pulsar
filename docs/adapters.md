@@ -40,7 +40,7 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 
 **Don't wake** keeps the message in the inbox across all harnesses. A session can read it through Pulsar.
 
-Pulsar setup installs the Antigravity session hooks. When Antigravity supplies a native host connection, Pulsar connects delivery to the matching conversation automatically. Check its current reach in `pulsar list`. Pulsar reads the native transcript from the conversation database. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
+Pulsar setup installs the Antigravity session hooks. An open CLI session picks them up on its next model call. When Antigravity supplies a native host connection, Pulsar connects delivery to the matching conversation automatically. Check its current reach in `pulsar list`. Pulsar reads the native transcript from the conversation database. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
 
 Native Antigravity child conversations appear under their parent when Antigravity records that relationship. Open a child to read its own transcript, or send a message through its parent. [Antigravity hooks](https://antigravity.google/docs/hooks#antigravity-cli)
 
@@ -74,7 +74,7 @@ Extension host tests verified the steering and follow-up requests for pi and omp
 | Managed ACP adapter | Steering qualification |
 | --- | --- |
 | Claude Agent ACP 0.110.0 | The installed adapter accepted input during a held prompt. A local model fixture received the input in that turn. |
-| Codex ACP 2.12.0 | The installed adapter advertised steering. Live prompt verification requires credentials for the adapter. The bridge tests cover active-turn acknowledgement and fallback when the turn ends. |
+| Codex ACP 2.12.0 | The installed adapter advertised steering. The adapter failed to synchronize managed preferences on the test Mac before a prompt could start. The bridge tests cover active-turn acknowledgement and fallback when the turn ends. |
 | OpenCode 2.2.5 and Antigravity CLI 1.5.16 | Neither advertised ACP steering. Urgent input waits for the next managed prompt. |
 
 ## Prompts in the app
