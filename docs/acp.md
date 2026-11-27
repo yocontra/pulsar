@@ -122,3 +122,18 @@ Snowflake Cortex Code 1.0.73 and Crow CLI 0.1.49 opened managed sessions. MiniMa
 Autohand 0.9.12 requires a different MCP stdio frame format. Harn 0.10.202 and CodeWhale 0.10.4 rejected the Pulsar MCP server during session creation. VTCode 0.96.14 reused a session ID across unrelated workspaces. The built-in catalog omits these versions.
 
 Muse Code 1.4.24 initialized and requested sign-in. Pulsar enables its experimental ACP mode for the provider process. Fast-agent also registered with Pulsar and started its MCP server with `FAST_AGENT_MODEL=codexplan`.
+
+
+### Other providers in the Paseo catalog
+
+These checks used temporary workspaces on macOS. [Paseo catalog comparison](paseo-comparison.md)
+
+| Provider tested | Result |
+| --- | --- |
+| Agoragentic 1.3.6 | Registered a session but ignored the supplied MCP server and returned a fixed tool-bridge response. |
+| Autohand | The npm adapter 0.2.1 required CLI sign-in. Native 0.9.12 sent a length-prefixed MCP frame and cancelled session creation. |
+| CodeWhale 0.10.4 | Rejected client-supplied MCP servers when opening a session. |
+| Hoplite 3.5.2 | Dropped client-supplied MCP servers. Sign-in remained incomplete. |
+| Minion Code 0.1.45 | Failed to import its ACP dependency. Pinning the SDK to 0.12.1 let a test session register, but the provider did not start the supplied MCP server. |
+| Nova 1.1.59 and 1.1.69 | Node could not resolve the local user record on the test machine. Both builds stopped before ACP initialization. |
+| VTCode 0.96.14 | Reused one session ID for unrelated workspaces. Pulsar refused the second concurrent registration. |
