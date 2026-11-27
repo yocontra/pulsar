@@ -21,6 +21,7 @@ export function antigravityFiles(output: string, directory: string) {
 	const sessions = new Set<string>();
 	const logs = new Set<string>();
 	const presence = new Set<string>();
+	const stores = new Set<string>();
 	const presenceDir = join(dirname(directory), "presence");
 	for (const line of output.split("\n")) {
 		if (line.startsWith("f")) fd = line.slice(1);
@@ -34,6 +35,19 @@ export function antigravityFiles(output: string, directory: string) {
 		)
 			logs.add(path);
 		if (!/^\d+$/.test(fd)) continue;
+		const folder = dirname(path);
+		const store = dirname(folder);
+		// A conversation database or presence lock scopes the process to its native store.
+		if (
+			store.endsWith("/.gemini/antigravity-cli") &&
+			((basename(folder) === "presence" &&
+				path.endsWith(".lock") &&
+				ANTIGRAVITY_SESSION_ID.test(basename(path, ".lock"))) ||
+				(basename(folder) === "conversations" &&
+					path.endsWith(".db") &&
+					ANTIGRAVITY_SESSION_ID.test(basename(path, ".db"))))
+		)
+			stores.add(store);
 		if (dirname(path) === presenceDir && path.endsWith(".lock")) {
 			const id = basename(path, ".lock");
 			if (ANTIGRAVITY_SESSION_ID.test(id)) presence.add(id);
@@ -48,6 +62,9 @@ export function antigravityFiles(output: string, directory: string) {
 		sessions: [...sessions],
 		presence: [...presence],
 		log: logs.size === 1 ? [...logs][0]! : null,
+		...(stores.size === 1 && !stores.has(dirname(directory)) && logs.size === 0
+			? { foreignStore: true }
+			: {}),
 	};
 }
 
@@ -78,10 +95,12 @@ export async function antigravitySession(
 	descriptors: string,
 	directory: string,
 ) {
-	const { cwd, sessions, log, presence } = antigravityFiles(
+	const { cwd, sessions, log, presence, foreignStore } = antigravityFiles(
 		descriptors,
 		directory,
 	);
+	if (foreignStore && !sessions.length && !presence.length)
+		return { cwd, sessionId: null, foreignStore };
 	// The CLI holds the active conversation's lock even when it opens a child's
 	// database or subscribes to that child's updates in the same process.
 	if (presence.length)

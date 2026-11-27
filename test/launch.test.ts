@@ -494,6 +494,31 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 		expect(await code(home.service.launches.start(VERIFIED, params))).toBe(
 			"conflict",
 		);
+		for (const cwd of [project, HOME, null]) {
+			scan.mockReturnValueOnce([
+				{
+					harness: "antigravity",
+					sessionId: "pid:123",
+					pid: 123,
+					cwd,
+					status: "unknown",
+					meta: {},
+				},
+			]);
+			expect(await code(home.service.launches.start(VERIFIED, params))).toBe(
+				"conflict",
+			);
+		}
+		scan.mockReturnValueOnce([
+			{
+				harness: "antigravity",
+				sessionId: "pid:123",
+				pid: 123,
+				cwd: project,
+				status: "unknown",
+				meta: { foreignAntigravityStore: "1" },
+			},
+		]);
 		const s = await home.service.launches.start(VERIFIED, params);
 		await until(() => now(home, s.id).step === "waiting", 5000);
 		expect(resumedArgs.at(-1)).toEqual(["agy", "--conversation", id]);

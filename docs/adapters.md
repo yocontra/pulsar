@@ -167,6 +167,8 @@ A saved conversation shows **Session closed**. Another terminal in the same proj
 
 Disposable terminal tests confirmed the previous conversation and its next model turn in Claude Code 2.1.331, OpenCode 2.2.5, pi 1.5.0 and OMP 19.1.1. On Linux, a passkey-authorized launch confirmed the saved Codex 0.172.0 thread before input and continued it with its original history. Desktop and iPhone-sized Chromium checks also reopened the selected conversation in Claude Code, OpenCode, pi and OMP. Each check included a second saved conversation in the same workspace.
 
+In Antigravity CLI 1.5.18, passkey-authorized Resume opened the exact saved conversation on desktop and iPhone-sized Chromium. Pulsar displayed the saved prompt and reply, and the native CLI's open files confirmed the selected conversation ID. The native terminal did not display the earlier print-mode turns. A second saved conversation in the same workspace stayed closed.
+
 ### Comparison with T3 Code
 
 | Area | What T3 Code does | How Pulsar handles it |

@@ -102,6 +102,40 @@ test("Antigravity uses only its open conversation databases and own CLI log", ()
 	).toBe(second);
 });
 
+test("Antigravity detects an open conversation in a different native store", async () => {
+	const local = "/home/local/.gemini/antigravity-cli";
+	const foreign = "/home/scratch/.gemini/antigravity-cli";
+	const conversations = join(local, "conversations");
+	const foreignLock = `f80\nn${foreign}/presence/${first}.lock`;
+	expect(await antigravitySession(foreignLock, conversations)).toMatchObject({
+		sessionId: null,
+		foreignStore: true,
+	});
+	for (const localEvidence of [
+		`f81\nn${local}/presence/${second}.lock`,
+		`f81\nn${local}/conversations/${second}.db`,
+		`f2\nn${local}/log/cli-20261124_220102.log`,
+		`f81\nn/home/other/.gemini/antigravity-cli/presence/${first}.lock`,
+	]) {
+		expect(
+			(
+				await antigravitySession(
+					`${foreignLock}\n${localEvidence}`,
+					conversations,
+				)
+			).foreignStore,
+		).toBeUndefined();
+	}
+	expect(
+		(
+			await antigravitySession(
+				`f80\nn/work/presence/${first}.lock`,
+				conversations,
+			)
+		).foreignStore,
+	).toBeUndefined();
+});
+
 test("an idle Antigravity session can close its database and keep its own log open", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "pulsar-agy-idle-"));
 	try {

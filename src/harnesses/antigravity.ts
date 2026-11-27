@@ -227,7 +227,7 @@ export const antigravity: HarnessDriver = {
 				: new Map<number, string>();
 			const sessions = await Promise.all(
 				matches.map(async ({ pid }) => {
-					const [{ cwd, sessionId }, birth] = await Promise.all([
+					const [{ cwd, sessionId, foreignStore }, birth] = await Promise.all([
 						antigravityProcess(pid),
 						processStart(pid, "background"),
 					]);
@@ -235,6 +235,7 @@ export const antigravity: HarnessDriver = {
 					if (birth) meta.processStart = birth;
 					const pane = panes.get(pid);
 					if (pane && sessionId) meta.tmux = pane;
+					if (foreignStore) meta.foreignAntigravityStore = "1";
 					return {
 						harness: "antigravity",
 						sessionId: sessionId ?? `pid:${pid}`,

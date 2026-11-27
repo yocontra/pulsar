@@ -544,7 +544,11 @@ export class Launches {
 			if (
 				rows.some(
 					(row) =>
-						row.sessionId.startsWith("pid:") ||
+						(row.sessionId.startsWith("pid:") &&
+							!(
+								harness === "antigravity" &&
+								row.meta.foreignAntigravityStore === "1"
+							)) ||
 						(row.meta.sessionFrom === "folder" && row.cwd === original),
 				)
 			)
