@@ -53,6 +53,23 @@ export const ACP_PROVIDERS = [
 		source: "https://opencode.ai/docs/cli/acp/",
 	},
 	{
+		id: "fx",
+		label: "fx",
+		binary: "fx",
+		args: ["acp"],
+		distribution: "native",
+		source: "https://fx.sh/docs/using-fx/acp",
+	},
+	{
+		id: "hermes",
+		label: "Hermes Agent",
+		binary: "hermes",
+		args: ["acp"],
+		distribution: "native",
+		source:
+			"https://hermes-agent.nousresearch.com/docs/user-guide/features/acp",
+	},
+	{
 		id: "kiro",
 		label: "Kiro CLI",
 		binary: "kiro-cli",

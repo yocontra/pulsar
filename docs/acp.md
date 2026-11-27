@@ -40,6 +40,8 @@ To check a local installation from this checkout, use `bun scripts/live/acp-smok
 | `copilot` | `copilot --acp --stdio` | native | [GitHub Copilot](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) |
 | `omp` | `omp acp` | native | [Oh My Pi](https://github.com/can1357/oh-my-pi/tree/main/packages/coding-agent/src/modes/acp) |
 | `opencode` | `opencode acp` | native | [OpenCode](https://opencode.ai/docs/cli/acp/) |
+| `fx` | `fx acp` | native | [fx](https://fx.sh/docs/using-fx/acp) |
+| `hermes` | `hermes acp` | native | [Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/features/acp) |
 | `kiro` | `kiro-cli acp` | native | [Kiro CLI](https://kiro.dev/docs/cli/acp/) |
 | `cline` | `cline --acp` | native | [Cline](https://github.com/agentclientprotocol/registry/tree/main/cline) |
 | `goose` | `goose acp` | native | [goose](https://github.com/agentclientprotocol/registry/tree/main/goose) |
@@ -77,6 +79,9 @@ The Cursor CLI installer also provides the `cursor-agent` alias. Kiro uses the A
 
 ## Provider verification
 
+fx 0.0.18 and Hermes Agent 0.23.4 each accepted a message from Pulsar, returned a reply from local Qwen2.5-0.5B-Instruct through llama.cpp, and connected to Pulsar’s MCP server. For fx, configure your local model connection before starting the session. For Hermes, install the ACP and MCP extras and configure a model with a context window of at least 64K. The Hermes check used a running `hermes gateway run` in the same profile. [fx local model setup](https://fx.sh/docs/configure-fx/custom-model-connections) · [Hermes ACP setup](https://hermes-agent.nousresearch.com/docs/user-guide/features/acp)
+
+
 Every listed executable initialized over ACP v1 on macOS arm64. In disposable sessions, Pulsar dispatched a slash command and returned a permission denial through five installed providers with a loopback model.
 
 | Provider | Version | Command tested |
@@ -111,6 +116,6 @@ Additional session checks used DeepAgents ACP 0.1.7, Dirac 0.6.2, GLM Agent 1.17
 
 Snowflake Cortex Code 1.0.73 and Crow CLI 0.1.49 opened managed sessions. MiniMax Code ACP 0.7.9 initialized and requested terminal sign-in with `mcode login`.
 
-Autohand 0.9.12 requires a different MCP stdio frame format. Harn 0.10.202 rejected the Pulsar MCP server during session creation. VTCode 0.96.14 reused a session ID across unrelated workspaces. The built-in catalog omits these versions.
+Autohand 0.9.12 requires a different MCP stdio frame format. Harn 0.10.202 and CodeWhale 0.10.4 rejected the Pulsar MCP server during session creation. VTCode 0.96.14 reused a session ID across unrelated workspaces. The built-in catalog omits these versions.
 
 Muse Code 1.4.24 initialized and requested sign-in. Pulsar enables its experimental ACP mode for the provider process. Fast-agent also registered with Pulsar and started its MCP server with `FAST_AGENT_MODEL=codexplan`.
