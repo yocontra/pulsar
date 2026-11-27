@@ -14,7 +14,7 @@ import { clean } from "./protocol.ts";
  * A peer may name only subagents of the agent asked about.
  */
 
-const STATES = new Set<SubagentState>(["running", "idle", "done"]);
+const STATES = new Set<SubagentState>(["running", "idle", "done", "unknown"]);
 const KINDS = new Set<SubagentKind>(["task", "teammate", "thread", "session"]);
 const MAX_ITEMS = 200;
 

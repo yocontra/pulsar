@@ -89,7 +89,7 @@ export interface AgentRow extends PublicAgent {
 }
 
 /** What a subagent is doing: working, waiting between tasks (a teammate), or finished. */
-export type SubagentState = "running" | "idle" | "done";
+export type SubagentState = "running" | "idle" | "done" | "unknown";
 
 /**
  * How a harness runs it: a `task` (Claude's Task/Agent tool, omp's task), a
@@ -150,6 +150,8 @@ export interface SubagentRow {
 	/** Started by another subagent: that one's id. */
 	parentSubId: string | null;
 	hasTranscript: boolean;
+	/** Local stop is available only while the exact child can be cancelled. */
+	canStop?: boolean;
 	messaging: SubagentMessaging;
 }
 

@@ -136,11 +136,13 @@ export const STATE_WORD: Record<SubagentState, string> = {
 	running: "Running",
 	idle: "Idle",
 	done: "Done",
+	unknown: "Unknown",
 };
 
 /** "Running", "Idle 2m" or "Finished 4m ago". */
 export function subagentStateText(sub: SubagentRow, now?: number): string {
 	if (sub.state === "running") return STATE_WORD.running;
+	if (sub.state === "unknown") return STATE_WORD.unknown;
 	const at = sub.finishedAt ?? sub.updatedAt;
 	if (sub.state !== "done") return stateLabel(STATE_WORD[sub.state], at, now);
 	// Never "0s": under a minute it just finished.
