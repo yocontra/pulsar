@@ -318,7 +318,12 @@ class Bridge {
 		const session = { cwd: this.options.cwd, mcpServers: [mcp] };
 		const requestedId = this.options.sessionId;
 		const canResume = this.capabilities?.sessionCapabilities?.resume != null;
-		const canLoad = this.capabilities?.loadSession === true;
+		// This adapter keeps loadable sessions in the current process only.
+		const processLocalLoad =
+			initialized.agentInfo?.name === "deepagents-acp" &&
+			initialized.agentInfo.version === "0.0.1";
+		const canLoad =
+			this.capabilities?.loadSession === true && !processLocalLoad;
 		startup.cancellationSignal.throwIfAborted();
 		let state: LoadSessionResponse | undefined;
 		if (!requestedId) {
@@ -330,6 +335,10 @@ class Bridge {
 			this.sessionId = opened.sessionId;
 			state = opened;
 		} else {
+			if (!canResume && processLocalLoad)
+				throw new Error(
+					"This DeepAgents adapter keeps sessions in memory and cannot reopen them after restart",
+				);
 			if (!canResume && !canLoad)
 				throw new Error(
 					`${this.options.harness} does not advertise ACP session resume or load`,

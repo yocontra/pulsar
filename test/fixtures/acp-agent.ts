@@ -3,6 +3,9 @@ import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 
 const mode = process.env.ACP_FIXTURE_MODE;
+const loadOnly = ["load", "wrong-load", "process-local-load"].includes(
+	mode ?? "",
+);
 const sessionId = mode?.startsWith("launch-settings")
 	? "fixture/configured"
 	: "fixture/acp";
@@ -118,6 +121,9 @@ for await (const line of lines) {
 				throw new Error("Fixture expected exposed subagent support");
 			reply(id, {
 				protocolVersion: 1,
+				...(mode === "process-local-load"
+					? { agentInfo: { name: "deepagents-acp", version: "0.0.1" } }
+					: {}),
 				...(mode === "steer"
 					? {
 							agentInfo: {
@@ -131,11 +137,8 @@ for await (const line of lines) {
 					mode === "unsupported"
 						? {}
 						: {
-								loadSession: mode === "load" || mode === "wrong-load",
-								sessionCapabilities:
-									mode === "load" || mode === "wrong-load"
-										? {}
-										: { resume: {}, close: {} },
+								loadSession: loadOnly,
+								sessionCapabilities: loadOnly ? {} : { resume: {}, close: {} },
 							},
 			});
 			break;

@@ -940,6 +940,9 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			expect(await bridge.exit).toBe(1);
 			expect(bridge.output()).toContain("returned a different session ID");
 		}
+		bridge = launch(sessionId, "process-local-load");
+		expect(await bridge.exit).toBe(1);
+		expect(bridge.output()).toContain("cannot reopen them after restart");
 		bridge = launch(sessionId, "unsupported");
 		expect(await bridge.exit).toBe(1);
 		expect(bridge.output()).toContain(
