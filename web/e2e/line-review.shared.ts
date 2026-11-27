@@ -76,7 +76,7 @@ export async function reviewFileLines(page: Page) {
 	await expect(page).toHaveURL(new RegExp(`${encodeURIComponent(other)}$`));
 	await expect(
 		page.getByRole("textbox", { name: "Message", exact: true }).last(),
-	).toHaveValue(/src\/auth\/refresh\.ts:7 \(File\)/);
+	).toHaveValue(/^From .+\nsrc\/auth\/refresh\.ts:7 \(File\)/);
 }
 
 export async function reviewChildLines(page: Page) {

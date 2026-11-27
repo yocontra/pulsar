@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.ts";
-import { useAgents } from "../data/hooks.ts";
+import { useAgent, useAgents } from "../data/hooks.ts";
 import { keys } from "../data/keys.ts";
 import { queryClient } from "../data/runtime.ts";
 import { addAgentDraftText } from "../lib/composer-draft.ts";
@@ -56,6 +56,7 @@ export function ReviewLines({
 	const [chooseChat, setChooseChat] = useState(false);
 	const [otherId, setOtherId] = useState("");
 	const agents = useAgents({ selector: "", sort: "name", enabled: chooseChat });
+	const sourceAgent = useAgent(chooseChat ? agentId : null).data;
 	const last = first + lines.length - 1;
 	function reviewText() {
 		const lo = Number(start),
@@ -101,9 +102,16 @@ export function ReviewLines({
 					setError("Open the chat again to check where this review will go.");
 					return;
 				}
+				const sourceLocation = sourceAgent
+					? [sourceAgent.name, sourceAgent.machineId, sourceAgent.cwd]
+							.filter(Boolean)
+							.join(" · ")
+					: agentId;
 				const issue = addAgentDraftText(
 					destination || recipient?.id || agentId,
-					quote,
+					destination && destination !== agentId
+						? `From ${sourceLocation}\n${quote}`
+						: quote,
 					recipient ? messagesViaParent(recipient) : false,
 				);
 				if (issue) {
