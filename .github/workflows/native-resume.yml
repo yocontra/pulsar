@@ -1,0 +1,25 @@
+name: Native Codex resume
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - src/harnesses/codex*.ts
+      - src/service/launch.ts
+      - scripts/live/codex-resume.ts
+      - .github/workflows/native-resume.yml
+permissions:
+  contents: read
+
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: bun install --frozen-lockfile
+      - run: npm install --prefix "$RUNNER_TEMP/native" @openai/codex@0.172.0
+      - run: PATH="$RUNNER_TEMP/native/node_modules/.bin:$PATH" bun scripts/live/codex-resume.ts
