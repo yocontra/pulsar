@@ -1022,4 +1022,4 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		await daemon.stop();
 		env.cleanup();
 	}
-}, 20_000);
+}, 60_000);

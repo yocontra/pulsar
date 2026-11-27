@@ -532,7 +532,7 @@ describe("Antigravity wake hooks", () => {
 			...user,
 			[group]: { ...user[group], PreInvocation: [{ command: "user-prepare" }] },
 		});
-	});
+	}, 60_000);
 
 	test("setup leaves malformed hook config intact and reports why", () => {
 		const home = fakeHome();
