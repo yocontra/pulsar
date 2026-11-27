@@ -54,10 +54,16 @@ async function diagramReply(page: Page, request: APIRequestContext) {
 	const turn = page.locator(".ds-turn--assistant", {
 		hasText: "The fixed path:",
 	});
-	for (const kind of KINDS)
+	// Streamdown renders a diagram when its block enters the viewport. Live
+	// turns can move either block above the phone screen before that happens.
+	const blocks = turn.locator('[data-streamdown="mermaid-block"]');
+	for (const [i, kind] of KINDS.entries()) {
+		const block = blocks.nth(i);
+		await block.scrollIntoViewIfNeeded();
 		await expect(
-			turn.locator(`svg[aria-roledescription="${kind}"]`),
+			block.locator(`svg[aria-roledescription="${kind}"]`),
 		).toBeVisible({ timeout: 15_000 });
+	}
 	return turn;
 }
 
