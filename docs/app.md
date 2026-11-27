@@ -69,6 +69,8 @@ Receipts follow each send: handed over, in its conversation, read, replied. Repl
 
 Your own messages need no extra check, as for sending. Another agent's message needs Face ID / Touch ID; on another machine, that machine checks it. For a busy top-level session with steering, these actions stay available while Pulsar holds a **Next turn** message. If the harness already has the message, the actions are disabled. On the phone, the strip starts folded: tap it to see the messages.
 
+Your unsent text, file mentions and completed uploads stay with the recipient when you switch conversations or reload the same browser tab.
+
 **Attach files** with the paperclip (on the phone: Photo Library or Choose Files), by dropping files on the composer, or by pasting an image. A paste of 32 KB of text or more becomes a `.txt` file. Up to 10 files per message: images up to 10 MB, other files up to 25 MB. Each file uploads when you add it, after one Face ID / Touch ID check for the batch. Its tile shows its progress, and Retry if the upload fails. Send waits until every file is uploaded. Pulsar saves the files on the agent's own machine, readable only by your user, and deletes them after 7 days. The message names each file by its path, and the agent opens the files from there. Your message shows the files as chips.
 
 **Mention a file**: type `@` to search the files in the agent's folder (what git tracks, plus new files it doesn't ignore). Use the arrow keys and Enter or Tab to insert `@path`. Mentions show as chips above the field, and Backspace deletes a mention in one step.
@@ -118,6 +120,8 @@ Limits: Codex subagents are listed only while Codex's app-server runs, and a Cod
 - Each file shows its status (M modified, A added, D deleted, R renamed, C copied, T type changed, U conflict, ? untracked) and lines added and removed. Select a file to see its diff, side by side when the panel is wide. **Expand all** shows every file's diff in one scroll; each loads as you reach it. `[` and `]` (or the arrows) step through the files.
 - Binary files and diffs over 512 KB show a note instead. The list shows at most 500 files.
 - It updates as the agent works (after each edit or command, and every few seconds while open) and keeps your place.
+
+To discuss a file, open **Review lines**. In a diff, select a line number on the side you want to quote. Set the first and last lines, then choose **Add to chat**. This adds the path, line range and source to your draft. For a diff, the quote identifies the old or new side. Use **Copy quote** to paste it into another conversation.
 
 The Changes view reads the worktree with git and never writes to it (only the git actions below do, when you ask): it takes no index lock, runs no external diff tools, textconv filters or fsmonitor hooks, shows only files `git status` lists (never ignored ones), and reads a new file only inside the repo and never through a symbolic link (a link shows its target). Diffs show file contents as they are; Pulsar redacts nothing. The same people who can read an agent's transcript can read its changes: you, from the app on any of your machines (the agent's machine reads them), and the agent itself. Tagged devices you allowed get nothing. If you open a saved Changes link for an agent on a machine that lacks Changes support, Pulsar asks you to update that machine.
 
@@ -201,6 +205,8 @@ Pulsar warns you when a limit passes 80% and 95%, and when one is reached: a not
 ## New agent
 
 Start an agent on any machine from the app: the pen button in the sidebar header (on a phone, + on Home), Cmd-Option-N, Cmd-K "New agent", "New agent in…" in Cmd-K or a project's right-click menu. A draft opens where a session would: pick the project and machine in the headline ("Add path…" takes any folder there), then the harness and the workspace under the message box. Harnesses that machine doesn't have are marked "Not found". **New worktree** makes a git worktree next to the repo on a new branch from the base branch you pick. Send says why it can't start yet ("Choose a base branch before creating a worktree.").
+
+For managed ACP sessions, open **First-turn settings** to choose the model and reasoning effort. Leave either field empty to use the provider default. If the provider rejects a setting, Pulsar keeps your first message in the draft.
 
 Starting needs a proven human (another machine asks for its own passkey check). Pulsar starts the harness in a new tmux session on that machine through your login shell, with its normal command and no extra flags, then shows each step: setting up the worktree, starting, waiting for the agent. Your first message goes out once the agent is connected and ready; nothing is typed earlier. If the new terminal asks something first (Claude Code's or Codex's "trust this folder"), the draft shows **Waiting in the terminal**: answer it on that machine (`tmux attach -t pulsar-…`), and the message goes out after that. Once the agent is up, its session replaces the draft, and Stop works on it. If it can't start, the draft says why and keeps your message.
 
