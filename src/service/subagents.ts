@@ -13,8 +13,14 @@ import type { ResolvedTranscript } from "../transcripts/tailer.ts";
 import type { TranscriptEvent } from "../transcripts/types.ts";
 import type { Agent } from "../types.ts";
 import type { Principal } from "./caller.ts";
+import {
+	type ChildStatus,
+	changedChildren,
+	observedAgent,
+} from "./child-status.ts";
 import type { EventBus } from "./events.ts";
 import {
+	isAddress,
 	isLocalSubagentId,
 	isRemote,
 	type PoolView,
@@ -76,6 +82,7 @@ interface Entry {
 	live: number;
 	counts: SubagentCounts | undefined;
 	listedAt: number;
+	statusFresh: boolean;
 	inflight: Promise<void> | null;
 	/** One more listing, asked for while `inflight` ran (it may miss a new file). */
 	again: Promise<void> | null;
@@ -125,6 +132,7 @@ export class Subagents {
 	pool: PoolView | null = null;
 	/** A verified Claude hook can collect mail for this exact child. */
 	hookCanDeliver: (parent: Agent, key: string) => boolean = () => false;
+	onObserved: (child: Agent) => void = () => {};
 	onNativeHookIdle: (child: Agent) => void = () => {};
 	hookIdentity: (child: Agent) => Agent = (child) => child;
 	/** Set by tests: the clock. */
@@ -154,6 +162,7 @@ export class Subagents {
 				live: 0,
 				counts: undefined,
 				listedAt: 0,
+				statusFresh: false,
 				inflight: null,
 				again: null,
 				watchedAt: 0,
@@ -195,16 +204,18 @@ export class Subagents {
 			try {
 				const driver = childDriver(agent)!;
 				let found: FoundSubagent[] = [];
+				let fresh = true;
 				try {
 					found = await driver.subagents!.list(agent);
 				} catch {
+					fresh = false;
 					found = e.found;
 				}
 				if (this.registry.closed) return;
 				const live = (f: FoundSubagent) => (f.state === "done" ? 1 : 0);
 				found.sort((a, b) => live(a) - live(b) || b.startedAt - a.startedAt);
 				found = found.slice(0, MAX_PER_PARENT);
-				this.apply(agent, e, found);
+				this.apply(agent, e, found, fresh);
 			} finally {
 				e.listedAt = this.now();
 				e.inflight = null;
@@ -222,7 +233,7 @@ export class Subagents {
 		);
 	}
 
-	private apply(agent: Agent, e: Entry, found: FoundSubagent[]) {
+	private apply(agent: Agent, e: Entry, found: FoundSubagent[], fresh = true) {
 		if (this.dead(agent))
 			found = found.map((f) =>
 				f.state === "done"
@@ -236,6 +247,8 @@ export class Subagents {
 		const idOf = (key: string) => `${agent.id}${SUB_MARK}${key}`;
 		const keys = new Set(found.map((f) => f.key));
 		const previous = e.direct;
+		const previousStatuses = this.observations(agent.id);
+		e.statusFresh = fresh;
 		e.found = found;
 		e.direct = new Map();
 		e.aliases = new Set();
@@ -329,6 +342,9 @@ export class Subagents {
 		const changed = key !== e.key;
 		e.key = key;
 		e.counts = counts;
+		changedChildren(previousStatuses, this.observations(agent.id), (sub) =>
+			this.onObserved(observedAgent(agent, sub)),
+		);
 		if (changed) this.events.emit("subagents", { agentId: agent.id, counts });
 		if (driver?.subagents?.invocationHook)
 			for (const child of e.direct.values())
@@ -388,6 +404,23 @@ export class Subagents {
 			if (!agent) this.entries.delete(id);
 			else if (e.live > 0 && this.dead(agent)) this.apply(agent, e, e.found);
 		}
+	}
+
+	parentGone(parent: Agent) {
+		const entry = this.entries.get(parent.id);
+		if (entry?.live) this.apply(parent, entry, entry.found);
+	}
+
+	async refreshWaitTarget(name: string, sender: Agent) {
+		// A direct id can be known to the caller before our first scheduled scan.
+		let id: string | undefined;
+		if (!/[=*,]/.test(name) && isLocalSubagentId(name)) id = name;
+		else if (this.entries.size && !isAddress(name)) {
+			const matches = this.registry.resolveWaitTargets(name, sender);
+			if (matches.length === 1 && isLocalSubagentId(matches[0]!.id))
+				id = matches[0]!.id;
+		}
+		if (id) await this.refresh(splitSubagentId(id)!.parentId);
 	}
 
 	/** Someone looks at this parent: keep it current. */
@@ -567,6 +600,49 @@ export class Subagents {
 					: {}),
 			},
 		};
+	}
+
+	private statusRow(row: SubagentRow, fresh: boolean): ChildStatus {
+		const connected = this.registry.connectedSubagent(row.id);
+		return {
+			key: splitSubagentId(row.id)!.key,
+			name: connected?.name ?? row.name,
+			status:
+				row.state === "done"
+					? "gone"
+					: (connected?.status ??
+						(!fresh
+							? "unknown"
+							: row.state === "running"
+								? "busy"
+								: row.state)),
+		};
+	}
+
+	observations(parentId: string): ChildStatus[] {
+		const e = this.entries.get(parentId);
+		return e?.listed.map((row) => this.statusRow(row, e.statusFresh)) ?? [];
+	}
+
+	observedAgent(id: string): Agent | undefined {
+		const parts = splitSubagentId(id);
+		if (!parts) return;
+		const parent = this.registry.get(parts.parentId);
+		const e = this.entries.get(parts.parentId);
+		const row = e?.listed.find((r) => r.id === id);
+		if (parent && e && row)
+			return observedAgent(parent, this.statusRow(row, e.statusFresh));
+	}
+
+	observedAgents(): Agent[] {
+		const out: Agent[] = [];
+		for (const id of this.entries.keys()) {
+			const parent = this.registry.get(id);
+			if (parent && parent.status !== "gone")
+				for (const child of this.observations(id))
+					out.push(observedAgent(parent, child));
+		}
+		return out;
 	}
 
 	/** Native-discovered child addresses, without registering presence or touching disk. */

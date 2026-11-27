@@ -524,7 +524,7 @@ export class Mailbox {
 			kind = "idle";
 			const name = forWhat.slice(5);
 			// Any agent in the pool; a remote one's idle comes from its home node's deltas.
-			const matches = this.registry.resolvePool(name, me);
+			const matches = this.registry.resolveWaitTargets(name, me);
 			const exactId = matches.find((candidate) => candidate.id === name);
 			if (!exactId && matches.length > 1)
 				throw new RpcError(
@@ -534,8 +534,8 @@ export class Mailbox {
 			const agent = exactId ?? matches[0];
 			if (!agent)
 				throw new RpcError("no_recipients", `no live agent matches "${name}"`);
-			if (agent.status === "idle")
-				return Promise.resolve({ event: "idle", agent: toPublic(agent) });
+			if (agent.status === "idle" || agent.status === "gone")
+				return Promise.resolve({ event: agent.status, agent: toPublic(agent) });
 			if (this.registry.view(agent).capabilities?.status === false)
 				throw new RpcError(
 					"unsupported",

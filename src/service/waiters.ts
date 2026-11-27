@@ -1,5 +1,6 @@
 import type { Agent, DeliveredMessage } from "../types.ts";
 import type { Caller } from "./caller.ts";
+import { isLocalSubagentId, splitSubagentId } from "./pool.ts";
 import { toPublic } from "./util.ts";
 
 export type WaitKind = "message" | "idle" | "reply";
@@ -48,6 +49,15 @@ export class Waiters {
 			caller.closed.addEventListener("abort", waiter.onClose, { once: true });
 			this.waiters.add(waiter);
 		});
+	}
+
+	/** Explicit child waits still observe their own parent with background discovery off. */
+	childParents(): Set<string> {
+		const parents = new Set<string>();
+		for (const w of this.waiters)
+			if (w.kind === "idle" && w.target && isLocalSubagentId(w.target))
+				parents.add(splitSubagentId(w.target)!.parentId);
+		return parents;
 	}
 
 	/** Moves waits by or on one agent to another (a session its process left). */

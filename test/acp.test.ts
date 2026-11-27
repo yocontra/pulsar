@@ -760,6 +760,11 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		expect(await op.call("stop", { agent: grandchild.id })).toMatchObject({
 			result: "unsupported",
 		});
+		const childWait = op.call("wait", {
+			for: `idle:${childAgent.id}`,
+			timeoutSeconds: 8,
+		});
+		await until(() => daemon.service.waiters.size > 0);
 		expect(await op.call("stop", { agent: childAgent.id })).toMatchObject({
 			result: "interrupted",
 		});
@@ -770,6 +775,11 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				!childApproval("Fixture child cancellable permission") &&
 				Boolean(bridge?.output().includes("Fixture permission 992 cancelled")),
 		);
+		expect(await childWait).toMatchObject({
+			event: "idle",
+			agent: { id: childAgent.id },
+		});
+		expect((await current())?.status).toBe("busy");
 		const nestedRequest = approvals.pendingFor(grandchild.id)[0]!;
 		expect(nestedRequest).toMatchObject({
 			kind: "question",

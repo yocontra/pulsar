@@ -274,6 +274,30 @@ describe("delivery rules", () => {
 		expect(r.event).toBe("timeout");
 	});
 
+	test("the wait CLI requires an explicit condition and reads the current idle status", async () => {
+		const cli = new URL("../src/cli.ts", import.meta.url).pathname;
+		const target = await spawnAgent();
+		await target.client.call("set_status", { status: "idle" });
+		const run = (...args: string[]) =>
+			Bun.spawn([process.execPath, cli, "wait", ...args], {
+				env: { PULSAR_HOME: home, HOME: home, PATH: process.env.PATH },
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+		const empty = run();
+		expect(await empty.exited).toBe(1);
+		expect(await new Response(empty.stderr).text()).toContain(
+			"usage: pulsar wait",
+		);
+		const result = run(`idle:${target.agent.id}`, "--timeout", "1");
+		const status = await result.exited;
+		expect(await new Response(result.stderr).text()).toBe("");
+		expect(status).toBe(0);
+		expect(await new Response(result.stdout).text()).toContain(
+			`${target.agent.name} is idle.`,
+		);
+	});
+
 	test("idle notice", async () => {
 		const a = await spawnAgent();
 		const b = await spawnAgent();

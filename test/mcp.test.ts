@@ -15,7 +15,9 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Daemon } from "../src/daemon.ts";
-import { restoreEnv, startDaemon } from "./helpers.ts";
+import { claudeSessionDir } from "../src/harnesses/claude-subagents.ts";
+import { restoreEnv, startDaemon, until } from "./helpers.ts";
+import { writeClaudeSub } from "./subagent-fixtures.ts";
 
 const cli = join(import.meta.dir, "..", "src", "cli.ts");
 let daemon: Daemon;
@@ -246,6 +248,39 @@ describe("MCP server", () => {
 			expect(await inbox(to)).toContain("Sibling delivery test");
 		} finally {
 			restoreEnv("CODEX_HOME", previousHome);
+		}
+	});
+
+	test("the MCP wait tool observes an unaddressable child by exact ID before the first scan", async () => {
+		const old = process.env.CLAUDE_CONFIG_DIR;
+		process.env.CLAUDE_CONFIG_DIR = join(home, "child-wait");
+		const sid = "c44d5933-132e-4501-a2a3-55550247bc88";
+		try {
+			const parent = await mcpClient("claude", home, sid);
+			await parent.callTool({ name: "whoami", arguments: {} });
+			const observer = await mcpClient("codex", home, "mcp-child-wait");
+			const parentId = `claude:${sid}`;
+			const childId = `${parentId}/sub:abced1`;
+			const folder = claudeSessionDir(
+				daemon.service.registry.get(parentId)!.cwd,
+				sid,
+			)!;
+			writeClaudeSub(folder, "abced1", { agentType: "MCP worker" });
+			const result = observer.callTool({
+				name: "wait",
+				arguments: { for: `idle:${childId}`, timeout_seconds: 5 },
+			});
+			await until(() => daemon.service.waiters.size === 1);
+			writeClaudeSub(folder, "abced1", {
+				agentType: "MCP worker",
+				finished: true,
+			});
+			await daemon.service.subagents.refresh(parentId);
+			expect(textOf(await result)).toContain(
+				"MCP worker is gone (its session ended).",
+			);
+		} finally {
+			restoreEnv("CLAUDE_CONFIG_DIR", old);
 		}
 	});
 

@@ -1,4 +1,11 @@
-import { agentsText, askText, messageText, receiptsText } from "./format.ts";
+import {
+	agentsText,
+	askText,
+	messageText,
+	receiptsText,
+	type WaitAnswer,
+	waitText,
+} from "./format.ts";
 import type { AskResponse } from "./http/wire.ts";
 import { schema as $, type Tool } from "./mcp-server.ts";
 import { RpcError } from "./rpc.ts";
@@ -23,12 +30,6 @@ export const PULSAR_TOOL_INSTRUCTIONS = `Pulsar connects you to the other AI age
 const RESPOND_STATES = ["working", "reply", "done", "declined"] as const;
 
 type SendResult = { message: Message; receipts: Receipt[] };
-type WaitAnswer = {
-	event: string;
-	message?: DeliveredMessage;
-	agent?: PublicAgent;
-	receipt?: Receipt;
-};
 export type ToolMeta = Record<string, unknown> | undefined;
 
 /** A sender or `to` that is the human operator in the app (`user:<login>`, maybe a peer's). */
@@ -635,23 +636,7 @@ export function registerPulsarTools(
 						{ for: forWhat, timeoutSeconds: timeout },
 						(timeout + 10) * 1000,
 					);
-			if (r.event === "timeout")
-				return text(`Nothing happened within ${timeout}s.`);
-			if (
-				(r.event === "dead" ||
-					r.event === "nacked" ||
-					r.event === "withdrawn") &&
-				r.receipt
-			)
-				return text(`${r.event}:\n${receiptsText([r.receipt])}`);
-			if (r.message) return text(`${r.event}:\n${messageText(r.message)}`);
-			if (r.agent)
-				return text(
-					r.event === "gone"
-						? `${r.agent.name} is gone (its session ended).`
-						: `${r.agent.name} is idle.`,
-				);
-			return text(r.event);
+			return text(waitText(r, timeout));
 		},
 	);
 

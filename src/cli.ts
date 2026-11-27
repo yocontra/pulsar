@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import type { DaemonClient } from "./client.ts";
+import type { WaitAnswer } from "./format.ts";
 import type { AskResponse, StopResult } from "./http/wire.ts";
 import { neutralizeHumanTag } from "./human-tag.ts";
 import type {
@@ -9,7 +10,7 @@ import type {
 	PublicAgent,
 	Receipt,
 } from "./types.ts";
-import { PROTOCOL_VERSION } from "./types.ts";
+import { MAX_BLOCK_SECONDS, PROTOCOL_VERSION } from "./types.ts";
 import { VERSION } from "./version.ts";
 
 const HELP = `Pulsar ${VERSION} — find and message AI agents across every harness on this machine
@@ -26,6 +27,7 @@ Usage:
         [--priority urgent|normal|fyi] [--expect-reply] [--await-reply [--timeout s]]
                                   (--await-reply: wait for the first reply and print it)
   pulsar reply <id> <message...>  answer a message in its thread
+  pulsar wait <idle:agent|reply:id|message> [--timeout s]   wait for one event
   pulsar inbox                    read replies sent to you (operator)
   pulsar tail                     stream agents joining/leaving and every message
   pulsar interrupt <agent>        stop an agent's current turn (its session keeps running)
@@ -287,6 +289,40 @@ async function main(argv: string[]) {
 			const { receiptsText } = await loadFormat();
 			console.log(`Replied with ${r.message.id}:\n${receiptsText(r.receipts)}`);
 			client.close();
+			return;
+		}
+		case "wait": {
+			const { values, positionals } = parseArgs({
+				args: rest,
+				options: { timeout: { type: "string" } },
+				allowPositionals: true,
+			});
+			const [what] = positionals;
+			if (
+				positionals.length !== 1 ||
+				!what ||
+				(what !== "message" && !/^(?:idle|reply):\S/.test(what))
+			)
+				fail("usage: pulsar wait <idle:agent|reply:id|message> [--timeout s]");
+			const timeout = Number(values.timeout ?? 60);
+			if (
+				!Number.isInteger(timeout) ||
+				timeout < 1 ||
+				timeout > MAX_BLOCK_SECONDS
+			)
+				fail(`--timeout is whole seconds, 1 to ${MAX_BLOCK_SECONDS}`);
+			const client = await operatorClient();
+			try {
+				const answer = await client.call<WaitAnswer>(
+					"wait",
+					{ for: what, timeoutSeconds: timeout },
+					(timeout + 10) * 1000,
+				);
+				const { waitText } = await loadFormat();
+				console.log(waitText(answer, timeout));
+			} finally {
+				client.close();
+			}
 			return;
 		}
 		case "inbox": {

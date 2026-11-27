@@ -10,8 +10,17 @@ import type {
 	Wake,
 } from "../http/wire.ts";
 import { cleanRepoUrl } from "../repo-url.ts";
+import {
+	type ChildStatus,
+	changedChildren,
+	observedAgent,
+} from "../service/child-status.ts";
 import { cleanAnswer, cleanPrompt, KINDS } from "../service/interactions.ts";
-import { isLocalSubagentId, type PoolMachine } from "../service/pool.ts";
+import {
+	isLocalSubagentId,
+	type PoolMachine,
+	splitSubagentId,
+} from "../service/pool.ts";
 import { clean as cleanText, clip, SUMMARY_MAX } from "../service/push-copy.ts";
 import type { Agent, AgentStatus, InboundPolicy } from "../types.ts";
 import {
@@ -109,6 +118,7 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 					detail: text(needs.detail, 500),
 				}
 			: null;
+	const children = !id.includes("/") ? childStatuses(a.childStatuses) : [];
 	const repoUrl = cleanRepoUrl(a.repoUrl);
 	const title = conversationTitle(a.conversationTitle);
 	const caps = a.capabilities as Record<string, unknown> | null;
@@ -180,6 +190,7 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 		hasTranscript: a.hasTranscript === true,
 		canStop: a.canStop === true,
 		...subagentCounts(a.subagents),
+		...(children.length ? { childStatuses: children } : {}),
 		approvals: Array.isArray(a.approvals)
 			? a.approvals
 					.slice(0, 50)
@@ -188,6 +199,26 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 			: [],
 		...turnOf(a.turn),
 	};
+}
+
+function childStatuses(raw: unknown): ChildStatus[] {
+	if (!Array.isArray(raw)) return [];
+	const result = new Map<string, ChildStatus>();
+	for (const item of raw.slice(0, 200)) {
+		if (!item || typeof item !== "object") continue;
+		const key = text(item.key, 300);
+		const name = text(item.name, 200);
+		if (
+			key &&
+			key === item.key &&
+			!key.includes("/") &&
+			name &&
+			!result.has(key) &&
+			STATUSES.has(item.status)
+		)
+			result.set(key, { key, name, status: item.status });
+	}
+	return [...result.values()];
 }
 
 /** A shared last turn, checked; dropped when malformed. */
@@ -341,6 +372,7 @@ export class PoolState {
 	private addresses = new Map<string, FedAgent>();
 	onChange: (machineId: string | null) => void = () => {};
 	/** A remote agent finished its turn (busy → idle): `wait idle:` resolves. */
+	onChildStatus: (child: Agent) => void = () => {};
 	onIdle: (address: string) => void = () => {};
 	/** A remote prompt appeared or changed (pool-address ids): SSE and push follow. */
 	onApproval: (approval: Approval) => void = () => {};
@@ -468,6 +500,7 @@ export class PoolState {
 	setLink(peer: Peer, link: Peer["link"]) {
 		if (peer.link === link) return false;
 		peer.link = link;
+		if (link !== "tailnet") peer.bootId = null;
 		peer.linkSince = Date.now();
 		this.bump(peer.machineId);
 		return true;
@@ -475,6 +508,7 @@ export class PoolState {
 
 	/** Replaces a peer's agents with a snapshot. */
 	snapshot(peer: Peer, bootId: string, seq: number, agents: unknown[]) {
+		if (bootId === peer.bootId && seq < peer.seq) return;
 		for (const id of peer.agents.keys())
 			this.addresses.delete(`${peer.machineId}/${id}`);
 		// Compared against the copy held before: prompts still pending don't
@@ -484,7 +518,10 @@ export class PoolState {
 		peer.agents.clear();
 		for (const raw of agents) this.put(peer, raw, before);
 		for (const [id, f] of before)
-			if (!peer.fed.has(id)) this.forgetApprovals(peer.machineId, f);
+			if (!peer.fed.has(id)) {
+				this.forgetApprovals(peer.machineId, f);
+				this.notifyChildren(peer, f);
+			}
 		peer.bootId = bootId;
 		peer.seq = seq;
 		this.bump(peer.machineId);
@@ -503,7 +540,9 @@ export class PoolState {
 		for (const raw of upserts) this.put(peer, raw);
 		for (const id of removes) {
 			if (typeof id !== "string") continue;
-			this.forgetApprovals(peer.machineId, peer.fed.get(id));
+			const removed = peer.fed.get(id);
+			this.forgetApprovals(peer.machineId, removed);
+			if (removed) this.notifyChildren(peer, removed);
 			peer.fed.delete(id);
 			peer.agents.delete(id);
 			this.addresses.delete(`${peer.machineId}/${id}`);
@@ -553,6 +592,39 @@ export class PoolState {
 		peer.fed.set(f.id, f);
 		peer.agents.set(f.id, toAgent(peer, f));
 		this.addresses.set(`${peer.machineId}/${f.id}`, f);
+		if (prev) this.notifyChildren(peer, prev, f);
+	}
+
+	private notifyChildren(peer: Peer, before: FedAgent, after?: FedAgent) {
+		if (!before.childStatuses?.length) return;
+		const parent = toAgent(peer, after ?? before);
+		changedChildren(before.childStatuses, after?.childStatuses ?? [], (child) =>
+			this.onChildStatus(observedAgent(parent, child)),
+		);
+	}
+
+	observedSubagent(address: string): Agent | undefined {
+		const parts = splitSubagentId(address);
+		if (!parts) return;
+		const parent = this.get(parts.parentId);
+		const child = this.fedAgent(parts.parentId)?.childStatuses?.find(
+			(c) => c.key === parts.key,
+		);
+		if (parent && child) return observedAgent(parent, child);
+	}
+
+	observedSubagents(): Agent[] {
+		const children: Agent[] = [];
+		for (const peer of this.peers.values()) {
+			if (peer.link !== "tailnet" || peer.bootId === null) continue;
+			for (const [id, f] of peer.fed) {
+				if (!f.childStatuses?.length) continue;
+				const parent = peer.agents.get(id)!;
+				for (const child of f.childStatuses)
+					children.push(observedAgent(parent, child));
+			}
+		}
+		return children;
 	}
 
 	/** A remote prompt with pool-address ids, the way this node shows it. */

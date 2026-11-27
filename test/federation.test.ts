@@ -15,6 +15,10 @@ import {
 } from "../src/federation/index.ts";
 import { PoolMembers } from "../src/federation/members.ts";
 import { readSse } from "../src/federation/sse.ts";
+import {
+	claudeSessionDir,
+	TEAMMATE_QUIET_MS,
+} from "../src/harnesses/claude-subagents.ts";
 import { driverFor } from "../src/harnesses/index.ts";
 import type { HarnessDriver } from "../src/harnesses/types.ts";
 import type {
@@ -36,6 +40,7 @@ import type { Agent, DeliveredMessage } from "../src/types.ts";
 import { FakeTailnet } from "./fake-tailnet.ts";
 import { cleanupRepos, gitRepo } from "./git-repo.ts";
 import { registration, until } from "./helpers.ts";
+import { writeClaudeSub, writeClaudeTeam } from "./subagent-fixtures.ts";
 import { SoftAuthenticator } from "./webauthn.ts";
 
 setDefaultTimeout(20_000);
@@ -1186,6 +1191,121 @@ describe("pool-wide attention, idle waits and stop", () => {
 		expect(r.event).toBe("idle");
 	});
 
+	test("remote idle waits follow an observed child without creating a delivery route", async () => {
+		const saved = process.env.CLAUDE_CONFIG_DIR;
+		process.env.CLAUDE_CONFIG_DIR = join(c.dir, "wait-claude");
+		const parent = c.service.registry.upsert({
+			harness: "claude",
+			sessionId: "9b20c447-5747-4e95-8721-67c3d2a1b1ec",
+			pid: null,
+			cwd: c.dir,
+			project: "wait-test",
+			branch: null,
+			tags: [],
+			name: "wait-parent",
+			meta: {},
+			registered: true,
+		});
+		const folder = claudeSessionDir(parent.cwd, parent.sessionId)!;
+		const homeId = `${parent.id}/sub:aac001`;
+		const address = `${c.service.machineId}/${homeId}`;
+		const caller = agents.a1!;
+		const waiting = () =>
+			caller.call("wait", { for: `idle:${address}`, timeoutSeconds: 6 });
+		const teammate = {
+			taskKind: "in_process_teammate",
+			name: "wire-wait",
+			teamName: "wait-team",
+		};
+		const publish = async () => {
+			await c.service.subagents.refresh(parent.id);
+			c.fed.feed.tick();
+		};
+		const busy = () =>
+			until(
+				() =>
+					a.service.registry.resolveWaitTargets(address, caller.agent)[0]
+						?.status === "busy",
+			);
+
+		try {
+			writeClaudeTeam(
+				process.env.CLAUDE_CONFIG_DIR!,
+				teammate.teamName,
+				parent.sessionId!,
+				[{ name: teammate.name, joinedAt: 0 }],
+			);
+			writeClaudeSub(folder, "aac001", teammate);
+			writeClaudeSub(folder, "aac002", { agentType: "sibling" });
+			await publish();
+			await busy();
+			expect(a.service.registry.resolvePool(address, caller.agent)).toEqual([]);
+			expect(
+				a.service.registry
+					.resolvePool("*", caller.agent)
+					.some((a) => a.id === address),
+			).toBe(false);
+			const result = waiting();
+			await until(() => a.service.waiters.countFor(caller.caller) === 1);
+			c.service.registry.setStatus(parent, "idle");
+			writeClaudeSub(folder, "aac002", {
+				agentType: "sibling",
+				finished: true,
+			});
+			await publish();
+			await until(
+				() =>
+					a.service.registry.resolveWaitTargets(
+						`${address.slice(0, -1)}2`,
+						caller.agent,
+					)[0]?.status === "gone",
+			);
+			expect(a.service.waiters.countFor(caller.caller)).toBe(1);
+			writeClaudeSub(folder, "aac001", teammate, {
+				mtime: Date.now() - TEAMMATE_QUIET_MS - 1500,
+			});
+			await publish();
+			expect(await result).toMatchObject({
+				event: "idle",
+				agent: { id: address, status: "idle" },
+			});
+			writeClaudeSub(folder, "aac001", teammate);
+			await publish();
+			await busy();
+			const completion = waiting();
+			await until(() => a.service.waiters.countFor(caller.caller) === 1);
+			writeClaudeSub(folder, "aac001", {
+				...teammate,
+				finished: true,
+			});
+			await publish();
+			expect(await completion).toMatchObject({
+				event: "gone",
+				agent: { id: address, status: "gone" },
+			});
+			expect(await waiting()).toMatchObject({ event: "gone" });
+			writeClaudeSub(folder, "aac001", teammate);
+			await publish();
+			await busy();
+			const removed = waiting();
+			await until(() => a.service.waiters.countFor(caller.caller) === 1);
+			rmSync(join(folder, "subagents", "agent-aac001.jsonl"));
+			await publish();
+			expect(await removed).toMatchObject({
+				event: "gone",
+				agent: { id: address },
+			});
+			expect(
+				a.service.registry.resolveWaitTargets(address, caller.agent),
+			).toEqual([]);
+		} finally {
+			if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+			else process.env.CLAUDE_CONFIG_DIR = saved;
+			c.service.registry.markGone(parent);
+			c.fed.feed.tick();
+		}
+	});
+
 	test("B stops an agent on C; C authorizes it as the user", async () => {
 		const address = `${c.service.machineId}/${agents.c1!.agent.id}`;
 		await until(async () => {
@@ -1778,8 +1898,13 @@ describe("security regressions (review F1–F9)", () => {
 				headers: { "x-pulsar-fed": "1" },
 			});
 			const stop = new AbortController();
-			let snap: { agents: { id: string; approvals?: unknown[] }[] } | null =
-				null;
+			let snap: {
+				agents: {
+					id: string;
+					approvals?: unknown[];
+					childStatuses?: unknown[];
+				}[];
+			} | null = null;
 			await readSse(
 				res.body!,
 				(event, data) => {
@@ -1791,11 +1916,28 @@ describe("security regressions (review F1–F9)", () => {
 			).catch(() => {});
 			return snap!.agents.find((x) => x.id === agents.a1!.agent.id)!;
 		};
-		const tagged = await firstSnapshot("ci2");
-		expect(tagged.approvals).toBeUndefined();
-		expect(JSON.stringify(tagged)).not.toContain("id_ed25519");
-		const owner = await firstSnapshot("b");
-		expect(owner.approvals?.length).toBeGreaterThan(0);
+		const observation = {
+			key: "a123",
+			name: "Owner-only child",
+			status: "busy" as const,
+		};
+		const observe = a.service.subagents.observations;
+		a.service.subagents.observations = function (id) {
+			return id === agents.a1!.agent.id
+				? [observation]
+				: observe.call(this, id);
+		};
+		try {
+			const tagged = await firstSnapshot("ci2");
+			expect(tagged.childStatuses).toBeUndefined();
+			expect(tagged.approvals).toBeUndefined();
+			expect(JSON.stringify(tagged)).not.toContain("id_ed25519");
+			const owner = await firstSnapshot("b");
+			expect(owner.childStatuses).toEqual([observation]);
+			expect(owner.approvals?.length).toBeGreaterThan(0);
+		} finally {
+			a.service.subagents.observations = observe;
+		}
 		ac.abort();
 		// It can still message as its own agent.
 		const before = agents.a1!.pushes.length;

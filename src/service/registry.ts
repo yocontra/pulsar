@@ -39,6 +39,7 @@ import {
 	isRemote,
 	type PoolView,
 	splitAddress,
+	splitSubagentId,
 } from "./pool.ts";
 import type { Sessions } from "./sessions.ts";
 import { newId, toPublic } from "./util.ts";
@@ -171,6 +172,9 @@ export class Registry {
 		return this.agents.get(id);
 	}
 
+	/** Child status for waits, independent of delivery or presence. */
+	observedSubagents: () => Agent[] = () => [];
+	observedSubagent: (id: string) => Agent | undefined = () => undefined;
 	/** Set by the service to include native addressed child sessions without adding presence. */
 	discoveredSubagents: () => Agent[] = () => [];
 	discoveredSubagent: (id: string) => Agent | undefined = () => undefined;
@@ -567,12 +571,12 @@ export class Registry {
 				stop: this.canStop(agent),
 				status:
 					active &&
-					!child &&
-					(extension ||
-						agent.status === "busy" ||
+					(agent.status === "busy" ||
 						agent.status === "idle" ||
-						(!!driver?.liveStatus && !!agent.sessionId) ||
-						!!driver?.scan),
+						(!child &&
+							(extension ||
+								(!!driver?.liveStatus && !!agent.sessionId) ||
+								!!driver?.scan))),
 				transcript: acp || !!driver?.transcript,
 				subagents:
 					!child &&
@@ -1422,6 +1426,56 @@ export class Registry {
 		return selector.kind === "name"
 			? this.byName(selector.value, targets, sender)
 			: targets;
+	}
+
+	private freshRemoteStatus(machineId: string) {
+		return (
+			this.pool?.hasFreshStatus?.(machineId) ??
+			this.pool?.machine(machineId)?.link === "tailnet"
+		);
+	}
+
+	resolveWaitTargets(to: string, sender: Agent): Agent[] {
+		const selector = parseSelector(to);
+		if (
+			selector.kind === "name" &&
+			selector.value === to &&
+			!to.endsWith("*") &&
+			splitSubagentId(to)
+		) {
+			const address = splitAddress(to);
+			const remote = address && address.machineId !== this.store.machineId();
+			if (remote && !this.freshRemoteStatus(address.machineId)) return [];
+			const id = remote ? to : (address?.localId ?? to);
+			const child = remote
+				? (this.pool?.observedSubagent?.(id) ?? this.pool?.get(id))
+				: (this.observedSubagent(id) ?? this.discoveredSubagent(id));
+			return child && child.id !== sender.id ? [child] : [];
+		}
+
+		const direct = this.resolvePool(to, sender);
+		const observed = [
+			...this.observedSubagents(),
+			...(this.pool?.observedSubagents?.() ?? []),
+		];
+		const targets = new Map(
+			observed
+				.filter(
+					(a) =>
+						a.id !== sender.id &&
+						(a.status !== "gone" || to === a.id) &&
+						matches(a, selector),
+				)
+				.map((a) => [a.id, a]),
+		);
+		for (const agent of direct)
+			if (!targets.has(agent.id)) targets.set(agent.id, agent);
+		const reachable = [...targets.values()].filter(
+			(a) => !isRemote(a) || this.freshRemoteStatus(a.meta.machineId!),
+		);
+		return selector.kind === "name"
+			? this.byName(selector.value, reachable, sender)
+			: reachable;
 	}
 
 	/**

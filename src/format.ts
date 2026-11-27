@@ -84,3 +84,22 @@ export function askText(r: AskResponse): string {
 		r.total > r.matches.length ? `\n(${r.total - r.matches.length} more)` : "";
 	return `${lines.join("\n")}${more}`;
 }
+
+export type WaitAnswer = {
+	event: string;
+	message?: DeliveredMessage;
+	agent?: PublicAgent;
+	receipt?: Receipt;
+};
+
+export function waitText(r: WaitAnswer, timeout: number): string {
+	if (r.event === "timeout") return `Nothing happened within ${timeout}s.`;
+	if (["dead", "nacked", "withdrawn"].includes(r.event) && r.receipt)
+		return `${r.event}:\n${receiptsText([r.receipt])}`;
+	if (r.message) return `${r.event}:\n${messageText(r.message)}`;
+	if (r.agent)
+		return r.event === "gone"
+			? `${r.agent.name} is gone (its session ended).`
+			: `${r.agent.name} is idle.`;
+	return r.event;
+}

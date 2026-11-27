@@ -10,6 +10,7 @@ import type {
 	UsagePeriod,
 	Wake,
 } from "../http/wire.ts";
+import type { ChildStatus } from "../service/child-status.ts";
 import type { Message, PublicAgent, Receipt, ReceiptState } from "../types.ts";
 
 /**
@@ -123,6 +124,7 @@ export interface FedAgent
 	canStop?: boolean;
 	/** Its subagents, counted, once found (absent from older nodes). */
 	subagents?: SubagentCounts;
+	childStatuses?: ChildStatus[];
 	/**
 	 * Its permission prompts: pending ones, and ones decided in the last
 	 * two minutes (so other nodes show the outcome). Home-node ids.

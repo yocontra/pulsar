@@ -49,6 +49,9 @@ export interface PoolView extends ActingRelay {
 	readonly machineId: string;
 	/** Remote agents, including those on machines that can't be reached now. */
 	agents(): Agent[];
+	observedSubagents?(): Agent[];
+	observedSubagent?(address: string): Agent | undefined;
+	hasFreshStatus?(machineId: string): boolean;
 	get(address: string): Agent | undefined;
 	needsYou(address: string): NeedsYou | null;
 	/** What a normal message would do, as the home node last said. */

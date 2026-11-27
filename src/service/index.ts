@@ -352,6 +352,12 @@ export class PulsarService {
 			const child = this.subagents.agentFor(id);
 			return child?.meta.acpChild === "1" ? child : undefined;
 		};
+		this.registry.observedSubagent = (id) => this.subagents.observedAgent(id);
+		this.registry.observedSubagents = () => this.subagents.observedAgents();
+		this.subagents.onObserved = (child) => {
+			if (child.status === "idle") this.waiters.resolveIdle(child);
+			else this.waiters.resolveGone(child);
+		};
 		this.registry.nativeSubagentAliases = () => this.subagents.nativeAliases();
 		this.registry.nativeSubagentTarget = (id) => this.subagents.aliasTarget(id);
 		this.claudeChildHooks = new ClaudeChildHooks({
@@ -400,7 +406,10 @@ export class PulsarService {
 		};
 		this.mailbox.onRead = (agent, messages) =>
 			this.deliveries.readFromInbox(agent, messages);
-		this.registry.onGone = (agent) => this.deliveries.gone(agent);
+		this.registry.onGone = (agent) => {
+			this.subagents.parentGone(agent);
+			this.deliveries.gone(agent);
+		};
 		this.registry.onBack = (agent) => {
 			void this.deliveries.back(agent);
 			void this.router.releaseNextTurn(agent);
@@ -1003,10 +1012,12 @@ export class PulsarService {
 			);
 		}
 		// Subagents: one cheap check per live agent; lists only what moved.
-		if (this.scan)
-			jobs.every("subagents", INTERVALS.subagentsMs, () =>
-				this.subagents.sweep(),
-			);
+		jobs.every("subagents", INTERVALS.subagentsMs, async () => {
+			if (this.scan) await this.subagents.sweep();
+			else
+				for (const parent of this.waiters.childParents())
+					await this.subagents.refresh(parent);
+		});
 		jobs.every("delivery", this.deliveries.config.tickMs, () =>
 			this.deliveries.tick(),
 		);
@@ -1744,12 +1755,12 @@ export class PulsarService {
 					String(p.via ?? "extension"),
 				);
 				return { ok: true };
-			case "wait":
-				return await mailbox.wait(
-					caller,
-					claudeChild ?? registry.sender(caller),
-					p,
-				);
+			case "wait": {
+				const sender = claudeChild ?? registry.sender(caller);
+				if (typeof p.for === "string" && p.for.startsWith("idle:"))
+					await this.subagents.refreshWaitTarget(p.for.slice(5), sender);
+				return await mailbox.wait(caller, sender, p);
+			}
 			case "history":
 				return mailbox.history(claudeChild ?? registry.sender(caller), p);
 			case "tail":

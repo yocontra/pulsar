@@ -358,9 +358,15 @@ export class Federation implements PoolView {
 			this.service.events.emit("approval", { approval });
 		this.state.onTurn = (address, turn) =>
 			this.service.events.emit("agent:turn", { agentId: address, ...turn });
+		this.state.onChildStatus = (child) => {
+			if (child.status === "gone") this.service.waiters.resolveGone(child);
+			else this.service.waiters.resolveIdle(child);
+		};
 		this.state.onIdle = (address) => {
-			const agent = this.service.registry.find(address);
-			if (agent) this.service.waiters.resolveIdle(agent);
+			const agent =
+				this.state.observedSubagent(address) ??
+				this.service.registry.find(address);
+			if (agent?.status === "idle") this.service.waiters.resolveIdle(agent);
 		};
 		this.state.onChange = (machineId) =>
 			this.service.events.emit("pool", { machineId });
@@ -435,6 +441,18 @@ export class Federation implements PoolView {
 	}
 
 	// --- PoolView ---
+
+	observedSubagent(address: string) {
+		return this.state.observedSubagent(address);
+	}
+
+	observedSubagents(): Agent[] {
+		return this.state.observedSubagents();
+	}
+	hasFreshStatus(machineId: string) {
+		const peer = this.state.peers.get(machineId);
+		return peer?.link === "tailnet" && peer.bootId !== null;
+	}
 
 	agents(): Agent[] {
 		return this.state.agents();
@@ -2062,7 +2080,9 @@ export class Federation implements PoolView {
 		);
 		this.feed.tick();
 		const strip = (agents: FedAgent[]) =>
-			userCapable ? agents : agents.map(({ approvals: _, ...a }) => a);
+			userCapable
+				? agents
+				: agents.map(({ approvals: _, childStatuses: _children, ...a }) => a);
 		const body = sseStream((sendRaw, end) => {
 			const untrack = this.serve(who, machineId, userCapable, end);
 			const send = (event: string, data: Record<string, unknown>) =>

@@ -507,6 +507,71 @@ describe("registry gossip", () => {
 		).toBe("unknown");
 	});
 
+	test("child observations are bounded, distinct, and unavailable until a reconnect receives a snapshot", () => {
+		const state = new PoolState();
+		const peer = state.upsert(
+			{
+				nodeId: "n",
+				name: "b",
+				dnsName: "b.test",
+				userId: "u",
+				login: "me",
+				tags: [],
+				online: true,
+			},
+			{
+				fedProtocol: [1, 1],
+				features: [],
+				pulsarVersion: "x",
+				machineId: "mb",
+				name: "b",
+			},
+			1,
+		);
+		const child = (key: string, status = "busy") => ({
+			key,
+			status,
+			name: key,
+		});
+		const rec = (children: unknown[]) => ({
+			id: "claude:p",
+			name: "parent",
+			harness: "claude",
+			childStatuses: children,
+		});
+		expect(
+			cleanFedAgent(
+				rec([
+					child("a"),
+					child("a", "idle"),
+					child("invalid/path"),
+					child("a".repeat(310)),
+					child("invalid", "bad"),
+					...Array.from({ length: 300 }, (_, i) => child(String(i))),
+				]),
+			)?.childStatuses,
+		).toHaveLength(196);
+		const changes: string[] = [];
+		state.onChildStatus = (a) => changes.push(a.status);
+		state.setLink(peer, "tailnet");
+		state.snapshot(peer, "b1", 5, [rec([child("a")])]);
+		state.snapshot(peer, "b1", 3, [rec([child("a", "idle")])]);
+		expect(changes).toEqual([]);
+		state.setLink(peer, "asleep");
+		expect(state.observedSubagents()).toEqual([]);
+		state.setLink(peer, "tailnet");
+		expect(state.observedSubagents()).toEqual([]);
+		expect(changes).toEqual([]);
+		state.snapshot(peer, "b1", 6, [rec([child("a", "idle")])]);
+		expect(changes).toEqual(["idle"]);
+		expect(state.observedSubagents()[0]).toMatchObject({
+			id: "mb/claude:p/sub:a",
+			status: "idle",
+		});
+		state.snapshot(peer, "b1", 7, []);
+		expect(changes).toEqual(["idle", "gone"]);
+	});
+
 	test("a peer's repo URL is kept only when it's a plain http(s) page", () => {
 		const rec = (repoUrl: unknown) =>
 			cleanFedAgent({ id: "a", name: "a", harness: "h", repoUrl });
