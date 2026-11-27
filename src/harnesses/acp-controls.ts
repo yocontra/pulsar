@@ -156,8 +156,8 @@ export class AcpSessionControls {
 	private config(options: SessionConfigOption[]) {
 		this.selectors.model = configSelection(options, "model");
 		this.selectors.effort = configSelection(options, "thought_level");
-		if (validAcpModeId(this.selectors.model?.current))
-			this.model = this.selectors.model.current;
+		const current = this.selectors.model?.current;
+		this.model = validAcpModeId(current) ? current : null;
 		this.configured = configSelection(options, "mode");
 	}
 

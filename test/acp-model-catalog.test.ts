@@ -26,3 +26,23 @@ test("large ACP model catalogs allow exact selection beyond the menu and keep th
 	expect(controls.hasChoice("model", "model-4998")).toBe(true);
 	expect(controls.hasChoice("model", "unknown")).toBe(false);
 });
+
+test("a provider can withdraw the current model and selector", () => {
+	const controls = new AcpSessionControls();
+	controls.install({
+		configOptions: [
+			{
+				id: "model",
+				name: "Model",
+				category: "model",
+				type: "select",
+				currentValue: "local",
+				options: [{ value: "local", name: "Local" }],
+			},
+		],
+	});
+	expect(controls.model).toBe("local");
+	controls.update({ sessionUpdate: "config_option_update", configOptions: [] });
+	expect(controls.model).toBeNull();
+	expect(controls.commandChoices("model")).toEqual([]);
+});
