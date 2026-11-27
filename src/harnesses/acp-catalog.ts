@@ -11,6 +11,15 @@ export interface AcpProvider {
 
 export const ACP_PROVIDERS = [
 	{
+		id: "codewhale",
+		label: "CodeWhale",
+		binary: "codewhale",
+		args: ["serve", "--acp"],
+		distribution: "native",
+		source:
+			"https://github.com/codewhale-hq/CodeWhale/blob/v0.10.4/docs/MCP.md",
+	},
+	{
 		id: "antigravity",
 		label: "Google Antigravity",
 		binary: "agy",

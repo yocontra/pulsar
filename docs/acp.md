@@ -39,6 +39,7 @@ To check a local installation from this checkout, use `bun scripts/live/acp-smok
 <!-- acp-catalog:start -->
 | Provider ID | Local command | Integration | Reference |
 | --- | --- | --- | --- |
+| `codewhale` | `codewhale serve --acp` | native | [CodeWhale](https://github.com/codewhale-hq/CodeWhale/blob/v0.10.4/docs/MCP.md) |
 | `antigravity` | `agy acp` | native | [Google Antigravity](https://antigravity.google/docs/cli/acp/) |
 | `cursor` | `cursor-agent acp` | native | [Cursor](https://cursor.com/docs/cli/acp) |
 | `copilot` | `copilot --acp --stdio` | native | [GitHub Copilot](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) |
@@ -134,7 +135,9 @@ Additional session checks used DeepAgents ACP 0.1.7, Dirac 0.6.2, GLM Agent 1.17
 
 Snowflake Cortex Code 1.0.73 and Crow CLI 0.1.49 opened managed sessions. MiniMax Code ACP 0.7.9 initialized and requested terminal sign-in with `mcode login`.
 
-Harn 0.10.202 and CodeWhale 0.10.4 rejected the Pulsar MCP server during session creation. The built-in catalog omits these versions.
+CodeWhale 0.10.4 completed a managed turn with a loopback model, requested passkey approval for the Pulsar `list_agents` tool, and received its own registered ID from the tool. A fresh process reopened the same conversation and completed a follow-up with the prior history. Pulsar supplies its MCP server through a private copy of the CodeWhale user configuration for each launch. It removes the copy when the bridge closes. CodeWhale applies its usual trust checks to project servers. [CodeWhale MCP configuration](https://github.com/codewhale-hq/CodeWhale/blob/v0.10.4/docs/MCP.md)
+
+Harn 0.10.202 rejected the Pulsar MCP server during session creation. The built-in catalog omits this version.
 
 Muse Code 1.4.24 initialized and requested sign-in. Pulsar enables its experimental ACP mode for the provider process. Fast-agent also registered with Pulsar and started its MCP server with `FAST_AGENT_MODEL=codexplan`.
 
@@ -146,7 +149,6 @@ These checks used temporary workspaces on macOS, with additional Ubuntu checks f
 | Provider tested | Result |
 | --- | --- |
 | Agoragentic 1.3.6 | Registered a session but ignored the supplied MCP server and returned a fixed tool-bridge response. |
-| CodeWhale 0.10.4 | Rejected client-supplied MCP servers when opening a session. |
 | Hoplite 3.5.2 | Dropped client-supplied MCP servers. Sign-in remained incomplete. |
 | Minion Code 0.1.45 | Failed to import its ACP dependency. Pinning the SDK to 0.12.1 let a test session register, but the provider did not start the supplied MCP server. |
 | Nova 1.1.59 and 1.1.69 | On Ubuntu, both created distinct sessions and validated the registered local model endpoint. The first managed prompt failed before reaching that endpoint, and neither started the supplied MCP server. [Linux qualification](https://github.com/yocontra/pulsar/actions/runs/45976397233) |

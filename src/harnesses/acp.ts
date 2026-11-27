@@ -58,6 +58,7 @@ import {
 	acpUsagePath,
 } from "./acp-transcript.ts";
 import { antigravitySkillPrompt } from "./antigravity-commands.ts";
+import { codewhaleMcpConfig } from "./codewhale-mcp.ts";
 
 export interface AcpBridgeOptions {
 	command: string[];
@@ -278,7 +279,12 @@ class Bridge {
 		this.daemon.onClose(() => this.reconnectLater());
 	}
 
-	async start(stream: Stream, pid: number, stopSignal: AbortSignal) {
+	async start(
+		stream: Stream,
+		pid: number,
+		stopSignal: AbortSignal,
+		mcpServers: McpServerStdio[],
+	) {
 		const connection = this.app.connect(stream);
 		this.connection = connection;
 		const startup = {
@@ -317,16 +323,7 @@ class Bridge {
 			initialized.agentInfo?.name === "@mistralai/mistral-vibe"
 		)
 			this.detachedActivity = "quiet";
-		const mcp: McpServerStdio = {
-			name: "pulsar",
-			command: process.execPath,
-			args: [resolve(process.argv[1] ?? "pulsar"), "mcp"],
-			env: [
-				{ name: ACP_IDENTITY_ENV, value: this.identityPath },
-				{ name: "PULSAR_HOME", value: resolve(stateDir()) },
-			],
-		};
-		const session = { cwd: this.options.cwd, mcpServers: [mcp] };
+		const session = { cwd: this.options.cwd, mcpServers };
 		const requestedId = this.options.sessionId;
 		const canResume = this.capabilities?.sessionCapabilities?.resume != null;
 		// This adapter keeps loadable sessions in the current process only.
@@ -1673,9 +1670,39 @@ export async function runAcpBridge(options: AcpBridgeOptions): Promise<void> {
 	const cwd = resolve(options.cwd);
 	const identityDir = await mkdtemp(join(tmpdir(), "pulsar-acp-"));
 	const identityPath = join(identityDir, "session.json");
+	const mcp: McpServerStdio = {
+		name: "pulsar",
+		command: process.execPath,
+		args: [resolve(process.argv[1] ?? "pulsar"), "mcp"],
+		env: [
+			{ name: ACP_IDENTITY_ENV, value: identityPath },
+			{ name: "PULSAR_HOME", value: resolve(stateDir()) },
+		],
+	};
+	const env: NodeJS.ProcessEnv = {
+		...process.env,
+		...options.env,
+		[ACP_IDENTITY_ENV]: identityPath,
+	};
+	let mcpServers = [mcp];
+	if (options.harness === "codewhale") {
+		try {
+			env.CODEWHALE_MCP_CONFIG = await codewhaleMcpConfig(
+				binary,
+				cwd,
+				env,
+				identityDir,
+				mcp,
+			);
+			mcpServers = [];
+		} catch (error) {
+			await rm(identityDir, { recursive: true, force: true });
+			throw error;
+		}
+	}
 	const child = spawn(binary, args, {
 		cwd,
-		env: { ...process.env, ...options.env, [ACP_IDENTITY_ENV]: identityPath },
+		env,
 		stdio: ["pipe", "pipe", "inherit"],
 	});
 	const ended = new Promise<{
@@ -1715,6 +1742,7 @@ export async function runAcpBridge(options: AcpBridgeOptions): Promise<void> {
 			),
 			child.pid,
 			stopController.signal,
+			mcpServers,
 		);
 		if (connection.signal.aborted)
 			throw new Error("ACP connection closed during startup");
