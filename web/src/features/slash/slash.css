@@ -112,6 +112,11 @@
 	flex: 1;
 	min-width: 0;
 }
+.slash-note select {
+	min-width: 0;
+	max-width: 100%;
+	flex: 1;
+}
 .slash-note .link {
 	flex: none;
 }

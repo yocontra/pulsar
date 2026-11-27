@@ -50,10 +50,32 @@ function commandEntry(command: AvailableCommand): CommandEntry[] {
 
 type Selection = { current: string; modes: ModeOption[]; configId?: string };
 
+function configSelection(
+	options: SessionConfigOption[],
+	category: "mode" | "model",
+): Selection | null {
+	const option = options.find(
+		(item) => item.category === category && item.type === "select",
+	);
+	if (option?.type !== "select" || !validAcpModeId(option.id)) return null;
+	const values = option.options.flatMap((item) =>
+		"options" in item ? item.options : [item],
+	);
+	return {
+		configId: option.id,
+		current: option.currentValue,
+		modes: values
+			.slice(0, 100)
+			.flatMap((item) => modeOption(item.value, item.name, item.description)),
+	};
+}
+
 export class AcpSessionControls {
 	private configured: Selection | null = null;
 	private legacy: Selection | null = null;
+	private models: Selection | null = null;
 	commands: CommandEntry[] = [];
+	model: string | null = null;
 
 	get selection(): Selection | null {
 		return this.configured ?? this.legacy;
@@ -75,24 +97,24 @@ export class AcpSessionControls {
 		if (configOptions) this.config(configOptions);
 	}
 
+	get modelChoices(): { value: string; label: string }[] {
+		return (
+			this.models?.modes.flatMap(({ id, label }) =>
+				id === id.trim() ? [{ value: id, label }] : [],
+			) ?? []
+		);
+	}
+
 	private config(options: SessionConfigOption[]) {
-		const option = options.find(
-			(item) => item.category === "mode" && item.type === "select",
-		);
-		if (option?.type !== "select") {
-			this.configured = null;
-			return;
-		}
-		const values = option.options.flatMap((item) =>
-			"options" in item ? item.options : [item],
-		);
-		this.configured = {
-			configId: option.id,
-			current: option.currentValue,
-			modes: values
-				.slice(0, 100)
-				.flatMap((item) => modeOption(item.value, item.name, item.description)),
-		};
+		this.models = configSelection(options, "model");
+		if (validAcpModeId(this.models?.current)) this.model = this.models.current;
+		this.configured = configSelection(options, "mode");
+	}
+
+	modelHelp(): string {
+		const ids = this.modelChoices.map(({ value }) => value);
+		const listed = ids.slice(0, 8).join(", ");
+		return `Use /model <id>. Available: ${listed}${ids.length > 8 ? `, and ${ids.length - 8} more` : ""}`;
 	}
 
 	update(update: SessionUpdate): boolean {
@@ -114,15 +136,26 @@ export class AcpSessionControls {
 		}
 	}
 
-	async select(agent: ClientContext, sessionId: string, target: string) {
-		const selection = this.selection;
+	async select(
+		agent: ClientContext,
+		sessionId: string,
+		target: string,
+		kind: "mode" | "model" = "mode",
+	) {
+		const selection = kind === "model" ? this.models : this.selection;
 		if (!selection?.modes.some((item) => item.id === target)) {
 			return {
 				result: "unsupported",
-				detail: "The agent did not advertise this ACP mode.",
+				detail:
+					kind === "model"
+						? this.modelHelp()
+						: "The agent did not advertise this ACP mode.",
 			};
 		}
-		if (selection.current === target) return { result: "ok", mode: target };
+		if (selection.current === target)
+			return kind === "model"
+				? { result: "ok" }
+				: { result: "ok", mode: target };
 		const options = {
 			cancellationSignal: AbortSignal.timeout(CALL_TIMEOUT_MS),
 			stopWaitingOnCancel: true,
@@ -146,6 +179,14 @@ export class AcpSessionControls {
 			);
 			if (this.legacy === selection)
 				this.legacy = { ...selection, current: target };
+		}
+		if (kind === "model") {
+			return this.models?.current === target
+				? { result: "ok" }
+				: {
+						result: "failed",
+						detail: "The ACP agent did not report the selected model.",
+					};
 		}
 		const mode = this.selection?.current;
 		return mode === target

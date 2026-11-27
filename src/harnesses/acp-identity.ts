@@ -18,6 +18,7 @@ export async function acpRegistration(
 		!pidAlive(registration.pid)
 	)
 		throw new Error("The managed ACP session is unavailable");
-	const { name: _name, ...identity } = registration;
+	// A later MCP connection must preserve the bridge’s current model and name.
+	const { name: _name, model: _model, ...identity } = registration;
 	return { ...identity, role, meta: { acp: "1" } };
 }

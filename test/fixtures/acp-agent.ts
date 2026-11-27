@@ -33,6 +33,7 @@ const childWaitingPermissionId = 992;
 const childQuestionId = 993;
 const strangerPermissionId = 994;
 let currentMode = "ask";
+let currentModel: string | undefined;
 const modes = () => ({
 	currentModeId: currentMode,
 	availableModes: [
@@ -40,7 +41,26 @@ const modes = () => ({
 		{ id: "plan-v2", name: "Plan" },
 	],
 });
+const modelOption = () => ({
+	id: "fixture.model",
+	name: "Model",
+	category: "model",
+	type: "select",
+	currentValue:
+		currentModel ?? (currentMode === "ask" ? "fixture-base" : "fixture-plan"),
+	options: [
+		{
+			group: "models",
+			name: "Fixture models",
+			options: [
+				{ value: "fixture-base", name: "Base" },
+				{ value: "fixture-plan", name: "Planner" },
+			],
+		},
+	],
+});
 const config = () => [
+	modelOption(),
 	{
 		id: "fixture.mode",
 		name: "Session mode",
@@ -146,6 +166,9 @@ for await (const line of lines) {
 						update: {
 							sessionUpdate: "available_commands_update",
 							availableCommands: [
+								...(mode === "steer"
+									? [{ name: "model", description: "Native model menu" }]
+									: []),
 								{
 									name: "fixture-command",
 									description: "Run the fixture command",
@@ -161,7 +184,7 @@ for await (const line of lines) {
 					reply(id, {
 						...(method === "session/new" ? { sessionId } : {}),
 						modes: modes(),
-						...(mode === "resume" ? { configOptions: config() } : {}),
+						configOptions: mode === "resume" ? config() : [modelOption()],
 					});
 				}
 				if (data.id === 2) mcpResult?.(data.result.content[0].text);
@@ -182,10 +205,22 @@ for await (const line of lines) {
 			reply(id, {});
 			break;
 		case "session/set_config_option":
-			if (mode !== "resume" || params.configId !== "fixture.mode")
-				throw new Error("Fixture expected legacy mode selection");
-			currentMode = params.value;
-			reply(id, { configOptions: config() });
+			if (params.configId === "fixture.model") {
+				if (
+					!modelOption().options[0]?.options.some(
+						({ value }) => value === params.value,
+					)
+				)
+					throw new Error("Unknown ACP model sent to provider");
+				currentModel = params.value;
+			} else {
+				if (mode !== "resume" || params.configId !== "fixture.mode")
+					throw new Error("Fixture expected legacy mode selection");
+				currentMode = params.value;
+			}
+			reply(id, {
+				configOptions: mode === "resume" ? config() : [modelOption()],
+			});
 			break;
 		case "session/prompt": {
 			promptId = id;
@@ -195,6 +230,12 @@ for await (const line of lines) {
 			)?.[1];
 			if (attachment) {
 				update(await readFile(attachment, "utf8"));
+				reply(id, { stopReason: "end_turn" });
+			} else if (text.includes("/model fixture-base")) {
+				update("Fixture received model syntax as prompt text");
+				reply(id, { stopReason: "end_turn" });
+			} else if (text === "/model") {
+				update("Fixture native model command called");
 				reply(id, { stopReason: "end_turn" });
 			} else if (text.startsWith("/fixture-command")) {
 				update("Fixture command called");

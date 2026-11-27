@@ -391,6 +391,7 @@ WHERE hour >= ? GROUP BY harness`,
 					})
 				: null;
 		const acpFields = {
+			...(agent.meta?.acp === "1" && agent.model ? { model: agent.model } : {}),
 			...(acp?.context ? { context: acp.context } : {}),
 			...(acp?.cost ? { reportedCost: acp.cost } : {}),
 		};

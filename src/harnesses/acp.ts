@@ -125,7 +125,7 @@ class Bridge {
 		update: SessionUpdate;
 	}> = [];
 	private setupNotificationBytes = 0;
-	private switchingMode = false;
+	private switchingConfig = false;
 	private usageObserved = false;
 	private usageWriter?: AcpUsageWriter;
 	private readonly options: AcpBridgeOptions;
@@ -370,6 +370,7 @@ class Bridge {
 			tags: [...autoTags(this.options.harness, git), ...envTags()],
 			...(this.options.name ? { name: this.options.name } : {}),
 			role: "extension",
+			model: this.controls.model,
 			meta: {
 				acp: "1",
 				acpResume: canResume || canLoad ? "1" : "0",
@@ -517,7 +518,7 @@ class Bridge {
 			!this.ready ||
 			this.stopping ||
 			(this.turn && !this.turn.prompt) ||
-			this.switchingMode ||
+			this.switchingConfig ||
 			this.steering ||
 			!this.queue.length
 		)
@@ -844,8 +845,28 @@ class Bridge {
 		}
 	}
 
+	private commandCatalog() {
+		const advertised = this.controls.commands;
+		const argumentChoices = this.controls.modelChoices;
+		if (!argumentChoices.length) return this.commands.list(advertised);
+		const native = advertised.find(({ name }) => name === "model");
+		return this.commands.list([
+			{
+				...native,
+				name: "model",
+				source: "agent",
+				args: "<model>",
+				argumentChoices,
+				description: native
+					? "Switch to an advertised model, or run /model alone for the provider command."
+					: "Switch to an advertised model.",
+			},
+			...advertised.filter(({ name }) => name !== "model"),
+		]);
+	}
+
 	private runtimeMeta() {
-		const commands = this.commands.list(this.controls.commands);
+		const commands = this.commandCatalog();
 		return {
 			acpModes: this.controls.selection?.modes.length ? "1" : "0",
 			acpCommands: commands.size ? "1" : "0",
@@ -862,11 +883,13 @@ class Bridge {
 		if (!registration || this.stopping) return;
 		const next = this.runtimeMeta();
 		if (
+			registration.model === this.controls.model &&
 			Object.entries(next).every(
 				([key, value]) => registration.meta?.[key] === value,
 			)
 		)
 			return;
+		registration.model = this.controls.model;
 		registration.meta = { ...registration.meta, ...next };
 		// A repeated hello on this socket refreshes the public session without
 		// creating a second extension registration.
@@ -1008,7 +1031,7 @@ class Bridge {
 		const busy =
 			!!this.turn ||
 			!!this.steering ||
-			this.switchingMode ||
+			this.switchingConfig ||
 			this.queue.length > 0;
 		if (request.kind === "mode.get") {
 			return {
@@ -1022,7 +1045,7 @@ class Bridge {
 			};
 		}
 		if (request.kind === "commands") {
-			const entries = [...this.commands.list(this.controls.commands).values()];
+			const entries = [...this.commandCatalog().values()];
 			return {
 				result: "ok",
 				commands: entries.map(({ entry }) => entry),
@@ -1037,38 +1060,31 @@ class Bridge {
 				result: "busy",
 				detail: "Wait for the current ACP operation to finish.",
 			};
-		if (request.kind === "mode.set" && typeof request.mode === "string") {
-			this.switchingMode = true;
-			try {
-				return await this.controls.select(
-					this.connection.agent,
-					this.sessionId,
-					request.mode,
-				);
-			} finally {
-				this.switchingMode = false;
-				this.refreshCapabilities();
-				this.drainQueue();
-			}
-		}
+		if (request.kind === "mode.set" && typeof request.mode === "string")
+			return this.selectConfig(request.mode, "mode");
+
 		if (request.kind === "command" && typeof request.line === "string") {
 			const line = request.line;
 			const name = /^\/([A-Za-z0-9][A-Za-z0-9:_.-]{0,127})(?: |$)/.exec(
 				line,
 			)?.[1];
-			const command = name
-				? this.commands.list(this.controls.commands).get(name)
-				: undefined;
-			if (line.length <= 4000 && !/\p{Cc}/u.test(line) && command && name) {
+			if (!name || line.length > 4000 || /\p{Cc}/u.test(line))
+				return { result: "unsupported", detail: "Invalid ACP command." };
+			const args = line.slice(name.length + 1).trim();
+			if (name === "model" && this.controls.modelChoices.length) {
+				if (args) return this.selectConfig(args, "model");
+				if (!this.controls.commands.some(({ name }) => name === "model"))
+					return { result: "unsupported", detail: this.controls.modelHelp() };
+			}
+
+			const command = this.commandCatalog().get(name);
+			if (command) {
 				this.enqueue({
 					text: line,
 					command: true,
 					...(command.skillPath
 						? {
-								providerText: antigravitySkillPrompt(
-									command.skillPath,
-									line.slice(name.length + 1).trim(),
-								),
+								providerText: antigravitySkillPrompt(command.skillPath, args),
 							}
 						: {}),
 				});
@@ -1080,6 +1096,23 @@ class Bridge {
 			};
 		}
 		return { result: "unsupported", detail: "Unknown ACP control request." };
+	}
+
+	private async selectConfig(target: string, kind: "mode" | "model") {
+		if (!this.connection || !this.sessionId) return { result: "unsupported" };
+		this.switchingConfig = true;
+		try {
+			return await this.controls.select(
+				this.connection.agent,
+				this.sessionId,
+				target,
+				kind,
+			);
+		} finally {
+			this.switchingConfig = false;
+			this.refreshCapabilities();
+			this.drainQueue();
+		}
 	}
 
 	private confirmDelivery(turn: Turn) {

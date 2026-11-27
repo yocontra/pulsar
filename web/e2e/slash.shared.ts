@@ -80,6 +80,43 @@ export function slashSuite(platform: "desktop" | "phone") {
 		});
 	});
 
+	test(`advertised arguments fill the command draft (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		await page.route("**/api/v1/agents/*/commands", async (route) => {
+			const response = await route.fetch();
+			const catalog = await response.json();
+			await route.fulfill({
+				response,
+				json: {
+					...catalog,
+					commands: catalog.commands.map((c: { name: string }) =>
+						c.name === "compact"
+							? {
+									...c,
+									argumentChoices: [{ value: "api", label: "API notes" }],
+								}
+							: c,
+					),
+				},
+			});
+		});
+		const composer = await openAgent(page, request, "name=apparish-auth");
+		const field = composer.locator(".composer-input");
+		await field.fill("/compact ");
+		await composer
+			.getByRole("combobox", { name: "Argument for /compact" })
+			.selectOption("api");
+		await expect(field).toHaveValue("/compact api");
+		await send(composer);
+		await expect(field).toHaveValue("");
+		expect(await ran(request)).toContainEqual({
+			agent: await agentId(request, "name=apparish-auth"),
+			line: "/compact api",
+		});
+	});
+
 	test(`reopening the picker loads commands advertised after startup (${platform})`, async ({
 		page,
 		request,

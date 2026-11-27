@@ -2057,6 +2057,8 @@ export interface CommandEntry {
 	skill?: boolean;
 	/** What goes after the name, e.g. `<pr number>`. */
 	args?: string;
+	/** Advertised values for a single command argument. */
+	argumentChoices?: { value: string; label: string }[];
 	/**
 	 * Run with no arguments it opens a picker or dialog in the terminal,
 	 * which only someone at the terminal can answer.

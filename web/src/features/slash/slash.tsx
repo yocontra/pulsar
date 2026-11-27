@@ -234,16 +234,45 @@ function SlashMenuImpl(p: ComposerSlotProps) {
 		const line = commandLine(text);
 		if (!line || p.draft.files.value.length) return null;
 		const asText = p.draft.asText.value;
+		const name = line.split(" ")[0]!;
+		const choices =
+			!asText &&
+			cat?.runnable &&
+			cat.commands.find((c) => c.name === name.slice(1))?.argumentChoices;
 		return (
 			<div className="slash-note" data-testid="slash-note">
 				<TerminalIcon aria-hidden="true" />
-				<span>
-					{asText
-						? "Sends as a message."
-						: cat && !cat.runnable
-							? `Can't run commands here: ${cat.reason ?? "unsupported"}`
-							: `Runs ${line.split(" ")[0]} in ${agent.name}'s session (Prove Human).`}
-				</span>
+				{choices && choices.length > 0 ? (
+					<select
+						aria-label={`Argument for ${name}`}
+						value={line.slice(name.length).trim()}
+						onChange={(event) => {
+							const ta = p.textarea.current;
+							if (ta)
+								replaceText(
+									ta,
+									0,
+									ta.value.length,
+									`${name} ${event.currentTarget.value}`,
+								);
+						}}
+					>
+						<option value="">Choose an option</option>
+						{choices.map((choice) => (
+							<option key={choice.value} value={choice.value}>
+								{choice.label}
+							</option>
+						))}
+					</select>
+				) : (
+					<span>
+						{asText
+							? "Sends as a message."
+							: cat && !cat.runnable
+								? `Can't run commands here: ${cat.reason ?? "unsupported"}`
+								: `Runs ${line.split(" ")[0]} in ${agent.name}'s session (Prove Human).`}
+					</span>
+				)}
 				<button
 					type="button"
 					className="link"

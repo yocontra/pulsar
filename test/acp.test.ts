@@ -78,6 +78,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			4000,
 		);
 		expect((await current())?.reach).toBe("push");
+		expect((await current())?.model).toBe("fixture-base");
 	};
 	const prompt = (body: string) => op.call("send", { to: agentId, body });
 	const user = {
@@ -194,6 +195,16 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		expect(
 			commands.commands.every((entry) => !Object.hasOwn(entry, "path")),
 		).toBe(true);
+		expect(commands.commands.filter(({ name }) => name === "model")).toEqual([
+			expect.objectContaining({
+				source: "agent",
+				args: "<model>",
+				argumentChoices: [
+					{ value: "fixture-base", label: "Base" },
+					{ value: "fixture-plan", label: "Planner" },
+				],
+			}),
+		]);
 		expect(commands).toMatchObject({
 			runnable: true,
 			commands: expect.arrayContaining([
@@ -219,6 +230,40 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				}),
 			]),
 		});
+
+		expect(await runCommand("/model fixture-plan")).toMatchObject({
+			result: "ok",
+			via: "acp",
+		});
+		await until(async () => (await current())?.model === "fixture-plan");
+		await prompt("/model fixture-base");
+		await until(
+			async () =>
+				(await current())?.status === "idle" &&
+				Boolean(
+					bridge
+						?.output()
+						.includes("Fixture received model syntax as prompt text"),
+				),
+		);
+		expect((await current())?.model).toBe("fixture-plan");
+		expect(await runCommand("/model wrong-model")).toMatchObject({
+			result: "unsupported",
+			detail: expect.stringContaining("fixture-base, fixture-plan"),
+		});
+		expect((await current())?.model).toBe("fixture-plan");
+		expect(await runCommand("/model")).toMatchObject({
+			result: "ok",
+			via: "acp",
+		});
+		await until(
+			async () =>
+				(await current())?.status === "idle" &&
+				Boolean(
+					bridge?.output().includes("Fixture native model command called"),
+				),
+		);
+
 		expect(await runCommand("/unknown")).toMatchObject({
 			result: "unsupported",
 			via: "acp",
@@ -599,6 +644,11 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 			result: "busy",
 			via: "acp",
 		});
+		expect(await runCommand("/model fixture-base")).toMatchObject({
+			result: "busy",
+			via: "acp",
+		});
+		expect((await current())?.model).toBe("fixture-plan");
 		// Replaying a queued receipt after restart must not start a second turn.
 		const sent = daemon.store.receipt(held.message.id, agentId)!;
 		daemon.store.setReceipt({ ...sent, state: "queued" });
@@ -776,7 +826,17 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				result: "interrupted",
 			});
 			await until(async () => (await current())?.status === "idle");
+			expect(await runCommand("/model")).toMatchObject({
+				result: "unsupported",
+				detail: expect.stringContaining("fixture-base, fixture-plan"),
+			});
 			await selectPlan();
+			if (mode === "resume") {
+				await until(async () => (await current())?.model === "fixture-plan");
+				expect((await daemon.service.agentUsage(agentId, user)).model).toBe(
+					"fixture-plan",
+				);
+			}
 			bridge.child.kill("SIGTERM");
 			expect(await bridge.exit).toBe(0);
 		}
