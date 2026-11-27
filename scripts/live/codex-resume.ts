@@ -12,6 +12,9 @@ const root = await mkdtemp(join(tmpdir(), "pulsar-codex-resume-"));
 const cwd = join(root, "work");
 const home = join(root, "home");
 const codexHome = join(home, ".codex");
+let host:
+	| Awaited<ReturnType<typeof import("./resume-host.ts").resumeHost>>
+	| undefined;
 const env = {
 	HOME: home,
 	CODEX_HOME: codexHome,
@@ -42,6 +45,7 @@ const requests: {
 	followup: boolean;
 }[] = [];
 let count = 0;
+const NativeResponse = globalThis.Response;
 const server = Bun.serve({
 	hostname: "127.0.0.1",
 	port: 0,
@@ -50,7 +54,7 @@ const server = Bun.serve({
 			req.method !== "POST" ||
 			!new URL(req.url).pathname.endsWith("/responses")
 		)
-			return new Response(null, { status: 404 });
+			return new NativeResponse(null, { status: 404 });
 		const { input } = (await req.json()) as { input: unknown };
 		const turns = JSON.stringify(input);
 		const evidence = {
@@ -92,7 +96,7 @@ const server = Bun.serve({
 				},
 			},
 		];
-		return new Response(
+		return new NativeResponse(
 			events
 				.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`)
 				.join(""),
@@ -139,37 +143,39 @@ enabled = false
 	const selected = await start(first);
 	if ((await start(decoy)) === selected)
 		throw new Error("Codex reused a thread ID");
-	process.env.CODEX_HOME = codexHome;
+	Object.assign(process.env, env, {
+		PULSAR_HOME: join(root, "state"),
+		PULSAR_NO_SCAN: "1",
+		PULSAR_NO_SEARCH: "1",
+		PULSAR_NO_MESH: "1",
+	});
+	await mkdir(process.env.PULSAR_HOME!);
+	await writeFile(
+		join(home, ".profile"),
+		`export PATH='${(env.PATH ?? "").replaceAll("'", "'\\''")}'\n`,
+	);
 	const saved = await codex.readSession?.(selected);
 	if (saved?.cwd !== cwd)
 		throw new Error(
 			"Pulsar did not find the selected session in its original workspace",
 		);
-	const argv = codex.nativeResume?.args(selected, saved);
-	if (!argv) throw new Error("No native resume command");
+	host = await (await import("./resume-host.ts")).resumeHost(root);
+	const launch = await host.launch("codex", cwd, selected);
+	if (!launch.session) throw Error("Missing resume session name");
 	const tmux = (...args: string[]) =>
 		run("tmux", ["-L", "qualification", ...args]);
-	await tmux(
-		"new-session",
-		"-d",
-		"-s",
-		"resume",
-		"-x",
-		"150",
-		"-y",
-		"50",
-		"--",
-		...argv,
-	);
+	const pane = `${launch.session}:`;
 	let screen = "";
 	let choseModel = false;
 	const deadline = Date.now() + 30000;
 	do {
-		screen = await tmux("capture-pane", "-pJ", "-S", "-1000", "-t", "resume:");
+		screen = await tmux("capture-pane", "-pJ", "-S", "-1000", "-t", pane).catch(
+			() => "",
+		);
 		if (screen.includes(first) && screen.includes(reply)) break;
 		if (!choseModel && screen.includes("2. Use existing model")) {
 			choseModel = true;
-			await tmux("send-keys", "-t", "resume:", "Down", "Enter");
+			await tmux("send-keys", "-t", pane, "Down", "Enter");
 		}
 		await delay(150);
 	} while (Date.now() < deadline);
@@ -181,17 +187,32 @@ enabled = false
 		throw new Error(
 			`Resumed terminal did not show selected history: ${screen.slice(-2500)}`,
 		);
-	await tmux("send-keys", "-t", "resume:", "-l", followup);
+	const readyBy = Date.now() + 46000;
+	let state = host.service.launches.get(launch.id);
+	while (
+		state &&
+		state.step !== "done" &&
+		state.step !== "failed" &&
+		Date.now() < readyBy
+	) {
+		await delay(150);
+		state = host.service.launches.get(launch.id);
+	}
+	if (state?.step !== "done" || state.agentId !== `codex:${selected}`)
+		throw Error(
+			`Pulsar did not confirm the resumed thread: ${JSON.stringify(state)}`,
+		);
+	await tmux("send-keys", "-t", pane, "-l", followup);
 	const typedUntil = Date.now() + 5000;
 	while (
-		!(await tmux("capture-pane", "-p", "-t", "resume:")).includes(followup) &&
+		!(await tmux("capture-pane", "-p", "-t", pane)).includes(followup) &&
 		Date.now() < typedUntil
 	)
 		await delay(100);
-	await tmux("send-keys", "-t", "resume:", "Enter");
+	await tmux("send-keys", "-t", pane, "Enter");
 	const until = Date.now() + 20000;
 	do {
-		screen = await tmux("capture-pane", "-pJ", "-t", "resume:");
+		screen = await tmux("capture-pane", "-pJ", "-t", pane);
 		if (screen.includes(resumedReply)) break;
 		await delay(150);
 	} while (Date.now() < until);
@@ -204,6 +225,7 @@ enabled = false
 	);
 } finally {
 	await run("tmux", ["-L", "qualification", "kill-server"]).catch(() => {});
+	await host?.close();
 	server.stop(true);
 	await rm(root, { recursive: true, force: true });
 }
