@@ -412,7 +412,9 @@ export class Controls {
 				pane ||
 				(extension &&
 					entry.source !== "builtin" &&
-					(agent.harness === "pi" || entry.skill))
+					(agent.harness === "pi" ||
+						entry.skill ||
+						entry.argumentChoices?.length))
 					? entry
 					: { ...entry, terminalOnly: true },
 			);
@@ -896,6 +898,16 @@ export class Controls {
 			if (this.sessions.extensionFor(agent.id)) {
 				const { commands } = await this.catalogs.list(agent);
 				const entry = commands.find((c) => c.name === cmd.name);
+				if (entry?.source === "agent" && entry.argumentChoices?.length) {
+					// Preserve the native picker and shorthand model aliases inside tmux.
+					if (
+						pane &&
+						(!cmd.args || (cmd.name === "model" && !cmd.args.includes("/")))
+					)
+						return done(await this.type(agent, pane, line));
+					const r = await this.askExtension(agent, { kind: "setting", line });
+					return done(extensionOutcome(r, "command"));
+				}
 				if (
 					entry &&
 					entry.source !== "builtin" &&

@@ -199,9 +199,23 @@ export class Catalogs {
 		});
 	}
 
-	list(agent: Agent): Promise<Listed> {
-		// pi/omp answer for their own session; the others by folder.
-		const key = `${agent.harness}\0${agent.harness === "pi" || agent.harness === "omp" ? agent.id : (agent.cwd ?? "")}`;
+	async list(agent: Agent): Promise<Listed> {
+		const nativeExtension = agent.harness === "pi" || agent.harness === "omp";
+		const base = await this.cached(agent);
+		if (!nativeExtension) return base;
+		const live = await this.fromExtension(agent).catch(() => []);
+		return {
+			...base,
+			commands: unique([
+				...live.filter((c) => c.source === "agent"),
+				...base.commands,
+				...live,
+			]),
+		};
+	}
+
+	private cached(agent: Agent): Promise<Listed> {
+		const key = `${agent.harness}\0${agent.cwd ?? ""}`;
 		const hit = this.cache.get(key);
 		if (hit && this.ports.now() - hit.at < CACHE_MS) return hit.listed;
 		if (this.cache.size > 200) this.cache.clear();
@@ -284,7 +298,7 @@ export class Catalogs {
 				return this.opencode(agent);
 			case "pi":
 			case "omp":
-				return this.fromExtension(agent);
+				return [];
 			default:
 				return [];
 		}
@@ -351,14 +365,40 @@ export class Catalogs {
 		const list = Array.isArray(r?.commands) ? (r.commands as unknown[]) : [];
 		const out: CommandEntry[] = [];
 		for (const raw of list.slice(0, MAX_ENTRIES)) {
+			if (!raw || typeof raw !== "object") continue;
 			const c = raw as {
 				name?: unknown;
 				description?: unknown;
 				source?: unknown;
 				path?: unknown;
+				currentArgument?: unknown;
+				argumentChoices?: unknown;
 			};
 			if (typeof c.name !== "string" || !/^[\w:.-]{1,128}$/.test(c.name))
 				continue;
+			if (
+				c.source === "agent" &&
+				(c.name === "model" || c.name === "effort") &&
+				Array.isArray(c.argumentChoices)
+			) {
+				const argumentChoices = c.argumentChoices.filter(
+					(v): v is { value: string; label: string } =>
+						typeof v?.value === "string" && typeof v.label === "string",
+				);
+				if (argumentChoices.length)
+					out.push({
+						name: c.name,
+						source: "agent",
+						description: oneLine(
+							typeof c.description === "string" ? c.description : "",
+						),
+						argumentChoices,
+						...(typeof c.currentArgument === "string" && {
+							currentArgument: c.currentArgument,
+						}),
+					});
+				continue;
+			}
 			const path = typeof c.path === "string" ? c.path : null;
 			out.push({
 				name: c.name,

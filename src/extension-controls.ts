@@ -1,6 +1,19 @@
 import type { DaemonClient } from "./client.ts";
+import { boundedArgumentChoices } from "./command-choices.ts";
+
+interface SessionModel {
+	id: string;
+	provider: string;
+	name?: string;
+	reasoning?: boolean;
+	thinking?: { efforts?: string[] };
+	thinkingLevelMap?: Record<string, unknown>;
+}
 
 export interface ControlContext {
+	model?: SessionModel;
+	modelRegistry?: { getAvailable(): SessionModel[] };
+
 	isIdle?(): boolean;
 	abort?(): void;
 	/**
@@ -19,6 +32,10 @@ export interface ControlContext {
 }
 
 export interface ControlApi {
+	setModel?(model: SessionModel): Promise<boolean>;
+	getThinkingLevel?(): string | undefined;
+	setThinkingLevel?(level: string): void;
+
 	/**
 	 * pi: runs input as if typed (extension commands, prompt templates,
 	 * `/skill:name`) when `expandPromptTemplates` is set and the session is
@@ -33,6 +50,25 @@ export interface ControlApi {
 		sourceInfo?: { path?: string };
 		path?: string;
 	}>;
+}
+
+function modelKey(model: SessionModel) {
+	return `${model.provider}/${model.id}`;
+}
+
+function effortChoices(model: SessionModel, harness: string): string[] {
+	if (!model.reasoning) return [];
+	if (harness === "omp") return ["off", ...(model.thinking?.efforts ?? [])];
+	// Pi maps unavailable levels to null and opts models into xhigh and max.
+	return ["off", "minimal", "low", "medium", "high", "xhigh", "max"].filter(
+		(level) => {
+			const mapped = model.thinkingLevelMap?.[level];
+			return (
+				mapped !== null &&
+				(mapped !== undefined || (level !== "xhigh" && level !== "max"))
+			);
+		},
+	);
 }
 
 /**
@@ -51,14 +87,44 @@ export async function answerControl(
 	const { pi, ctx, harness } = host;
 	if (req.kind === "commands") {
 		const list = pi.getCommands?.() ?? [];
+		const settings = [];
+		if (pi.setModel && ctx?.modelRegistry) {
+			const current = ctx.model && modelKey(ctx.model);
+			const choices = ctx.modelRegistry.getAvailable().map((m) => ({
+				value: modelKey(m),
+				label: `${m.name ?? m.id} (${m.provider})`,
+			}));
+			if (choices.length)
+				settings.push({
+					name: "model",
+					description: "Select the session model",
+					source: "agent",
+					...(current && { currentArgument: current }),
+					argumentChoices: boundedArgumentChoices(choices, current),
+				});
+		}
+		if (pi.getThinkingLevel && pi.setThinkingLevel && ctx?.model) {
+			const choices = effortChoices(ctx.model, harness);
+			if (choices.length > 1)
+				settings.push({
+					name: "effort",
+					description: "Select the session reasoning effort",
+					source: "agent",
+					currentArgument: pi.getThinkingLevel() ?? "off",
+					argumentChoices: choices.map((value) => ({ value, label: value })),
+				});
+		}
 		return {
 			result: "ok",
-			commands: list.slice(0, 500).map((c) => ({
-				name: c.name,
-				description: c.description,
-				source: c.source,
-				path: c.sourceInfo?.path ?? c.path,
-			})),
+			commands: [
+				...settings,
+				...list.slice(0, 500).map((c) => ({
+					name: c.name,
+					description: c.description,
+					source: c.source,
+					path: c.sourceInfo?.path ?? c.path,
+				})),
+			],
 		};
 	}
 	if (req.kind === "mode.get" || req.kind === "mode.set") {
@@ -104,6 +170,41 @@ export async function answerControl(
 			}
 		}
 		return { result: "ok", mode: planOn() ? "plan" : "default" };
+	}
+	if (req.kind === "setting" && typeof req.line === "string") {
+		if (!ctx?.isIdle?.())
+			return {
+				result: "busy",
+				detail: "Change settings when the session is idle",
+			};
+		const [, name, value] = /^\/(model|effort) +(.+)$/.exec(req.line) ?? [];
+		if (name === "model" && pi.setModel) {
+			const selected = ctx.modelRegistry
+				?.getAvailable()
+				.find((m) => modelKey(m) === value);
+			if (
+				selected &&
+				(await pi.setModel(selected)) &&
+				ctx.model &&
+				modelKey(ctx.model) === value
+			)
+				return { result: "ok" };
+		}
+		if (
+			name === "effort" &&
+			value &&
+			ctx.model &&
+			pi.setThinkingLevel &&
+			pi.getThinkingLevel &&
+			effortChoices(ctx.model, harness).includes(value)
+		) {
+			pi.setThinkingLevel(value);
+			if ((pi.getThinkingLevel() ?? "off") === value) return { result: "ok" };
+		}
+		return {
+			result: "unsupported",
+			detail: "Choose a setting offered by the current session",
+		};
 	}
 	if (req.kind === "command" && typeof req.line === "string") {
 		if (!pi.sendUserMessage || (harness !== "pi" && harness !== "omp"))

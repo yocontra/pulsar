@@ -45,6 +45,62 @@ describe("extension control requests", () => {
 		});
 	});
 
+	for (const harness of ["pi", "omp"]) {
+		test(`${harness} settings use exact registry entries and confirm the host applied them`, async () => {
+			const base = {
+				id: "same",
+				provider: "a",
+				reasoning: true,
+				thinking: { efforts: ["low", "high"] },
+				thinkingLevelMap: { medium: null },
+			};
+			const other = { ...base, provider: "b" };
+			const ctx = {
+				isIdle: () => true,
+				model: base,
+				modelRegistry: { getAvailable: () => [base, other] },
+			};
+			let effort = "low";
+			const host = {
+				ctx,
+				harness,
+				pi: {
+					setModel: async (selected: typeof base) => {
+						ctx.model = selected;
+						return true;
+					},
+					getThinkingLevel: () => effort,
+					setThinkingLevel: (value: string) => {
+						effort = value;
+					},
+				},
+			};
+			const read = async () =>
+				(await answerControl({ kind: "commands" }, host)).commands as {
+					name: string;
+					currentArgument: string;
+					argumentChoices: { value: string }[];
+				}[];
+			const run = (line: string) =>
+				answerControl({ kind: "setting", line }, host);
+			expect(
+				(await read())
+					.find((c) => c.name === "effort")
+					?.argumentChoices.map((c) => c.value),
+			).not.toContain("medium");
+			expect(await run("/model b/same")).toEqual({ result: "ok" });
+			expect((await read())[0]?.currentArgument).toBe("b/same");
+			expect(await run("/model same")).toMatchObject({ result: "unsupported" });
+			expect(await run("/effort high")).toEqual({ result: "ok" });
+			ctx.isIdle = () => false;
+			expect(await run("/effort low")).toMatchObject({ result: "busy" });
+			ctx.isIdle = () => true;
+			host.pi.setThinkingLevel = () => {};
+			expect(await run("/effort low")).toMatchObject({ result: "unsupported" });
+			expect(effort).toBe("high");
+		});
+	}
+
 	test("pi runs a command line while idle, expanding templates; not mid-turn", async () => {
 		const sent: Array<[string, unknown]> = [];
 		const pi = {

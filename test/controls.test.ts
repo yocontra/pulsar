@@ -886,6 +886,50 @@ describe("pi and omp through the extension", () => {
 		]);
 	});
 
+	for (const harness of ["pi", "omp"]) {
+		test(`${harness}: a live setting replaces its terminal picker and reads back immediately`, async () => {
+			const a = agent({ id: `${harness}:settings`, harness });
+			let value = "a/model";
+			const { controls } = rig({
+				agents: [a],
+				extension: (req) => {
+					if (req.kind === "setting" && req.line === "/model b/model") {
+						value = "b/model";
+						return { result: "ok" };
+					}
+					if (req.kind === "commands")
+						return {
+							result: "ok",
+							commands: [
+								{
+									name: "model",
+									source: "agent",
+									currentArgument: value,
+									argumentChoices: ["a/model", "b/model"].map((value) => ({
+										value,
+										label: value,
+									})),
+								},
+							],
+						};
+					return null;
+				},
+			});
+			const menu = async () =>
+				(await controls.commands(a.id)).commands.filter(
+					(c) => c.name === "model",
+				);
+			expect(await menu()).toMatchObject([
+				{ currentArgument: "a/model", source: "agent" },
+			]);
+			expect(await controls.run(a, "/model b/model")).toMatchObject({
+				result: "ok",
+				via: "extension",
+			});
+			expect(await menu()).toMatchObject([{ currentArgument: "b/model" }]);
+		});
+	}
+
 	test("no extension connected: unsupported, nothing waits", async () => {
 		const a = agent({ id: "omp:2", harness: "omp" });
 		const none = rig({ agents: [a] }).controls;
