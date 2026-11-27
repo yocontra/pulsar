@@ -117,8 +117,8 @@ The app can switch an agent's mode and run slash commands and skills in its sess
 | Claude Code | Manual, Accept edits, Plan, Auto, Bypass permissions | Shift+Tab in its tmux pane, one press at a time, footer read back | Typed into its tmux pane |
 | Codex | Default, Plan | Shift+Tab in its tmux pane (the TUI applies its own effort per mode); else `thread/settings/update` on Codex's app-server daemon with the same per-mode effort (the TUI follows) | Typed into its tmux pane (skills as `$name`) |
 | OpenCode | Build, Plan | Shift+Tab in its pane (only an agent Pulsar started in tmux: OpenCode reports no pid); else the service's `/agent` API (the terminal may not follow) | Server commands and skills through the service; the TUI's own commands typed into its pane |
-| pi | None | — | The extension runs custom commands, templates, and skills. Built-ins use the idle terminal pane. |
-| omp | Default, Plan | The Pulsar extension (`sessionModes`) | Commands and skills use the idle terminal pane. The extension can invoke installed skills for headless sessions. |
+| pi | None | — | The extension runs custom commands, templates, skills, and the model and effort selectors. Other built-ins use the idle terminal pane. |
+| omp | Default, Plan | The Pulsar extension (`sessionModes`) | Commands and skills use the idle terminal pane. The extension can select the model and effort or invoke installed skills in a headless session. |
 | Antigravity | Default, Accept edits, Plan | Shift+Tab in the exact native session’s idle tmux pane | Built-ins use the owned terminal. Help, changelog, and installed skills also work through Pulsar. |
 | Other native sessions | Not supported | — | — |
 
