@@ -1073,6 +1073,8 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		);
 		const providerPid = daemon.service.registry.get(driftId)?.pid;
 		expect(providerPid).toBeGreaterThan(0);
+		process.kill(providerPid!, "SIGUSR2");
+		await until(() => daemon.service.registry.get(driftId)?.model === null);
 		process.kill(providerPid!, "SIGUSR1");
 		await until(
 			() => daemon.service.registry.get(driftId)?.model === "fixture-base",

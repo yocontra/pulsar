@@ -766,7 +766,8 @@ export class Registry {
 			status:
 				input.status ??
 				(existing && existing.status !== "gone" ? existing.status : "unknown"),
-			model: input.model ?? existing?.model ?? null,
+			model:
+				input.model === undefined ? (existing?.model ?? null) : input.model,
 			activity: existing?.activity ?? saved?.activity ?? null,
 			inbound: existing?.inbound ?? saved?.inbound ?? "accept",
 			registered: input.registered || (existing?.registered ?? false),
@@ -890,7 +891,7 @@ export class Registry {
 				meta: s.meta,
 				registered: false,
 				status: s.status,
-				model: s.model ?? null,
+				model: s.model ?? undefined,
 			});
 			seen.add(agent.id);
 			if (s.waitingFor !== undefined)

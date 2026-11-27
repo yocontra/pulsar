@@ -103,6 +103,12 @@ const config = () => [
 ];
 
 if (mode === "launch-settings-drift") {
+	process.on("SIGUSR2", () =>
+		emitUpdate(sessionId, {
+			sessionUpdate: "config_option_update",
+			configOptions: [],
+		}),
+	);
 	process.on("SIGUSR1", () => {
 		currentModel = "fixture-base";
 		emit("session/update", {

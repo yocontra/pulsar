@@ -1414,7 +1414,10 @@ export class PulsarService {
 			...(reg.name ? { name: reg.name } : {}),
 			meta: protectedMeta,
 			registered: true,
-			model: reg.model ?? null,
+			model:
+				reg.role === "extension" && reg.meta?.acp === "1"
+					? reg.model
+					: (reg.model ?? undefined),
 		});
 		// A connection that says hello again under a new id moves over.
 		const previousId = agentIdOf(caller.principal);
