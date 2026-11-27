@@ -273,12 +273,15 @@ function address(a: MockAgent) {
 	return `${a.machineId}/${a.id}`;
 }
 
+const conversationTitles = new Map<string, string | null>();
+
 /** A mock agent as the daemon's `AgentRow`. */
 function row(a: MockAgent): AgentRow {
 	const needs = a.status === "needs-you";
 	return {
 		id: a.id,
 		name: a.name,
+		conversationTitle: conversationTitles.get(a.id) ?? undefined,
 		harness: a.harness,
 		sessionId: a.id.slice(a.id.indexOf(":") + 1),
 		pid: null,
@@ -1763,6 +1766,8 @@ type RealtimeChange =
 			reply?: string;
 			messageId?: string;
 	  }
+	| { action: "session-title"; id: string; title: string | null }
+	| { action: "session-notice"; notice: ServerEvents["sessionNotice"] }
 	| { action: "restore" };
 
 /** Transcripts the `transcript-missing` change holds back, by agent id. */
@@ -1960,7 +1965,16 @@ function realtime(raw: unknown) {
 			out = { ok: true, messageId: s.message.id };
 			break;
 		}
+		case "session-title":
+			conversationTitles.set(agentOr404(c.id).id, c.title);
+			break;
+		case "session-notice":
+			// Simulate notices already in flight during a session switch.
+			for (const stream of streams.values())
+				write(stream, "sessionNotice", c.notice);
+			break;
 		case "restore": {
+			conversationTitles.clear();
 			transcriptHolds.clear();
 			transcriptQuiet.clear();
 			resetChanges();
