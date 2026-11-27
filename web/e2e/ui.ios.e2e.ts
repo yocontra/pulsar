@@ -381,7 +381,22 @@ test.describe("phone UI", () => {
 				await open(page, id);
 				// Ionic's page and sheet transitions: measure the colors at rest.
 				await animationsDone(page);
-				const lum = await pageLuminance(page);
+				// The center of a sheet can be a colored recipient badge. Its
+				// title sits directly on the sheet surface in both themes.
+				const title = page
+					.getByRole("dialog")
+					.last()
+					.getByRole("heading")
+					.first();
+				const box = (await title.isVisible())
+					? await title.boundingBox()
+					: null;
+				const lum = await pageLuminance(
+					page,
+					box
+						? { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+						: undefined,
+				);
 				if (scheme === "dark") expect(lum, name).toBeLessThan(0.05);
 				else expect(lum, name).toBeGreaterThan(0.8);
 				expect(
