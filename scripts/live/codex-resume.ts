@@ -143,10 +143,15 @@ enabled = false
 		...argv,
 	);
 	let screen = "";
+	let choseModel = false;
 	const deadline = Date.now() + 30000;
 	do {
 		screen = await tmux("capture-pane", "-pJ", "-S", "-1000", "-t", "resume:");
 		if (screen.includes(first) && screen.includes(reply)) break;
+		if (!choseModel && screen.includes("2. Use existing model")) {
+			choseModel = true;
+			await tmux("send-keys", "-t", "resume:", "Down", "Enter");
+		}
 		await delay(150);
 	} while (Date.now() < deadline);
 	if (
