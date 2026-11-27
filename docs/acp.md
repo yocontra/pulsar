@@ -132,14 +132,14 @@ Additional session checks used DeepAgents ACP 0.1.7, Dirac 0.6.2, GLM Agent 1.17
 
 Snowflake Cortex Code 1.0.73 and Crow CLI 0.1.49 opened managed sessions. MiniMax Code ACP 0.7.9 initialized and requested terminal sign-in with `mcode login`.
 
-Harn 0.10.202 and CodeWhale 0.10.4 rejected the Pulsar MCP server during session creation. VTCode 0.96.14 reused a session ID across unrelated workspaces. The built-in catalog omits these versions.
+Harn 0.10.202 and CodeWhale 0.10.4 rejected the Pulsar MCP server during session creation. The built-in catalog omits these versions.
 
 Muse Code 1.4.24 initialized and requested sign-in. Pulsar enables its experimental ACP mode for the provider process. Fast-agent also registered with Pulsar and started its MCP server with `FAST_AGENT_MODEL=codexplan`.
 
 
 ### Other providers in the Paseo catalog
 
-These checks used temporary workspaces on macOS. [Paseo catalog comparison](paseo-comparison.md)
+These checks used temporary workspaces on macOS, with additional Ubuntu checks for Nova and VTCode. [Paseo catalog comparison](paseo-comparison.md)
 
 | Provider tested | Result |
 | --- | --- |
@@ -147,6 +147,6 @@ These checks used temporary workspaces on macOS. [Paseo catalog comparison](pase
 | CodeWhale 0.10.4 | Rejected client-supplied MCP servers when opening a session. |
 | Hoplite 3.5.2 | Dropped client-supplied MCP servers. Sign-in remained incomplete. |
 | Minion Code 0.1.45 | Failed to import its ACP dependency. Pinning the SDK to 0.12.1 let a test session register, but the provider did not start the supplied MCP server. |
-| Nova 1.1.59 and 1.1.69 | Node could not resolve the local user record on the test machine. Both builds stopped before ACP initialization. |
+| Nova 1.1.59 and 1.1.69 | On Ubuntu, both created distinct sessions and validated the registered local model endpoint. The first managed prompt failed before reaching that endpoint, and neither started the supplied MCP server. [Linux qualification](https://github.com/yocontra/pulsar/actions/runs/45976397233) |
 | TRAE CLI 0.217.0 | Initialized over ACP. Creating a session required Enterprise SSO or a personal access token. The managed test ended before registration and prompt delivery. |
-| VTCode 0.96.14 | Reused one session ID for unrelated workspaces. Pulsar refused the second concurrent registration. |
+| VTCode 0.96.14 and 0.185.3 | Both completed two local-model turns with history. Neither started the supplied Pulsar MCP server. Separate workspaces received the same session ID, and a fresh process could not load the conversation by that ID. [Concurrent registrations](https://github.com/yocontra/pulsar/actions/runs/45975115916) · [Prompt, MCP and reload checks](https://github.com/yocontra/pulsar/actions/runs/45975615414) |
