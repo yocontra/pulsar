@@ -42,6 +42,7 @@ To check a local installation from this checkout, use `bun scripts/live/acp-smok
 | `copilot` | `copilot --acp --stdio` | native | [GitHub Copilot](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) |
 | `omp` | `omp acp` | native | [Oh My Pi](https://github.com/can1357/oh-my-pi/tree/main/packages/coding-agent/src/modes/acp) |
 | `opencode` | `opencode acp` | native | [OpenCode](https://opencode.ai/docs/cli/acp/) |
+| `autohand` | `autohand --acp` | native | [Autohand Code](https://docs.autohand.ai/integrations/acp-mode) |
 | `fx` | `fx acp` | native | [fx](https://fx.sh/docs/using-fx/acp) |
 | `hermes` | `hermes acp` | native | [Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/features/acp) |
 | `gjc` | `gjc acp` | native | [Gajae Code](https://github.com/Yeachan-Heo/gajae-code/blob/main/docs/acp-local-development.md) |
@@ -86,6 +87,8 @@ Fast-agent ACP 0.10.66 completed two turns with a loopback model, stopped an act
 
 Qwen Code 0.28.7 and goose 1.61.0 each completed two turns through Pulsar on macOS arm64 with a loopback OpenAI-compatible test server. The second reply required the first turn’s history. Both accepted `/status`, changed and restored the model and permission mode, and stopped an active turn. After a bridge restart, each resumed the same session ID and answered with its earlier history. Qwen also changed and restored reasoning effort. Goose offered only `off` for effort with `gpt-4o`.
 
+Autohand Code 0.9.12 completed two managed turns with a local OpenAI-compatible endpoint. Its native ACP process retried the Pulsar MCP connection with newline framing, listed Pulsar tools, and called `list_agents`. The second model request contained the first answer.
+
 fx 0.0.18, Hermes Agent 0.23.4 and Gajae Code 0.22.2 each accepted a message from Pulsar, returned a reply from local Qwen2.5-0.5B-Instruct through llama.cpp, and connected to Pulsar’s MCP server. For fx, configure your local model connection before starting the session. For Hermes, install the ACP and MCP extras and configure a model with a context window of at least 64K. With `hermes gateway run` active in the same profile, Hermes also completed two turns, stopped an active turn, and reopened the exact session after a bridge restart with the earlier model history. Gajae Code used its local provider configuration with permission prompts enabled. [Gajae Code provider setup](https://github.com/Yeachan-Heo/gajae-code/blob/main/docs/models.md) · [fx local model setup](https://fx.sh/docs/configure-fx/custom-model-connections) · [Hermes ACP setup](https://hermes-agent.nousresearch.com/docs/user-guide/features/acp)
 
 
@@ -121,11 +124,15 @@ Cline 3.0.76 and Kilo 7.8.38 each completed two managed turns with an OpenAI-com
 
 Kiro CLI 3.6.0, goose 1.61.0, Factory Droid 1.20.0, Grok Build 1.0.92, and Mistral Vibe 3.1.5 initialized over ACP v1 on macOS arm64 using official distributions and temporary homes. Kiro, Droid, Grok, and Vibe returned authentication errors from `session/new`. Goose returned an internal error and its log identified the missing `GOOSE_PROVIDER` setting. The checks used fresh homes without credentials and ended at session creation. [Kiro installation](https://kiro.dev/docs/getting-started/installation/) · [goose release](https://github.com/aaif-goose/goose/releases/tag/v1.61.0) · [Droid CLI reference](https://github.com/Factory-AI/factory/blob/main/docs/reference/cli-reference.mdx) · [Grok installation](https://docs.x.ai/build/overview) · [Vibe installation](https://docs.mistral.ai/vibe/code/cli)
 
+With a loopback OpenAI-compatible model configured, Mistral Vibe 3.1.5, Grok Build 1.0.92, and Kimi Code 2.8.1 each completed two managed turns, stopped an active request, and resumed the same ID. The next model request after resume included both earlier prompts and replies. Vibe and Kimi also changed and restored their permission modes. Grok advertised commands and model settings and did not advertise ACP modes. On this Mac, the Kimi npm launcher's Node runtime returned `EMFILE` from file watching. Running the same vendor package under Bun completed the check. [Vibe offline models](https://docs.mistral.ai/vibe/code/cli/offline-models) · [Grok custom models](https://docs.x.ai/build/settings) · [Kimi providers](https://moonshotai.github.io/kimi-code/en/configuration/providers.html)
+
+Factory Droid 1.20.0 used the loopback model in ordinary `droid exec` and still required Factory sign-in to create an ACP session with the same configuration. Auggie 1.2.3 opened a managed session. Its terminal model selector listed no models with the scratch local configuration, and its ACP prompt returned an internal error before the loopback server received a request. [Droid custom models](https://docs.factory.com/model-independence/byok) · [Auggie 1.x release](https://www.augmentcode.com/changelog/auggie-cli-1-2-0-release-notes)
+
 Additional session checks used DeepAgents ACP 0.1.7, Dirac 0.6.2, GLM Agent 1.17.1, siGit Code 1.7.10 and fast-agent ACP 0.10.66. Each created a session over stdio. Configure a model for fast-agent before starting it. IBM Bob 2.1.0, Corust Agent 0.6.0, DimCode 0.5.32, Kimchi 1.40.0, Stakpak 0.3.88 and Poolside 1.0.16 initialized and required authentication to open a session.
 
 Snowflake Cortex Code 1.0.73 and Crow CLI 0.1.49 opened managed sessions. MiniMax Code ACP 0.7.9 initialized and requested terminal sign-in with `mcode login`.
 
-Autohand 0.9.12 requires a different MCP stdio frame format. Harn 0.10.202 and CodeWhale 0.10.4 rejected the Pulsar MCP server during session creation. VTCode 0.96.14 reused a session ID across unrelated workspaces. The built-in catalog omits these versions.
+Harn 0.10.202 and CodeWhale 0.10.4 rejected the Pulsar MCP server during session creation. VTCode 0.96.14 reused a session ID across unrelated workspaces. The built-in catalog omits these versions.
 
 Muse Code 1.4.24 initialized and requested sign-in. Pulsar enables its experimental ACP mode for the provider process. Fast-agent also registered with Pulsar and started its MCP server with `FAST_AGENT_MODEL=codexplan`.
 
@@ -137,7 +144,6 @@ These checks used temporary workspaces on macOS. [Paseo catalog comparison](pase
 | Provider tested | Result |
 | --- | --- |
 | Agoragentic 1.3.6 | Registered a session but ignored the supplied MCP server and returned a fixed tool-bridge response. |
-| Autohand | The npm adapter 0.2.1 required CLI sign-in. Native 0.9.12 sent a length-prefixed MCP frame and cancelled session creation. |
 | CodeWhale 0.10.4 | Rejected client-supplied MCP servers when opening a session. |
 | Hoplite 3.5.2 | Dropped client-supplied MCP servers. Sign-in remained incomplete. |
 | Minion Code 0.1.45 | Failed to import its ACP dependency. Pinning the SDK to 0.12.1 let a test session register, but the provider did not start the supplied MCP server. |
