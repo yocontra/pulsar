@@ -218,9 +218,10 @@ function seed() {
 			kind: "session",
 			agentType: "explore",
 			state: "running",
-			hasTranscript: false,
+			hasTranscript: true,
 		});
 		subs.set(oc.id, [kid]);
+		log(kid.id, "Explore the repository.", "Found the entry point.", true);
 	}
 }
 

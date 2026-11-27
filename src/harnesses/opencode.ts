@@ -15,6 +15,7 @@ import {
 } from "./opencode-api.ts";
 import { opencodeIdent } from "./opencode-ident.ts";
 import { opencodePending, opencodeReply } from "./opencode-interactions.ts";
+import { opencodeTranscript } from "./opencode-transcript.ts";
 import type { HarnessDriver, Scanned } from "./types.ts";
 
 /** A session's messages from its local server, newest first; [] when unavailable. */
@@ -229,6 +230,7 @@ function hasOpenCodeTarget(agent: Agent): boolean {
 
 export const opencode: HarnessDriver = {
 	...opencodeIdent,
+	transcript: opencodeTranscript,
 
 	scan: { intervalMs: 20_000, sessions: scanOpencode },
 

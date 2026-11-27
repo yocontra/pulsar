@@ -328,7 +328,7 @@ export function makeAgent(
 		lastActive,
 		statusSince: lastActive - int(10, 900) * 1000,
 		wake: "wakes",
-		hasTranscript: harness !== "opencode",
+		hasTranscript: true,
 		inbound,
 		reach,
 		...over,

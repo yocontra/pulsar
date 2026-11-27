@@ -818,9 +818,8 @@ describe("locate", () => {
 		).toEqual({ kind: "file", path: newer, headerLine: true, guess: true });
 	});
 
-	test("omp marks its header line; OpenCode has no transcript in v1", () => {
-		expect(driverFor("opencode")?.transcript).toBeUndefined();
-		for (const id of ["claude", "codex", "pi", "omp"])
+	test("native harnesses expose transcript readers", () => {
+		for (const id of ["claude", "codex", "pi", "omp", "opencode"])
 			expect(driverFor(id)?.transcript).toBeDefined();
 	});
 });
@@ -1465,7 +1464,7 @@ describe("why there is no transcript", () => {
 		({ harness, sessionId, cwd: "/work/demo", meta: {} }) as unknown as Agent;
 
 	test("by harness: none kept, no session yet, or not found yet", () => {
-		expect(driverMissing(agent("opencode", "ses_1"))).toBe("unsupported");
+		expect(driverMissing(agent("opencode", "ses_1"))).toBe("not_found");
 		expect(driverMissing(agent("cursor", null))).toBe("unsupported");
 		// A Codex app-server before it learns its thread.
 		expect(driverMissing(agent("codex", null))).toBe("no_session");
@@ -1474,7 +1473,7 @@ describe("why there is no transcript", () => {
 		// pi and omp register by pid and find the file by folder.
 		expect(driverMissing(agent("pi", null))).toBe("not_found");
 		expect(driverMissing(agent("omp", null))).toBe("not_found");
-		expect(subagentMissing(agent("opencode", "ses_1"))).toBe("unsupported");
+		expect(subagentMissing(agent("opencode", "ses_1"))).toBe("not_found");
 		expect(subagentMissing(agent("claude", "s"))).toBe("not_found");
 	});
 

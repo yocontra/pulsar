@@ -55,11 +55,7 @@ export function claudeStatePath(): string {
 	return dir ? join(dir, ".claude.json") : join(homedir(), ".claude.json");
 }
 
-/** OpenCode's database, in its XDG data folder. */
-export function opencodeDbPath(): string {
-	const data = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
-	return join(data, "opencode", "opencode.db");
-}
+export { opencodeDbPath } from "../harnesses/opencode-transcript.ts";
 
 /**
  * The windows Claude Code's `/usage` names (the other keys in its answer
