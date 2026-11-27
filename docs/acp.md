@@ -42,6 +42,7 @@ To check a local installation from this checkout, use `bun scripts/live/acp-smok
 | `opencode` | `opencode acp` | native | [OpenCode](https://opencode.ai/docs/cli/acp/) |
 | `fx` | `fx acp` | native | [fx](https://fx.sh/docs/using-fx/acp) |
 | `hermes` | `hermes acp` | native | [Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/features/acp) |
+| `gjc` | `gjc acp` | native | [Gajae Code](https://github.com/Yeachan-Heo/gajae-code/blob/main/docs/acp-local-development.md) |
 | `kiro` | `kiro-cli acp` | native | [Kiro CLI](https://kiro.dev/docs/cli/acp/) |
 | `cline` | `cline --acp` | native | [Cline](https://github.com/agentclientprotocol/registry/tree/main/cline) |
 | `goose` | `goose acp` | native | [goose](https://github.com/agentclientprotocol/registry/tree/main/goose) |
@@ -79,7 +80,7 @@ The Cursor CLI installer also provides the `cursor-agent` alias. Kiro uses the A
 
 ## Provider verification
 
-fx 0.0.18 and Hermes Agent 0.23.4 each accepted a message from Pulsar, returned a reply from local Qwen2.5-0.5B-Instruct through llama.cpp, and connected to Pulsar’s MCP server. For fx, configure your local model connection before starting the session. For Hermes, install the ACP and MCP extras and configure a model with a context window of at least 64K. The Hermes check used a running `hermes gateway run` in the same profile. [fx local model setup](https://fx.sh/docs/configure-fx/custom-model-connections) · [Hermes ACP setup](https://hermes-agent.nousresearch.com/docs/user-guide/features/acp)
+fx 0.0.18, Hermes Agent 0.23.4 and Gajae Code 0.22.2 each accepted a message from Pulsar, returned a reply from local Qwen2.5-0.5B-Instruct through llama.cpp, and connected to Pulsar’s MCP server. For fx, configure your local model connection before starting the session. For Hermes, install the ACP and MCP extras and configure a model with a context window of at least 64K. The Hermes check used a running `hermes gateway run` in the same profile. Gajae Code used its local provider configuration with permission prompts enabled. [Gajae Code provider setup](https://github.com/Yeachan-Heo/gajae-code/blob/main/docs/models.md) · [fx local model setup](https://fx.sh/docs/configure-fx/custom-model-connections) · [Hermes ACP setup](https://hermes-agent.nousresearch.com/docs/user-guide/features/acp)
 
 
 Every listed executable initialized over ACP v1 on macOS arm64. In disposable sessions, Pulsar dispatched a slash command and returned a permission denial through five installed providers with a loopback model.

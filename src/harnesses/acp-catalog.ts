@@ -70,6 +70,16 @@ export const ACP_PROVIDERS = [
 			"https://hermes-agent.nousresearch.com/docs/user-guide/features/acp",
 	},
 	{
+		id: "gjc",
+		label: "Gajae Code",
+		binary: "gjc",
+		args: ["acp"],
+		env: { GJC_ACP_PERMISSION_MODE: "prompt" },
+		distribution: "native",
+		source:
+			"https://github.com/Yeachan-Heo/gajae-code/blob/main/docs/acp-local-development.md",
+	},
+	{
 		id: "kiro",
 		label: "Kiro CLI",
 		binary: "kiro-cli",
