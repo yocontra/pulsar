@@ -65,6 +65,7 @@ These checks used disposable sessions on macOS. The Codex steering check used th
 | --- | --- |
 | Claude Code 2.1.331 | A child received a message through a tool hook, replied as itself, and updated its identity. Its parent kept its original identity. |
 | Codex CLI 0.172.0 | The installed app server accepted urgent input during a turn. The local model received it on the original thread, with one turn ID throughout. Starting an already queued submission during that turn was refused. Stop interrupted the turn and the session became idle. |
+| OpenCode 2.2.5 | Pulsar reopened saved native parent and child sessions separately and displayed their messages, tool calls, and results. |
 | OpenCode 2.2.5 | A native child listed agents, received a direct message through the OpenCode service, and replied from its own child address. Pulsar also found a nested child through the native session API. In two disposable service sessions, the model received urgent input after a tool result within the active turn, and normal input only after the assistant finished its turn. |
 | pi 1.5.0 | The local model received urgent input during the active turn and normal input after idle. Pulsar confirmed both deliveries. |
 | omp 19.1.1 | The local model received urgent input during the active turn and normal input after idle. A running child received urgent input, messaged its sibling, and received the reply. |
