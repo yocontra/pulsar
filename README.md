@@ -77,6 +77,8 @@ pulsar acp antigravity
 
 The app also uses the Agent Client Protocol (ACP) when it finds a compatible executable. Antigravity and OpenCode speak ACP directly. Claude Code and Codex use separate ACP adapters. The provider guide lists the executable, available features, and live test results for each provider. [ACP provider guide](https://github.com/yocontra/pulsar/blob/main/docs/acp.md)
 
+To continue a closed conversation, search for its name or project, open the saved transcript, and select **Resume session**. Pulsar reopens that conversation in its original workspace. This works with the six native harnesses and with managed ACP providers that support resume or load. [Session links and saved conversations](https://github.com/yocontra/pulsar/blob/main/docs/adapters.md#session-links-and-saved-conversations)
+
 For cloud work, open **Hosted agents** to view or start GitHub Copilot, Codex Cloud, or Cursor Cloud tasks. Choose the machine signed in to the provider. That machine verifies your passkey before submitting work. [Hosted agent setup](https://github.com/yocontra/pulsar/blob/main/docs/hosted.md)
 
 ## Agent mesh
