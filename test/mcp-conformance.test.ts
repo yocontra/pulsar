@@ -636,6 +636,28 @@ describe.skipIf(RECORD)("the SDK client", () => {
 		}
 	});
 
+	test("a length-prefixed client receives a parse error so it can retry with newline framing", async () => {
+		const peer = new Raw();
+		try {
+			const body = req(1, "ping");
+			peer.child.stdin?.write("Content-Len");
+			peer.write(`gth: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
+			await peer.waitFor([null]);
+			expect(peer.seen).toEqual([
+				{
+					jsonrpc: "2.0",
+					id: null,
+					error: {
+						code: -32700,
+						message: "MCP stdio requires newline-delimited JSON.",
+					},
+				},
+			]);
+		} finally {
+			peer.close();
+		}
+	});
+
 	test("exits when stdin closes", async () => {
 		const child = spawn(NODE, [CLI, "mcp"], {
 			cwd: work,

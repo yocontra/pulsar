@@ -53,6 +53,14 @@ export const ACP_PROVIDERS = [
 		source: "https://opencode.ai/docs/cli/acp/",
 	},
 	{
+		id: "autohand",
+		label: "Autohand Code",
+		binary: "autohand",
+		args: ["--acp"],
+		distribution: "native",
+		source: "https://docs.autohand.ai/integrations/acp-mode",
+	},
+	{
 		id: "fx",
 		label: "fx",
 		binary: "fx",

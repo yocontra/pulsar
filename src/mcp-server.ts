@@ -277,15 +277,36 @@ export class McpStdioServer {
 		let parts: string[] = [];
 		let pending = 0;
 		let overflow = false;
+		let framing: "unknown" | "newline" | "rejected" = "unknown";
 		input.setEncoding("utf8");
 		input.on("data", (chunk: string) => {
+			if (framing === "rejected") return;
 			let start = 0;
 			let nl = chunk.indexOf("\n");
 			while (nl !== -1) {
 				const tail = chunk.slice(start, nl);
 				if (!overflow && pending + tail.length <= MAX_LINE) {
 					const line = parts.length ? parts.join("") + tail : tail;
-					if (line.trim()) this.onLine(line);
+					if (line.trim()) {
+						// Clients that try length framing first can retry the standard MCP transport.
+						if (
+							framing === "unknown" &&
+							/^Content-Length:\s*\d+\s*$/i.test(line)
+						) {
+							framing = "rejected";
+							this.send({
+								jsonrpc: "2.0",
+								id: null,
+								error: {
+									code: -32700,
+									message: "MCP stdio requires newline-delimited JSON.",
+								},
+							});
+							return;
+						}
+						framing = "newline";
+						this.onLine(line);
+					}
 				}
 				parts = [];
 				pending = 0;
