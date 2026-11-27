@@ -591,21 +591,23 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		expect(childAgent.canStop).toBe(true);
 		expect(grandchild.canStop).toBe(false);
 		expect((await current())?.capabilities?.subagents).toBe(true);
-		const childHistory = await op.call<TranscriptPageResult>(
-			"transcript.read",
-			{ agent: childAgent.id },
+		const childHistory = () =>
+			op.call<TranscriptPageResult>("transcript.read", {
+				agent: childAgent.id,
+			});
+		// Child text is streamed and persisted independently of registry updates.
+		await until(async () =>
+			(await childHistory()).events.some((e) => e.text === "Exact child reply"),
 		);
-		expect(childHistory.events).toContainEqual(
-			expect.objectContaining({ text: "Exact child reply" }),
-		);
-		expect(childHistory.events).toContainEqual(
+		const childPage = await childHistory();
+		expect(childPage.events).toContainEqual(
 			expect.objectContaining({
 				text: "Work for child",
 				from: "Parent session",
 			}),
 		);
 		expect(
-			childHistory.events.some(
+			childPage.events.some(
 				({ text }) =>
 					text === "Unannounced text" || text === "Status for parent",
 			),
