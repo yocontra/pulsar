@@ -3,6 +3,7 @@ import type {
 	LaunchState,
 	LimitWarning,
 	SecurityNotice,
+	ServerEvents,
 	SubagentCounts,
 	TurnKind,
 	TurnSummary,
@@ -12,6 +13,7 @@ import type { NeedsYou } from "./registry.ts";
 
 /** Everything the service announces. Names and payloads are the socket `tail` frames. */
 export interface ServiceEvents {
+	sessionNotice: ServerEvents["sessionNotice"];
 	agent: { action: "join" | "update" | "gone"; agent: PublicAgent };
 	message: { message: Message; recipients: string[] };
 	/** An agent started or stopped waiting on the user (not a socket `tail` frame). */

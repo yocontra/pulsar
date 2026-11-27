@@ -188,6 +188,13 @@ for await (const line of lines) {
 			mcpLines.on("line", (message) => {
 				const data = JSON.parse(message);
 				if (data.id === 1) {
+					emit("session/update", {
+						sessionId,
+						update: {
+							sessionUpdate: "session_info_update",
+							title: "Early conversation title",
+						},
+					});
 					// Providers can wait for child MCP initialization before returning the session id.
 					emit("session/update", {
 						sessionId,
@@ -333,6 +340,38 @@ for await (const line of lines) {
 					title: "Fixture child",
 					capabilities: { cancel: {} },
 					state: { state: "running" },
+				});
+				emitUpdate(sessionId, {
+					sessionUpdate: "session_info_update",
+					title: "Updated conversation title",
+					_meta: { name: "spoofed-name" },
+				});
+				emitUpdate(sessionId, {
+					sessionUpdate: "session_info_update",
+					updatedAt: "2026-11-25T00:00:00Z",
+				});
+				emitUpdate(childSessionId, {
+					sessionUpdate: "session_info_update",
+					title: "Child subject",
+				});
+				emitUpdate("unannounced-session", {
+					sessionUpdate: "session_info_update",
+					title: "Wrong subject",
+				});
+				emitUpdate(sessionId, {
+					sessionUpdate: "compaction_update",
+					compactionId: "summary-1",
+					status: "in_progress",
+				});
+				emitUpdate(sessionId, {
+					sessionUpdate: "compaction_update",
+					compactionId: "summary-1",
+					status: "completed",
+				});
+				emitUpdate(sessionId, {
+					sessionUpdate: "notice",
+					severity: "warning",
+					title: "Temporary provider warning",
 				});
 				emitUpdate(childSessionId, {
 					sessionUpdate: "subagent_update",

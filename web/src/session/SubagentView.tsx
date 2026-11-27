@@ -22,6 +22,7 @@ import { messagesViaParent } from "../lib/subagents.ts";
 import { ConversationView, TranscriptSkeleton } from "./ConversationView.tsx";
 import { Transcript } from "./Transcript.tsx";
 import { TranscriptMissingNotice } from "./TranscriptMissing.tsx";
+import { useSessionNotice } from "./use-session-notice.ts";
 
 /** At most this many events in the DOM; older ones behind "load earlier". */
 const WINDOW = 300;
@@ -52,6 +53,7 @@ export function SubagentView({
 	// A finished subagent the daemon found no log for keeps none (a Codex
 	// subagent with no rollout): final. A running one may still write it.
 	const settled = sub?.hasTranscript === false && sub.state !== "running";
+	useSessionNotice(id);
 	const t = useTranscript(sub ? id : null, settled);
 	const lastApprovalAgent = useRef<AgentRow | null>(null);
 	const item = useApprovalItem(id, (agentId) =>
@@ -94,6 +96,9 @@ export function SubagentView({
 			data-subagent-page={id}
 		>
 			{!bare && <SubagentHeader sub={sub} parentName={parentName} id={id} />}
+			{bare && sub?.conversationTitle && (
+				<p className="session-conversation-title">{sub.conversationTitle}</p>
+			)}
 			<ConversationView
 				variant={variant}
 				label={`Transcript of subagent ${sub?.name ?? ""}`}
@@ -214,6 +219,7 @@ export function SubagentHeader({
 						sub.agentType,
 						kindWord(sub),
 						`started ${age(sub.startedAt, now)} ago`,
+						sub.conversationTitle,
 						sub.description,
 					]
 						.filter(Boolean)

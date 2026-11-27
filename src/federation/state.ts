@@ -1,3 +1,4 @@
+import { conversationTitle } from "../harnesses/acp-session-info.ts";
 import type {
 	Approval,
 	ApprovalState,
@@ -109,6 +110,7 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 				}
 			: null;
 	const repoUrl = cleanRepoUrl(a.repoUrl);
+	const title = conversationTitle(a.conversationTitle);
 	const caps = a.capabilities as Record<string, unknown> | null;
 	const capabilities =
 		caps && (caps.surface === "managed-acp" || caps.surface === "attached")
@@ -159,6 +161,7 @@ export function cleanFedAgent(raw: unknown): FedAgent | null {
 			: [],
 		status,
 		model: text(a.model, 120),
+		...(title ? { conversationTitle: title } : {}),
 		activity: text(a.activity, 500),
 		inbound: INBOUND.has(a.inbound as InboundPolicy)
 			? (a.inbound as InboundPolicy)
@@ -310,7 +313,11 @@ function toAgent(peer: Peer, f: FedAgent): Agent {
 		reach: f.reach,
 		lastSeen: f.lastSeen,
 		createdAt: f.createdAt,
-		meta: { machineId: peer.machineId, localId: f.id },
+		meta: {
+			machineId: peer.machineId,
+			localId: f.id,
+			...(f.conversationTitle ? { acpTitle: f.conversationTitle } : {}),
+		},
 	};
 }
 

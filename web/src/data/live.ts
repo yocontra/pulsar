@@ -55,6 +55,7 @@ type Listeners = {
 	approval: Approval;
 	ready: ServerEvents["ready"];
 	query: ServerEvents["query"];
+	sessionNotice: ServerEvents["sessionNotice"];
 	notify: ServerEvents["notify"];
 	launch: ServerEvents["launch"];
 	limit: ServerEvents["limit"];
@@ -106,6 +107,7 @@ export class LiveSync {
 		approval: new Set(),
 		ready: new Set(),
 		query: new Set(),
+		sessionNotice: new Set(),
 		notify: new Set(),
 		launch: new Set(),
 		limit: new Set(),
@@ -417,6 +419,9 @@ export class LiveSync {
 				c.setQueryData(keys.changes(e.data.agent, e.data.mode), e.data);
 				if (e.data.mode === "worktree")
 					c.setQueryData(keys.changesPeek(e.data.agent), e.data);
+				break;
+			case "sessionNotice":
+				this.emit("sessionNotice", e.data);
 				break;
 			case "notify":
 				this.emit("notify", e.data);

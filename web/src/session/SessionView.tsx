@@ -29,6 +29,7 @@ import {
 } from "./ConversationView.tsx";
 import { Transcript, type TranscriptProps } from "./Transcript.tsx";
 import { TranscriptMissingNotice } from "./TranscriptMissing.tsx";
+import { useSessionNotice } from "./use-session-notice.ts";
 
 const TerminalCard = lazy(() => import("../approval/TerminalCard.tsx"));
 
@@ -60,6 +61,7 @@ function SessionViewImpl({
 	const live = findAgent(id);
 	const row = useAgent(id).data;
 	const agent: AgentRow | null = row ?? live;
+	useSessionNotice(id);
 	const t = useTranscript(id);
 	const events = t.events;
 	const err =
@@ -213,6 +215,9 @@ function SessionViewImpl({
 			className={`session${mobile ? " mobile" : ""}`}
 			aria-label={`Session ${agent?.name ?? ""}`}
 		>
+			{agent?.conversationTitle && agent.conversationTitle !== agent.name && (
+				<p className="session-conversation-title">{agent.conversationTitle}</p>
+			)}
 			<ConversationView
 				variant={mobile ? "phone" : "desktop"}
 				label={`Conversation with ${agent?.name ?? "agent"}`}

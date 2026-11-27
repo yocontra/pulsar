@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { Daemon } from "../src/daemon.ts";
 import { cleanFedAgent } from "../src/federation/state.ts";
 import type { AttachmentUpload, InteractionAnswer } from "../src/http/wire.ts";
+import { SessionHistory } from "../src/service/session-history.ts";
 import type { TranscriptPageResult } from "../src/service/transcripts.ts";
 import type { PublicAgent } from "../src/types.ts";
 import { operator, startDaemon, until } from "./helpers.ts";
@@ -533,6 +534,15 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				(await current())?.status === "idle" &&
 				Boolean(bridge?.output().includes("Detached question cancelled")),
 		);
+		expect((await current())?.conversationTitle).toBe(
+			"Early conversation title",
+		);
+		const providerAgent = daemon.service.registry.find(agentId)!;
+		daemon.service.registry.setIdentity(providerAgent, { name: "my-agent" });
+		const notices: string[] = [];
+		const stopNotices = daemon.service.events.on("sessionNotice", (notice) =>
+			notices.push(notice.title),
+		);
 		await prompt("fixture-child");
 		const children = () => daemon.service.subagents.list(agentId);
 		await until(() =>
@@ -544,6 +554,38 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		const grandchild = listed.find(
 			({ name }) => name === "Fixture grandchild",
 		)!;
+		await until(
+			async () =>
+				(await current())?.conversationTitle === "Updated conversation title" &&
+				notices.includes("Temporary provider warning"),
+		);
+		stopNotices();
+		expect((await current())?.name).toBe("my-agent");
+		expect(
+			daemon.service.registry.resolveTargets("Updated conversation title", {
+				...providerAgent,
+				id: "sender",
+			}),
+		).toEqual([]);
+		expect(childAgent.conversationTitle).toBe("Child subject");
+		const archived = new SessionHistory(daemon.service.store, "fixture");
+		archived.remember(daemon.service.registry.find(agentId)!);
+		expect(archived.get(agentId)).toMatchObject({
+			name: "my-agent",
+			meta: { acpTitle: "Updated conversation title" },
+		});
+		expect(
+			archived.search("Updated conversation title", []).map((r) => r.id),
+		).toContain(agentId);
+		const lifecycle = await op.call<TranscriptPageResult>("transcript.read", {
+			agent: agentId,
+		});
+		expect(
+			lifecycle.events.filter((e) => e.subtype === "compacted"),
+		).toHaveLength(1);
+		expect(lifecycle.events.map((e) => e.text)).not.toContain(
+			"Temporary provider warning",
+		);
 		expect(grandchild.parentSubId).toBe(childAgent.id);
 		expect(childAgent.messaging.mode).toBe("parent");
 		expect(childAgent.canStop).toBe(true);

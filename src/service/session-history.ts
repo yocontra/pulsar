@@ -58,7 +58,11 @@ export class SessionHistory {
 			lastSeen: agent.lastSeen,
 			meta: {
 				...(agent.meta.acp === "1"
-					? { acp: "1", acpResume: agent.meta.acpResume === "1" ? "1" : "0" }
+					? {
+							acp: "1",
+							acpResume: agent.meta.acpResume === "1" ? "1" : "0",
+							...(agent.meta.acpTitle ? { acpTitle: agent.meta.acpTitle } : {}),
+						}
 					: {}),
 				...(agent.meta.resumeKey ? { resumeKey: agent.meta.resumeKey } : {}),
 			},
@@ -81,7 +85,7 @@ export class SessionHistory {
 				json_extract(binding,'$.lastSeen') AS lastSeen
 			FROM session_history
 			WHERE id NOT IN (SELECT value FROM json_each(?))
-				AND instr(lower(name || ' ' || coalesce(project,'') || ' ' || id), lower(?)) > 0
+				AND instr(lower(name || ' ' || coalesce(project,'') || ' ' || coalesce(json_extract(binding,'$.meta.acpTitle'),'') || ' ' || id), lower(?)) > 0
 			ORDER BY lastSeen DESC, id LIMIT 30
 		`)
 			.all(JSON.stringify(liveIds), query.trim());

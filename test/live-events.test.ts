@@ -141,6 +141,59 @@ const agentIn = (cwd: string, sessionId: string) =>
 		registered: false,
 	});
 
+test("only the selected live chat receives a provider notice, with no reconnect replay", async () => {
+	const target = agentIn(dir, "notice-target");
+	const other = agentIn(dir, "other-session");
+	const watching = await stream();
+	const away = await stream();
+	hub.setSubscription(watching.streamId, OWNER, {
+		...NONE,
+		session: target.id,
+	});
+	hub.setSubscription(away.streamId, OWNER, { ...NONE, session: other.id });
+	const notice = {
+		agentId: target.id,
+		severity: "warning" as const,
+		title: "Live notice",
+	};
+	service.events.emit("sessionNotice", notice);
+	await watching.waitFor("Live notice");
+	expect(await away.drain(30)).not.toContain("Live notice");
+	const cursor = watching.lastId();
+	await watching.cancel();
+	service.events.emit("sessionNotice", { ...notice, title: "Expired notice" });
+	const resumed = await stream(cursor);
+	expect(resumed.streamId).toBe(watching.streamId);
+	expect(await resumed.drain(30)).not.toContain("Expired notice");
+	await Promise.all([resumed.cancel(), away.cancel()]);
+});
+
+test("a qualified local child receives its own notices", async () => {
+	const parent = agentIn(dir, "child-notice");
+	const child = `${parent.id}/sub:worker`;
+	const qualified = `${service.machineId}/${child}`;
+	const watching = await stream();
+	hub.setSubscription(watching.streamId, OWNER, {
+		...NONE,
+		session: qualified,
+	});
+	service.events.emit("sessionNotice", {
+		agentId: parent.id,
+		title: "Parent only",
+		severity: "info",
+	});
+	service.events.emit("sessionNotice", {
+		agentId: child,
+		title: "Child notice",
+		severity: "info",
+	});
+	await watching.waitFor("Child notice");
+	const events = await watching.drain(10);
+	expect(events).toContain(`"agentId":"${qualified}"`);
+	expect(events).not.toContain("Parent only");
+	await watching.cancel();
+});
+
 describe("usage", () => {
 	test("a scan that stores new lines sends one `usage` notice to every stream; an unchanged scan sends none", async () => {
 		const usage = count("usage");

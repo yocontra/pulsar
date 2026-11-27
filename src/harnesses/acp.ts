@@ -42,6 +42,7 @@ import { type AcpSelectorCommand, AcpSessionControls } from "./acp-controls.ts";
 import { ACP_IDENTITY_ENV } from "./acp-identity.ts";
 import { permissionArguments } from "./acp-permission.ts";
 import { antigravityQuestion, elicitationQuestions } from "./acp-questions.ts";
+import { compactionEvent, conversationTitle } from "./acp-session-info.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
 import { acpTranscriptPath } from "./acp-transcript.ts";
 import { antigravitySkillPrompt } from "./antigravity-commands.ts";
@@ -130,6 +131,7 @@ class Bridge {
 	private setupNotificationBytes = 0;
 	private switchingConfig = false;
 	private usageObserved = false;
+	private conversationTitle: string | undefined;
 	private usageWriter?: AcpUsageWriter;
 	private readonly options: AcpBridgeOptions;
 	private readonly identityPath: string;
@@ -194,6 +196,9 @@ class Bridge {
 						(update.sessionUpdate === "available_commands_update" ||
 							update.sessionUpdate === "config_option_update" ||
 							update.sessionUpdate === "current_mode_update" ||
+							update.sessionUpdate === "notice" ||
+							update.sessionUpdate === "session_info_update" ||
+							update.sessionUpdate === "compaction_update" ||
 							update.sessionUpdate === "subagent_update" ||
 							update.sessionUpdate === "session_message" ||
 							update.sessionUpdate === "session_message_chunk" ||
@@ -286,7 +291,11 @@ class Bridge {
 			"initialize",
 			{
 				protocolVersion: ACP_PROTOCOL_VERSION,
-				clientCapabilities: { elicitation: { form: {} }, subagents: {} },
+				clientCapabilities: {
+					session: { compaction: {}, notices: {} },
+					elicitation: { form: {} },
+					subagents: {},
+				},
 				clientInfo: { name: "pulsar", version: VERSION },
 			},
 			startup,
@@ -401,6 +410,8 @@ class Bridge {
 		};
 		stopSignal.throwIfAborted();
 		await this.connectDaemon();
+		// The registry now owns this name, including future explicit renames.
+		delete this.registration.name;
 		stopSignal.throwIfAborted();
 		const pendingPath = `${this.identityPath}.tmp`;
 		await writeFile(pendingPath, JSON.stringify(this.registration), {
@@ -897,12 +908,33 @@ class Bridge {
 		this.setupNotificationBytes = 0;
 		for (const pending of this.setupUpdates.splice(0)) {
 			if (this.childUpdate(pending.sessionId, pending.update)) continue;
-			if (pending.sessionId === sessionId) this.controls.update(pending.update);
+			if (pending.sessionId === sessionId) {
+				if (
+					pending.update.sessionUpdate === "session_info_update" ||
+					pending.update.sessionUpdate === "compaction_update"
+				)
+					this.sessionUpdate(pending.update);
+				else this.controls.update(pending.update);
+			}
 		}
 	}
 
 	private childUpdate(sessionId: string, update: SessionUpdate): boolean {
 		try {
+			if (update.sessionUpdate === "notice") {
+				const root = sessionId === this.sessionId;
+				if (root || this.children?.announced(sessionId)) {
+					const title = conversationTitle(update.title);
+					if (title)
+						this.notify("acp.notice", {
+							title,
+							description: conversationTitle(update.description),
+							severity: update.severity,
+							...(root ? {} : { childSessionId: sessionId }),
+						});
+				}
+				return true;
+			}
 			if (
 				update.sessionUpdate === "subagent_update" &&
 				update.state?.state === "idle" &&
@@ -940,6 +972,9 @@ class Bridge {
 	private runtimeMeta() {
 		const commands = this.commandCatalog();
 		return {
+			...(this.conversationTitle !== undefined
+				? { acpTitle: this.conversationTitle }
+				: {}),
 			acpEffort: this.controls.current("effort") ?? "",
 			acpModes: this.controls.selection?.modes.length ? "1" : "0",
 			acpCommands: commands.size ? "1" : "0",
@@ -974,7 +1009,18 @@ class Bridge {
 	}
 
 	private sessionUpdate(update: SessionUpdate) {
-		if (this.controls.update(update)) {
+		if (update.sessionUpdate === "session_info_update") {
+			if (update.title !== undefined) {
+				const title = conversationTitle(update.title);
+				if (this.conversationTitle !== title) {
+					this.conversationTitle = title;
+					this.refreshCapabilities();
+				}
+			}
+		} else if (update.sessionUpdate === "compaction_update") {
+			const event = compactionEvent(update);
+			if (event) this.record(event);
+		} else if (this.controls.update(update)) {
 			this.refreshCapabilities();
 		} else if (update.sessionUpdate === "usage_update") {
 			this.usageWriter?.add(update);

@@ -765,6 +765,21 @@ describe("forwarded user actions", () => {
 				),
 			3000,
 		);
+		const notice = { title: "Peer notice", severity: "warning" as const };
+		c.service.events.emit("sessionNotice", { ...notice, agentId: "unrelated" });
+		c.service.events.emit("sessionNotice", { ...notice, agentId: logged.id });
+		await until(() => events.some((e) => e.event === "sessionNotice"), 3000);
+		expect(
+			events.filter((e) => e.event === "sessionNotice").map((e) => e.data),
+		).toEqual([{ ...notice, agentId: address, description: "" }]);
+		const history = await api<{ events: TranscriptEvent[] }>(
+			"b",
+			`/agents/${encodeURIComponent(address)}/transcript`,
+		);
+		expect(history.status).toBe(200);
+		expect(history.body.events.some((e) => e.text.includes(notice.title))).toBe(
+			false,
+		);
 		ac.abort();
 		await reading;
 	});

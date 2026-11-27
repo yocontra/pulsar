@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { PulsarService } from "../service/index.ts";
+import { isAddress } from "../service/pool.ts";
 import {
 	type AgentSort,
 	encodeCursor,
@@ -241,6 +242,18 @@ export class EventHub {
 		const offSecurity = this.service.events.on("security", (data) =>
 			this.publish(topicKey("security"), "security", data),
 		);
+		const offSessionNotice = this.service.events.on("sessionNotice", (data) => {
+			const addresses = isAddress(data.agentId)
+				? [data.agentId]
+				: [data.agentId, `${this.service.machineId}/${data.agentId}`];
+			for (const id of addresses)
+				this.publish(
+					topicKey("transcript", id),
+					"sessionNotice",
+					{ ...data, agentId: id },
+					false,
+				);
+		});
 		const offNotify = this.service.events.on("notify", (data) =>
 			this.publish(topicKey("notify"), "notify", data),
 		);
@@ -271,6 +284,7 @@ export class EventHub {
 			offApproval();
 			offSecurity();
 			offNotify();
+			offSessionNotice();
 			offLaunch();
 			offLimit();
 			offUsage();
@@ -715,11 +729,11 @@ export class EventHub {
 	}
 
 	/** Sends one event to a topic's streams at once (kept for resume). */
-	private publish(key: string, event: string, data: unknown) {
+	private publish(key: string, event: string, data: unknown, retain = true) {
 		const topic = this.topics.get(key);
 		if (!topic) return;
 		const e: TopicEvent = { seq: ++this.seq, at: Date.now(), event, data };
-		topic.events.push(e);
+		if (retain) topic.events.push(e);
 		for (const stream of this.streams.values())
 			if (stream.topics.has(key)) this.write(stream, e.event, e.data, e.seq);
 	}

@@ -1,3 +1,5 @@
+import { sessionNotice } from "../harnesses/acp-session-info.ts";
+import type { ServerEvents } from "../http/wire.ts";
 import { RpcError } from "../rpc.ts";
 import type { Principal } from "../service/caller.ts";
 import type { RemoteTranscripts } from "../service/pool.ts";
@@ -59,7 +61,13 @@ export class RemoteTranscriptReader implements RemoteTranscripts {
 	private readonly fed: Federation;
 	private watches = new Map<string, Watch>();
 
-	constructor(fed: Federation) {
+	private readonly onNotice?: (notice: ServerEvents["sessionNotice"]) => void;
+
+	constructor(
+		fed: Federation,
+		onNotice?: (notice: ServerEvents["sessionNotice"]) => void,
+	) {
+		this.onNotice = onNotice;
 		this.fed = fed;
 	}
 
@@ -174,6 +182,15 @@ export class RemoteTranscriptReader implements RemoteTranscripts {
 							await readSse(
 								res.body,
 								(event, data) => {
+									if (event === "sessionNotice") {
+										if (w.ac.signal.aborted || !w.fns.size) return;
+										try {
+											// Bind to the watch's authenticated peer and target; the payload supplies only display text.
+											const notice = sessionNotice(address, JSON.parse(data));
+											if (notice) this.onNotice?.(notice);
+										} catch {}
+										return;
+									}
 									if (event !== "transcript") return;
 									try {
 										const { events } = JSON.parse(data) as {

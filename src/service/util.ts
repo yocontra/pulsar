@@ -32,8 +32,12 @@ export function newId(prefix: string): string {
 }
 
 export function toPublic(agent: Agent): PublicAgent {
-	const { meta: _meta, ...rest } = agent;
-	return isFolderGuess(agent) ? { ...rest, sessionFrom: "folder" } : rest;
+	const { meta, ...rest } = agent;
+	return {
+		...rest,
+		...(meta.acpTitle ? { conversationTitle: meta.acpTitle } : {}),
+		...(isFolderGuess(agent) ? { sessionFrom: "folder" } : {}),
+	};
 }
 
 /** A stored message with its sender's public details, as receivers see it. */

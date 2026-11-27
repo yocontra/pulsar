@@ -1,3 +1,4 @@
+import { conversationTitle } from "../harnesses/acp-session-info.ts";
 import type {
 	SubagentCounts,
 	SubagentKind,
@@ -73,6 +74,9 @@ export function cleanSubagentList(
 			color: NOTICE_COLORS.find((c) => c === x.color) ?? null,
 			agentType: text(x.agentType, 80),
 			description: text(x.description, 300),
+			...(typeof x.conversationTitle === "string"
+				? { conversationTitle: conversationTitle(x.conversationTitle) }
+				: {}),
 			state: STATES.has(x.state as SubagentState)
 				? (x.state as SubagentState)
 				: "done",

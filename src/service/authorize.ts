@@ -44,6 +44,7 @@ export const OPS = [
 	"interaction.ask",
 	"interaction.local",
 	"acp.children",
+	"acp.notice",
 	/**
 	 * Passkeys: list, and remove (from the socket after a presence check; from
 	 * the app with a passkey session).
@@ -147,6 +148,7 @@ const AGENT_ONLY: ReadonlySet<Op> = new Set<Op>([
 	"interaction.ask",
 	"interaction.local",
 	"acp.children",
+	"acp.notice",
 	"whoami",
 	"set_identity",
 	"set_status",

@@ -10,6 +10,7 @@ import { isAbsolute } from "node:path";
 import type { SessionUpdate, SubagentUpdate } from "@agentclientprotocol/sdk";
 import type { TranscriptEvent } from "../transcripts/types.ts";
 import type { Agent } from "../types.ts";
+import { compactionEvent, conversationTitle } from "./acp-session-info.ts";
 import { AcpToolResults } from "./acp-tool-results.ts";
 import { acpTranscript, acpTranscriptPath } from "./acp-transcript.ts";
 import type { FoundSubagent, HarnessDriver } from "./types.ts";
@@ -109,6 +110,18 @@ export class AcpChildren {
 			this.recordChild(child, event);
 		const type = update.sessionUpdate;
 		switch (type) {
+			case "session_info_update":
+				if (update.title !== undefined) {
+					child.row.conversationTitle =
+						conversationTitle(update.title) || undefined;
+					this.persist();
+				}
+				break;
+			case "compaction_update": {
+				const event = compactionEvent(update);
+				if (event) record(event);
+				break;
+			}
 			case "agent_message_chunk":
 			case "agent_thought_chunk":
 			case "user_message_chunk": {
@@ -270,7 +283,7 @@ export class AcpChildren {
 		}
 		const row = child.row;
 		if (update.title !== undefined)
-			row.name = update.title?.trim().slice(0, 120) || "ACP child session";
+			row.name = conversationTitle(update.title) || "ACP child session";
 		if (update.description !== undefined)
 			row.description = update.description?.trim().slice(0, 800) || null;
 		if (update.cwd !== undefined)

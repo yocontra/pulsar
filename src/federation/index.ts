@@ -343,7 +343,9 @@ export class Federation implements PoolView {
 		};
 		service.onPoolChange = () => this.recheckServed();
 		this.feed = new LocalFeed(service, opts.feedLog);
-		this.transcripts = new RemoteTranscriptReader(this);
+		this.transcripts = new RemoteTranscriptReader(this, (notice) =>
+			this.service.events.emit("sessionNotice", notice),
+		);
 		this.changes = new RemoteChangesReader(this);
 		this.usage = new RemoteUsage(this);
 		this.hosted = new RemoteHosted(this);
@@ -2116,7 +2118,16 @@ export class Federation implements PoolView {
 			const off = this.service.transcripts.subscribe(agent, (events) =>
 				send("transcript", { events }),
 			);
+			const offNotice = this.service.events.on("sessionNotice", (notice) => {
+				if (notice.agentId === agent)
+					send("sessionNotice", {
+						title: notice.title,
+						description: notice.description,
+						severity: notice.severity,
+					});
+			});
 			return () => {
+				offNotice();
 				off();
 				untrack();
 				release();

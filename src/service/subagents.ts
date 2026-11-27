@@ -267,6 +267,9 @@ export class Subagents {
 			color: f.color ?? null,
 			agentType: f.agentType,
 			description: f.description,
+			...(f.conversationTitle
+				? { conversationTitle: f.conversationTitle }
+				: {}),
 			state: f.state,
 			startedAt: f.startedAt,
 			updatedAt: f.updatedAt,

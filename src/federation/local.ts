@@ -46,6 +46,9 @@ export class LocalFeed {
 			return {
 				id: agent.id,
 				name: agent.name,
+				...(row.conversationTitle
+					? { conversationTitle: row.conversationTitle }
+					: {}),
 				harness: agent.harness,
 				project: agent.project,
 				branch: agent.branch,

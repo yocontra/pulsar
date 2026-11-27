@@ -1379,6 +1379,18 @@ button.row:hover,
 
 /* ------------------------------------------------------------- session */
 
+.session-conversation-title {
+	align-self: center;
+	max-width: min(100%, 80ch);
+	margin: 0;
+	padding: 0.35rem 1rem;
+	color: var(--ds-text-2);
+	font-size: 0.875rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .session {
 	display: flex;
 	flex-direction: column;

@@ -112,6 +112,8 @@ export function isFolderGuess(agent: Agent): boolean {
 }
 
 export type PublicAgent = Omit<Agent, "meta"> & {
+	/** Provider conversation title, for display only. */
+	conversationTitle?: string;
 	/**
 	 * `folder`: not a session the harness named but a guess, the latest
 	 * session in the folder of an open OpenCode TUI. Inbox only: sends never

@@ -133,6 +133,8 @@ export interface SubagentMessaging {
  * broadcasts. Only their own id reaches them.
  */
 export interface SubagentRow {
+	/** Conversation subject from the provider, independent of the agent name. */
+	conversationTitle?: string;
 	/** `<parent id>/sub:<key>`; a remote one carries its parent's pool address. */
 	id: string;
 	/** The parent agent's id (the same id space as `AgentRow.id`). */
@@ -1424,6 +1426,13 @@ export type ListUpdate<T> =
  * first; `gap` means replay is gone (refetch, or for a transcript, re-page).
  */
 export interface ServerEvents {
+	/** An ephemeral, provider-authored notice for an open conversation. */
+	sessionNotice: {
+		agentId: string;
+		severity: "info" | "warning" | "error";
+		title: string;
+		description?: string;
+	};
 	ready: { streamId: string; bootId: string; resumed: boolean };
 	/**
 	 * An agent the operator recently started, messaged or opened finished

@@ -39,6 +39,8 @@ export interface Scanned {
  * as data.
  */
 export interface FoundSubagent {
+	/** Conversation subject from the provider, independent of the agent name. */
+	conversationTitle?: string;
 	/**
 	 * Unique under its parent and safe in an id: Claude's agent id, a Codex
 	 * thread id, an omp task name, an OpenCode session id.

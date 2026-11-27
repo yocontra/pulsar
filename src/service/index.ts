@@ -11,6 +11,10 @@ import { PoolAdmin, type PoolVerb } from "../federation/admin.ts";
 import { PoolMembers } from "../federation/members.ts";
 import { type TailnetStatus, TailscaleTailnet } from "../federation/tailnet.ts";
 import { gitInfoAsync } from "../git.ts";
+import {
+	conversationTitle,
+	sessionNotice,
+} from "../harnesses/acp-session-info.ts";
 import { codexThreadIdentity } from "../harnesses/codex-child-ident.ts";
 import { DRIVERS, driverFor } from "../harnesses/index.ts";
 import { opencodeSessionIdentity } from "../harnesses/opencode-ident.ts";
@@ -1440,6 +1444,11 @@ export class PulsarService {
 						"replaced by newer extension connections from the same process",
 					);
 		}
+		if ("acpTitle" in meta) {
+			if (reg.role === "extension" && meta.acp === "1")
+				meta.acpTitle = conversationTitle(meta.acpTitle);
+			else delete meta.acpTitle;
+		}
 		delete meta.socket;
 		return meta;
 	}
@@ -1701,6 +1710,20 @@ export class PulsarService {
 						await this.acpInteractionChild(caller, p.childSessionId),
 					),
 				};
+			case "acp.notice": {
+				const me = registry.self(caller);
+				if (me.meta.acp !== "1" || caller !== this.sessions.extensionFor(me.id))
+					throw new RpcError(
+						"forbidden",
+						"Only the owning ACP connection can send session notices.",
+					);
+				const target = await this.acpInteractionChild(caller, p.childSessionId);
+				const notice = sessionNotice(target?.id ?? me.id, p);
+				if (!notice)
+					throw new RpcError("bad_request", "A session notice needs a title.");
+				this.events.emit("sessionNotice", notice);
+				return { ok: true };
+			}
 			case "acp.children": {
 				const me = registry.self(caller);
 				if (me.meta.acp !== "1" || caller !== this.sessions.extensionFor(me.id))
