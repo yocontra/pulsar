@@ -52,6 +52,8 @@ export async function paneOf(
 	agent: Agent,
 	opts: TmuxOptions = {},
 ): Promise<string | null> {
+	// The resumed TUI's PID tracks process lifetime. Its user can switch threads.
+	if (agent.meta.sessionFrom === "native-resume") return null;
 	if (isPane(agent.meta.tmux)) return agent.meta.tmux;
 	const { driverFor } = await import("./harnesses/index.ts");
 	const pane = await driverFor(agent.harness)?.tmuxPane?.(agent);

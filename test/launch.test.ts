@@ -44,6 +44,7 @@ import {
 } from "../src/service/launch.ts";
 import { SessionHistory } from "../src/service/session-history.ts";
 import { Store } from "../src/store.ts";
+import { paneOf } from "../src/tmux.ts";
 import { HttpTransport } from "../src/transport/http.ts";
 import { FakeTailnet } from "./fake-tailnet.ts";
 import { registration, until } from "./helpers.ts";
@@ -592,6 +593,7 @@ describe.skipIf(!HAS_TMUX)("launching on this node", () => {
 			meta: { sessionFrom: "native-resume" },
 		});
 		expect(live.meta.tmux).toBeUndefined();
+		expect(await paneOf(live, { socket: SOCKET })).toBeNull();
 	});
 
 	test("OpenCode can confirm its exact tab in the launched pane without taking control of its shared service", async () => {
