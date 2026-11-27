@@ -60,6 +60,23 @@ export async function reviewFileLines(page: Page) {
 	).toHaveValue(
 		/src\/auth\/refresh.ts:7-8 \(File\)\n\n {4}export async function refresh/,
 	);
+	const other = await agentId(page.request, "name=apparish-auth");
+	await page.goto(
+		`/#/file/${encodeURIComponent(id)}?path=src%2Fauth%2Frefresh.ts&line=7`,
+	);
+	await page
+		.getByRole("button", { name: "Review lines", exact: true })
+		.last()
+		.click();
+	await form.getByRole("button", { name: "Choose another chat" }).click();
+	await form
+		.getByRole("combobox", { name: "Destination chat" })
+		.selectOption(other);
+	await form.getByRole("button", { name: "Add to chat" }).click();
+	await expect(page).toHaveURL(new RegExp(`${encodeURIComponent(other)}$`));
+	await expect(
+		page.getByRole("textbox", { name: "Message", exact: true }).last(),
+	).toHaveValue(/src\/auth\/refresh\.ts:7 \(File\)/);
 }
 
 export async function reviewChildLines(page: Page) {

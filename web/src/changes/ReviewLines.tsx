@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.ts";
+import { useAgents } from "../data/hooks.ts";
 import { keys } from "../data/keys.ts";
 import { queryClient } from "../data/runtime.ts";
 import { addAgentDraftText } from "../lib/composer-draft.ts";
@@ -52,6 +53,9 @@ export function ReviewLines({
 		},
 		queryClient,
 	).data;
+	const [chooseChat, setChooseChat] = useState(false);
+	const [otherId, setOtherId] = useState("");
+	const agents = useAgents({ selector: "", sort: "name", enabled: chooseChat });
 	const last = first + lines.length - 1;
 	function reviewText() {
 		const lo = Number(start),
@@ -80,13 +84,25 @@ export function ReviewLines({
 				e.preventDefault();
 				const quote = reviewText();
 				if (!quote) return;
-				const recipient = child?.parentId === agentId ? child : null;
-				if ((childId && !recipient) || (recipient && !recipient.messaging)) {
+				const destination = chooseChat ? otherId : "";
+				if (
+					destination &&
+					!agents.items.some((a) => a.id === destination && !a.archived)
+				) {
+					setError("Choose an open chat.");
+					return;
+				}
+				const recipient =
+					!destination && child?.parentId === agentId ? child : null;
+				if (
+					(!destination && childId && !recipient) ||
+					(recipient && !recipient.messaging)
+				) {
 					setError("Open the chat again to check where this review will go.");
 					return;
 				}
 				const issue = addAgentDraftText(
-					recipient?.id ?? agentId,
+					destination || recipient?.id || agentId,
 					quote,
 					recipient ? messagesViaParent(recipient) : false,
 				);
@@ -96,6 +112,7 @@ export function ReviewLines({
 				}
 				onClose();
 				if (
+					!destination &&
 					(recipient || (origin?.view === "agent" && origin.id === agentId)) &&
 					found >= 0 &&
 					found < pages.length - 1
@@ -105,7 +122,7 @@ export function ReviewLines({
 					navigate(
 						recipient
 							? { view: "subagent", id: recipient.id }
-							: { view: "agent", id: agentId },
+							: { view: "agent", id: destination || agentId },
 					);
 			}}
 		>
@@ -140,6 +157,54 @@ export function ReviewLines({
 					onChange={(e) => setEnd(e.target.value)}
 				/>
 			</label>
+			{chooseChat ? (
+				<>
+					<select
+						aria-label="Destination chat"
+						value={otherId}
+						onChange={(e) => {
+							setOtherId(e.target.value);
+							setError("");
+						}}
+					>
+						<option value="">Current chat</option>
+						{agents.items
+							.filter((a) => !a.archived)
+							.map((a) => (
+								<option key={a.id} value={a.id}>
+									{a.name} · {a.project || a.harness} · {a.machineId}
+								</option>
+							))}
+					</select>
+					{agents.hasNextPage && (
+						<button
+							type="button"
+							className="d-btn sm"
+							disabled={agents.isFetchingNextPage}
+							onClick={() => void agents.fetchNextPage()}
+						>
+							More chats
+						</button>
+					)}
+					{agents.isError && (
+						<button
+							type="button"
+							className="d-btn sm"
+							onClick={() => void agents.refetch()}
+						>
+							Retry loading chats
+						</button>
+					)}
+				</>
+			) : (
+				<button
+					type="button"
+					className="d-btn sm"
+					onClick={() => setChooseChat(true)}
+				>
+					Choose another chat
+				</button>
+			)}
 			<button type="submit" className="d-btn sm">
 				Add to chat
 			</button>

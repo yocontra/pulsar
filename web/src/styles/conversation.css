@@ -2803,6 +2803,11 @@
 	padding: 6px 10px;
 	font-size: 0.8rem;
 }
+.review-lines select {
+	max-width: 100%;
+	color: var(--ds-text);
+	background: var(--ds-surface);
+}
 .review-lines input {
 	width: 5.5em;
 	padding: 3px;
