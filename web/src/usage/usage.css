@@ -649,6 +649,11 @@
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 }
+.ds-banner > .usage-agent {
+	display: flex;
+	flex-wrap: wrap;
+	margin-block-start: var(--ds-space-1);
+}
 .usage-session-cost {
 	color: inherit;
 	font: inherit;
