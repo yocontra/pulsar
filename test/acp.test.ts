@@ -247,6 +247,7 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 				{ value: "low", label: "Low" },
 				{ value: "high", label: "High" },
 			],
+			currentArgument: "low",
 			description: expect.stringContaining("Current: Low"),
 		});
 		expect(await runCommand("/effort high")).toMatchObject({

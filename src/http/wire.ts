@@ -2067,6 +2067,8 @@ export interface CommandEntry {
 	args?: string;
 	/** Advertised values for a single command argument. */
 	argumentChoices?: { value: string; label: string }[];
+	/** The provider-confirmed choice before editing the command draft. */
+	currentArgument?: string;
 	/**
 	 * Run with no arguments it opens a picker or dialog in the terminal,
 	 * which only someone at the terminal can answer.

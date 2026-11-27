@@ -235,10 +235,8 @@ function SlashMenuImpl(p: ComposerSlotProps) {
 		if (!line || p.draft.files.value.length) return null;
 		const asText = p.draft.asText.value;
 		const name = line.split(" ")[0]!;
-		const choices =
-			!asText &&
-			cat?.runnable &&
-			cat.commands.find((c) => c.name === name.slice(1))?.argumentChoices;
+		const command = cat?.commands.find((c) => c.name === name.slice(1));
+		const choices = !asText && cat?.runnable && command?.argumentChoices;
 		return (
 			<div className="slash-note" data-testid="slash-note">
 				<TerminalIcon aria-hidden="true" />
@@ -261,6 +259,7 @@ function SlashMenuImpl(p: ComposerSlotProps) {
 						{choices.map((choice) => (
 							<option key={choice.value} value={choice.value}>
 								{choice.label}
+								{command?.currentArgument === choice.value && " (current)"}
 							</option>
 						))}
 					</select>

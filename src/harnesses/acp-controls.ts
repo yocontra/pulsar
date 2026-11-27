@@ -130,6 +130,7 @@ export class AcpSessionControls {
 				source: "agent",
 				args: name === "model" ? "<model>" : "<level>",
 				argumentChoices,
+				...(selected ? { currentArgument: selected.value } : {}),
 				description: selected
 					? `${detail} Current: ${selected.label}.`
 					: detail,
