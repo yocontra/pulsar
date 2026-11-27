@@ -22,6 +22,8 @@ Managed sessions can ask questions in the Pulsar app through ACP forms. Supporte
 
 Antigravity can send a reply or ask a question after the original prompt ends. Pulsar records that activity in the same transcript and shows the session as working until the reply ends. Late tool results keep their original tool names. [T3 Code Antigravity adapter reference](https://github.com/pingdotgg/t3code/blob/37d3d199/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.ts#L250-L261)
 
+Mistral Vibe can start scheduled work after the chat becomes idle. Pulsar shows the scheduled prompt, reply, and any permission request in the same conversation. In a live test with Vibe 3.1.5, **Stop** cancelled a scheduled write before Vibe created the file.
+
 When a managed provider announces ACP child sessions, Pulsar shows the child tree and a separate transcript for each child. Permission requests and questions appear in the child’s conversation and in Needs You. Stop is available on the session machine when the provider permits cancellation of that child. To send a message to a managed child, use its parent. [ACP subagents](https://agentclientprotocol.com/protocol/v1/subagents)
 
 Normal messages wait for the current turn to finish. FYI messages stay in the inbox. An urgent message can join a running turn when the adapter advertises steering and supports returning unconsumed input to Pulsar. This is available with Codex ACP 2.12.0+ and Claude Agent ACP 0.110.0+. If the adapter returns the input, Pulsar sends it as a regular prompt once the current turn ends. [ACP steering contract](https://github.com/agentclientprotocol/codex-acp/blob/main/docs/steering.md)
