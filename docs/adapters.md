@@ -14,6 +14,8 @@ A harness name becomes a slug (`Recover TODO and audit game` → `recover-todo-a
 
 A rename keeps the agent id. For 15 minutes, `send`, `ask` and `wait idle:` with the old name still reach the agent on this machine. Other machines see the new name at once.
 
+An idle wait follows one session. If a selector matches several agents, use the ID returned by `list_agents` or `pulsar ls`, for example `pulsar wait 'idle:codex:<thread-id>'`. A child can report idle when its turn ends, or gone when its session ends. Activity in the parent or another child does not satisfy the wait.
+
 `PULSAR_HARNESS`, `PULSAR_SESSION_ID`, `PULSAR_NAME` and `PULSAR_TAGS` override detection.
 
 ## PR tags
@@ -43,6 +45,8 @@ Pulsar replaces only the `pr:` tag it added. A `pr:` tag the agent set itself st
 Pulsar setup installs the Antigravity session hooks. An open CLI session picks them up on its next model call. Antigravity CLI 1.5.18 gives its native API connection to shell commands it runs. The setup hooks and MCP server receive no such connection. Until a relay connects, an idle terminal outside tmux receives queued messages on its next turn. In tests, both `agy --conversation` and ACP resume opened a second client for the same ID. The original terminal’s next turn omitted messages submitted through that client. Google’s interactive Remote Control must be enabled in the terminal or at launch. [Antigravity Remote Control](https://antigravity.google/docs/remote-control/) Pulsar reads the native transcript from the conversation database. Managed Antigravity sessions stream their transcript over [ACP](acp.md).
 
 Native Antigravity child conversations appear under their parent when Antigravity records that relationship. Open a child to read its transcript or message it directly. With the native hooks installed, urgent messages reach the child before its next model call. Normal messages wait for its next turn. A connected native wake relay can deliver to an idle child. Children can use Pulsar tools to contact their parent or siblings under their own conversation IDs. [Antigravity hooks](https://antigravity.google/docs/hooks#antigravity-cli)
+
+When a native Antigravity session has both a verified hook and a wake relay, **Send now** uses the hook during a turn. If the turn ends first, the relay delivers the message once. After a daemon restart, Pulsar restores the hook for the same live process and conversation if its installed hook configuration still matches.
 
 On your phone, open **+ → Skills & Commands**, or type `/` in the message box. In a native Antigravity session, `/skills <name>` searches installed skills and `/help <name>` searches commands. Select a skill, add your request, and send it. A session with hooks receives queued requests when its next turn starts. A session with a native relay or a verified tmux pane can wake immediately. Commands that require an unavailable terminal are marked in the picker. [Antigravity CLI commands](https://antigravity.google/docs/cli/reference)
 
