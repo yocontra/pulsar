@@ -46,6 +46,7 @@ interface ToolState {
 	raw: string;
 	kind?: Update["kind"];
 	exitCode?: number;
+	permissionScope?: symbol;
 }
 
 type ToolEvent = Omit<TranscriptEvent, "ts">;
@@ -66,9 +67,26 @@ export class AcpToolResults {
 		return this.pending.has(id.slice(0, 500));
 	}
 
-	apply(update: Update, harness: string, child = false): ToolEvent[] {
+	permissionInput(id: string, scope: symbol | undefined) {
+		if (!scope || id.length > 500) return undefined;
+		const state = this.pending.get(id);
+		if (state?.permissionScope !== scope || state.rawInput == null)
+			return undefined;
+		return { input: state.rawInput, title: state.title || state.name };
+	}
+
+	apply(
+		update: Update,
+		harness: string,
+		child = false,
+		permissionScope?: symbol,
+	): ToolEvent[] {
 		const id = update.toolCallId.slice(0, 500);
-		const state: ToolState = this.pending.get(id) ?? {
+		const prior = this.pending.get(id);
+		const fresh =
+			update.sessionUpdate === "tool_call" &&
+			permissionScope !== prior?.permissionScope;
+		const state: ToolState = (!fresh ? prior : undefined) ?? {
 			callEventId: child
 				? `acp:child-tool:${createHash("sha256").update(update.toolCallId).digest("hex")}`
 				: randomUUID(),
@@ -77,6 +95,10 @@ export class AcpToolResults {
 			inputTruncated: false,
 			content: "",
 			raw: "",
+			permissionScope:
+				update.sessionUpdate === "tool_call" && id === update.toolCallId
+					? permissionScope
+					: undefined,
 		};
 		if (update.name) state.name = update.name.slice(0, 200);
 		if (update.title) state.title = update.title.slice(0, 500);

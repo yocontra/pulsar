@@ -3,9 +3,12 @@ import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 
 const mode = process.env.ACP_FIXTURE_MODE;
-const loadOnly = ["load", "wrong-load", "process-local-load"].includes(
-	mode ?? "",
-);
+const loadOnly = [
+	"load",
+	"wrong-load",
+	"process-local-load",
+	"vibe-detached",
+].includes(mode ?? "");
 const sessionId = mode?.startsWith("launch-settings")
 	? mode === "launch-settings-drift"
 		? "fixture/drift"
@@ -136,6 +139,14 @@ for await (const line of lines) {
 				...(mode === "process-local-load"
 					? { agentInfo: { name: "deepagents-acp", version: "0.0.1" } }
 					: {}),
+				...(mode === "vibe-detached"
+					? {
+							agentInfo: {
+								name: "@mistralai/mistral-vibe",
+								version: "3.1.5",
+							},
+						}
+					: {}),
 				...(mode === "steer"
 					? {
 							agentInfo: {
@@ -157,6 +168,18 @@ for await (const line of lines) {
 		case "session/new":
 		case "session/resume":
 		case "session/load": {
+			if (mode === "vibe-detached" && method !== "session/new") {
+				if (method !== "session/load")
+					throw new Error("Fixture expected session/load");
+				for (const [sessionUpdate, text] of [
+					["user_message_chunk", "Scheduled prompt from history"],
+					["agent_message_chunk", "Scheduled reply from history"],
+				])
+					emitUpdate(sessionId, {
+						sessionUpdate,
+						content: { type: "text", text },
+					});
+			}
 			if (mode === "invalid-id") {
 				reply(id, { sessionId: { invalid: true } });
 				break;
@@ -207,7 +230,7 @@ for await (const line of lines) {
 			mcpLines.on("line", (message) => {
 				const data = JSON.parse(message);
 				if (data.id === 1) {
-					if (method === "session/load") {
+					if (method === "session/load" && mode !== "vibe-detached") {
 						for (let i = 0; i < 201; i++)
 							emitUpdate(sessionId, {
 								sessionUpdate: "agent_message_chunk",
@@ -500,6 +523,43 @@ for await (const line of lines) {
 					childQuestionId,
 				);
 				update("Parent is still working");
+			} else if (text.includes("fixture-vibe-schedule")) {
+				reply(id, { stopReason: "end_turn" });
+				promptId = undefined;
+				setTimeout(() => {
+					emitUpdate(sessionId, {
+						sessionUpdate: "user_message_chunk",
+						content: { type: "text", text: "Scheduled fixture prompt" },
+					});
+					update("Scheduled fixture ");
+					emitUpdate(sessionId, {
+						sessionUpdate: "usage_update",
+						used: 42,
+						size: 1024,
+					});
+					update("reply");
+					emitUpdate(sessionId, {
+						sessionUpdate: "tool_call",
+						toolCallId: "vibe-scheduled-permission",
+						title: "Check fixture workspace",
+						status: "pending",
+						rawInput: { path: "fixture.txt" },
+					});
+					emit(
+						"session/request_permission",
+						{
+							sessionId,
+							toolCall: {
+								toolCallId: "vibe-scheduled-permission",
+							},
+							options: [
+								{ optionId: "allow", name: "Allow once", kind: "allow_once" },
+								{ optionId: "deny", name: "Reject once", kind: "reject_once" },
+							],
+						},
+						detachedPermissionId,
+					);
+				}, 60);
 			} else if (text.includes("fixture-detached")) {
 				emit("session/update", {
 					sessionId,

@@ -1151,3 +1151,87 @@ test("managed ACP sends prompts, renders transcript, binds MCP tools, denies per
 		env.cleanup();
 	}
 }, 60_000);
+
+test("managed Vibe records unsolicited turns and permissions without treating load replay as live activity", async () => {
+	const env = await startDaemon({ approvals: { answerable: () => true } });
+	const op = await operator();
+	const workspace = join(env.home, "vibe-workspace");
+	const binary = join(env.home, "vibe-acp");
+	const cli = new URL("../src/cli.ts", import.meta.url).pathname;
+	const fixture = new URL("./fixtures/acp-agent.ts", import.meta.url).pathname;
+	mkdirSync(workspace);
+	writeFileSync(
+		binary,
+		`#!/bin/sh\nexec "${process.execPath}" "${fixture}" "$@"\n`,
+		{ mode: 0o700 },
+	);
+	const launch = (resume?: string) => {
+		const child = spawn(
+			process.execPath,
+			[cli, "acp", "mistral-vibe", ...(resume ? ["--resume", resume] : [])],
+			{
+				cwd: workspace,
+				env: {
+					...process.env,
+					HOME: env.home,
+					PATH: `${env.home}:${process.env.PATH}`,
+					ACP_FIXTURE_MODE: "vibe-detached",
+				},
+				stdio: ["pipe", "ignore", "ignore"],
+			},
+		);
+		const exit = new Promise((resolve) => child.once("close", resolve));
+		return async () => {
+			child.kill("SIGTERM");
+			await exit;
+		};
+	};
+	const sessionId = "fixture/acp";
+	const id = "mistral-vibe:fixture%2Facp";
+	const current = () => env.daemon.service.registry.find(id);
+	const transcript = () =>
+		op.call<TranscriptPageResult>("transcript.read", { agent: id });
+	const pending = () => env.daemon.service.approvals.pendingFor(id);
+	let close = launch();
+	try {
+		await until(() => current()?.status === "idle");
+		await op.call("send", { to: id, body: "fixture-vibe-schedule" });
+		await until(() => current()?.status === "busy" && pending().length === 1);
+		expect(pending()[0]).toMatchObject({
+			tool: "Check fixture workspace",
+			input: { arguments: { path: "fixture.txt" } },
+		});
+		const page = await transcript();
+		expect(page.events).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					role: "user",
+					text: "Scheduled fixture prompt",
+				}),
+				expect.objectContaining({
+					role: "assistant",
+					text: "Scheduled fixture reply",
+				}),
+			]),
+		);
+		expect(await op.call("stop", { agent: id })).toMatchObject({
+			result: "interrupted",
+		});
+		await until(() => current()?.status === "idle" && !pending().length);
+
+		const pid = current()?.pid;
+		await close();
+		close = launch(sessionId);
+		await until(() => current()?.status === "idle" && current()?.pid !== pid);
+		expect(pending()).toHaveLength(0);
+		const reopened = await transcript();
+		expect(reopened.events.map((event) => event.text)).toEqual(
+			page.events.map((event) => event.text),
+		);
+	} finally {
+		await close();
+		op.close();
+		await env.daemon.stop();
+		env.cleanup();
+	}
+}, 15_000);

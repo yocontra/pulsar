@@ -120,10 +120,11 @@ type Turn = {
 	delivered: boolean;
 	printed: boolean;
 	permissions: Map<string, () => void>;
+	permissionScope?: symbol;
 	block?: {
 		id: string;
 		messageId?: string | null;
-		kind: "text" | "thinking";
+		kind: "text" | "thinking" | "user";
 		text: string;
 		lastWrite: number;
 		written: number;
@@ -169,6 +170,7 @@ class Bridge {
 	private turn?: Turn;
 	private children?: AcpChildren;
 	private readonly childInteractions = new Map<string, Turn>();
+	private detachedActivity?: "usage-settled" | "quiet";
 	private detachedTimeout?: ReturnType<typeof setTimeout>;
 	private detachedSettled = false;
 	private draining?: Promise<void>;
@@ -300,6 +302,15 @@ class Bridge {
 			);
 		this.capabilities = initialized.agentCapabilities;
 		this.canSteer = supportsHostOwnedSteering(initialized);
+		if (this.options.harness === "antigravity")
+			this.detachedActivity = "usage-settled";
+		// Vibe forwards scheduled turns and their callbacks via a live ACP
+		// subscription. Its usage updates can also arrive during a turn.
+		else if (
+			this.options.harness === "mistral-vibe" &&
+			initialized.agentInfo?.name === "@mistralai/mistral-vibe"
+		)
+			this.detachedActivity = "quiet";
 		const mcp: McpServerStdio = {
 			name: "pulsar",
 			command: process.execPath,
@@ -898,11 +909,19 @@ class Bridge {
 					: undefined;
 			return selected ? select(selected) : cancelled;
 		}
-		const args = permissionArguments(request.toolCall);
+		const pending = this.tools.permissionInput(
+			request.toolCall.toolCallId,
+			turn.permissionScope,
+		);
+		const args = permissionArguments(request.toolCall) ?? pending?.input;
 		if (!allow || args == null) return deny ? select(deny.optionId) : cancelled;
 		const result = await this.interaction(turn, signal, {
 			kind: "permission",
-			tool: request.toolCall.title ?? request.toolCall.kind ?? "ACP tool",
+			tool:
+				request.toolCall.title ??
+				pending?.title ??
+				request.toolCall.kind ??
+				"ACP tool",
 			input: { arguments: args, option: allow.name },
 		});
 		if (signal.aborted || turn.cancelled) return cancelled;
@@ -1183,18 +1202,30 @@ class Bridge {
 			this.refreshCapabilities();
 		} else if (update.sessionUpdate === "usage_update") {
 			this.usageWriter?.add(update);
-			if (this.turn && !this.turn.prompt) this.settleDetached(this.turn);
+			if (this.turn && !this.turn.prompt && !this.turn.cancelled) {
+				if (this.detachedActivity === "usage-settled")
+					this.settleDetached(this.turn);
+				else this.refreshDetached(this.turn);
+			}
 		} else if (this.turn) {
 			if (!this.turn.prompt && !this.turn.cancelled)
 				this.refreshDetached(this.turn);
 			this.update(this.turn, update);
-		} else if (this.options.harness === "antigravity") {
+		} else if (this.detachedActivity) {
 			if (
 				update.sessionUpdate === "agent_message_chunk" ||
-				update.sessionUpdate === "agent_thought_chunk"
+				update.sessionUpdate === "agent_thought_chunk" ||
+				(update.sessionUpdate === "user_message_chunk" &&
+					this.detachedActivity === "quiet")
 			) {
 				if (update.content.type === "text" && update.content.text)
 					this.update(this.detachedTurn(), update);
+			} else if (
+				this.detachedActivity === "quiet" &&
+				update.sessionUpdate === "tool_call" &&
+				(update.status === "pending" || update.status === "in_progress")
+			) {
+				this.update(this.detachedTurn(), update);
 			} else if (
 				update.sessionUpdate === "tool_call" ||
 				(update.sessionUpdate === "tool_call_update" &&
@@ -1228,8 +1259,7 @@ class Bridge {
 		)
 			return;
 		return (
-			this.turn ??
-			(this.options.harness === "antigravity" ? this.detachedTurn() : undefined)
+			this.turn ?? (this.detachedActivity ? this.detachedTurn() : undefined)
 		);
 	}
 
@@ -1455,10 +1485,21 @@ class Bridge {
 
 	private update(turn: Turn, update: SessionUpdate) {
 		const type = update.sessionUpdate;
-		if (type === "agent_message_chunk" || type === "agent_thought_chunk") {
+		if (
+			type === "agent_message_chunk" ||
+			type === "agent_thought_chunk" ||
+			(type === "user_message_chunk" &&
+				!turn.prompt &&
+				this.detachedActivity === "quiet")
+		) {
 			this.confirmDelivery(turn);
 			if (update.content.type !== "text") return;
-			const kind = type === "agent_message_chunk" ? "text" : "thinking";
+			const kind =
+				type === "user_message_chunk"
+					? "user"
+					: type === "agent_thought_chunk"
+						? "thinking"
+						: "text";
 			if (kind === "text") turn.printed = true;
 			if (
 				turn.block?.kind !== kind ||
@@ -1512,7 +1553,9 @@ class Bridge {
 			this.writeBlock(turn);
 			turn.block = undefined;
 		}
-		this.updateTool(update);
+		if (this.detachedActivity === "quiet" && !turn.childSessionId)
+			turn.permissionScope ??= Symbol();
+		this.updateTool(update, turn.permissionScope);
 	}
 
 	private updateTool(
@@ -1520,8 +1563,14 @@ class Bridge {
 			SessionUpdate,
 			{ sessionUpdate: "tool_call" | "tool_call_update" }
 		>,
+		permissionScope?: symbol,
 	) {
-		for (const event of this.tools.apply(update, this.options.harness))
+		for (const event of this.tools.apply(
+			update,
+			this.options.harness,
+			false,
+			permissionScope,
+		))
 			this.record(event);
 	}
 
@@ -1529,8 +1578,8 @@ class Bridge {
 		const block = turn.block;
 		if (!block || block.written === block.text.length) return;
 		this.record({
-			role: "assistant",
-			kind: block.kind,
+			role: block.kind === "user" ? "user" : "assistant",
+			kind: block.kind === "user" ? "text" : block.kind,
 			text: block.text,
 			id: block.id,
 		});
