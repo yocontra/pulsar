@@ -154,7 +154,7 @@ function seed() {
 	log(
 		list[1]!.id,
 		"Write a regression test for the refresh race.",
-		"Added `session.test.ts`: two concurrent refreshes now share one request.",
+		"Added `session.test.ts`: two concurrent refreshes now share one request. See the [session interface](./src/auth/session.ts).",
 		true,
 	);
 	log(

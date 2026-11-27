@@ -123,6 +123,8 @@ export interface SendVars {
 	req: SendRequest;
 	/** The open session: the message shows in its transcript at once. */
 	agentId?: string;
+	/** Remove the matching composer checkpoint after acceptance or explicit discard. */
+	settledDraft?: () => void;
 }
 
 /**
@@ -184,6 +186,7 @@ export async function sendWithRollback(
 			discard: () => {
 				patchLine(() => null);
 				setLocalSend(id, null);
+				vars.settledDraft?.();
 			},
 		});
 	};
@@ -220,7 +223,10 @@ export async function sendWithRollback(
 		);
 		if (r.reconfirm || r.drift) drop();
 		// Sent from this tab: its bubble shows the delivery state (lib/sent.ts).
-		else if (r.messageId) noteSent(r.messageId);
+		else if (r.messageId) {
+			noteSent(r.messageId);
+			vars.settledDraft?.();
+		}
 		if (!(r.reconfirm || r.drift) && showLine && id) {
 			const mid = r.messageId;
 			state("sent");

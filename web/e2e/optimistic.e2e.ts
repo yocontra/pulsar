@@ -113,6 +113,21 @@ test.describe("optimistic sends", () => {
 		await expect.poll(() => held(request, "send")).toBe(1);
 		// The box is free for the next message at once.
 		await expect(page.locator(".composer-input")).toHaveValue("");
+		await expect
+			.poll(() =>
+				page.evaluate(
+					(text) =>
+						Object.keys(sessionStorage).some(
+							(key) =>
+								key.startsWith("pulsar:draft:") &&
+								sessionStorage.getItem(key)?.includes(text),
+						),
+					text,
+				),
+			)
+			.toBe(true);
+		const nextDraft = "A separate unsent draft";
+		await page.locator(".composer-input").fill(nextDraft);
 		// The response: Sending… ends; the echo is not in yet.
 		await release(request, "send");
 		await expect(page.locator('[data-send-state="sending"]')).toHaveCount(0);
@@ -126,6 +141,7 @@ test.describe("optimistic sends", () => {
 			page.locator(".ds-turn[data-msg-id^='local:']", { hasText: text }),
 		).toHaveCount(0);
 		await expect(bubbles(page, text)).toHaveCount(1);
+		await expect(page.locator(".composer-input")).toHaveValue(nextDraft);
 		// One state line, under that bubble: the receipts' state now.
 		const note = bubbles(page, text).locator(".ds-delivery");
 		await expect(note).toHaveText(/^(Sent|Delivered|Read|Replied)/);
@@ -213,6 +229,8 @@ test.describe("optimistic sends", () => {
 		const failed = page.locator('[data-send-state="failed"]');
 		await failed.getByRole("button", { name: "Delete" }).click();
 		await expect(bubbles(page, text)).toHaveCount(0);
+		await page.reload();
+		await expect(page.locator(".composer-input")).toHaveValue("");
 	});
 
 	test("a send to several agents shows Sending… and, on failure, an error with Retry", async ({

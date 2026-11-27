@@ -445,6 +445,7 @@ export function FileBody({
 			)}
 			<FileReader
 				key={`${agentId}:${path}`}
+				agentId={agentId}
 				path={path}
 				text={content.text ?? ""}
 				size={content.size ?? 0}

@@ -18,6 +18,7 @@ import { agentColor } from "../lib/agent-color.ts";
 import { age } from "../lib/format.ts";
 import { navigate, route } from "../lib/router.ts";
 import { findAgent, showToast } from "../lib/store.ts";
+import { messagesViaParent } from "../lib/subagents.ts";
 import { ConversationView, TranscriptSkeleton } from "./ConversationView.tsx";
 import { Transcript } from "./Transcript.tsx";
 import { TranscriptMissingNotice } from "./TranscriptMissing.tsx";
@@ -77,7 +78,7 @@ export function SubagentView({
 		q.error instanceof ApiError && q.error.code === "not_found" && !sub;
 	const messaging = sub?.messaging;
 	const directFinished = messaging?.mode === "direct" && sub?.state === "done";
-	const viaParent = messaging?.mode === "parent" || directFinished;
+	const viaParent = sub ? messagesViaParent(sub) : false;
 
 	const variant = mobile ? "phone" : "desktop";
 
@@ -138,6 +139,7 @@ export function SubagentView({
 					working={sub?.state === "running" && windowed.at(-1)?.role === "user"}
 					// Its siblings' names here take their colors from the parent's list.
 					subagentsOf={parentId}
+					fileWorkspace={parent}
 				/>
 				{item?.approval && <PromptInline item={item} mobile={mobile} />}
 			</ConversationView>

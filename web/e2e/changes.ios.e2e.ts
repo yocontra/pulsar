@@ -1,5 +1,10 @@
 import type { Page } from "@playwright/test";
 import { agentId, expect, test } from "./fixtures.ts";
+import {
+	reviewChildLines,
+	reviewDiffLines,
+	reviewFileLines,
+} from "./line-review.shared.ts";
 import { contrastFailures } from "./ui-audit.ts";
 
 /**
@@ -151,3 +156,13 @@ test.describe("changes pages", () => {
 		);
 	});
 });
+
+test("quote a renamed diff range in the existing agent draft", async ({
+	page,
+}) => reviewDiffLines(page, true));
+test("quote source lines from a directly opened file", async ({ page }) =>
+	reviewFileLines(page));
+
+test("quote a workspace file in the subagent that opened it", async ({
+	page,
+}) => reviewChildLines(page));

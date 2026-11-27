@@ -106,12 +106,29 @@ export function navigate(
 		route.value = r;
 		return;
 	}
+	// Preserve the child that opened a file when a refresh discards the in-memory stack.
+	const current = route.peek();
+	const workspaceOf = (r: Route) =>
+		r.view === "changes"
+			? r.id
+			: r.view === "page" && r.name === "file"
+				? r.arg
+				: null;
+	const workspace = workspaceOf(r);
+	const reviewChild =
+		workspace &&
+		(current.view === "subagent"
+			? current.id
+			: workspaceOf(current) === workspace
+				? history.state?.reviewChild
+				: null);
+	const origin = reviewChild ? { reviewChild } : {};
 	if (opts.replace) {
-		history.replaceState({ depth }, "", href);
+		history.replaceState({ depth, ...origin }, "", href);
 		stack.value = [...stack.value.slice(0, -1), r];
 		motion.value = "none";
 	} else {
-		history.pushState({ depth: ++depth }, "", href);
+		history.pushState({ depth: ++depth, ...origin }, "", href);
 		stack.value = [...stack.value, r];
 		motion.value = opts.animated === false ? "none" : "push";
 	}

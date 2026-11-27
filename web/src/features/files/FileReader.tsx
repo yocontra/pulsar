@@ -14,6 +14,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { ReviewLines } from "../../changes/ReviewLines.tsx";
 import { CodeBlock } from "../../session/CodeBlock.tsx";
 import { langForPath } from "../../session/highlight.tsx";
 
@@ -23,11 +24,13 @@ const FileCode = memo(CodeBlock);
 type Tool = "find" | "line";
 
 export function FileReader({
+	agentId,
 	path,
 	text,
 	size,
 	line,
 }: {
+	agentId: string;
 	path: string;
 	text: string;
 	size: number;
@@ -38,6 +41,7 @@ export function FileReader({
 	const [activeLine, setActiveLine] = useState(line ?? 1);
 	const selected = clamp(activeLine);
 	const [tool, setTool] = useState<Tool | null>(null);
+	const [review, setReview] = useState<[number, number] | null>(null);
 	const [query, setQuery] = useState("");
 	const [lineInput, setLineInput] = useState("");
 	const input = useRef<HTMLInputElement>(null);
@@ -82,6 +86,28 @@ export function FileReader({
 			if (tool === "find") input.current?.select();
 		}
 	}, [tool]);
+
+	function chooseLines() {
+		const selection = window.getSelection();
+		if (selection?.rangeCount && !selection.isCollapsed) {
+			const range = selection.getRangeAt(0);
+			const number = (node: Node) => {
+				const row = (
+					node.nodeType === 1 ? (node as Element) : node.parentElement
+				)?.closest(".ds-code-line");
+				return row && code.current?.contains(row)
+					? Number(row.querySelector(".ds-ln")?.textContent)
+					: 0;
+			};
+			const a = number(range.startContainer),
+				b = number(range.endContainer);
+			if (a && b) {
+				setReview([a, Math.max(a, b - (range.endOffset === 0 ? 1 : 0))]);
+				return;
+			}
+		}
+		setReview([selected, selected]);
+	}
 
 	function openTool(next: Tool) {
 		if (next === "line") setLineInput(String(selected));
@@ -167,10 +193,29 @@ export function FileReader({
 					>
 						<HashIcon aria-hidden="true" /> Go to line
 					</button>
+					<button
+						type="button"
+						className="fv-btn"
+						aria-expanded={review !== null}
+						onClick={() => (review === null ? chooseLines() : setReview(null))}
+					>
+						Review lines
+					</button>
 					<span className="fv-line-position" role="status">
 						Line {selected} of {lines.length}
 					</span>
 				</div>
+				{review !== null && (
+					<ReviewLines
+						agentId={agentId}
+						path={path}
+						source="File"
+						lines={lines}
+						at={review[0]}
+						through={review[1]}
+						onClose={() => setReview(null)}
+					/>
+				)}
 				{tool && (
 					<form
 						className="fv-reader-form"

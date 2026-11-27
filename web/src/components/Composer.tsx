@@ -14,9 +14,9 @@ import type {
 import type { ChatStatus } from "../lib/ai-types.ts";
 import {
 	ComposerDraft,
+	directDraftKey,
 	openComposers,
 	showsStop,
-	takeKeptDraft,
 } from "../lib/composer-draft.ts";
 import {
 	ComposerActionsProvider,
@@ -255,29 +255,57 @@ function ComposerImpl({
 		total: number;
 	} | null>(null);
 	const ta = useRef<HTMLTextAreaElement>(null);
-	/** The text being sent; PromptInput clears its form on submit. */
-	const pendingBody = useRef("");
-	const key = targetKey(target);
-	// Attached files and `@` picks: one draft per target (lib/composer-draft.ts).
-	const draft = useMemo(() => new ComposerDraft(), [key]);
+	const pending = useRef({ body: "", revision: "" });
+	const legacyKey = targetKey(target);
+	const key =
+		target.kind === "selector"
+			? legacyKey
+			: directDraftKey(targetRequest(target).ids, viaParent);
+	const draft = useMemo(
+		() => new ComposerDraft(key, target.kind === "ids" ? null : legacyKey),
+		[key, legacyKey, target.kind],
+	);
+	const active = useRef<ComposerDraft | null>(null);
 	useEffect(() => {
-		// Text kept across a reload into a new build (data/update.ts).
-		const kept = ta.current && !ta.current.value ? takeKeptDraft(key) : null;
-		if (kept && ta.current) {
-			ta.current.value = kept;
-			setHasText(!!kept.trim());
-		}
+		const field = ta.current;
+		if (!field) return;
+		const sync = () => {
+			draft.text = field.value;
+			setHasText(!!field.value.trim());
+			draft.checkpoint();
+		};
 		const open = {
 			draft,
-			field: () => ta.current,
-			text: () => ta.current?.value || pendingBody.current,
+			field: () => field,
+			text: () => field.value,
+			persistent: target.kind !== "selector",
+			accept: (revision: string) => {
+				if (draft.checkpoint().revision !== revision) return;
+				field.value = "";
+				draft.text = "";
+				draft.clear();
+				field.dispatchEvent(new Event("input", { bubbles: true }));
+			},
 		};
+		active.current = draft;
 		openComposers.set(key, open);
+		field.value = draft.text;
+		field.addEventListener("input", sync);
+		field.dispatchEvent(new Event("input", { bubbles: true }));
+		const unwatch = draft.watch(() => draft.checkpoint());
 		return () => {
+			field.removeEventListener("input", sync);
+			unwatch();
+			if (active.current === draft) active.current = null;
 			if (openComposers.get(key) === open) openComposers.delete(key);
 			draft.clear();
 		};
-	}, [draft, key]);
+	}, [draft, key, target.kind]);
+
+	const accept = (revision: string) => {
+		openComposers.get(key)?.accept(revision);
+		draft.accept(revision);
+	};
 
 	useEffect(() => {
 		setPhase("idle");
@@ -295,77 +323,83 @@ function ComposerImpl({
 	const everyone = target.kind === "selector" && target.selector.trim() === "*";
 	const base = (): SendRequest => ({
 		...targetRequest(target),
-		body: pendingBody.current.trim(),
+		body: pending.current.body,
 		priority,
 		expectReply,
 		...(viaParent ? { viaParent: true } : {}),
 	});
 
-	/** Put unsent text back in the box (after a failure or a cancel). */
-	const restore = () => {
-		if (ta.current && !ta.current.value) {
-			ta.current.value = pendingBody.current;
-			setHasText(!!pendingBody.current.trim());
-		}
-	};
-
 	/**
 	 * Sends (or retries `again` with its client id). In the open session the
-	 * message shows at once as a sending bubble (data/mutations.ts) and the
-	 * box is free for the next one; a failure stays on that bubble with
+	 * message shows at once as a sending bubble (data/mutations.ts) and a
+	 * failure stays on that bubble with
 	 * Retry. Anything else (several recipients, a subagent's parent) shows
 	 * "Sending…" here, and a failure an error with Retry.
 	 */
 	const doSend = async (token?: string, again?: SendRequest) => {
+		const attempt = pending.current;
+		const { revision } = attempt;
+		if (!again && draft.checkpoint().revision !== revision) {
+			setPhase("idle");
+			setDry(null);
+			setError("The draft changed. Check the recipients again.");
+			return;
+		}
+		setPhase("sending");
 		setError(null);
 		setFailed(null);
+		const request = again ?? { ...base(), resolveToken: token };
 		const data = await import("../data/index.ts");
-		const req: SendRequest = again ?? {
-			...base(),
-			resolveToken: token,
-			clientId: data.newClientId(),
+		const req = {
+			...request,
+			clientId: request.clientId ?? data.newClientId(),
 		};
-		const body = req.body ?? "";
 		const p = data.sendMessage({
 			req,
+			settledDraft: () => accept(revision),
 			...(target.kind === "agent" ? { agentId: target.agent.id } : {}),
 		});
 		const shown = data.localSend(data.localId(req.clientId!)) !== null;
-		if (shown) {
-			pendingBody.current = "";
-			setDry(null);
+		if (shown && active.current === draft) {
+			const field = ta.current;
+			if (field && draft.checkpoint().revision === revision) {
+				field.value = "";
+				draft.detach();
+				draft.clear();
+				field.dispatchEvent(new Event("input", { bubbles: true }));
+			}
 			setPhase("idle");
-		} else setPhase("sending");
+		}
+
 		try {
 			const r = await p;
-			if (r.drift) {
-				pendingBody.current = body;
+			if (active.current !== draft || pending.current !== attempt) return;
+			if (r.drift || r.reconfirm) {
 				setDry(r);
 				setDrift(true);
 				setPhase("confirm");
 				return;
 			}
-			setLast({ id: r.messageId!, req, total: r.total });
-			// The data layer notes it as sent here (lib/sent.ts), retries too.
-			if (!shown) {
-				pendingBody.current = "";
-				setDry(null);
-				setPhase("idle");
-			}
+			setPhase("idle");
+			setDry(null);
 			setDrift(false);
+			setLast({ id: r.messageId!, req, total: r.total });
 			onSent?.(r, req);
 		} catch (err) {
-			if (!shown) setPhase("idle");
-			pendingBody.current = body;
-			if (err instanceof ProveCancelled) {
-				restore();
+			if (active.current !== draft || pending.current !== attempt) return;
+			setPhase("idle");
+			if (err instanceof ProveCancelled && shown) {
+				const field = ta.current;
+				if (field && !field.value && !draft.files.peek().length) {
+					draft.restoreDetached();
+					field.value = draft.text;
+					field.dispatchEvent(new Event("input", { bubbles: true }));
+				}
 				return;
 			}
-			// The bubble says it failed and offers Retry.
-			if (shown) return;
+			if (err instanceof ProveCancelled || shown) return;
 			setError(err instanceof ApiError ? err.message : "Send failed");
 			setFailed(req);
-			restore();
 		}
 	};
 
@@ -379,28 +413,21 @@ function ComposerImpl({
 		setError(null);
 		setFailed(null);
 		setRan(null);
-		if (fromDraft) {
-			pendingBody.current = line;
-			if (ta.current) ta.current.value = "";
-			setHasText(false);
-		}
+		const { revision } = draft.checkpoint();
 		setPhase("sending");
 		try {
 			const r = await api.runCommand(target.agent.id, line);
+			if (r.result === "ok" && fromDraft) accept(revision);
+			if (active.current !== draft) return;
 			setPhase("idle");
 			if (r.result === "ok") {
-				if (fromDraft) {
-					pendingBody.current = "";
-					draft.clear();
-				}
 				setRan({ command: line.split(" ")[0]!, detail: r.detail });
 				return;
 			}
 			setError(`${line.split(" ")[0]} didn't run: ${r.detail ?? r.result}`);
-			if (fromDraft) restore();
 		} catch (err) {
+			if (active.current !== draft) return;
 			setPhase("idle");
-			if (fromDraft) restore();
 			if (err instanceof ProveCancelled) return;
 			setError(err instanceof ApiError ? err.message : "Couldn't run it");
 		}
@@ -408,7 +435,7 @@ function ComposerImpl({
 
 	const start = async (text: string) => {
 		if (!text.trim() && !draft.ready().length) return;
-		if (draft.blocked() || phase === "sending" || phase === "checking") return;
+		if (draft.blocked() || phase !== "idle" || !ta.current) return;
 		const line =
 			target.kind === "agent" &&
 			!draft.asText.value &&
@@ -418,9 +445,10 @@ function ComposerImpl({
 		if (line && target.kind === "agent") return runSlash(line, true);
 		setRan(null);
 		// The files went to the agent's machine already: the message names them.
-		pendingBody.current = draft.body(text);
-		draft.clear();
-		setHasText(false);
+		pending.current = {
+			body: draft.body(text),
+			revision: draft.checkpoint().revision,
+		};
 		// One recipient (an agent, a subagent): no confirmation to show.
 		if (
 			target.kind === "agent" ||
@@ -430,27 +458,27 @@ function ComposerImpl({
 		setPhase("checking");
 		try {
 			const r = await api.send({ ...base(), dryRun: true });
+			if (active.current !== draft) return;
 			setDry(r);
 			setDrift(false);
 			const tier = tierFor(r.total, r.machines, everyone);
 			if (r.total === 0) {
 				setError("No agents match.");
 				setPhase("idle");
-				restore();
 			} else if (tier === "direct") await doSend(r.resolveToken);
 			else setPhase("confirm");
 		} catch (err) {
+			if (active.current !== draft) return;
 			setError(
 				err instanceof ApiError ? err.message : "Couldn't check the recipients",
 			);
 			setPhase("idle");
-			restore();
 		}
 	};
 
 	const cancel = () => {
 		setPhase("idle");
-		restore();
+		setDry(null);
 	};
 
 	const tier = dry ? confirmTier(dry, drift, everyone) : null;
@@ -473,10 +501,7 @@ function ComposerImpl({
 	};
 	const blocked = draft.blocked();
 	const canSend =
-		(hasText || draft.ready().length > 0) &&
-		!blocked &&
-		phase !== "sending" &&
-		phase !== "checking";
+		(hasText || draft.ready().length > 0) && !blocked && phase === "idle";
 	// The agent works and the draft is empty: Stop (composer.right) replaces Send.
 	const stopMode = showsStop(
 		target.kind === "agent" ? target.agent : null,
@@ -495,6 +520,7 @@ function ComposerImpl({
 		<ComposerActionsProvider value={actionsApi}>
 			<Slot name="composer.top" {...slot} />
 			<PromptInput
+				keepTextOnSubmit
 				onSubmit={(msg) => void start(msg.text)}
 				className="prompt m-prompt"
 			>
@@ -518,7 +544,6 @@ function ComposerImpl({
 						aria-label="Message"
 						aria-describedby={describedBy}
 						enterKeyHint="send"
-						onChange={(e) => setHasText(!!e.currentTarget.value.trim())}
 						onPaste={pasteText}
 					/>
 				</PromptInputBody>
@@ -563,6 +588,7 @@ function ComposerImpl({
 			)}
 			{!compact && (
 				<PromptInput
+					keepTextOnSubmit
 					onSubmit={(msg) => void start(msg.text)}
 					className="prompt"
 				>
@@ -574,7 +600,6 @@ function ComposerImpl({
 							placeholder={placeholder ?? "Message…"}
 							aria-label="Message"
 							aria-describedby={describedBy}
-							onChange={(e) => setHasText(!!e.currentTarget.value.trim())}
 							onPaste={pasteText}
 						/>
 					</PromptInputBody>
@@ -641,12 +666,7 @@ function ComposerImpl({
 							<button
 								type="button"
 								className="link"
-								onClick={() => {
-									// The box holds the same text; Retry sends it once.
-									if (ta.current) ta.current.value = "";
-									setHasText(false);
-									void doSend(undefined, failed);
-								}}
+								onClick={() => void doSend(undefined, failed)}
 							>
 								Retry
 							</button>

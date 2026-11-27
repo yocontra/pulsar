@@ -3,19 +3,26 @@
  * transcript's diff renderer (session/Diff.tsx) and highlighter. Binary,
  * too-large and gone files get a placeholder instead.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ApiError } from "../api/client.ts";
 import type { ChangedFile, ChangesMode } from "../api/types.ts";
-import { DiffBody } from "../session/Diff.tsx";
+import { DiffBody, type DiffRow, type DiffSide } from "../session/Diff.tsx";
 import { langForPath, useTokens } from "../session/highlight.tsx";
 import { useChangeFile } from "./data.ts";
 import { parsePatch } from "./patch.ts";
+import { ReviewLines } from "./ReviewLines.tsx";
 
 export function PatchView({
+	agentId,
+	oldPath,
+	mode,
 	patch,
 	path,
 	layout,
 }: {
+	agentId: string;
+	oldPath?: string;
+	mode: ChangesMode;
 	patch: string;
 	path: string;
 	layout: "split" | "unified";
@@ -24,9 +31,44 @@ export function PatchView({
 	const lang = langForPath(path);
 	const A = useTokens(p.before, p.before ? lang : null);
 	const B = useTokens(p.after, p.after ? lang : null);
+	const [selection, select] = useState<{
+		side: DiffSide;
+		at: number;
+		first: number;
+		lines: string[];
+	} | null>(null);
+	function pick(row: DiffRow, side: DiffSide) {
+		const prop = side === "LEFT" ? "oldLine" : "newLine";
+		const at = row[prop];
+		if (!at) return;
+		const index = p.items.indexOf(row);
+		let start = index,
+			stop = index + 1;
+		while (start > 0 && "sign" in p.items[start - 1]!) start--;
+		while (stop < p.items.length && "sign" in p.items[stop]!) stop++;
+		const rows = (p.items.slice(start, stop) as DiffRow[]).filter(
+			(r) => r[prop] !== undefined,
+		);
+		select({
+			side,
+			at,
+			first: rows[0]![prop]!,
+			lines: rows.map((r) => r.text),
+		});
+	}
 	return (
 		<>
 			{p.notes.length > 0 && <p className="cv-notes">{p.notes.join(" · ")}</p>}
+			{selection && (
+				<ReviewLines
+					key={selection.side + selection.at}
+					agentId={agentId}
+					path={selection.side === "LEFT" ? (oldPath ?? path) : path}
+					source={`${mode === "base" ? "branch vs base" : "working tree"}, ${selection.side === "LEFT" ? "before" : "after"}`}
+					{...selection}
+					onClose={() => select(null)}
+				/>
+			)}
 			{p.hunks > 0 ? (
 				<DiffBody
 					items={p.items}
@@ -34,6 +76,23 @@ export function PatchView({
 					B={B}
 					layout={layout}
 					className="cv-diff"
+					extras={{
+						bothContextGutters: true,
+						gutter: (row, side) => {
+							const n = side === "LEFT" ? row.oldLine : row.newLine;
+							return (
+								<button
+									type="button"
+									className="review-ln"
+									aria-label={`Review ${side === "LEFT" ? "old" : "new"} line ${n}`}
+									title="Review line"
+									onClick={() => pick(row, side)}
+								>
+									{n}
+								</button>
+							);
+						},
+					}}
 				/>
 			) : (
 				p.notes.length === 0 && <p className="cv-placeholder">Empty file</p>
@@ -69,7 +128,17 @@ export function FileDiff({
 			</p>
 		);
 	if (d?.patch != null)
-		return <PatchView patch={d.patch} path={file.path} layout={layout} />;
+		return (
+			<PatchView
+				key={file.key + mode}
+				agentId={agentId}
+				mode={mode}
+				oldPath={file.oldPath}
+				patch={d.patch}
+				path={file.path}
+				layout={layout}
+			/>
+		);
 	if (q.error)
 		return (
 			<p className="cv-placeholder" role="status">

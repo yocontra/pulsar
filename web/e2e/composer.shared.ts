@@ -228,6 +228,83 @@ export function composerSuite(platform: "desktop" | "phone") {
 		await expect(menu).toHaveCount(0);
 	});
 
+	test(`a draft, mention and uploaded file stay in their chat after navigation and reload (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const selector = "name=apparish-auth";
+		const home = await agentId(request, selector);
+		const other = await agentId(request, "name=codex@apparish");
+		const composer = await openAgent(page, request, selector);
+		const shown = page.locator(".composer:visible").last();
+		const field = shown.getByRole("textbox", { name: "Message" });
+		await composer.getByTestId("attach-files").setInputFiles({
+			name: "draft-notes.txt",
+			mimeType: "text/plain",
+			buffer: Buffer.from("draft note"),
+		});
+		await expect(composer.getByTestId("attachment")).toHaveAttribute(
+			"data-state",
+			"done",
+		);
+		await field.click();
+		await field.pressSequentially("Review @composer");
+		await expect(
+			page.getByRole("listbox", { name: "Files" }).getByRole("option").first(),
+		).toContainText("Composer.tsx");
+		await field.press("Enter");
+		const text = "Review @web/src/components/Composer.tsx ";
+		await expect(field).toHaveValue(text);
+
+		const go = async (id: string) =>
+			page.evaluate((id) => {
+				location.hash = `#/a/${encodeURIComponent(id)}`;
+			}, id);
+		await go(other);
+		await expect(field).toHaveValue("");
+		await expect(shown.getByTestId("attachment")).toHaveCount(0);
+		await go(home);
+		await expect(field).toHaveValue(text);
+		await page.reload();
+		await expect(field).toHaveValue(text);
+		await expect(shown.locator(".mention-chip")).toContainText("Composer.tsx");
+		await expect(shown.getByTestId("attachment")).toHaveAttribute(
+			"data-state",
+			"done",
+		);
+		await expect(shown.getByTestId("attachment")).toContainText(
+			"draft-notes.txt",
+		);
+
+		const sent = page.waitForResponse(
+			(r) =>
+				r.request().method() === "POST" &&
+				new URL(r.url()).pathname === "/api/v1/send",
+		);
+		await shown.getByRole("button", { name: "Send", exact: true }).click();
+		const r = await sent;
+		expect(r.ok()).toBe(true);
+		expect(r.request().postDataJSON()).toMatchObject({ ids: [home] });
+		expect(r.request().postDataJSON().body).toContain("draft-notes.txt");
+		await expect(field).toHaveValue("");
+		await expect
+			.poll(() =>
+				page.evaluate(
+					(id) =>
+						Object.keys(sessionStorage).some(
+							(key) =>
+								key.startsWith("pulsar:draft:") &&
+								key.includes(JSON.stringify(id)),
+						),
+					home,
+				),
+			)
+			.toBe(false);
+		await page.reload();
+		await expect(field).toHaveValue("");
+		await expect(shown.getByTestId("attachment")).toHaveCount(0);
+	});
+
 	test(`Stop replaces Send while the agent works and the draft is empty (${platform})`, async ({
 		page,
 		request,

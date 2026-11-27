@@ -143,6 +143,7 @@ async function uploadBatch(
 	const specs: AttachmentFileSpec[] = [];
 	const ok: DraftFile[] = [];
 	for (const f of batch) {
+		if (!f.file) continue;
 		try {
 			specs.push({
 				name: f.name,
@@ -192,7 +193,7 @@ async function uploadBatch(
 async function putFile(draft: ComposerDraft, key: string) {
 	const u = uploads.get(key);
 	const f = draft.files.value.find((x) => x.key === key);
-	if (!u || !f) return;
+	if (!u || !f?.file) return;
 	const abort = new AbortController();
 	draft.update(key, { state: "uploading", progress: 0, error: null, abort });
 	// Removed (or the draft cleared) while it uploaded: nothing more to show.
@@ -709,6 +710,7 @@ function useMentions(
 		};
 		const close = () => setOpen(null);
 		pickRef.current = pick;
+		setText(ta.value);
 		ta.addEventListener("input", check);
 		ta.addEventListener("click", check);
 		ta.addEventListener("keyup", check);

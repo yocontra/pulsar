@@ -399,6 +399,7 @@ test.describe("desktop", () => {
 		await page.locator(".scope .composer-input").fill("draft");
 		await page.getByRole("radio", { name: /On all \d+ machines/ }).click();
 		await expect(page.locator(".selector-line")).toHaveText("project=apparish");
+		await expect(page.locator(".scope .composer-input")).toHaveValue("");
 		await page.getByRole("radio", { name: "on studio" }).click();
 		await expect(page.locator(".scope .composer-input")).toHaveValue("draft");
 

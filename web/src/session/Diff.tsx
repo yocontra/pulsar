@@ -23,6 +23,8 @@ export type DiffSide = "LEFT" | "RIGHT";
  * (a comment thread). Context lines are asked for both sides.
  */
 export interface DiffLineExtras {
+	/** Give unchanged lines a selectable old side in the split view. */
+	bothContextGutters?: boolean;
 	gutter?: (r: DiffRow, side: DiffSide) => ReactNode;
 	after?: (r: DiffRow, side: DiffSide) => ReactNode;
 }
@@ -270,7 +272,7 @@ export function DiffBody({
 		return (
 			<span key={key} className={`ds-diff-cell ${cls}`}>
 				{/* A context line takes comments on its new side only. */}
-				{c.sign === " " && side === "a"
+				{c.sign === " " && side === "a" && !extras?.bothContextGutters
 					? null
 					: extras?.gutter?.(c, side === "a" ? "LEFT" : "RIGHT")}
 				{ln(side === "a" ? c.oldLine : c.newLine)}

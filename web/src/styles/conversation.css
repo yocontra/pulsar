@@ -2794,3 +2794,33 @@
 .prompt-inline {
 	scroll-margin-bottom: 72px;
 }
+
+.review-lines {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+	padding: 6px 10px;
+	font-size: 0.8rem;
+}
+.review-lines input {
+	width: 5.5em;
+	padding: 3px;
+	border: 1px solid var(--ds-code-border);
+	border-radius: 4px;
+	color: inherit;
+	background: transparent;
+}
+.review-ln {
+	color: var(--ds-diff-gutter);
+	font: inherit;
+	width: 4ch;
+	flex: none;
+	align-self: start;
+	text-align: right;
+	cursor: pointer;
+}
+.review-ln:hover,
+.review-ln:focus-visible {
+	text-decoration: underline;
+}

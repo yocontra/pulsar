@@ -149,3 +149,11 @@ export function subagentStateText(sub: SubagentRow, now?: number): string {
 	const held = heldFor(at, now);
 	return held ? `Finished ${held} ago` : "Finished just now";
 }
+
+/** A finished direct recipient receives further messages through its parent. */
+export function messagesViaParent(sub: SubagentRow): boolean {
+	return (
+		sub.messaging?.mode === "parent" ||
+		(sub.messaging?.mode === "direct" && sub.state === "done")
+	);
+}

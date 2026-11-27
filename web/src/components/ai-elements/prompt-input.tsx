@@ -312,6 +312,7 @@ export type PromptInputProps = Omit<
 	maxFiles?: number;
 	// bytes
 	maxFileSize?: number;
+	keepTextOnSubmit?: boolean;
 	onError?: (err: {
 		code: "max_files" | "max_file_size" | "accept";
 		message: string;
@@ -330,6 +331,7 @@ export const PromptInput = ({
 	syncHiddenInput,
 	maxFiles,
 	maxFileSize,
+	keepTextOnSubmit,
 	onError,
 	onSubmit,
 	children,
@@ -666,7 +668,7 @@ export const PromptInput = ({
 
 			// Reset form immediately after capturing text to avoid race condition
 			// where user input during async blob conversion would be lost
-			if (!usingProvider) {
+			if (!usingProvider && !keepTextOnSubmit) {
 				form.reset();
 			}
 
@@ -710,7 +712,7 @@ export const PromptInput = ({
 				// Don't clear on error - user may want to retry
 			}
 		},
-		[usingProvider, controller, files, onSubmit, clear],
+		[usingProvider, controller, files, onSubmit, clear, keepTextOnSubmit],
 	);
 
 	// Render with or without local provider

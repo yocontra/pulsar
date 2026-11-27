@@ -112,6 +112,7 @@ export interface TranscriptProps {
 	 * is not `agent` (a subagent's page: its parent, for its siblings).
 	 */
 	subagentsOf?: string | null;
+	fileWorkspace?: { id: string; cwd?: string | null } | null;
 }
 
 /** What a message action gets: the turn, who wrote it, its exact text. */
@@ -149,6 +150,7 @@ export const Transcript = memo(function Transcript({
 	messageActions,
 	promptAt,
 	subagentsOf,
+	fileWorkspace,
 }: TranscriptProps) {
 	const messages = useMemo(() => toMessages(buildItems(events)), [events]);
 	const lastSentId = useMemo(() => {
@@ -196,8 +198,8 @@ export const Transcript = memo(function Transcript({
 		],
 	);
 	const fileAgent = useMemo(
-		() => (agent ? { id: agent.id, cwd: agent.cwd } : null),
-		[agent?.id, agent?.cwd],
+		() => fileWorkspace ?? (agent ? { id: agent.id, cwd: agent.cwd } : null),
+		[fileWorkspace, agent?.id, agent?.cwd],
 	);
 	const senders = useMemo(() => sendersOf(events), [events]);
 	const colors = useMemo(
