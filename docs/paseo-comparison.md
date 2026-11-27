@@ -12,7 +12,7 @@ This comparison covers a developer working with installed agents from a phone an
 
 Paseo also lets you collect review comments and choose a different agent to receive them. Pulsar adds selected source to the draft for the conversation where you opened the file. Use **Copy quote** to take the same path, range and diff side into another agent’s draft. [Paseo review feedback](https://github.com/getpaseo/paseo/blob/9eab3b278f7a5288f1aed5b71f2889ffc3ecde61/packages/app/src/review/feedback/index.ts)
 
-The provider comparison also identified two working additions. Vercel fx and Hermes Agent both received a message through Pulsar, replied from a local model, and connected to the Pulsar MCP server. CodeWhale rejected that MCP server at startup. [Qualification and versions](acp.md)
+Pulsar covers 37 of the 45 Paseo providers in scope. The comparison identified three working additions: Vercel fx, Hermes Agent and Gajae Code. Each received a message through Pulsar, replied from a local model, and connected to the Pulsar MCP server. The eight remaining are Agoragentic, Autohand, CodeWhale, Hoplite, Minion Code, Nova, TRAE CLI and VTCode. CodeWhale, for example, rejected the required MCP server at startup. [Qualification and versions](acp.md) · [Paseo catalog](https://github.com/getpaseo/paseo/blob/9eab3b278f7a5288f1aed5b71f2889ffc3ecde61/packages/app/src/data/acp-provider-catalog.ts)
 
 Both projects support separate worktrees for parallel tasks, agent control through MCP, and mobile review. Pulsar already provides passkey approvals, a message queue with edit and cancel, file mentions, voice dictation, and cross-machine delivery. [Pulsar app](app.md) · [Pulsar delivery](delivery.md) · [Paseo parallel development](https://paseo.sh/docs/parallel-development)
 
