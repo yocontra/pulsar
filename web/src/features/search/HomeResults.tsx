@@ -8,17 +8,18 @@ import { navigate } from "../../lib/router.ts";
 import { observer } from "../../lib/signals.ts";
 import { can } from "../../lib/store.ts";
 import { GroupedList, ListItem } from "../../mobile/ui/GroupedList.tsx";
-import { HitRow, useMessageSearch } from "./results.tsx";
+import { HitRow, SavedSessions, useMessageSearch } from "./results.tsx";
 
 const SHOWN = 4;
 
 function HomeResults({ query }: { query: string }) {
 	const q = query.trim();
 	const result = useMessageSearch(q, !can("search"));
-	if (result.kind === "idle") return null;
+	if (result.kind === "idle") return q ? <SavedSessions query={q} /> : null;
 	const hits = result.kind === "done" ? result.res.hits : [];
 	return (
 		<div className="msr-home" data-testid="home-messages">
+			<SavedSessions query={q} />
 			<GroupedList title="In messages" label="In messages">
 				{result.kind === "loading" && (
 					<ListItem

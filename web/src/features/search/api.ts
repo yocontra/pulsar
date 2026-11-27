@@ -7,7 +7,11 @@
 
 import { parseQuery } from "../../../../src/search/text.ts";
 import { request } from "../../api/client.ts";
-import type { MessageHit, MessageSearchResponse } from "../../api/types.ts";
+import type {
+	MessageHit,
+	MessageSearchResponse,
+	SavedSessionHit,
+} from "../../api/types.ts";
 
 export type { MessageHit, MessageSearchResponse };
 
@@ -36,4 +40,12 @@ export function searchMessages(
 	return request<MessageSearchResponse>(`/search/messages?${params}`, {
 		...(opts.signal ? { signal: opts.signal } : {}),
 	});
+}
+
+export async function savedSessions(q: string, signal?: AbortSignal) {
+	const res = await request<{ items: SavedSessionHit[] }>(
+		`/sessions/saved?${new URLSearchParams({ q })}`,
+		{ signal },
+	);
+	return res.items;
 }

@@ -13,6 +13,14 @@ import {
 } from "../../lib/registry.tsx";
 
 registerPaletteProvider({
+	id: "search.sessions",
+	group: "Saved conversations on this machine",
+	order: 90,
+	search: async (q, signal) =>
+		(await import("./palette.tsx")).savedResults(q, signal),
+});
+
+registerPaletteProvider({
 	id: "search.messages",
 	group: "In messages",
 	order: 100,

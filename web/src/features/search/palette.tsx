@@ -6,8 +6,9 @@
 import { AgentAvatar } from "../../ds/index.ts";
 import { ago } from "../../lib/format.ts";
 import type { PaletteResult } from "../../lib/registry.tsx";
+import { navigate } from "../../lib/router.ts";
 import { can } from "../../lib/store.ts";
-import { searchable, searchMessages } from "./api.ts";
+import { savedSessions, searchable, searchMessages } from "./api.ts";
 import { Snippet } from "./Snippet.tsx";
 import { openHit } from "./state.ts";
 import "./search.css";
@@ -34,4 +35,18 @@ export async function messageResults(
 			run: () => openHit(hit, q),
 		};
 	});
+}
+
+export async function savedResults(
+	q: string,
+	signal: AbortSignal,
+): Promise<PaletteResult[]> {
+	return (await savedSessions(q, signal)).map((s) => ({
+		key: s.id,
+		label: s.name,
+		sub: s.project ?? s.harness,
+		icon: <AgentAvatar harness={s.harness} size="sm" />,
+		trail: ago(s.lastSeen),
+		run: () => navigate({ view: "agent", id: s.id }),
+	}));
 }

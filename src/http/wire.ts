@@ -58,6 +58,14 @@ export interface NeedsYou {
 	detail: string | null;
 }
 
+export interface SavedSessionHit {
+	id: string;
+	name: string;
+	harness: string;
+	project: string | null;
+	lastSeen: number;
+}
+
 /** One agent as the app sees it: tree leaves, lists, previews, the session header. */
 export interface AgentRow extends PublicAgent {
 	/** Saved local conversation with no live recipient. */

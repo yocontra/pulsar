@@ -11,7 +11,7 @@ import type { PageProps } from "../../lib/registry.tsx";
 import { can } from "../../lib/store.ts";
 import { GroupedList } from "../../mobile/ui/GroupedList.tsx";
 import { PageShell } from "../../mobile/ui/PageShell.tsx";
-import { HitRow, useMessageSearch } from "./results.tsx";
+import { HitRow, SavedSessions, useMessageSearch } from "./results.tsx";
 import "../../mobile/home.css";
 
 export default function SearchPage({ params }: PageProps) {
@@ -30,7 +30,7 @@ export default function SearchPage({ params }: PageProps) {
 					</label>
 					<Searchbar
 						inputId="p-search-q"
-						placeholder="Search messages"
+						placeholder="Search conversations and messages"
 						value={q}
 						onInput={(e: React.FormEvent<HTMLInputElement>) =>
 							setQ(e.currentTarget.value)
@@ -40,6 +40,7 @@ export default function SearchPage({ params }: PageProps) {
 				</div>
 			}
 		>
+			<SavedSessions query={q} />
 			{result.kind === "idle" && (
 				<div className="p-empty msr-empty">
 					<MessageSquareTextIcon />
@@ -64,7 +65,7 @@ export default function SearchPage({ params }: PageProps) {
 			)}
 			{result.kind === "done" && result.res.hits.length === 0 && (
 				<p className="msr-state" role="status">
-					No matches
+					No matching messages
 				</p>
 			)}
 			{result.kind === "done" && result.res.hits.length > 0 && (

@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import { driverFor } from "../harnesses/index.ts";
+import type { SavedSessionHit } from "../http/wire.ts";
 import type { Store } from "../store.ts";
 import { type Agent, isFolderGuess } from "../types.ts";
 import { splitAddress } from "./pool.ts";
@@ -69,6 +70,22 @@ export class SessionHistory {
 			.prepare(`INSERT INTO session_history (id,binding) VALUES (?,?)
 			ON CONFLICT(id) DO UPDATE SET binding=excluded.binding WHERE ? = 0 AND binding != excluded.binding`)
 			.run(id, JSON.stringify(binding), Number(recovered));
+	}
+
+	search(query: string, liveIds: string[]): SavedSessionHit[] {
+		const rows = this.store.db
+			.prepare(`
+			SELECT id, json_extract(binding,'$.name') AS name,
+				json_extract(binding,'$.harness') AS harness,
+				json_extract(binding,'$.project') AS project,
+				json_extract(binding,'$.lastSeen') AS lastSeen
+			FROM session_history
+			WHERE id NOT IN (SELECT value FROM json_each(?))
+				AND instr(lower(name || ' ' || coalesce(project,'') || ' ' || id), lower(?)) > 0
+			ORDER BY lastSeen DESC, id LIMIT 30
+		`)
+			.all(JSON.stringify(liveIds), query.trim());
+		return rows as unknown as SavedSessionHit[];
 	}
 
 	get(id: string): Agent | undefined {

@@ -1325,6 +1325,10 @@ describe("service transcripts", () => {
 				"INSERT INTO usage_files (path,harness,session,model,last_at) VALUES (?,?,?,?,?)",
 			)
 			.run(file, "pi", original.sessionId, "fixture-model", 1);
+		expect(
+			service.app.savedSessions(principal, "WITH-LOG").items.map((x) => x.id),
+		).toContain(original.id);
+		expect(service.app.savedSessions(principal, "%").items).toEqual([]);
 		const usage = {
 			agent: original.id,
 			model: "fixture-model",
@@ -1364,6 +1368,7 @@ describe("service transcripts", () => {
 			(await service.app.agent(principal, original.id)).openSessions,
 		).toEqual([{ id: sibling.id, name: sibling.name }]);
 		add("with-log");
+		expect(service.app.savedSessions(principal, "").items).toEqual([]);
 		expect(
 			(await service.app.agent(principal, original.id)).archived,
 		).toBeUndefined();

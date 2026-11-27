@@ -3384,6 +3384,7 @@ async function route(
 		);
 	}
 	if (GET && path === "/search") return json(search(q.get("q") ?? ""));
+	if (GET && path === "/sessions/saved") return json({ items: [] });
 	if (GET && path === "/search/messages") {
 		const text = q.get("q") ?? "";
 		if (text.length > 200)

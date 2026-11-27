@@ -231,6 +231,16 @@ export class AppApi {
 		return this.views.attention();
 	}
 
+	savedSessions(p: Principal, query: string) {
+		authorize(p, "agents");
+		return {
+			items: this.history.search(
+				query,
+				this.registry.live().map((a) => a.id),
+			),
+		};
+	}
+
 	recent(p: Principal, limit?: number) {
 		authorize(p, "recent");
 		return this.views.recent(limit);

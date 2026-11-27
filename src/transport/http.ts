@@ -1001,6 +1001,9 @@ export class HttpTransport {
 			return c.json(svc.children(who(c), c.req.param("nodeId"), q));
 		});
 		api.get("/attention", (c) => c.json(svc.attention(who(c))));
+		api.get("/sessions/saved", (c) =>
+			c.json(svc.savedSessions(who(c), parse(Q.search, c.req.query()).q)),
+		);
 		api.get("/recent", (c) => {
 			const q = parse(Q.recent, c.req.query());
 			return c.json(svc.recent(who(c), q.limit));

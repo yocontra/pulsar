@@ -3,13 +3,16 @@
  * query changes) and the rows, shared by Home's "In messages" section
  * (HomeResults.tsx) and the search page (SearchPage.tsx).
  */
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AgentAvatar } from "../../ds/index.ts";
 import { ago } from "../../lib/format.ts";
-import { ListItem } from "../../mobile/ui/GroupedList.tsx";
+import { navigate } from "../../lib/router.ts";
+import { GroupedList, ListItem } from "../../mobile/ui/GroupedList.tsx";
 import {
 	type MessageHit,
 	type MessageSearchResponse,
+	savedSessions,
 	searchable,
 	searchMessages,
 } from "./api.ts";
@@ -81,5 +84,31 @@ export function HitRow({
 			text={<Snippet hit={hit} />}
 			onClick={() => openHit(hit, q)}
 		/>
+	);
+}
+
+export function SavedSessions({ query }: { query: string }) {
+	const q = query.trim();
+	const saved = useQuery({
+		queryKey: ["savedSessions", q],
+		queryFn: ({ signal }) => savedSessions(q, signal),
+		retry: false,
+		staleTime: 5000,
+	});
+	if (!saved.data?.length) return null;
+	return (
+		<GroupedList title="Saved conversations on this machine">
+			{saved.data.map((s) => (
+				<ListItem
+					link
+					linkComponent="button"
+					key={s.id}
+					title={s.name}
+					text={s.project ?? s.harness}
+					after={ago(s.lastSeen)}
+					onClick={() => navigate({ view: "agent", id: s.id })}
+				/>
+			))}
+		</GroupedList>
 	);
 }
