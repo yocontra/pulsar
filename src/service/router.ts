@@ -20,6 +20,7 @@ import type { Waiters } from "./waiters.ts";
 
 /** Stored per recipient because Send now promotes only that recipient's delivery. */
 export const URGENT_HANDOFF = "sent with urgent priority";
+export const NATIVE_STEER = "pulsar-native-steer";
 export const NEXT_TURN = "pulsar-next-turn";
 
 /**
@@ -254,6 +255,10 @@ export class Router {
 		const current = isLocalSubagentId(target.id)
 			? await this.resolveSubagent(target.id)
 			: target;
+		// A child refresh can yield while a hook or inbox claims this attempt.
+		const receipt = this.store.receipt(message.id, target.id);
+		if (receipt && receipt.state !== "queued" && receipt.state !== "held")
+			return receipt;
 		return current
 			? this.pushCurrent(message, sender, current)
 			: this.unavailableSubagent(message.id, target);
@@ -319,7 +324,9 @@ export class Router {
 		try {
 			if (this.registry.closed) return;
 			for (const queued of this.store.unread(agentId, LIMITS.inboxCap)) {
-				const current = this.registry.get(agentId);
+				const current = isLocalSubagentId(agentId)
+					? this.registry.discoveredSubagent(agentId)
+					: this.registry.get(agentId);
 				if (
 					this.registry.closed ||
 					!current ||
@@ -331,15 +338,19 @@ export class Router {
 				const receipt = this.store.receipt(queued.id, agentId);
 				if (
 					receipt?.state !== "queued" ||
-					receipt.via !== NEXT_TURN ||
+					(receipt.via !== NEXT_TURN && receipt.via !== NATIVE_STEER) ||
 					this.activeHandoff(agentId, queued.id)
 				)
 					continue;
 				const message = this.store.getMessage(queued.id);
 				if (!message) continue;
 				const attempt = receipt.attempt ?? 1;
-				const push = attempt > 1 ? { ...message, attempt } : message;
-				const result = await this.push(
+				const push = {
+					...message,
+					attempt,
+					...(receipt.via === NATIVE_STEER && { priority: "urgent" as const }),
+				};
+				const result = await this.pushCurrent(
 					push,
 					this.registry.senderOf(message),
 					current,
@@ -378,17 +389,19 @@ export class Router {
 		if (target.inbound !== "accept" || caller.closed.aborted) return [];
 		const messages: Array<{ id: string; text: string; attempt: number }> = [];
 		for (const m of this.store.unread(target.id, LIMITS.inboxCap)) {
+			const pending = this.store.receipt(m.id, target.id);
+			const priority = pending?.via === NATIVE_STEER ? "urgent" : m.priority;
 			if (
-				m.priority === "fyi" ||
-				(m.priority === "normal" && !first) ||
+				priority === "fyi" ||
+				(priority === "normal" && !first) ||
 				this.activeHandoff(target.id, m.id)
 			)
 				continue;
 			const sender = this.registry.from(m.fromId, m.fromName);
 			if (!sender) continue;
-			const attempt = this.store.receipt(m.id, target.id)?.attempt ?? 1;
+			const attempt = pending?.attempt ?? 1;
 			const text = this.frame(
-				{ ...m, attempt },
+				{ ...m, priority, attempt },
 				{ ...sender, name: m.fromName },
 			);
 			const receipt = this.receipt(
@@ -466,6 +479,18 @@ export class Router {
 			// The extension acks once the message is in the conversation.
 			return this.receipt(message.id, target, "sent", "extension", detail);
 		}
+		if (
+			message.priority === "urgent" &&
+			target.status === "busy" &&
+			this.registry.hasNativeHook(target)
+		)
+			return this.receipt(
+				message.id,
+				target,
+				"queued",
+				NATIVE_STEER,
+				"Waiting for the active session’s next model invocation",
+			);
 		const relay = this.registry.wakeRelay(target);
 		if (relay) return this.wake(relay, target, message, text);
 		if (
@@ -547,7 +572,8 @@ export class Router {
 			if (
 				msg.priority === "fyi" ||
 				receipt?.state !== "queued" ||
-				receipt.via === NEXT_TURN
+				receipt.via === NEXT_TURN ||
+				receipt.via === NATIVE_STEER
 			)
 				continue;
 			const sender = this.registry.senderOf(msg);

@@ -15,7 +15,12 @@ import type { EventBus } from "./events.ts";
 import { LIMITS } from "./limits.ts";
 import { isRemote, type RemoteQueueAct, splitAddress } from "./pool.ts";
 import type { Registry } from "./registry.ts";
-import { NEXT_TURN, type Router, URGENT_HANDOFF } from "./router.ts";
+import {
+	NATIVE_STEER,
+	NEXT_TURN,
+	type Router,
+	URGENT_HANDOFF,
+} from "./router.ts";
 import type { PushMessage } from "./util.ts";
 
 export type QueueAction = RemoteQueueAct["action"];
@@ -242,7 +247,7 @@ export class Queue {
 	/** One local agent's queue, as `p` sees it. */
 	local(p: Principal, agent: Agent): QueueItem[] {
 		const items: QueueItem[] = [];
-		const pushable = agent.status !== "gone" && this.router.canPush(agent);
+		const pushable = this.canPromote(agent);
 		for (const { message, receipt, dueAt } of this.store.queueFor(agent.id)) {
 			const mine = isMine(p, message);
 			let state: QueueState;
@@ -358,7 +363,7 @@ export class Queue {
 				return r;
 			}
 			case "promote": {
-				if (agent.status === "gone" || !this.router.canPush(agent))
+				if (!this.canPromote(agent))
 					throw new RpcError(
 						"unsupported",
 						agent.status === "gone" ? WHY.gone : WHY.noPush,
@@ -490,6 +495,14 @@ export class Queue {
 		return m;
 	}
 
+	private canPromote(agent: Agent): boolean {
+		return (
+			agent.status !== "gone" &&
+			(this.router.canPush(agent) ||
+				(agent.status === "busy" && this.registry.hasNativeHook(agent)))
+		);
+	}
+
 	private item(
 		agentId: string,
 		message: Message,
@@ -514,7 +527,10 @@ export class Queue {
 			from: { id: message.fromId, name: mine ? "You" : message.fromName },
 			mine,
 			body: message.body,
-			priority: receipt.detail === URGENT_HANDOFF ? "urgent" : message.priority,
+			priority:
+				receipt.via === NATIVE_STEER || receipt.detail === URGENT_HANDOFF
+					? "urgent"
+					: message.priority,
 			createdAt: message.createdAt,
 			state: o.state,
 			detail: receipt.detail,

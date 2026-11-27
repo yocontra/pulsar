@@ -454,7 +454,7 @@ export class Registry {
 			return agent.meta.acp === "1"
 				? agent.meta.acpSteer === "1"
 				: this.sessions.supports(ext, "steer");
-		if (!this.wakeRelay(agent) && this.hasNativeHook(agent)) return true;
+		if (this.hasNativeHook(agent)) return true;
 		if (this.wakeRelay(agent) || this.reachOf(agent) !== "push") return false;
 		return pushFor(agent)?.canSteer?.(agent) === true;
 	}
@@ -780,13 +780,15 @@ export class Registry {
 			existing &&
 			previousStatus !== "gone" &&
 			existing.pid === agent.pid &&
-			existing.cwd === agent.cwd &&
 			existing.meta.gen === agent.meta.gen &&
 			existing.meta.processStart === agent.meta.processStart &&
 			existing.meta.resumeKey === agent.meta.resumeKey
 		) {
 			const fallback = this.activity.get(existing);
-			if (fallback) this.activity.set(agent, fallback);
+			if (fallback && existing.cwd === agent.cwd)
+				this.activity.set(agent, fallback);
+			// Hook proof follows the live process and session. Registrations can
+			// report different spellings of its working directory.
 			if (this.nativeHooks.has(existing)) this.nativeHooks.add(agent);
 		}
 		this.finishTags(agent);

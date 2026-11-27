@@ -125,6 +125,7 @@ export class Subagents {
 	pool: PoolView | null = null;
 	/** A verified Claude hook can collect mail for this exact child. */
 	hookCanDeliver: (parent: Agent, key: string) => boolean = () => false;
+	onNativeHookIdle: (child: Agent) => void = () => {};
 	hookIdentity: (child: Agent) => Agent = (child) => child;
 	/** Set by tests: the clock. */
 	now: () => number = Date.now;
@@ -234,6 +235,7 @@ export class Subagents {
 		);
 		const idOf = (key: string) => `${agent.id}${SUB_MARK}${key}`;
 		const keys = new Set(found.map((f) => f.key));
+		const previous = e.direct;
 		e.found = found;
 		e.direct = new Map();
 		e.aliases = new Set();
@@ -328,6 +330,13 @@ export class Subagents {
 		e.key = key;
 		e.counts = counts;
 		if (changed) this.events.emit("subagents", { agentId: agent.id, counts });
+		if (driver?.subagents?.invocationHook)
+			for (const child of e.direct.values())
+				if (
+					child.status === "idle" &&
+					previous.get(child.id)?.status === "busy"
+				)
+					this.onNativeHookIdle(child);
 	}
 
 	/**

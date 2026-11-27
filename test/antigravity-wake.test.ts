@@ -133,6 +133,28 @@ if (operation === "get-conversation-metadata") {
 			expect(daemon.service.store.receipt(staged.message.id, id)?.state).toBe(
 				"queued",
 			);
+			const hookOnly = daemon.service.registry.get(id)!;
+			daemon.service.registry.setStatus(hookOnly, "busy");
+			const promoted = await send("promoted FYI for hook", "fyi");
+			await daemon.service.queue.apply(
+				{ kind: "human", login: "test", node: "test" },
+				id,
+				promoted.message.id,
+				"promote",
+				{ verified: true },
+			);
+			expect(
+				(await hook("PreInvocation", unbound, sessionId, 4)).injectSteps,
+			).toEqual([
+				{ userMessage: expect.stringContaining("promoted FYI for hook") },
+			]);
+			expect(
+				daemon.service.store.receipt(promoted.message.id, id),
+			).toMatchObject({ state: "delivered", via: "native-hook" });
+			daemon.service.registry.setStatus(
+				daemon.service.registry.get(id)!,
+				"idle",
+			);
 			const delivery = await Promise.all([
 				hook("PreInvocation", unbound),
 				hook("PreInvocation", unbound),
@@ -248,7 +270,7 @@ if (operation === "get-conversation-metadata") {
 			expect(
 				daemon.service.registry.view(daemon.service.registry.get(id)!)
 					.capabilities,
-			).toMatchObject({ wake: true, stop: false });
+			).toMatchObject({ wake: true, steer: true, stop: false });
 			await hook("PreInvocation", {}, sessionId, 3);
 			expect(daemon.service.store.receipt(fyi.message.id, id)?.state).toBe(
 				"queued",
@@ -266,6 +288,35 @@ if (operation === "get-conversation-metadata") {
 			expect(sends.every((args) => args[2] === sessionId)).toBe(true);
 			expect(sends[0]![3]).toContain("queued before bind");
 			expect(sends[1]![3]).toContain(text);
+			const tracked = daemon.service.registry.get(id)!;
+			daemon.service.registry.setStatus(tracked, "busy");
+			const during = await send("urgent parent while running", "urgent");
+			expect(during.receipts[0]).toMatchObject({
+				state: "queued",
+				via: "pulsar-native-steer",
+			});
+			expect(
+				(await hook("PreInvocation", unbound, sessionId, 4)).injectSteps,
+			).toEqual([
+				{ userMessage: expect.stringContaining("urgent parent while running") },
+			]);
+			expect(await hook("PreInvocation", unbound, sessionId, 5)).toEqual({});
+			const finalInvocation = await send(
+				"urgent missed final invocation",
+				"urgent",
+			);
+			daemon.service.registry.setStatus(tracked, "idle");
+			await until(
+				() =>
+					daemon.service.store.receipt(finalInvocation.message.id, id)?.via ===
+					"native-wake",
+			);
+			expect(
+				daemon.service.store.receipt(finalInvocation.message.id, id)?.state,
+			).toBe("delivered");
+			expect(readFileSync(calls, "utf8")).not.toContain(
+				"urgent parent while running",
+			);
 			// A newer relay can address only descendants in the native index.
 			const childReg = (key: string) => ({
 				...reg,
@@ -302,6 +353,56 @@ if (operation === "get-conversation-metadata") {
 				expect(readFileSync(calls, "utf8")).toContain(
 					`"send-message","${beta}"`,
 				);
+				const status = db.prepare(
+					"UPDATE conversation_summaries SET status=? WHERE conversation_id=?",
+				);
+				status.run("CASCADE_RUN_STATUS_RUNNING", beta);
+				await daemon.service.subagents.refresh(id);
+				const busyChild = await own.client.call<{
+					message: { id: string };
+					receipts: Receipt[];
+				}>("send", {
+					to: dest,
+					body: "urgent busy sibling",
+					priority: "urgent",
+				});
+				expect(busyChild.receipts[0]).toMatchObject({
+					state: "queued",
+					via: "pulsar-native-steer",
+				});
+				expect(await hook("PreInvocation", unbound, sessionId, 4)).toEqual({});
+				expect(
+					(
+						await hook(
+							"PreInvocation",
+							{ ...unbound, ANTIGRAVITY_CONVERSATION_ID: beta },
+							beta,
+							4,
+						)
+					).injectSteps,
+				).toEqual([
+					{ userMessage: expect.stringContaining("urgent busy sibling") },
+				]);
+				expect(readFileSync(calls, "utf8")).not.toContain(
+					"urgent busy sibling",
+				);
+				const childBoundary = await own.client.call<{
+					message: { id: string };
+				}>("send", {
+					to: dest,
+					body: "sibling already finished turn",
+					priority: "urgent",
+				});
+				status.run("CASCADE_RUN_STATUS_IDLE", beta);
+				await daemon.service.subagents.refresh(id);
+				await until(
+					() =>
+						daemon.service.store.receipt(childBoundary.message.id, dest)
+							?.state === "delivered",
+				);
+				expect(
+					daemon.service.store.receipt(childBoundary.message.id, dest)?.via,
+				).toBe("native-wake");
 				for (const [key, error] of [
 					[alpha, "already has"],
 					[other, "did not verify"],

@@ -367,6 +367,9 @@ export class PulsarService {
 			waiters: this.waiters,
 			resolveSubagent: (id) => this.subagents.resolveLocalTarget(id),
 		});
+		this.subagents.onNativeHookIdle = (child) => {
+			void this.router.releaseNextTurn(child);
+		};
 		this.mailbox = new Mailbox({
 			store: this.store,
 			registry: this.registry,
