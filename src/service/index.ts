@@ -97,8 +97,8 @@ import {
 	isLocalSubagentId,
 	isRemote,
 	type PoolView,
-	splitAddress,
 	SUB_MARK,
+	splitAddress,
 } from "./pool.ts";
 import { PrReviewOps } from "./pr-review.ts";
 import { Presence } from "./presence.ts";
