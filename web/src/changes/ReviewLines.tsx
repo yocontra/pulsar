@@ -5,6 +5,7 @@ import { keys } from "../data/keys.ts";
 import { queryClient } from "../data/runtime.ts";
 import { addAgentDraftText } from "../lib/composer-draft.ts";
 import { backBy, navigate, stack } from "../lib/router.ts";
+import { showToast } from "../lib/store.ts";
 import { messagesViaParent } from "../lib/subagents.ts";
 
 /** File line numbers are 1-based. A diff supplies only one side of one hunk. */
@@ -52,29 +53,41 @@ export function ReviewLines({
 		queryClient,
 	).data;
 	const last = first + lines.length - 1;
+	function reviewText() {
+		const lo = Number(start),
+			hi = Number(end);
+		if (
+			!Number.isSafeInteger(lo) ||
+			!Number.isSafeInteger(hi) ||
+			lo < first ||
+			hi > last ||
+			lo > hi
+		)
+			return null;
+		const snippet = lines.slice(lo - first, hi - first + 1).join("\n");
+		// Indented Markdown quotes preserve code containing its own fences.
+		return `${path}:${lo}${hi === lo ? "" : `-${hi}`} (${source})\n\n${snippet
+			.split("\n")
+			.map((l) => `    ${l}`)
+			.join("\n")}\n\n`;
+	}
+
 	return (
 		<form
 			className="review-lines"
 			aria-label="Review lines"
 			onSubmit={(e) => {
 				e.preventDefault();
-				const lo = Number(start),
-					hi = Number(end);
-				if (lo < first || hi > last || lo > hi) return;
-				const snippet = lines.slice(lo - first, hi - first + 1).join("\n");
-				// Indented Markdown quotes preserve code containing its own fences.
-				const body = `${path}:${lo}${hi === lo ? "" : `-${hi}`} (${source})\n\n${snippet
-					.split("\n")
-					.map((l) => `    ${l}`)
-					.join("\n")}\n\n`;
+				const quote = reviewText();
+				if (!quote) return;
 				const recipient = child?.parentId === agentId ? child : null;
-				if ((childId && !child) || (recipient && !recipient.messaging)) {
+				if ((childId && !recipient) || (recipient && !recipient.messaging)) {
 					setError("Open the chat again to check where this review will go.");
 					return;
 				}
 				const issue = addAgentDraftText(
 					recipient?.id ?? agentId,
-					body,
+					quote,
 					recipient ? messagesViaParent(recipient) : false,
 				);
 				if (issue) {
@@ -129,6 +142,23 @@ export function ReviewLines({
 			</label>
 			<button type="submit" className="d-btn sm">
 				Add to chat
+			</button>
+			<button
+				type="button"
+				className="d-btn sm"
+				onClick={async (e) => {
+					if (!e.currentTarget.form?.reportValidity()) return;
+					const quote = reviewText();
+					if (!quote) return;
+					try {
+						await navigator.clipboard.writeText(quote);
+						showToast("Review lines copied");
+					} catch {
+						setError("Clipboard access is unavailable.");
+					}
+				}}
+			>
+				Copy quote
 			</button>
 			<button type="button" className="d-btn sm" onClick={onClose}>
 				Cancel

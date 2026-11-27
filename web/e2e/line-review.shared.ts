@@ -19,6 +19,19 @@ export async function reviewDiffLines(page: Page, phone: boolean) {
 	await row.click();
 	const form = page.getByRole("form", { name: "Review lines" }).last();
 	await form.getByRole("spinbutton", { name: "Last review line" }).fill("2");
+	await page.evaluate(() =>
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: {
+				writeText: async (quote: string) =>
+					sessionStorage.setItem("test.copiedReview", quote),
+			},
+		}),
+	);
+	await form.getByRole("button", { name: "Copy quote" }).click();
+	expect(
+		await page.evaluate(() => sessionStorage.getItem("test.copiedReview")),
+	).toContain("src/util/lock.ts:1-2 (working tree, before)");
 	await form.getByRole("button", { name: "Add to chat" }).click();
 	await expect(input).toHaveValue(
 		/Please review\n\nsrc\/util\/lock\.ts:1-2 \(working tree, before\)\n\n {4}export class Lock \{\n {4}\s*private tail/,
