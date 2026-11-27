@@ -104,7 +104,7 @@ const server = Bun.serve({
 		);
 	},
 });
-try {
+async function qualify() {
 	await mkdir(codexHome, { recursive: true });
 	await mkdir(cwd);
 	await run("git", ["init", "-q"]);
@@ -123,6 +123,24 @@ trust_level = "trusted"
 enabled = false
 `,
 	);
+	Object.assign(process.env, env, {
+		PULSAR_HOME: join(root, "state"),
+		PULSAR_NO_SCAN: "1",
+		PULSAR_NO_SEARCH: "1",
+		PULSAR_NO_MESH: "1",
+	});
+	await mkdir(process.env.PULSAR_HOME!);
+	if (process.argv.includes("--acp")) {
+		host = await (await import("./resume-host.ts")).resumeHost(root);
+		const { checkCodexAcp } = await import("./codex-acp.ts");
+		await checkCodexAcp(
+			host.service,
+			cwd,
+			`http://127.0.0.1:${server.port}/v1`,
+			{ first, reply, followup, resumedReply },
+		);
+		return;
+	}
 	async function start(prompt: string) {
 		const output = await run("codex", [
 			"exec",
@@ -143,13 +161,6 @@ enabled = false
 	const selected = await start(first);
 	if ((await start(decoy)) === selected)
 		throw new Error("Codex reused a thread ID");
-	Object.assign(process.env, env, {
-		PULSAR_HOME: join(root, "state"),
-		PULSAR_NO_SCAN: "1",
-		PULSAR_NO_SEARCH: "1",
-		PULSAR_NO_MESH: "1",
-	});
-	await mkdir(process.env.PULSAR_HOME!);
 	await writeFile(
 		join(home, ".profile"),
 		`export PATH='${(env.PATH ?? "").replaceAll("'", "'\\''")}'\n`,
@@ -166,16 +177,22 @@ enabled = false
 		run("tmux", ["-L", "qualification", ...args]);
 	const pane = `${launch.session}:`;
 	let screen = "";
-	let choseModel = false;
+	let lastPickerInput = 0;
 	const deadline = Date.now() + 30000;
 	do {
 		screen = await tmux("capture-pane", "-pJ", "-S", "-1000", "-t", pane).catch(
 			() => "",
 		);
 		if (screen.includes(first) && screen.includes(reply)) break;
-		if (!choseModel && screen.includes("2. Use existing model")) {
-			choseModel = true;
-			await tmux("send-keys", "-t", pane, "Down", "Enter");
+		if (
+			screen.includes("2. Use existing model") &&
+			Date.now() - lastPickerInput >= 500
+		) {
+			if (/›\s+1\. Try new model/.test(screen))
+				await tmux("send-keys", "-t", pane, "Down");
+			else if (/›\s+2\. Use existing model/.test(screen))
+				await tmux("send-keys", "-t", pane, "Enter");
+			lastPickerInput = Date.now();
 		}
 		await delay(150);
 	} while (Date.now() < deadline);
@@ -223,6 +240,9 @@ enabled = false
 	console.log(
 		"Codex reopened the selected thread and continued it with its own history.",
 	);
+}
+try {
+	await qualify();
 } finally {
 	await run("tmux", ["-L", "qualification", "kill-server"]).catch(() => {});
 	await host?.close();

@@ -105,7 +105,7 @@ Direct stdio checks on macOS confirmed ACP v1 initialization for Antigravity CLI
 
 On November 26, 2026, five adapters passed live command and permission checks with disposable sessions and local models: Claude Agent ACP 0.110.0, Antigravity 1.5.18, OMP 19.1.1, OpenCode 2.2.5, and GitHub Copilot CLI 1.0.116. Each exposed commands and honored a denied permission request. Cursor still required sign-in.
 
-Claude Agent ACP 0.110.0, pi ACP 0.0.35, and Amp ACP 0.13.0 created sessions. Codex ACP 2.12.0 initialized, then reported an error while it loaded workspace requirements in the test environment.
+Claude Agent ACP 0.110.0, pi ACP 0.0.35, and Amp ACP 0.13.0 created sessions. Codex ACP 2.12.0 completed two turns through Pulsar’s managed bridge on Linux. A local Responses endpoint returned the second answer only after receiving the first prompt, its answer, and the new message together. The command catalog exposed 13 commands, including `/status` and `/compact`. Pulsar changed `/model` from `gpt-5.5` to `gpt-6.2-sol` and back, then changed `/effort` from `medium` to `low` and back. The provider confirmed each selection. [Linux qualification](https://github.com/yocontra/pulsar/actions/runs/45973658142)
 
 CodeBuddy 2.186.0 and Qoder CLI 1.1.97 returned ACP v1 during initialization. Each returned a session error in a fresh workspace without credentials.
 

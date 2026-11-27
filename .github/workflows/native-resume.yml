@@ -5,6 +5,8 @@ on:
     paths:
       - src/harnesses/codex*.ts
       - src/service/launch.ts
+      - src/harnesses/acp*.ts
+      - scripts/live/codex-acp.ts
       - scripts/live/codex-resume.ts
       - scripts/live/resume-host.ts
       - .github/workflows/native-resume.yml
@@ -15,6 +17,16 @@ jobs:
   resume:
     runs-on: ubuntu-latest
     timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: native
+            packages: "@openai/codex@0.172.0"
+            args: ""
+          - mode: acp
+            packages: "@agentclientprotocol/codex-acp@2.12.0"
+            args: "--acp"
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -22,5 +34,5 @@ jobs:
         with:
           node-version: "24"
       - run: bun install --frozen-lockfile
-      - run: npm install --prefix "$RUNNER_TEMP/native" @openai/codex@0.172.0
-      - run: PATH="$RUNNER_TEMP/native/node_modules/.bin:$PATH" bun scripts/live/codex-resume.ts
+      - run: npm install --prefix "$RUNNER_TEMP/native" ${{ matrix.packages }}
+      - run: PATH="$RUNNER_TEMP/native/node_modules/.bin:$PATH" bun scripts/live/codex-resume.ts ${{ matrix.args }}
