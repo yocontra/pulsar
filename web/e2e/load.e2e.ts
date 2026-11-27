@@ -402,22 +402,39 @@ test.describe("service worker", () => {
 		await openUsage(page);
 		await expect(usage(page)).toBeVisible();
 
-		// The held HTML arrives and the current build's worker takes over the
-		// page, which still runs build A: A's cache stays for it.
+		// Let the current worker install once the server is responsive again.
+		// Trigger the update explicitly so this test does not depend on when
+		// the browser runs its automatic update check.
+		await serve(request, { webBuild: NO_UPDATE });
+		await page.evaluate(async () => {
+			const registration = await navigator.serviceWorker.ready;
+			await registration.update();
+		});
+		// Verify that the current worker controls this page, which still
+		// runs build A and needs A's cached lazy chunks.
 		await expect
 			.poll(
 				() =>
-					page.evaluate(async (name) => {
-						const reg = await navigator.serviceWorker.getRegistration();
-						// caches.open would create it: look first.
-						const shell =
-							(await caches.has(name)) &&
-							(await (await caches.open(name)).match("/"));
-						return !!shell && !reg?.installing && !reg?.waiting;
-					}, `pulsar-shell-${current().build}`),
+					page.evaluate(async () => {
+						const worker = navigator.serviceWorker.controller;
+						if (worker?.state !== "activated") return null;
+						const channel = new MessageChannel();
+						return new Promise<string | null>((resolve) => {
+							const timer = setTimeout(() => {
+								channel.port1.close();
+								resolve(null);
+							}, 1_000);
+							channel.port1.onmessage = (event) => {
+								clearTimeout(timer);
+								channel.port1.close();
+								resolve(event.data.build);
+							};
+							worker.postMessage({ type: "info" }, [channel.port2]);
+						});
+					}),
 				{ timeout: 20_000 },
 			)
-			.toBe(true);
+			.toBe(current().build);
 		await expect
 			.poll(() => cacheNames(page), { timeout: 20_000 })
 			.toEqual([`pulsar-shell-${a.build}`, `pulsar-shell-${current().build}`]);
