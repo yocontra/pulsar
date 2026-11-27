@@ -415,7 +415,14 @@ export class Registry {
 
 	/** A verified invocation hook can accept input while the model is working. */
 	hasNativeHook(agent: Agent) {
-		return this.nativeHooks.has(agent);
+		if (!agent.meta.subagentOf) return this.nativeHooks.has(agent);
+		const parent = this.get(agent.meta.subagentOf);
+		return (
+			!!parent &&
+			parent.status !== "gone" &&
+			!!attachedDriver(parent)?.subagents?.invocationHook &&
+			this.nativeHooks.has(parent)
+		);
 	}
 
 	noteNativeHook(agent: Agent) {
@@ -432,16 +439,23 @@ export class Registry {
 		this.events.emit("agent", { action: "update", agent: this.view(current) });
 	}
 
+	wakeRelay(agent: Agent) {
+		const own = this.sessions.wakeFor(agent.id);
+		if (own || !agent.meta.subagentOf || !agent.sessionId) return own;
+		const relay = this.sessions.wakeFor(agent.meta.subagentOf);
+		return relay && this.sessions.supports(relay, "wake-children")
+			? relay
+			: undefined;
+	}
+
 	canSteer(agent: Agent): boolean {
 		const ext = this.sessions.extensionFor(agent.id);
 		if (ext)
 			return agent.meta.acp === "1"
 				? agent.meta.acpSteer === "1"
 				: this.sessions.supports(ext, "steer");
-		if (!this.sessions.wakeFor(agent.id) && this.hasNativeHook(agent))
-			return true;
-		if (this.sessions.wakeFor(agent.id) || this.reachOf(agent) !== "push")
-			return false;
+		if (!this.wakeRelay(agent) && this.hasNativeHook(agent)) return true;
+		if (this.wakeRelay(agent) || this.reachOf(agent) !== "push") return false;
 		return pushFor(agent)?.canSteer?.(agent) === true;
 	}
 
@@ -503,6 +517,7 @@ export class Registry {
 					this.sessions
 						.forAgent(agent.id)
 						.some((c) => this.sessions.role(c) === "mcp"));
+			const relay = this.sessions.wakeFor(agent.id);
 			const wake =
 				active && agent.inbound === "accept" && agent.reach === "push";
 			pub.capabilities = {
@@ -511,6 +526,9 @@ export class Registry {
 				inbox,
 				steer: active && this.canSteer(agent),
 				wake,
+				...(relay && this.sessions.supports(relay, "wake-children")
+					? { childWake: true }
+					: {}),
 				stop: this.canStop(agent),
 				status:
 					active &&
@@ -791,7 +809,7 @@ export class Registry {
 	}
 
 	reachOf(agent: Agent): Agent["reach"] {
-		if (this.sessions.extensionFor(agent.id) || this.sessions.wakeFor(agent.id))
+		if (this.sessions.extensionFor(agent.id) || this.wakeRelay(agent))
 			return "push";
 		if (
 			agent.meta.subagentPull ||

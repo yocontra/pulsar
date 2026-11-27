@@ -86,6 +86,35 @@ function rows(directory: string, root: string): Record<string, unknown>[] {
 	}
 }
 
+/** Only a live descendant explicitly named in the native index is addressable. */
+export function antigravityChildOf(
+	directory: string,
+	root: string,
+	child: string,
+) {
+	if (
+		root === child ||
+		!ANTIGRAVITY_SESSION_ID.test(root) ||
+		!ANTIGRAVITY_SESSION_ID.test(child)
+	)
+		return false;
+	const active = new Set([root]);
+	for (const row of rows(directory, root)) {
+		const id = row.conversation_id;
+		if (
+			typeof id !== "string" ||
+			!ANTIGRAVITY_SESSION_ID.test(id) ||
+			typeof row.parent_conversation_id !== "string" ||
+			!active.has(row.parent_conversation_id) ||
+			state(row) === "done"
+		)
+			continue;
+		if (id === child) return true;
+		active.add(id);
+	}
+	return false;
+}
+
 export function antigravityChildSupport(
 	conversations: () => string,
 	transcript: (
@@ -94,6 +123,7 @@ export function antigravityChildSupport(
 	) => Promise<SubagentTranscript | null>,
 ): NonNullable<HarnessDriver["subagents"]> {
 	return {
+		invocationHook: true,
 		async stamp(agent) {
 			if (!agent.sessionId || !ANTIGRAVITY_SESSION_ID.test(agent.sessionId))
 				return null;

@@ -1091,6 +1091,8 @@ export class PulsarService {
 				this.sessions.remove(caller);
 				this.touch();
 				this.registry.detach(caller, role);
+				if (role === "wake" && id && !this.registry.closed)
+					void this.subagents.refresh(id);
 				if (parent && !this.registry.closed)
 					void this.subagents.refresh(parent);
 			},
@@ -1195,6 +1197,69 @@ export class PulsarService {
 		caller: Caller,
 		reg: Registration,
 	): Promise<Agent | null> {
+		if (
+			reg.harness === "antigravity" &&
+			reg.meta?.nativeRootSessionId &&
+			reg.meta.acp !== "1" &&
+			(reg.role === "cli" || reg.role === "mcp")
+		) {
+			const rootId = reg.meta.nativeRootSessionId;
+			const parent = this.registry.get(
+				this.registry.agentId(reg.harness, rootId, null),
+			);
+			if (
+				!parent ||
+				!reg.sessionId ||
+				!reg.pid ||
+				parent.pid !== reg.pid ||
+				(reg.role === "mcp" &&
+					!this.sessions.ownsNativeHost(parent.id, reg.nativeHostToken)) ||
+				parent.status === "gone" ||
+				!(await driverFor(reg.harness)?.verifyWakeHost?.(reg.pid, rootId))
+			)
+				throw new RpcError(
+					"forbidden",
+					"Antigravity did not verify the native root process.",
+				);
+			await this.subagents.refresh(parent.id);
+			const id = `${parent.id}${SUB_MARK}${reg.sessionId}`;
+			const target = this.subagents.agentFor(id);
+			if (
+				!target ||
+				target.sessionId !== reg.sessionId ||
+				target.status === "gone" ||
+				caller.closed.aborted
+			)
+				throw new RpcError(
+					"forbidden",
+					"Antigravity did not verify this child conversation.",
+				);
+			const previous = agentIdOf(caller.principal);
+			if (previous && previous !== id)
+				throw new RpcError(
+					"forbidden",
+					"The connection already belongs to a different conversation.",
+				);
+			if (
+				reg.role === "mcp" &&
+				this.sessions
+					.forAgent(id)
+					.some((c) => c !== caller && this.sessions.role(c) === "mcp")
+			)
+				throw new RpcError(
+					"session_claimed",
+					"The child already has an MCP connection.",
+				);
+			const child = this.registry.get(id) ?? target;
+			child.status = target.status;
+			if (reg.role === "mcp") child.registered = true;
+			if (reg.capabilities?.includes("acks")) child.meta.acks = "1";
+			child.meta.subagentNative = "1";
+			this.registry.registerSubagent(child);
+			caller.principal = { kind: "agent", agentId: id };
+			this.sessions.bind(caller, reg.capabilities);
+			return child;
+		}
 		if (reg.role !== "mcp" || !reg.sessionId || reg.meta?.acp === "1")
 			return null;
 		const lookup =
@@ -1381,15 +1446,38 @@ export class PulsarService {
 			}
 		}
 		caller.principal = { kind: "agent", agentId: agent.id };
-		this.sessions.bind(caller, reg.capabilities);
+		this.sessions.bind(
+			caller,
+			reg.capabilities,
+			reg.harness === "antigravity" && reg.meta?.acp !== "1"
+				? reg.nativeHostToken
+				: undefined,
+		);
 		agent.reach = this.registry.reachOf(agent);
 		this.events.emit("agent", { action: "join", agent: toPublic(agent) });
 		// Tracked messages an earlier session got go again; then anything that
 		// arrived while the session had no pulsar connection is pushed.
 		const role = reg.role;
+
 		void (async () => {
 			try {
 				await this.deliveries.back(agent);
+				if (
+					role === "wake" &&
+					this.sessions.supports(caller, "wake-children") &&
+					!this.registry.closed
+				) {
+					await this.subagents.refresh(agent.id);
+					for (const row of this.subagents.cached(agent.id)) {
+						if (this.registry.closed || caller.closed.aborted) return;
+						const target = this.subagents.localTarget(row.id);
+						if (target && this.store.unreadCount(row.id))
+							await this.router.flushQueued(
+								target,
+								this.deliveries.config.maxAttempts,
+							);
+					}
+				}
 				if ((role === "extension" || role === "wake") && !this.registry.closed)
 					await this.router.flushQueued(
 						agent,
@@ -1658,11 +1746,14 @@ export class PulsarService {
 				};
 			case "native.hook.collect": {
 				const me = registry.self(caller);
+				const root = me.meta.subagentOf ? registry.get(me.meta.subagentOf) : me;
 				if (
 					this.sessions.role(caller) !== "cli" ||
-					!me.pid ||
+					!root?.pid ||
+					!root.sessionId ||
+					root.status === "gone" ||
 					!me.sessionId ||
-					me.pid !== p.pid ||
+					root.pid !== p.pid ||
 					me.sessionId !== p.sessionId ||
 					me.status === "gone" ||
 					me.meta.acp === "1" ||
@@ -1672,18 +1763,24 @@ export class PulsarService {
 						"forbidden",
 						"Hook does not match a native conversation.",
 					);
-				if (registry.hasNativeHook(me) && !this.store.unreadCount(me.id))
+				if (
+					root === me &&
+					registry.hasNativeHook(me) &&
+					!this.store.unreadCount(me.id)
+				)
 					return { messages: [] };
 				const host = await driverFor(me.harness)?.verifyWakeHost?.(
-					me.pid,
-					me.sessionId,
+					root.pid,
+					root.sessionId,
 				);
 				if (!host || caller.closed.aborted)
 					throw new RpcError(
 						"forbidden",
 						"Native conversation is no longer active.",
 					);
+				const firstObservation = !registry.hasNativeHook(me);
 				registry.noteNativeHook(me);
+				if (firstObservation) await this.subagents.refresh(root.id);
 				return {
 					messages: this.router.takeForHook(caller, me, p.first === true),
 				};

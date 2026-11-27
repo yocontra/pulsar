@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DaemonClient } from "./client.ts";
@@ -5,6 +6,7 @@ import { messageText } from "./format.ts";
 import { idleCompactor } from "./gc.ts";
 import { gitInfoAsync } from "./git.ts";
 import { ACP_IDENTITY_ENV, acpRegistration } from "./harnesses/acp-identity.ts";
+import { ANTIGRAVITY_SESSION_ID } from "./harnesses/antigravity-ident.ts";
 import { codexToolThreadId } from "./harnesses/codex-ident.ts";
 import { IDENTS, identFor } from "./harnesses/ident.ts";
 import { detectRegistration } from "./identity.ts";
@@ -30,6 +32,13 @@ export function assertManagedAcpToolSession(
 	registration: Pick<Registration, "harness" | "sessionId">,
 	meta: ToolMeta,
 ) {
+	if (
+		registration.harness === "antigravity" &&
+		meta &&
+		Object.hasOwn(meta, "antigravity.google/conversation_id") &&
+		meta["antigravity.google/conversation_id"] !== registration.sessionId
+	)
+		throw new Error("Antigravity identified a different managed conversation.");
 	const context = identFor(registration.harness)?.toolSessions;
 	if (registration.harness !== "codex" && !context) return;
 	const nativeSession =
@@ -261,6 +270,7 @@ export async function runMcp() {
 	const active = idleCompactor(IDLE_GC_MS);
 	const managed = !!process.env[ACP_IDENTITY_ENV];
 	const base = managed ? null : await detectRegistration("mcp");
+	if (base?.harness === "antigravity") base.nativeHostToken = randomUUID();
 	const server = new McpStdioServer(
 		{ name: "pulsar", version: VERSION },
 		PULSAR_TOOL_INSTRUCTIONS,
@@ -270,6 +280,8 @@ export async function runMcp() {
 	const onMessage = (m: DeliveredMessage) => {
 		active();
 		server.sendResourceUpdated("pulsar://inbox");
+		// Antigravity shares one transport between a parent and its children.
+		if (base?.harness === "antigravity") return;
 		server.sendLog(
 			"notice",
 			"pulsar",
@@ -355,35 +367,59 @@ export async function runMcp() {
 			baseSession ??= new Session(registration, onMessage);
 			return baseSession;
 		}
-		if (base.harness === "codex" && meta && Object.hasOwn(meta, "threadId")) {
-			const id = codexToolThreadId(meta);
-			if (!id)
-				throw new Error("Codex did not supply a valid invoking thread ID.");
-			const key = `codex:${id}`;
+		const agy =
+			base.harness === "antigravity" &&
+			meta &&
+			Object.hasOwn(meta, "antigravity.google/conversation_id");
+		if (
+			agy ||
+			(base.harness === "codex" && meta && Object.hasOwn(meta, "threadId"))
+		) {
+			const id = agy
+				? meta["antigravity.google/conversation_id"]
+				: codexToolThreadId(meta);
+			const root = agy ? meta["antigravity.google/root_conversation_id"] : null;
+			if (
+				typeof id !== "string" ||
+				!id ||
+				(agy &&
+					(!ANTIGRAVITY_SESSION_ID.test(id) ||
+						typeof root !== "string" ||
+						!ANTIGRAVITY_SESSION_ID.test(root)))
+			)
+				throw new Error(
+					agy
+						? "Antigravity did not identify the invoking conversation."
+						: "Codex did not supply a valid invoking thread ID.",
+				);
+			if (agy) {
+				await baseSession?.ensure();
+				if (baseSession && !baseSession.registration.sessionId) {
+					await baseSession.refresh();
+				}
+				if (baseSession?.registration.sessionId !== root)
+					throw new Error("Antigravity did not verify the root conversation.");
+				if (id === root) return baseSession!;
+			}
+			const key = `${base.harness}:${id}`;
 			const existing = perSession.get(key);
 			if (existing) return existing;
-			let pending = creating.get(key);
-			if (!pending) {
-				pending = Promise.resolve()
-					.then(() => {
-						// A legacy call may already have registered this exact root.
-						if (baseSession?.me && baseSession.registration.sessionId === id)
-							return baseSession;
-						const session = new Session(
-							{
-								...base,
-								sessionId: id,
-								meta: { ...base.meta, nativeToolContext: "1" },
-							},
-							onMessage,
-						);
-						perSession.set(key, session);
-						return session;
-					})
-					.finally(() => creating.delete(key));
-				creating.set(key, pending);
-			}
-			return pending;
+			if (!agy && baseSession?.me && baseSession.registration.sessionId === id)
+				return baseSession;
+			const session = new Session(
+				{
+					...base,
+					sessionId: id,
+					meta: {
+						...base.meta,
+						nativeToolContext: "1",
+						...(typeof root === "string" ? { nativeRootSessionId: root } : {}),
+					},
+				},
+				onMessage,
+			);
+			perSession.set(key, session);
+			return session;
 		}
 		for (const driver of IDENTS) {
 			const tool = driver.toolSessions;
@@ -424,6 +460,10 @@ export async function runMcp() {
 			}
 			return pending;
 		}
+		if (base.harness === "antigravity" && tool)
+			throw new Error(
+				"Antigravity did not supply the tool call's conversation ID.",
+			);
 		if (identFor(base.harness)?.toolSessions)
 			throw new Error(
 				"OpenCode did not identify the calling session. Call Pulsar from a session using a host that supplies its session ID.",
@@ -439,8 +479,8 @@ export async function runMcp() {
 		title: "Pulsar inbox",
 		description: "Messages waiting for this agent",
 		mimeType: "text/plain",
-		read: async () => {
-			const r = await (await sessionFor(undefined)).call<{
+		read: async (meta) => {
+			const r = await (await sessionFor(meta, undefined, "inbox")).call<{
 				messages: DeliveredMessage[];
 			}>("inbox", { markRead: false });
 			return r.messages.length

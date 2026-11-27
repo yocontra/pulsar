@@ -140,8 +140,31 @@ export const antigravityIdent: HarnessIdent = {
 		const { startNativeWake } = await import("../native-wake.ts");
 		await startNativeWake("antigravity", sessionId);
 	},
-	async identify({ pid, sessionId, cwd }) {
+	async identify({ pid, sessionId, cwd, env }) {
 		const found = await antigravityProcess(pid);
+		const invoked = env.ANTIGRAVITY_CONVERSATION_ID;
+		if (
+			!sessionId &&
+			invoked &&
+			invoked !== found.sessionId &&
+			ANTIGRAVITY_SESSION_ID.test(invoked) &&
+			found.sessionId
+		) {
+			const { antigravityChildOf } = await import("./antigravity-children.ts");
+			if (
+				!antigravityChildOf(
+					antigravityConversations(),
+					found.sessionId,
+					invoked,
+				)
+			)
+				throw new Error("Antigravity did not verify this child conversation.");
+			return {
+				sessionId: invoked,
+				cwd: found.cwd ?? cwd,
+				meta: { nativeRootSessionId: found.sessionId },
+			};
+		}
 		return { sessionId: sessionId ?? found.sessionId, cwd: found.cwd ?? cwd };
 	},
 	lateSession: {

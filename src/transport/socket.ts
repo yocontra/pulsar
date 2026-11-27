@@ -247,6 +247,9 @@ export class SocketTransport {
 			const git = await gitInfoAsync(host.cwd, { lane: "user" });
 			reg = {
 				role: "wake",
+				capabilities: reg.capabilities?.includes("wake-children")
+					? ["wake-children"]
+					: [],
 				harness: reg.harness,
 				sessionId: reg.sessionId,
 				pid: reg.pid,

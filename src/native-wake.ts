@@ -29,7 +29,9 @@ export async function startNativeWake(
 		);
 		if (
 			agents.some(
-				(a) => a.id === `${harness}:${sessionId}` && a.reach === "push",
+				(a) =>
+					a.id === `${harness}:${sessionId}` &&
+					a.capabilities?.childWake === true,
 			)
 		)
 			return;
@@ -39,7 +41,7 @@ export async function startNativeWake(
 		client.close();
 	}
 	const binding = existing ?? (await antigravityBinding(sessionId));
-	if (!binding) return;
+	if (!binding || binding.rootSessionId) return;
 	const worker = fork(process.argv[1]!, ["worker", "native-wake"], {
 		detached: true,
 		stdio: ["ignore", "ignore", "ignore", "ipc"],

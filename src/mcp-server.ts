@@ -200,7 +200,7 @@ export interface Resource {
 	title: string;
 	description: string;
 	mimeType: string;
-	read: () => Promise<string>;
+	read: (meta?: Record<string, unknown>) => Promise<string>;
 }
 
 type Id = string | number;
@@ -437,7 +437,16 @@ export class McpStdioServer {
 						-32602,
 						`MCP error -32602: Resource ${uri} not found`,
 					);
-				return { contents: [{ uri, text: await r.read() }] };
+				return {
+					contents: [
+						{
+							uri,
+							text: await r.read(
+								params._meta as Record<string, unknown> | undefined,
+							),
+						},
+					],
+				};
 			}
 			// Updates go out for every resource anyway; nothing to record.
 			case "resources/subscribe":

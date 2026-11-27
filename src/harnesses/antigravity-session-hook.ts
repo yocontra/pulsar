@@ -33,6 +33,9 @@ export async function antigravitySessionHook(
 							role: "cli",
 							pid: binding.pid,
 							sessionId: binding.sessionId,
+							...(binding.rootSessionId
+								? { meta: { nativeRootSessionId: binding.rootSessionId } }
+								: {}),
 							cwd: binding.cwd,
 							project: null,
 							branch: null,
@@ -41,7 +44,10 @@ export async function antigravitySessionHook(
 					},
 					1000,
 				);
-				if (agent.id === `antigravity:${binding.sessionId}`) {
+				const expected = binding.rootSessionId
+					? `antigravity:${binding.rootSessionId}/sub:${binding.sessionId}`
+					: `antigravity:${binding.sessionId}`;
+				if (agent.id === expected) {
 					({ messages } = await client.call<{ messages: HookMessage[] }>(
 						"native.hook.collect",
 						{

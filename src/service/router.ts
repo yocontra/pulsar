@@ -446,9 +446,12 @@ export class Router {
 			// The extension acks once the message is in the conversation.
 			return this.receipt(message.id, target, "sent", "extension", detail);
 		}
-		const relay = this.sessions.wakeFor(target.id);
+		const relay = this.registry.wakeRelay(target);
 		if (relay) return this.wake(relay, target, message, text);
-		if (target.meta.subagentPull === "1")
+		if (
+			target.meta.subagentPull === "1" ||
+			target.meta.subagentPull === "native-hook"
+		)
 			return this.receipt(
 				message.id,
 				target,

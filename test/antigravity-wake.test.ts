@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { DaemonClient } from "../src/client.ts";
 import { PROTOCOL_VERSION, type Receipt } from "../src/types.ts";
 import {
@@ -36,7 +37,7 @@ test.skipIf(process.platform === "win32")(
 const fs = require("node:fs");
 const [command, operation, recipient, text] = process.argv.slice(2);
 fs.appendFileSync(process.env.WAKE_FIXTURE_CALLS, JSON.stringify(process.argv.slice(2)) + "\\n");
-if (command !== "agentapi" || recipient !== process.env.ANTIGRAVITY_CONVERSATION_ID) process.exit(1);
+if (command !== "agentapi") process.exit(1);
 if (operation === "get-conversation-metadata") {
 	const metadata = process.env.EMPTY_METADATA ? null : {conversationId: recipient};
 	console.log(JSON.stringify({response: {conversationMetadata: {metadata}}}));
@@ -97,6 +98,7 @@ if (operation === "get-conversation-metadata") {
 		try {
 			await once(host.stdout, "data");
 			const reg = registration({
+				nativeHostToken: crypto.randomUUID(),
 				harness: "antigravity",
 				role: "mcp",
 				pid: host.pid!,
@@ -138,6 +140,56 @@ if (operation === "get-conversation-metadata") {
 			expect(
 				delivery.flatMap((d) => d.injectSteps ?? []).map((d) => d.userMessage),
 			).toEqual([expect.stringContaining("hook test message")]);
+			const alpha = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+			const beta = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+			const db = new DatabaseSync(
+				join(directory, "..", "conversation_summaries.db"),
+			);
+			db.exec(
+				"CREATE TABLE conversation_summaries(conversation_id TEXT, parent_conversation_id TEXT, title TEXT, last_modified_time TEXT, status TEXT, killed INTEGER)",
+			);
+			const insert = db.prepare(
+				"INSERT INTO conversation_summaries VALUES (?,?,?,?,'CASCADE_RUN_STATUS_IDLE',0)",
+			);
+			for (const [key, parent] of [
+				[alpha, sessionId],
+				[beta, sessionId],
+				[other, ""],
+			] as const)
+				insert.run(key, parent, key, new Date().toISOString());
+			// Both children inherit the installed hook. Only the named invocation collects the text.
+			await daemon.service.subagents.refresh(id);
+			const dest = `${id}/sub:${beta}`;
+			const stagedChild = await op.call<{
+				message: { id: string };
+				receipts: Receipt[];
+			}>("send", {
+				to: dest,
+				body: "addressed child hook",
+				priority: "urgent",
+			});
+			expect(stagedChild.receipts[0]?.state).toBe("queued");
+			expect(
+				await hook(
+					"PreInvocation",
+					{ ...unbound, ANTIGRAVITY_CONVERSATION_ID: alpha },
+					alpha,
+					1,
+				),
+			).toEqual({});
+			expect(await hook("PreInvocation", unbound, sessionId, 1)).toEqual({});
+			const collected = await hook(
+				"PreInvocation",
+				{ ...unbound, ANTIGRAVITY_CONVERSATION_ID: beta },
+				beta,
+				1,
+			);
+			expect(collected.injectSteps).toEqual([
+				{ userMessage: expect.stringContaining("addressed child hook") },
+			]);
+			expect(
+				daemon.service.store.receipt(stagedChild.message.id, dest),
+			).toMatchObject({ state: "delivered", via: "native-hook" });
 			const lost = await send("unconfirmed hook delivery", "urgent");
 			const interrupted = new DaemonClient();
 			await interrupted.connect(false);
@@ -214,6 +266,74 @@ if (operation === "get-conversation-metadata") {
 			expect(sends.every((args) => args[2] === sessionId)).toBe(true);
 			expect(sends[0]![3]).toContain("queued before bind");
 			expect(sends[1]![3]).toContain(text);
+			// A newer relay can address only descendants in the native index.
+			const childReg = (key: string) => ({
+				...reg,
+				sessionId: key,
+				meta: { nativeRootSessionId: sessionId, nativeToolContext: "1" },
+			});
+			const stranger = new DaemonClient();
+			try {
+				await stranger.connect(false);
+				await expect(
+					stranger.call("hello", {
+						protocol: PROTOCOL_VERSION,
+						registration: {
+							...childReg(alpha),
+							nativeHostToken: crypto.randomUUID(),
+						},
+					}),
+				).rejects.toThrow("did not verify");
+			} finally {
+				stranger.close();
+			}
+			const own = await agentClient(childReg(alpha));
+			try {
+				expect(own.agent.id).toBe(`${id}/sub:${alpha}`);
+				const dest = `${id}/sub:${beta}`;
+				const response = await own.client.call<{
+					message: { fromId: string };
+					receipts: Receipt[];
+				}>("send", { to: dest, body: "sibling test", priority: "urgent" });
+				expect(response.message.fromId).toBe(own.agent.id);
+				expect(response.receipts).toMatchObject([
+					{ agentId: dest, state: "delivered", via: "native-wake" },
+				]);
+				expect(readFileSync(calls, "utf8")).toContain(
+					`"send-message","${beta}"`,
+				);
+				for (const [key, error] of [
+					[alpha, "already has"],
+					[other, "did not verify"],
+				] as const) {
+					const connection = new DaemonClient();
+					try {
+						await connection.connect(false);
+						await expect(
+							connection.call("hello", {
+								protocol: PROTOCOL_VERSION,
+								registration: childReg(key),
+							}),
+						).rejects.toThrow(error);
+					} finally {
+						connection.close();
+					}
+				}
+				await expect(
+					own.client.call("hello", {
+						protocol: PROTOCOL_VERSION,
+						registration: childReg(beta),
+					}),
+				).rejects.toThrow("different conversation");
+				db.prepare(
+					"UPDATE conversation_summaries SET killed=1 WHERE conversation_id=?",
+				).run(beta);
+				await daemon.service.subagents.refresh(id);
+				expect(daemon.service.subagents.localTarget(dest)).toBeUndefined();
+			} finally {
+				own.client.close();
+				db.close();
+			}
 			host.kill();
 			daemon.service.sessions.wakeFor(id)?.close?.("test disconnect");
 			await until(() => daemon.service.registry.get(id)?.reach === "pull");

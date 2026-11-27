@@ -46,6 +46,8 @@ export interface SessionCapabilities {
 	host?: string;
 	inbox: boolean;
 	wake: boolean;
+	/** A connected native relay can wake this agent's own child conversations. */
+	childWake?: boolean;
 	steer?: boolean;
 	stop: boolean;
 	status: boolean;
@@ -228,6 +230,8 @@ export interface Registration {
 	 * tools, so an unacked tracked message may be redelivered on a timer.
 	 */
 	capabilities?: string[];
+	/** Private nonce shared only by the native MCP host's per-conversation connections. */
+	nativeHostToken?: string;
 	/**
 	 * A session id that survives a restart when the agent id does not (pi and
 	 * omp ids are the pid). Tracked messages follow it to the new agent.

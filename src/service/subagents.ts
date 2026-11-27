@@ -238,22 +238,31 @@ export class Subagents {
 		e.direct = new Map();
 		e.aliases = new Set();
 		for (const sub of found) {
+			let target = this.record(idOf(sub.key), agent, sub);
 			const native = sub.direct || driver?.subagents?.direct;
+			const relay = this.registry.wakeRelay(target);
+			const nativeHook =
+				driver?.subagents?.invocationHook && this.registry.hasNativeHook(agent);
 			if (
 				sub.sessionId &&
-				(native || this.registry.verifiedChildInbox(idOf(sub.key)))
+				(native ||
+					relay ||
+					nativeHook ||
+					this.registry.verifiedChildInbox(idOf(sub.key)))
 			)
 				e.aliases.add(
 					this.registry.agentId(agent.harness, sub.sessionId, null),
 				);
 			if (sub.state === "done") continue;
-			let target = this.record(idOf(sub.key), agent, sub);
-			if (this.hookCanDeliver(agent, sub.key)) {
+			if (!relay && nativeHook) {
+				target.meta.subagentPull = "native-hook";
+				target.reach = "pull";
+			} else if (this.hookCanDeliver(agent, sub.key)) {
 				target = this.hookIdentity(target);
 				target.meta.subagentPull = "1";
 				target.reach = "pull";
 			} else {
-				if (!native || !pushFor(target)) continue;
+				if (!relay && (!native || !pushFor(target))) continue;
 				target.meta.subagentNative = "1";
 			}
 			e.direct.set(target.id, target);
@@ -292,7 +301,7 @@ export class Subagents {
 				f,
 				f.state === "done"
 					? "parent"
-					: e.direct.get(idOf(f.key))?.meta.subagentPull === "1"
+					: e.direct.get(idOf(f.key))?.meta.subagentPull
 						? "pull"
 						: e.direct.has(idOf(f.key)) ||
 								this.registry.connectedSubagent(idOf(f.key))
@@ -593,9 +602,12 @@ export class Subagents {
 	}
 
 	private canAddress(parent: Agent, child: Agent): boolean {
+		if (child.meta.subagentPull === "native-hook") {
+			return this.registry.hasNativeHook(parent);
+		}
 		return child.meta.subagentPull === "1"
 			? this.hookCanDeliver(parent, child.meta.subagentKey!)
-			: !!pushFor(child);
+			: !!this.registry.wakeRelay(child) || !!pushFor(child);
 	}
 
 	localTarget(id: string): Agent | undefined {
@@ -616,7 +628,12 @@ export class Subagents {
 			registered.status !== "gone" &&
 			registered.sessionId === target.sessionId &&
 			registered.meta.subagentNative === "1"
-			? registered
+			? {
+					...registered,
+					reach: target.reach,
+					status: target.status,
+					meta: { ...registered.meta, ...target.meta },
+				}
 			: target;
 	}
 

@@ -10,10 +10,8 @@ export const MAX_RETIRED = 4;
  * lookups stay cheap however many connections are open.
  */
 export class Sessions {
-	private readonly extensionCapabilities = new WeakMap<
-		Caller,
-		readonly string[]
-	>();
+	private readonly nativeHosts = new WeakMap<Caller, string>();
+	private readonly capabilities = new WeakMap<Caller, readonly string[]>();
 	private roles = new Map<Caller, Role | null>();
 	private byAgent = new Map<string, Set<Caller>>();
 	private agentOf = new Map<Caller, string>();
@@ -49,11 +47,22 @@ export class Sessions {
 	}
 
 	/** Re-files a caller under its current principal's agent (after hello). */
-	bind(caller: Caller, capabilities: readonly string[] = []) {
+	bind(
+		caller: Caller,
+		capabilities: readonly string[] = [],
+		nativeHostToken?: string,
+	) {
 		if (!this.roles.has(caller)) return;
-		if (this.role(caller) === "extension")
-			this.extensionCapabilities.set(caller, capabilities);
-		else this.extensionCapabilities.delete(caller);
+		if (
+			this.role(caller) === "mcp" &&
+			typeof nativeHostToken === "string" &&
+			nativeHostToken.length === 36
+		)
+			this.nativeHosts.set(caller, nativeHostToken);
+		else this.nativeHosts.delete(caller);
+		if (this.role(caller) === "extension" || this.role(caller) === "wake")
+			this.capabilities.set(caller, capabilities);
+		else this.capabilities.delete(caller);
 		this.unindex(caller);
 		const id = agentIdOf(caller.principal);
 		if (!id) return;
@@ -87,9 +96,16 @@ export class Sessions {
 		return undefined;
 	}
 
-	supports(caller: Caller, capability: "steer" | "stop") {
+	supports(caller: Caller, capability: "steer" | "stop" | "wake-children") {
+		return this.capabilities.get(caller)?.includes(capability) === true;
+	}
+
+	ownsNativeHost(agentId: string, token: string | undefined) {
 		return (
-			this.extensionCapabilities.get(caller)?.includes(capability) === true
+			!!token &&
+			this.forAgent(agentId).some(
+				(c) => this.role(c) === "mcp" && this.nativeHosts.get(c) === token,
+			)
 		);
 	}
 

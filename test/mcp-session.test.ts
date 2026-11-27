@@ -26,6 +26,18 @@ test("managed multiplexed MCP requests cannot fall back to the parent identity",
 	expect(() => assertManagedAcpToolSession(codex, undefined)).toThrow(
 		"did not verify",
 	);
+	const agy = { harness: "antigravity", sessionId: root };
+	expect(() =>
+		assertManagedAcpToolSession(agy, {
+			"antigravity.google/conversation_id": root,
+		}),
+	).not.toThrow();
+	expect(() =>
+		assertManagedAcpToolSession(agy, {
+			"antigravity.google/conversation_id":
+				"22222222-2222-4222-8222-222222222222",
+		}),
+	).toThrow("different managed conversation");
 	const opencode = { harness: "opencode", sessionId: "ses_test" };
 	expect(() => assertManagedAcpToolSession(opencode, undefined)).toThrow(
 		"did not verify",

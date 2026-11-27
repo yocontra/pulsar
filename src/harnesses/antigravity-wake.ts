@@ -4,6 +4,7 @@ import { DaemonClient } from "../client.ts";
 import { exec } from "../exec.ts";
 import { pidAlive, processStart, processTable } from "../processes.ts";
 import { PROTOCOL_VERSION, type Registration } from "../types.ts";
+import { antigravityChildOf } from "./antigravity-children.ts";
 import {
 	ANTIGRAVITY_SESSION_ID,
 	antigravityConversations,
@@ -16,6 +17,7 @@ export type NativeBinding = {
 	pid: number;
 	birth: string;
 	sessionId: string;
+	rootSessionId?: string;
 	cwd: string;
 };
 
@@ -45,9 +47,19 @@ export async function antigravityBinding(
 					antigravityProcess(pid),
 					processStart(pid),
 				]);
-				return sessionId && cwd && birth && sessionId === supplied
-					? { pid, birth, sessionId, cwd }
-					: null;
+				if (!sessionId || !cwd || !birth) return null;
+				if (sessionId === supplied) return { pid, birth, sessionId, cwd };
+				if (
+					!antigravityChildOf(antigravityConversations(), sessionId, supplied)
+				)
+					return null;
+				return {
+					pid,
+					birth,
+					sessionId: supplied,
+					rootSessionId: sessionId,
+					cwd,
+				};
 			}),
 		)
 	).filter((b) => b !== null);
@@ -110,6 +122,7 @@ async function connectAntigravityRelay(
 		const reg: Registration = {
 			harness: "antigravity",
 			role: "wake",
+			capabilities: ["wake-children"],
 			pid: b.pid,
 			sessionId: b.sessionId,
 			cwd: b.cwd,
@@ -146,15 +159,24 @@ function handleAntigravityWake(
 			text: string;
 		};
 		let ok = false;
-		if (req.sessionId === sessionId && typeof req.text === "string") {
-			const key = JSON.stringify([req.messageId, req.attempt]);
+		if (
+			typeof req.sessionId === "string" &&
+			typeof req.text === "string" &&
+			(req.sessionId === sessionId ||
+				antigravityChildOf(
+					antigravityConversations(),
+					sessionId,
+					req.sessionId,
+				))
+		) {
+			const key = JSON.stringify([req.sessionId, req.messageId, req.attempt]);
 			let send = attempts.get(key);
 			if (!send) {
 				send = current()
 					.then(
 						(valid) =>
 							valid &&
-							antigravityAgentApi(["send-message", sessionId, req.text]),
+							antigravityAgentApi(["send-message", req.sessionId, req.text]),
 					)
 					.catch(() => false);
 				attempts.set(key, send);
