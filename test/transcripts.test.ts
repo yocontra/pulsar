@@ -265,7 +265,7 @@ describe("codex transcript", () => {
 		});
 	});
 
-	test("the first user message is skipped only when parsing from the start", () => {
+	test("a plain first Codex prompt survives with or without a preamble", () => {
 		const line = JSON.stringify({
 			timestamp: "2026-11-10T11:00:00.000Z",
 			type: "response_item",
@@ -277,9 +277,9 @@ describe("codex transcript", () => {
 			},
 		});
 		const parse = support("codex").parse;
-		expect(parse(line, newParseState({ atStart: true }))).toHaveLength(0);
+		expect(parse(line, newParseState({ atStart: true }))).toHaveLength(1);
 		expect(parse(line, newParseState({ atStart: false }))).toHaveLength(1);
-		// Only the first: a second user message from the start is kept.
+		// Consecutive user messages in the same rollout are also retained.
 		const state = newParseState({ atStart: true });
 		parse(line, state);
 		expect(parse(line.replace('"m1"', '"m2"'), state)).toHaveLength(1);

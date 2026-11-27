@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { codex } from "../src/harnesses/codex.ts";
@@ -73,7 +73,7 @@ test("only live Codex children explicitly accepting app-server input advertise d
 	server.handlers.set("thread/list", (params) => {
 		expect(params).toMatchObject({
 			sourceKinds: ["subAgentThreadSpawn"],
-			cwd: parent.cwd,
+			ancestorThreadId: parent.sessionId,
 		});
 		return {
 			data: [
@@ -274,4 +274,154 @@ test("urgent input respects a child that disallows direct messages", async () =>
 		await codex.push!.deliver(child, "Blocked", "urgent", "Operator"),
 	).toMatchObject({ ok: false });
 	expect(server.calls.some((call) => call.method === "turn/steer")).toBe(false);
+});
+
+test("nested Codex children keep their own workspace and exact archived rollout across pages", async () => {
+	const file = join(directory, "archived-rollout.jsonl");
+	const grandId = "00000000-0000-4000-8000-000000000003";
+	server.handlers.set("thread/list", (params) => {
+		expect(params.ancestorThreadId).toBe(parentId);
+		expect(params.cwd).toBeUndefined();
+		return params.cursor === "earlier"
+			? { data: [{ id: childId, parentThreadId: parentId }], nextCursor: null }
+			: {
+					data: [
+						{
+							id: grandId,
+							parentThreadId: childId,
+							cwd: "/other-worktree",
+							path: file,
+						},
+					],
+					nextCursor: "earlier",
+				};
+	});
+	const rows = await codex.subagents!.list(parent);
+	const grand = rows.find((r) => r.key === grandId)!;
+	expect(grand).toMatchObject({ parentKey: childId, cwd: "/other-worktree" });
+	const lookup = () => codex.subagents!.transcript!(parent, grand);
+	for (const [id, parent_thread_id, valid] of [
+		[grandId, childId, true],
+		[childId, parentId, false],
+		[grandId, parentId, false],
+	] as const) {
+		await writeFile(
+			file,
+			`${JSON.stringify({
+				type: "session_meta",
+				payload: {
+					id,
+					source: { subagent: { thread_spawn: { parent_thread_id } } },
+				},
+			})}\n`,
+		);
+		const transcript = await lookup();
+		expect(transcript?.source ?? null).toEqual(
+			valid ? { kind: "file", path: file } : null,
+		);
+	}
+});
+
+test("a missing or lost Codex child queue receipt is terminal to avoid duplicate delivery", async () => {
+	activeChild();
+	for (const lost of [false, true]) {
+		server.handlers.set("thread/queue/add", () => {
+			if (lost) server.dropClients();
+			return {};
+		});
+		expect(
+			await codex.push!.deliver(child, "Only once", "normal", "Operator"),
+		).toMatchObject({ ok: false, via: "codex-queue", uncertain: true });
+	}
+	expect(
+		server.calls.filter((c) => c.method === "thread/queue/add"),
+	).toHaveLength(2);
+});
+
+test("a child without a rollout reads its own paged thread history, including peer and tool activity", async () => {
+	server.handlers.set("thread/list", () => ({
+		data: [{ id: childId, parentThreadId: parentId }],
+	}));
+	const [sub] = await codex.subagents!.list(parent);
+	const own = await codex.subagents!.transcript!(parent, sub!);
+	if (own?.source.kind !== "poll")
+		throw new Error("expected app-server history");
+	server.handlers.set("thread/turns/list", (params) => {
+		expect(params).toMatchObject({
+			threadId: childId,
+			itemsView: "full",
+			sortDirection: "desc",
+		});
+		if (params.cursor === "earlier")
+			return {
+				data: [
+					{
+						startedAt: 8,
+						items: [
+							{
+								id: "user",
+								type: "userMessage",
+								content: [{ type: "text", text: "My first prompt" }],
+							},
+						],
+					},
+				],
+			};
+		return {
+			data: [
+				{
+					startedAt: 10,
+					items: [{ type: "agentMessage", id: "reply", text: "Latest reply" }],
+				},
+				{
+					startedAt: 9,
+					items: [
+						{
+							type: "reasoning",
+							id: "summary",
+							summary: ["Public summary"],
+							content: ["private data"],
+						},
+						{
+							type: "collabAgentToolCall",
+							id: "peer",
+							tool: "sendMessage",
+							receiverThreadIds: ["sibling"],
+							prompt: "Run checks",
+							status: "completed",
+						},
+						{
+							type: "commandExecution",
+							id: "cmd",
+							command: "false",
+							aggregatedOutput: "failed check",
+							exitCode: 1,
+							status: "failed",
+						},
+					],
+				},
+			],
+			nextCursor: "earlier",
+		};
+	});
+	const page = await own.source.fetch(null);
+	expect(page.cursor).toBe("earlier");
+	expect(page.events.at(-1)).toMatchObject({
+		id: "reply",
+		text: "Latest reply",
+	});
+	expect(page.events[0]).toMatchObject({ text: "Public summary" });
+	expect(JSON.stringify(page.events)).not.toContain("private data");
+	expect(page.events.find((e) => e.id === "peer")?.tool).toMatchObject({
+		name: "send_message",
+		input: { target: "sibling", message: "Run checks" },
+	});
+	expect(page.events.find((e) => e.id === "cmd#output")?.tool?.isError).toBe(
+		true,
+	);
+	expect((await own.source.fetch(page.cursor)).events[0]).toMatchObject({
+		role: "user",
+		text: "My first prompt",
+	});
+	expect(server.calls.some((c) => c.method === "thread/resume")).toBe(false);
 });

@@ -179,13 +179,18 @@ describe("MCP server", () => {
 			"00000000-0000-0000-0000-000000000011",
 			"00000000-0000-0000-0000-000000000012",
 			"00000000-0000-0000-0000-000000000013",
+			"00000000-0000-0000-0000-000000000014",
 		];
 		const root = join(home, "codex-child-test");
 		const day = join(root, "sessions", "2026", "11", "25");
 		mkdirSync(day, { recursive: true });
 		for (const [i, id] of ids.entries()) {
 			const source = i
-				? { subagent: { thread_spawn: { parent_thread_id: ids[i - 1] } } }
+				? {
+						subagent: {
+							thread_spawn: { parent_thread_id: ids[i === 3 ? 1 : i - 1] },
+						},
+					}
 				: "cli";
 			writeFileSync(
 				join(day, `rollout-2026-11-25T00-00-00-${id}.jsonl`),
@@ -216,6 +221,29 @@ describe("MCP server", () => {
 			);
 			expect(legacy).toContain(`codex:${ids[0]}`);
 			expect(legacy).not.toContain("/sub:");
+			const from = ids[2]!;
+			const to = ids[3]!;
+			const address = `codex:${ids[0]}/sub:${to}`;
+			expect(textOf(await invoke(to))).toContain(address);
+			const send = textOf(
+				await cx.callTool({
+					name: "send",
+					arguments: { to: address, body: "Sibling delivery test" },
+					_meta: { threadId: from },
+				}),
+			);
+			expect(send).toMatch(/Sent m_\w+ to 1 agent/);
+			const inbox = async (threadId: string) =>
+				textOf(
+					await cx.callTool({
+						name: "inbox",
+						arguments: {},
+						_meta: { threadId },
+					}),
+				);
+			expect(await inbox(ids[0]!)).not.toContain("Sibling delivery test");
+			expect(await inbox(ids[1]!)).not.toContain("Sibling delivery test");
+			expect(await inbox(to)).toContain("Sibling delivery test");
 		} finally {
 			restoreEnv("CODEX_HOME", previousHome);
 		}

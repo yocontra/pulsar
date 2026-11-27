@@ -232,11 +232,11 @@ export async function ompSubagentTranscript(
  * Codex (0.169): a spawned agent is its own thread with
  * `source.subAgent.thread_spawn.parent_thread_id`. Most threads keep their
  * history in Codex's database, not a rollout, so the children come from
- * the app-server's `thread/list` (filtered to spawned threads in the
- * parent's folder). Without a running app-server none are listed.
+ * the app-server's `thread/list`, scoped to the root thread across workspaces. Without a running app-server none are listed.
  */
 interface CodexThread {
 	id?: string;
+	cwd?: string;
 	parentThreadId?: string | null;
 	agentNickname?: string | null;
 	agentRole?: string | null;
@@ -253,23 +253,32 @@ export async function listCodexSubagents(
 	agent: Agent,
 	now = Date.now(),
 ): Promise<FoundSubagent[]> {
-	if (!agent.sessionId || !agent.cwd || !(await codexControlReady())) return [];
-	let threads: CodexThread[] = [];
+	if (!agent.sessionId || !(await codexControlReady())) return [];
+	const threads: CodexThread[] = [];
+	const seen = new Set<string>();
+	let cursor: string | null = null;
 	try {
-		const [r] = (await codexRpc(
-			[
+		do {
+			const [page] = (await codexRpc(
 				[
-					"thread/list",
-					{
-						sourceKinds: ["subAgentThreadSpawn"],
-						cwd: agent.cwd,
-						limit: 100,
-					},
+					[
+						"thread/list",
+						{
+							sourceKinds: ["subAgentThreadSpawn"],
+							ancestorThreadId: agent.sessionId,
+							limit: 100,
+							...(cursor && { cursor }),
+						},
+					],
 				],
-			],
-			{ timeoutMs: 4000, experimental: true },
-		)) as [{ data?: CodexThread[] }];
-		threads = Array.isArray(r?.data) ? r.data : [];
+				{ timeoutMs: 4000, experimental: true },
+			)) as [{ data?: CodexThread[]; nextCursor?: string | null }];
+			if (!Array.isArray(page?.data)) break;
+			threads.push(...page.data);
+			cursor = page.nextCursor ?? null;
+			if (!cursor || seen.has(cursor)) break;
+			seen.add(cursor);
+		} while (cursor);
 	} catch {
 		return [];
 	}
@@ -322,6 +331,7 @@ export async function listCodexSubagents(
 			parentKey:
 				parent && parent !== agent.sessionId && ids.has(parent) ? parent : null,
 			sessionId: t.id,
+			...(typeof t.cwd === "string" && isAbsolute(t.cwd) && { cwd: t.cwd }),
 			...(state !== "done" &&
 				t.canAcceptDirectInput === true && { direct: true }),
 			file: typeof t.path === "string" && t.path ? t.path : null,

@@ -85,11 +85,9 @@ export function parseCodex(
 		switch (payload.type) {
 			case "message": {
 				if (payload.role === "user") {
-					const first = state.atStart && !state.flags.userSeen;
-					state.flags.userSeen = true;
 					const text = contentText(payload.content);
-					// The first user item is the AGENTS.md / environment injection.
-					if (first || INJECTED.test(text) || !text.trim()) break;
+					// Child rollouts can begin directly with a real task or peer message.
+					if (INJECTED.test(text) || !text.trim()) break;
 					// Pulsar pushes arrive as queued prompts: read the frame back.
 					const push = parsePush(text);
 					// A `[pulsar]` frame we can't read is still a peer's, never the operator's.

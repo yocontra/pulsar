@@ -1,6 +1,6 @@
 import { access, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { join, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve, sep } from "node:path";
 import { lazyCrypto } from "../lazy.ts";
 import { type Action, cliUndo, skillFor } from "../setup/actions.ts";
 import { exists, runCli, setTomlKey, tryCli, which } from "../setup/files.ts";
@@ -19,6 +19,7 @@ import {
 	codexRpc,
 } from "./codex-rpc.ts";
 import { codexStatuses } from "./codex-status.ts";
+import { codexThreadHistory } from "./codex-thread-history.ts";
 import { parseCodex } from "./codex-transcript.ts";
 import { CodexWatch } from "./codex-watch.ts";
 import { listCodexSubagents } from "./more-subagents.ts";
@@ -170,7 +171,7 @@ async function deliverCodexSubagent(
 	const via = "codex-queue";
 	if (
 		!threadId ||
-		!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(threadId) ||
+		!CODEX_THREAD_ID.test(threadId) ||
 		!(await codexControlReady())
 	)
 		return {
@@ -178,6 +179,7 @@ async function deliverCodexSubagent(
 			via,
 			detail: "Codex subagent is not on the local app server.",
 		};
+	let submitting = false;
 	try {
 		const [result] = (await codexRpc(
 			[["thread/read", { threadId, includeTurns: false }]],
@@ -208,6 +210,7 @@ async function deliverCodexSubagent(
 			const steered = await steerCodexTurn(threadId, text);
 			if (steered) return steered;
 		}
+		submitting = true;
 		const [receipt] = (await codexRpc(
 			[
 				[
@@ -223,9 +226,19 @@ async function deliverCodexSubagent(
 		)) as [{ queuedSubmission?: { id?: string } }];
 		return receipt?.queuedSubmission?.id
 			? { ok: true, via }
-			: { ok: false, via, detail: "Codex did not return a queue receipt." };
+			: {
+					ok: false,
+					via,
+					uncertain: true,
+					detail: "Codex did not return a queue receipt.",
+				};
 	} catch (e) {
-		return { ok: false, via, detail: (e as Error).message };
+		return {
+			ok: false,
+			via,
+			...(submitting && !(e instanceof CodexRpcError) && { uncertain: true }),
+			detail: (e as Error).message,
+		};
 	}
 }
 
@@ -407,7 +420,38 @@ export const codex: HarnessDriver = {
 	},
 
 	// Spawned threads; their transcript is the thread's own (`transcript.locate`).
-	subagents: { list: listCodexSubagents, interruptBySession: true },
+	subagents: {
+		list: listCodexSubagents,
+		interruptBySession: true,
+		async transcript(parent, sub) {
+			// The server can return archived rollout paths outside the recent file search.
+			const id = sub.sessionId;
+			if (!id || !CODEX_THREAD_ID.test(id)) return null;
+			const file =
+				(sub.file && isAbsolute(sub.file) ? sub.file : null) ??
+				(await codexRolloutAsync(id));
+			if (!file || !(await statAsync(file))) {
+				if (!(await codexControlReady())) return null;
+				return {
+					source: {
+						kind: "poll",
+						intervalMs: 3000,
+						fetch: (cursor) =>
+							codexThreadHistory(id, cursor, sub.cwd ?? parent.cwd),
+					},
+					parse: parseCodex,
+				};
+			}
+			const raw = await headAsync(file, 1024 * 1024);
+			const header = codexRolloutIdentity(id, raw.split("\n", 1)[0] ?? "");
+			if (
+				!header?.parentId ||
+				header.parentId !== (sub.parentKey ?? parent.sessionId)
+			)
+				return null;
+			return { source: { kind: "file", path: file }, parse: parseCodex };
+		},
+	},
 
 	// Threads in the app-server daemon: answered from the app (codex-watch.ts).
 	// Others (`--no-daemon`): read from the rollout, answered in the terminal.
