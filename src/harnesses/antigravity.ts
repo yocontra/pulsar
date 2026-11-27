@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { freshProcessSnapshot, processStart } from "../processes.ts";
+import { toolAction } from "../transcripts/activity.ts";
 import type { TranscriptEvent, TranscriptPage } from "../transcripts/types.ts";
 import {
 	ANTIGRAVITY_SESSION_ID,
@@ -12,7 +13,7 @@ import {
 	nativeAntigravityProcess,
 } from "./antigravity-ident.ts";
 import { fields, message, utf8 } from "./antigravity-proto.ts";
-import { antigravityStatuses } from "./antigravity-status.ts";
+import { antigravitySummaries } from "./antigravity-status.ts";
 import { antigravityStepEvents } from "./antigravity-steps.ts";
 import type { HarnessDriver } from "./types.ts";
 
@@ -66,6 +67,7 @@ export function antigravityPage(
 	path: string,
 	sessionId: string,
 	cursor: string | null,
+	pageSize = PAGE_SIZE,
 ): TranscriptPage {
 	const before = cursor === null ? Number.MAX_SAFE_INTEGER : Number(cursor);
 	if (!Number.isSafeInteger(before) || before < 0)
@@ -79,14 +81,14 @@ export function antigravityPage(
 			.prepare(`SELECT idx, step_type, step_payload FROM steps
 			WHERE idx < ? AND step_format = 0
 			AND length(step_payload) <= ? ORDER BY idx DESC LIMIT ?`)
-			.all(before, MAX_PAYLOAD_BYTES, PAGE_SIZE + 1) as unknown as Step[];
+			.all(before, MAX_PAYLOAD_BYTES, pageSize + 1) as unknown as Step[];
 		const events = rows
-			.slice(0, PAGE_SIZE)
+			.slice(0, pageSize)
 			.reverse()
 			.flatMap((row) => antigravityEvents(sessionId, row));
 		return {
 			events,
-			cursor: rows.length > PAGE_SIZE ? String(rows[PAGE_SIZE - 1]!.idx) : null,
+			cursor: rows.length > pageSize ? String(rows[pageSize - 1]!.idx) : null,
 		};
 	} finally {
 		db.close();
@@ -211,6 +213,19 @@ export async function readAntigravitySession(
 export const antigravity: HarnessDriver = {
 	...antigravityIdent,
 	readSession: readAntigravitySession,
+	async activity({ sessionId }) {
+		if (!sessionId || !ANTIGRAVITY_SESSION_ID.test(sessionId)) return null;
+		const path = join(antigravityConversations(), `${sessionId}.db`);
+		const { events } = antigravityPage(path, sessionId, null, 8);
+		for (const e of events.reverse()) {
+			if (e.tool?.isError) return "Tool returned an error";
+			if (e.tool) return toolAction(e.tool.name, e.kind === "tool_result");
+			if (e.notice?.summary) return e.notice.summary;
+			if (e.role === "assistant") return "Sent a reply";
+			if (e.role === "user") return "Received a prompt";
+		}
+		return null;
+	},
 	resumeArgs: (id) =>
 		ANTIGRAVITY_SESSION_ID.test(id) ? ["agy", "--conversation", id] : null,
 	async verifyWakeHost(pid, sessionId) {
@@ -247,16 +262,20 @@ export const antigravity: HarnessDriver = {
 					};
 				}),
 			);
-			const statuses = antigravityStatuses(
+			const summaries = antigravitySummaries(
 				join(dirname(antigravityConversations()), "conversation_summaries.db"),
 				sessions
 					.map((s) => s.sessionId)
 					.filter((id) => ANTIGRAVITY_SESSION_ID.test(id)),
 			);
-			return sessions.map((s) => ({
-				...s,
-				status: statuses.get(s.sessionId) ?? "unknown",
-			}));
+			return sessions.map((s) => {
+				const info = summaries.get(s.sessionId);
+				if (info?.title) {
+					s.meta.harnessName = info.title;
+					s.meta.harnessNameSource = "auto";
+				}
+				return { ...s, status: info?.status ?? "unknown" };
+			});
 		},
 	},
 	transcript: {

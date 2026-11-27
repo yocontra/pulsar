@@ -97,3 +97,51 @@ test("native Antigravity shows task notifications and user-facing errors and ski
 		),
 	).toMatchObject([{ text: "Quota reached" }]);
 });
+
+test("task rows keep multiline command output behind a bounded completion title", () => {
+	const notice = (text: string) =>
+		read(
+			101,
+			field(114, [
+				...field(3, "task_notification"),
+				...field(4, field(4, text)),
+			]),
+		)[0];
+	const output = "  one\n  two\nthree";
+	for (const [code, status] of [
+		[0, "completed"],
+		[2, "failed"],
+	] as const) {
+		expect(
+			notice(
+				`Task id "parent/task-505" finished with result:\nCommand exited with code ${code}.\n\nCommand output:\n${output}`,
+			),
+		).toMatchObject({
+			text: output,
+			notice: {
+				type: "background_job",
+				status,
+				summary: `Task 505 ${status} · exit ${code}`,
+			},
+		});
+	}
+	expect(
+		notice(
+			'Task id "parent/task-4" was canceled with result:\nTool execution was canceled',
+		),
+	).toMatchObject({
+		text: "Tool execution was canceled",
+		notice: { summary: "Task 4 cancelled" },
+	});
+});
+
+test("native MCP calls use the shared tool presenter and remove the caller proof", () => {
+	const tool = descriptor("a", "call_mcp_tool", {
+		ServerName: "pulsar",
+		ToolName: "respond",
+		Arguments: { body: "hello", sourceProof: "private" },
+	});
+	const [e] = read(15, field(20, field(7, tool)));
+	expect(e?.tool?.name).toBe("mcp__pulsar__respond");
+	expect(e?.tool?.input).toEqual({ body: "hello" });
+});

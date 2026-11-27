@@ -1,4 +1,5 @@
 import { parsePush } from "../push-frame.ts";
+import { backgroundJob } from "../transcripts/background-job.ts";
 import {
 	attachImages,
 	callEvent,
@@ -17,7 +18,6 @@ import type {
 	ToolDetail,
 	TranscriptEvent,
 } from "../transcripts/types.ts";
-import { NOTICE_TEXT_CAP } from "../transcripts/types.ts";
 import { xdCall, xdResult } from "./omp-xd.ts";
 
 /** Counts omp puts in a result's `details`, over guesses from its text. */
@@ -74,18 +74,7 @@ function backgroundResult(
 	const body = (header || batch ? raw.slice(firstLine.length).trimStart() : raw)
 		.replace(/^Resume your work using the result below\.\s*/, "")
 		.trim();
-	return {
-		id,
-		ts: toMs(rec.timestamp),
-		role: "system",
-		kind: "system",
-		subtype: "task",
-		notice: { type: "background_job", summary, status: outcome },
-		text:
-			body.length > NOTICE_TEXT_CAP
-				? `${body.slice(0, NOTICE_TEXT_CAP)}\n…`
-				: body,
-	};
+	return backgroundJob({ id, ts: toMs(rec.timestamp) }, summary, outcome, body);
 }
 
 /**

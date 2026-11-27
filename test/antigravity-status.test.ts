@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { antigravitySession } from "../src/harnesses/antigravity-ident.ts";
-import { antigravityStatuses } from "../src/harnesses/antigravity-status.ts";
+import { antigravitySummaries } from "../src/harnesses/antigravity-status.ts";
 
 test("the active Antigravity conversation owns the process presence lock while child databases are open", async () => {
 	const dir = "/home/test/.gemini/antigravity-cli";
@@ -31,7 +31,7 @@ test("Antigravity reads native run status for discovered sessions", () => {
 		"node:sqlite",
 	) as typeof import("node:sqlite");
 	try {
-		expect(antigravityStatuses(path, ["idle"]).size).toBe(0);
+		expect(antigravitySummaries(path, ["idle"]).size).toBe(0);
 		const db = new DatabaseSync(path);
 		try {
 			db.exec(
@@ -51,7 +51,7 @@ test("Antigravity reads native run status for discovered sessions", () => {
 				put.run(status, `CASCADE_RUN_STATUS_${status.toUpperCase()}`);
 			expect(
 				Object.fromEntries(
-					antigravityStatuses(path, [
+					antigravitySummaries(path, [
 						"idle",
 						"busy",
 						"running",
@@ -61,10 +61,21 @@ test("Antigravity reads native run status for discovered sessions", () => {
 					]),
 				),
 			).toEqual({
-				idle: "idle",
-				busy: "busy",
-				running: "busy",
-				canceling: "busy",
+				idle: { status: "idle" },
+				busy: { status: "busy" },
+				running: { status: "busy" },
+				canceling: { status: "busy" },
+				unspecified: { status: "unknown" },
+			});
+			db.exec(
+				"ALTER TABLE conversation_summaries ADD COLUMN title TEXT; ALTER TABLE conversation_summaries ADD COLUMN not_fully_idle INTEGER",
+			);
+			db.exec(
+				"UPDATE conversation_summaries SET title = 'Audit findings', not_fully_idle = 1 WHERE conversation_id = 'idle'",
+			);
+			expect(antigravitySummaries(path, ["idle"]).get("idle")).toEqual({
+				status: "busy",
+				title: "Audit findings",
 			});
 		} finally {
 			db.close();

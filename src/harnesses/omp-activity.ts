@@ -1,4 +1,4 @@
-import { toolKind } from "../transcripts/describe.ts";
+import { toolAction } from "../transcripts/activity.ts";
 import { jsonLines, obj } from "../transcripts/summary.ts";
 import { statAsync, tailAsync } from "../util.ts";
 import { hostSessionId, locatePiStyle } from "./pi-sessions.ts";
@@ -6,32 +6,6 @@ import type { SessionRef } from "./types.ts";
 
 const TAIL_BYTES = 64 * 1024;
 const MISS_RETRY_MS = 60_000;
-
-function toolAction(name: unknown, completed: boolean): string {
-	const kind = typeof name === "string" ? toolKind(name) : "other";
-	switch (kind) {
-		case "shell":
-			return completed ? "Ran a command" : "Requested a command";
-		case "read":
-		case "list":
-			return completed ? "Read workspace files" : "Requested a file read";
-		case "edit":
-		case "patch":
-		case "write":
-		case "notebook":
-			return completed ? "Finished a file change" : "Requested a file change";
-		case "search":
-		case "websearch":
-		case "fetch":
-			return completed ? "Received search results" : "Requested a search";
-		case "task":
-			return completed
-				? "Received a subagent result"
-				: "Requested a subagent task";
-		default:
-			return completed ? "Received a tool result" : "Called a tool";
-	}
-}
 
 function lastAction(tail: string): string | null {
 	// A partial line at either end is not an activity record.
