@@ -174,6 +174,7 @@ export class Registry {
 
 	/** Child status for waits, independent of delivery or presence. */
 	observedSubagents: () => Agent[] = () => [];
+	readonly childReportsStatus = new WeakSet<Agent>();
 	observedSubagent: (id: string) => Agent | undefined = () => undefined;
 	/** Set by the service to include native addressed child sessions without adding presence. */
 	discoveredSubagents: () => Agent[] = () => [];
@@ -571,7 +572,8 @@ export class Registry {
 				stop: this.canStop(agent),
 				status:
 					active &&
-					(agent.status === "busy" ||
+					(agent.meta.subagentObserved === "1" ||
+						agent.status === "busy" ||
 						agent.status === "idle" ||
 						(!child &&
 							(extension ||
@@ -1428,6 +1430,13 @@ export class Registry {
 			: targets;
 	}
 
+	localWaitId(to: string) {
+		const addr = splitAddress(to);
+		return addr && addr.machineId === this.store.machineId()
+			? addr.localId
+			: to;
+	}
+
 	private freshRemoteStatus(machineId: string) {
 		return (
 			this.pool?.hasFreshStatus?.(machineId) ??
@@ -1448,12 +1457,16 @@ export class Registry {
 			if (remote && !this.freshRemoteStatus(address.machineId)) return [];
 			const id = remote ? to : (address?.localId ?? to);
 			const child = remote
-				? (this.pool?.observedSubagent?.(id) ?? this.pool?.get(id))
-				: (this.observedSubagent(id) ?? this.discoveredSubagent(id));
+				? this.pool?.observedSubagent?.(id)
+				: this.observedSubagent(id);
 			return child && child.id !== sender.id ? [child] : [];
 		}
 
 		const direct = this.resolvePool(to, sender);
+		if (selector.kind === "all")
+			return direct.filter(
+				(a) => !isRemote(a) || this.freshRemoteStatus(a.meta.machineId!),
+			);
 		const observed = [
 			...this.observedSubagents(),
 			...(this.pool?.observedSubagents?.() ?? []),
@@ -1469,7 +1482,7 @@ export class Registry {
 				.map((a) => [a.id, a]),
 		);
 		for (const agent of direct)
-			if (!targets.has(agent.id)) targets.set(agent.id, agent);
+			if (!splitSubagentId(agent.id)) targets.set(agent.id, agent);
 		const reachable = [...targets.values()].filter(
 			(a) => !isRemote(a) || this.freshRemoteStatus(a.meta.machineId!),
 		);
@@ -1841,6 +1854,7 @@ export class Registry {
 	}
 
 	setStatus(agent: Agent, status: AgentStatus) {
+		if (isLocalSubagentId(agent.id)) this.childReportsStatus.add(agent);
 		const was = agent.status;
 		agent.lastSeen = Date.now();
 		if (status === "idle" || status === "unknown") {

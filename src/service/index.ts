@@ -407,6 +407,7 @@ export class PulsarService {
 		this.mailbox.onRead = (agent, messages) =>
 			this.deliveries.readFromInbox(agent, messages);
 		this.registry.onGone = (agent) => {
+			this.waiters.resolveChildrenGone(agent.id);
 			this.subagents.parentGone(agent);
 			this.deliveries.gone(agent);
 		};
@@ -1013,7 +1014,7 @@ export class PulsarService {
 		}
 		// Subagents: one cheap check per live agent; lists only what moved.
 		jobs.every("subagents", INTERVALS.subagentsMs, async () => {
-			if (this.scan) await this.subagents.sweep();
+			if (this.scan) await this.subagents.sweep(this.waiters.childParents());
 			else
 				for (const parent of this.waiters.childParents())
 					await this.subagents.refresh(parent);

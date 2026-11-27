@@ -372,6 +372,7 @@ export class PoolState {
 	private addresses = new Map<string, FedAgent>();
 	onChange: (machineId: string | null) => void = () => {};
 	/** A remote agent finished its turn (busy → idle): `wait idle:` resolves. */
+	onParentGone: (address: string) => void = () => {};
 	onChildStatus: (child: Agent) => void = () => {};
 	onIdle: (address: string) => void = () => {};
 	/** A remote prompt appeared or changed (pool-address ids): SSE and push follow. */
@@ -520,7 +521,6 @@ export class PoolState {
 		for (const [id, f] of before)
 			if (!peer.fed.has(id)) {
 				this.forgetApprovals(peer.machineId, f);
-				this.notifyChildren(peer, f);
 			}
 		peer.bootId = bootId;
 		peer.seq = seq;
@@ -542,7 +542,7 @@ export class PoolState {
 			if (typeof id !== "string") continue;
 			const removed = peer.fed.get(id);
 			this.forgetApprovals(peer.machineId, removed);
-			if (removed) this.notifyChildren(peer, removed);
+			if (!isLocalSubagentId(id)) this.onParentGone(`${peer.machineId}/${id}`);
 			peer.fed.delete(id);
 			peer.agents.delete(id);
 			this.addresses.delete(`${peer.machineId}/${id}`);
@@ -592,13 +592,19 @@ export class PoolState {
 		peer.fed.set(f.id, f);
 		peer.agents.set(f.id, toAgent(peer, f));
 		this.addresses.set(`${peer.machineId}/${f.id}`, f);
-		if (prev) this.notifyChildren(peer, prev, f);
+		if (f.status === "gone" && !isLocalSubagentId(f.id))
+			this.onParentGone(address);
+		this.notifyChildren(peer, prev, f);
 	}
 
-	private notifyChildren(peer: Peer, before: FedAgent, after?: FedAgent) {
-		if (!before.childStatuses?.length) return;
-		const parent = toAgent(peer, after ?? before);
-		changedChildren(before.childStatuses, after?.childStatuses ?? [], (child) =>
+	private notifyChildren(
+		peer: Peer,
+		before: FedAgent | undefined,
+		after: FedAgent,
+	) {
+		if (!after.childStatuses?.length) return;
+		const parent = toAgent(peer, after);
+		changedChildren(before?.childStatuses ?? [], after.childStatuses, (child) =>
 			this.onChildStatus(observedAgent(parent, child)),
 		);
 	}

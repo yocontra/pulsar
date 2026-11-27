@@ -562,14 +562,18 @@ describe("registry gossip", () => {
 		state.setLink(peer, "tailnet");
 		expect(state.observedSubagents()).toEqual([]);
 		expect(changes).toEqual([]);
-		state.snapshot(peer, "b1", 6, [rec([child("a", "idle")])]);
+		state.snapshot(peer, "b1", 6, [
+			{ id: "claude:p", name: "parent", harness: "claude" },
+		]);
+		expect(changes).toEqual([]);
+		state.delta(peer, "b1", 7, [rec([child("a", "idle")])], []);
 		expect(changes).toEqual(["idle"]);
 		expect(state.observedSubagents()[0]).toMatchObject({
 			id: "mb/claude:p/sub:a",
 			status: "idle",
 		});
-		state.snapshot(peer, "b1", 7, []);
-		expect(changes).toEqual(["idle", "gone"]);
+		state.snapshot(peer, "b1", 8, []);
+		expect(changes).toEqual(["idle"]);
 	});
 
 	test("a peer's repo URL is kept only when it's a plain http(s) page", () => {

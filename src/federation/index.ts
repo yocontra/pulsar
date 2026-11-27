@@ -358,15 +358,19 @@ export class Federation implements PoolView {
 			this.service.events.emit("approval", { approval });
 		this.state.onTurn = (address, turn) =>
 			this.service.events.emit("agent:turn", { agentId: address, ...turn });
+		this.state.onParentGone = (id) =>
+			this.service.waiters.resolveChildrenGone(id);
 		this.state.onChildStatus = (child) => {
 			if (child.status === "gone") this.service.waiters.resolveGone(child);
 			else this.service.waiters.resolveIdle(child);
 		};
 		this.state.onIdle = (address) => {
-			const agent =
-				this.state.observedSubagent(address) ??
-				this.service.registry.find(address);
-			if (agent?.status === "idle") this.service.waiters.resolveIdle(agent);
+			const agent = this.service.registry.find(address);
+			if (
+				agent?.status === "idle" &&
+				!isLocalSubagentId(agent.meta.localId ?? "")
+			)
+				this.service.waiters.resolveIdle(agent);
 		};
 		this.state.onChange = (machineId) =>
 			this.service.events.emit("pool", { machineId });

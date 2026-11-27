@@ -82,7 +82,7 @@ interface Entry {
 	live: number;
 	counts: SubagentCounts | undefined;
 	listedAt: number;
-	statusFresh: boolean;
+	statuses: Map<string, ChildStatus>;
 	inflight: Promise<void> | null;
 	/** One more listing, asked for while `inflight` ran (it may miss a new file). */
 	again: Promise<void> | null;
@@ -162,7 +162,7 @@ export class Subagents {
 				live: 0,
 				counts: undefined,
 				listedAt: 0,
-				statusFresh: false,
+				statuses: new Map(),
 				inflight: null,
 				again: null,
 				watchedAt: 0,
@@ -234,7 +234,8 @@ export class Subagents {
 	}
 
 	private apply(agent: Agent, e: Entry, found: FoundSubagent[], fresh = true) {
-		if (this.dead(agent))
+		const parentGone = this.dead(agent);
+		if (parentGone)
 			found = found.map((f) =>
 				f.state === "done"
 					? f
@@ -248,7 +249,7 @@ export class Subagents {
 		const keys = new Set(found.map((f) => f.key));
 		const previous = e.direct;
 		const previousStatuses = this.observations(agent.id);
-		e.statusFresh = fresh;
+
 		e.found = found;
 		e.direct = new Map();
 		e.aliases = new Set();
@@ -330,6 +331,28 @@ export class Subagents {
 		e.listed = e.rows.filter(
 			(r) => r.state !== "done" || (r.finishedAt ?? r.updatedAt) >= cutoff,
 		);
+		const listed = new Set(e.listed.map((r) => r.id));
+		e.statuses.clear();
+		for (const sub of found) {
+			const id = idOf(sub.key);
+			const status = parentGone
+				? "gone"
+				: !fresh
+					? "unknown"
+					: (sub.waitStatus ??
+						(sub.state === "running"
+							? "busy"
+							: sub.state === "done"
+								? "gone"
+								: sub.state));
+			if (listed.has(id) || status === "busy" || status === "idle")
+				e.statuses.set(sub.key, {
+					key: sub.key,
+					name: e.direct.get(id)?.name ?? sub.name,
+					status,
+				});
+		}
+
 		e.live = found.filter((f) => f.state !== "done").length;
 		const running = e.listed.filter((r) => r.state === "running").length;
 		const done = e.listed.filter((r) => r.state === "done").length;
@@ -362,12 +385,16 @@ export class Subagents {
 	 * someone watches. A known parent that is gone has all its children done.
 	 * Sequential, so it never floods the disk or a harness server.
 	 */
-	async sweep() {
+	async sweep(waitedParents: ReadonlySet<string> = new Set()) {
 		const now = this.now();
 		for (const agent of this.registry.live()) {
 			if (this.registry.closed) return;
 			const sub = childDriver(agent)?.subagents;
 			if (!sub) continue;
+			if (waitedParents.has(agent.id)) {
+				await this.refresh(agent.id);
+				continue;
+			}
 			const e = this.entries.get(agent.id);
 			const running = (e?.counts?.running ?? 0) > 0;
 			const since = now - (e?.listedAt ?? 0);
@@ -412,6 +439,7 @@ export class Subagents {
 	}
 
 	async refreshWaitTarget(name: string, sender: Agent) {
+		name = this.registry.localWaitId(name);
 		// A direct id can be known to the caller before our first scheduled scan.
 		let id: string | undefined;
 		if (!/[=*,]/.test(name) && isLocalSubagentId(name)) id = name;
@@ -602,36 +630,31 @@ export class Subagents {
 		};
 	}
 
-	private statusRow(row: SubagentRow, fresh: boolean): ChildStatus {
-		const connected = this.registry.connectedSubagent(row.id);
-		return {
-			key: splitSubagentId(row.id)!.key,
-			name: connected?.name ?? row.name,
-			status:
-				row.state === "done"
-					? "gone"
-					: (connected?.status ??
-						(!fresh
-							? "unknown"
-							: row.state === "running"
-								? "busy"
-								: row.state)),
-		};
+	private statusRow(parentId: string, observation: ChildStatus): ChildStatus {
+		const connected = this.registry.connectedSubagent(
+			parentId + SUB_MARK + observation.key,
+		);
+		const reported =
+			connected && this.registry.childReportsStatus.has(connected);
+		return connected && reported && observation.status !== "gone"
+			? { ...observation, status: connected.status, name: connected.name }
+			: observation;
 	}
 
 	observations(parentId: string): ChildStatus[] {
-		const e = this.entries.get(parentId);
-		return e?.listed.map((row) => this.statusRow(row, e.statusFresh)) ?? [];
+		const entry = this.entries.get(parentId);
+		return entry
+			? [...entry.statuses.values()].map((row) => this.statusRow(parentId, row))
+			: [];
 	}
 
 	observedAgent(id: string): Agent | undefined {
 		const parts = splitSubagentId(id);
 		if (!parts) return;
 		const parent = this.registry.get(parts.parentId);
-		const e = this.entries.get(parts.parentId);
-		const row = e?.listed.find((r) => r.id === id);
-		if (parent && e && row)
-			return observedAgent(parent, this.statusRow(row, e.statusFresh));
+		const row = this.entries.get(parts.parentId)?.statuses.get(parts.key);
+		if (parent && row)
+			return observedAgent(parent, this.statusRow(parent.id, row));
 	}
 
 	observedAgents(): Agent[] {

@@ -11,6 +11,7 @@ interface Waiter {
 	agentId: string;
 	kind: WaitKind;
 	target?: string;
+	child?: Agent;
 	resolve: (value: unknown) => void;
 	timer: NodeJS.Timeout;
 	onClose: () => void;
@@ -30,6 +31,7 @@ export class Waiters {
 		kind: WaitKind,
 		target: string | undefined,
 		timeoutMs: number,
+		child?: Agent,
 	): Promise<unknown> {
 		if (caller.closed.aborted) return Promise.resolve({ event: "closed" });
 		return new Promise((resolve) => {
@@ -38,6 +40,7 @@ export class Waiters {
 				agentId,
 				kind,
 				...(target ? { target } : {}),
+				...(child ? { child } : {}),
 				resolve,
 				timer: setTimeout(
 					() => this.settle(waiter, { event: "timeout" }),
@@ -70,6 +73,7 @@ export class Waiters {
 
 	/** Wakes anyone waiting for this agent to finish its turn. */
 	resolveIdle(agent: Agent) {
+		if (agent.status !== "idle") return;
 		for (const w of [...this.waiters])
 			if (w.kind === "idle" && w.target === agent.id)
 				this.settle(w, { event: "idle", agent: toPublic(agent) });
@@ -80,6 +84,21 @@ export class Waiters {
 		for (const w of [...this.waiters])
 			if (w.kind === "idle" && w.target === agent.id)
 				this.settle(w, { event: "gone", agent: toPublic(agent) });
+	}
+
+	/** A confirmed parent shutdown ends waits even for temporarily missing children. */
+	resolveChildrenGone(parentId: string) {
+		for (const w of this.waiters) {
+			if (
+				w.child &&
+				w.target &&
+				splitSubagentId(w.target)?.parentId === parentId
+			)
+				this.settle(w, {
+					event: "gone",
+					agent: toPublic({ ...w.child, id: w.target, status: "gone" }),
+				});
+		}
 	}
 
 	/** Wakes every `wait reply:<parentId>`. */

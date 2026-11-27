@@ -7,7 +7,12 @@ import { type Caller, OPERATOR_ID } from "./caller.ts";
 import { trackLevel } from "./delivery.ts";
 import type { EventBus } from "./events.ts";
 import { INTERVALS, LIMITS } from "./limits.ts";
-import { isLocalSubagentId, isRemote, splitAddress } from "./pool.ts";
+import {
+	isLocalSubagentId,
+	isRemote,
+	splitAddress,
+	splitSubagentId,
+} from "./pool.ts";
 import { type Registry, USER_PREFIX } from "./registry.ts";
 import type { Router } from "./router.ts";
 import {
@@ -520,6 +525,7 @@ export class Mailbox {
 		const forWhat = String(p.for ?? "message");
 		let kind: WaitKind = "message";
 		let target: string | undefined;
+		let child: Agent | undefined;
 		if (forWhat.startsWith("idle:")) {
 			kind = "idle";
 			const name = forWhat.slice(5);
@@ -542,6 +548,7 @@ export class Mailbox {
 					`${agent.name} does not currently report turn status; wait for a reply instead`,
 				);
 			target = agent.id;
+			if (splitSubagentId(target)) child = agent;
 		} else if (forWhat.startsWith("reply:")) {
 			kind = "reply";
 			target = forWhat.slice(6);
@@ -568,6 +575,6 @@ export class Mailbox {
 				});
 			}
 		}
-		return this.waiters.add(caller, me.id, kind, target, timeoutMs);
+		return this.waiters.add(caller, me.id, kind, target, timeoutMs, child);
 	}
 }

@@ -26,6 +26,7 @@ export function observedAgent(parent: Agent, child: ChildStatus): Agent {
 		tags: [],
 		meta: {
 			subagentOf: parent.id,
+			subagentObserved: "1",
 			subagentKey: child.key,
 			...(parent.meta.machineId
 				? { machineId: parent.meta.machineId, localId }
@@ -38,24 +39,23 @@ export function observedAgent(parent: Agent, child: ChildStatus): Agent {
 			stop: false,
 			transcript: false,
 			subagents: false,
-			status: child.status === "busy" || child.status === "idle",
+			status: child.status !== "gone",
 		},
 	};
 }
 
-/** A child leaving its home node's live list has ended. Only an explicit idle
- * observation reports a finished turn. A sibling or parent cannot satisfy it. */
+/** Only a reported state can finish a wait. An omitted row may be outside
+ * the discovery limit or temporarily unavailable. */
 export function changedChildren(
 	before: ChildStatus[],
 	after: ChildStatus[],
 	notify: (child: ChildStatus) => void,
 ) {
-	const current = new Map(after.map((item) => [item.key, item]));
-	for (const old of before) {
-		if (old.status === "gone") continue;
-		const next = current.get(old.key);
-		if (!next) notify({ ...old, status: "gone" });
-		else if (next.status === "gone") notify(next);
-		else if (next.status === "idle" && old.status !== "idle") notify(next);
-	}
+	const previous = new Map(before.map((item) => [item.key, item.status]));
+	for (const child of after)
+		if (
+			(child.status === "gone" || child.status === "idle") &&
+			previous.get(child.key) !== child.status
+		)
+			notify(child);
 }

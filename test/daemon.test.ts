@@ -311,6 +311,31 @@ describe("delivery rules", () => {
 		expect((await waiting).event).toBe("idle");
 	});
 
+	test("a settled unknown report keeps an idle wait pending", async () => {
+		daemon.service.registry.idleSettleMs = 10;
+		const a = await spawnAgent();
+		const b = await spawnAgent();
+		await b.client.call("set_status", { status: "busy" });
+		const waiting = a.client.call("wait", {
+			for: `idle:${b.agent.id}`,
+			timeoutSeconds: 5,
+		});
+		await until(() => daemon.service.waiters.size === 1);
+		daemon.service.registry.setStatus(
+			daemon.service.registry.get(b.agent.id)!,
+			"unknown",
+		);
+		await until(
+			() => daemon.service.registry.get(b.agent.id)?.status === "unknown",
+		);
+		expect(daemon.service.waiters.size).toBe(1);
+		await b.client.call("set_status", { status: "idle" });
+		expect(await waiting).toMatchObject({
+			event: "idle",
+			agent: { id: b.agent.id, status: "idle" },
+		});
+	});
+
 	test("an idle wait with multiple matching agents requires a specific target", async () => {
 		const observer = await spawnAgent();
 		const first = await spawnAgent({ harness: "omp" });

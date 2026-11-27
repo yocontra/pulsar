@@ -40,7 +40,7 @@ import type { Agent, DeliveredMessage } from "../src/types.ts";
 import { FakeTailnet } from "./fake-tailnet.ts";
 import { cleanupRepos, gitRepo } from "./git-repo.ts";
 import { registration, until } from "./helpers.ts";
-import { writeClaudeSub, writeClaudeTeam } from "./subagent-fixtures.ts";
+import { rec, writeClaudeSub, writeClaudeTeam } from "./subagent-fixtures.ts";
 import { SoftAuthenticator } from "./webauthn.ts";
 
 setDefaultTimeout(20_000);
@@ -1242,6 +1242,11 @@ describe("pool-wide attention, idle waits and stop", () => {
 			expect(a.service.registry.resolvePool(address, caller.agent)).toEqual([]);
 			expect(
 				a.service.registry
+					.resolveWaitTargets("*", caller.agent)
+					.some((a) => a.id === address),
+			).toBe(false);
+			expect(
+				a.service.registry
 					.resolvePool("*", caller.agent)
 					.some((a) => a.id === address),
 			).toBe(false);
@@ -1261,10 +1266,43 @@ describe("pool-wide attention, idle waits and stop", () => {
 					)[0]?.status === "gone",
 			);
 			expect(a.service.waiters.countFor(caller.caller)).toBe(1);
+			rmSync(join(folder, "subagents", "agent-aac001.jsonl"));
+			await publish();
+			await until(
+				() =>
+					a.service.registry.resolveWaitTargets(address, caller.agent)
+						.length === 0,
+			);
+			expect(a.service.waiters.countFor(caller.caller)).toBe(1);
 			writeClaudeSub(folder, "aac001", teammate, {
 				mtime: Date.now() - TEAMMATE_QUIET_MS - 1500,
 			});
 			await publish();
+			await until(
+				() =>
+					a.service.registry.resolveWaitTargets(address, caller.agent)[0]
+						?.status === "unknown",
+			);
+			expect(a.service.waiters.countFor(caller.caller)).toBe(1);
+			const quietWait = waiting();
+			await until(() => a.service.waiters.countFor(caller.caller) === 2);
+			writeClaudeSub(folder, "aac001", teammate, {
+				trailer: rec({
+					agentId: "aac001",
+					type: "assistant",
+					timestamp: new Date().toISOString(),
+					message: {
+						role: "assistant",
+						stop_reason: "end_turn",
+						content: [],
+					},
+				}),
+			});
+			await publish();
+			expect(await quietWait).toMatchObject({
+				event: "idle",
+				agent: { id: address },
+			});
 			expect(await result).toMatchObject({
 				event: "idle",
 				agent: { id: address, status: "idle" },
@@ -1291,6 +1329,14 @@ describe("pool-wide attention, idle waits and stop", () => {
 			await until(() => a.service.waiters.countFor(caller.caller) === 1);
 			rmSync(join(folder, "subagents", "agent-aac001.jsonl"));
 			await publish();
+			await until(
+				() =>
+					a.service.registry.resolveWaitTargets(address, caller.agent)
+						.length === 0,
+			);
+			expect(a.service.waiters.countFor(caller.caller)).toBe(1);
+			c.service.registry.markGone(parent);
+			c.fed.feed.tick();
 			expect(await removed).toMatchObject({
 				event: "gone",
 				agent: { id: address },

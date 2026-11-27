@@ -268,7 +268,10 @@ describe("MCP server", () => {
 			writeClaudeSub(folder, "abced1", { agentType: "MCP worker" });
 			const result = observer.callTool({
 				name: "wait",
-				arguments: { for: `idle:${childId}`, timeout_seconds: 5 },
+				arguments: {
+					for: `idle:${daemon.service.machineId}/${childId}`,
+					timeout_seconds: 5,
+				},
 			});
 			await until(() => daemon.service.waiters.size === 1);
 			writeClaudeSub(folder, "abced1", {
