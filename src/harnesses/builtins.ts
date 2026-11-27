@@ -1,14 +1,11 @@
 /**
- * Each harness's own slash commands, for the composer's `/` menu. No harness
- * lists its built-ins through an API, so these are static, keyed by the CLI
- * version they were read from (`version`). A newer installed CLI still gets
- * this list; `builtinsFor` says it may be stale (doctor and the catalog show
- * that).
+ * Native slash commands for the composer. Managed ACP sessions use the catalog
+ * supplied by the provider. Native fallbacks cover the public terminal commands
+ * for the recorded version. Runtime flags, plugins and skills can add commands.
  *
- * Sources: Claude Code 2.1.330's own menu (each name typed into a private
- * tmux session and its menu row read back); Codex 0.171.0's command table
- * (binary strings); OpenCode 2.2.5's `slash:` registrations; pi 1.5.0's
- * docs/slash-commands.md; omp's builtin registry.
+ * Sources include Claude Code's terminal menu, Codex's release-tagged
+ * slash_command.rs and bottom_pane/slash_commands.rs, OpenCode's slash
+ * registrations, pi's docs/slash-commands.md and OMP's builtin registry.
  *
  * `dialog`: run with no arguments, the command opens a picker or dialog in
  * the terminal that only someone at the terminal can answer. The menu offers
@@ -37,7 +34,7 @@ const c = (
 ): BuiltinCommand => ({ name, description, ...extra });
 
 const CLAUDE: BuiltinList = {
-	version: "2.1.330",
+	version: "2.1.331",
 	commands: [
 		c("add-dir", "Add a working directory", { args: "<path>" }),
 		c("advisor", "Let Claude consult a stronger model at key moments"),
@@ -172,13 +169,45 @@ const CLAUDE: BuiltinList = {
 			dialog: true,
 		}),
 		c("workflows", "Browse running and completed workflows", { dialog: true }),
+		c("auto-mode-setup", "Teach auto mode about your environment"),
+		c("bug", "Report a bug or share your session", { dialog: true }),
+		c("claude-api", "Build or debug an app that uses the Claude API"),
+		c("dataviz", "Get chart and dashboard design guidance"),
+		c("deep-research", "Research a question and verify sources", {
+			args: "<question>",
+		}),
+		c("list-agents", "List subagents, teammates and other Claude sessions"),
+		c("login", "Switch Anthropic accounts", { dialog: true }),
+		c("logout", "Sign out of your Anthropic account", { terminalOnly: true }),
+		c("mobile", "Show the mobile app download code", { dialog: true }),
+		c("plugin-authoring", "Write a Claude Code modification"),
+		c("powerup", "Learn Claude Code features in short lessons"),
+		c("radio", "Listen to Claude FM", { terminalOnly: true }),
+		c("run", "Launch the current project"),
+		c("run-skill-generator", "Create a skill for running the current project"),
+		c("sandbox", "Configure sandbox settings", { dialog: true }),
+		c("scroll-speed", "Adjust mouse wheel scroll speed", { dialog: true }),
+		c("statusline", "Set up the status line"),
+		c("stickers", "Check Claude Code sticker availability"),
+		c("team-onboarding", "Create a Claude Code guide for teammates"),
+		c("terminal-setup", "Set up Shift+Enter for newlines", {
+			terminalOnly: true,
+		}),
+		c("tui", "Select the terminal renderer", {
+			args: "<classic|fullscreen>",
+			dialog: true,
+		}),
+		c("update-config", "Change hooks, permissions or environment settings"),
+		c("verify", "Try a change and report whether it works"),
+		c("workflow-authoring", "Load the reference for writing workflow scripts"),
 	],
 };
 
 const CODEX: BuiltinList = {
-	version: "0.171.0",
+	version: "0.172.0",
 	commands: [
-		c("model", "Choose what model and reasoning effort to use", {
+		c("model", "Choose a model and reasoning effort", {
+			args: "[model]",
 			dialog: true,
 		}),
 		c("permissions", "Choose what Codex is allowed to do", { dialog: true }),
@@ -212,11 +241,53 @@ const CODEX: BuiltinList = {
 		c("hooks", "View and manage lifecycle hooks", { dialog: true }),
 		c("memories", "Configure memory use and generation", { dialog: true }),
 		c("ps", "List background terminals"),
-		c("clean", "Stop all background terminals"),
+		c("stop", "Stop all background terminals"),
 		c("clear", "Clear the terminal and start a new chat"),
 		c("feedback", "Send logs to maintainers", { dialog: true }),
 		c("logout", "Log out of Codex"),
 		c("exit", "Exit Codex"),
+		c("presets", "Manage saved prompts and commands", { dialog: true }),
+		c("ide", "Manage context from the connected IDE", {
+			args: "[setting]",
+			dialog: true,
+		}),
+		c("keymap", "Configure terminal keybindings", {
+			args: "[shortcut]",
+			dialog: true,
+		}),
+		c("vim", "Toggle Vim editing for the prompt"),
+		c("experimental", "Choose experimental features", { dialog: true }),
+		c("approve", "Review a request to retry a denied action", { dialog: true }),
+		c("import", "Import Claude Code setup, project settings or chats", {
+			dialog: true,
+		}),
+		c("archive", "Archive the current session"),
+		c("delete", "Delete the current session permanently", { dialog: true }),
+		c("config", "Open Codex settings", { dialog: true }),
+		c("agents", "Open the agent command center", { dialog: true }),
+		c("subagents", "Switch between the current thread\u2019s subagents", {
+			dialog: true,
+		}),
+		c("raw", "Toggle copy-friendly terminal scrollback", { args: "[on|off]" }),
+		c("tui", "Select the terminal interface for the next launch", {
+			dialog: true,
+		}),
+		c("daemon", "Manage the local background service", { dialog: true }),
+		c("rc", "Configure remote control", { args: "[on|off]", dialog: true }),
+		c("warnings", "Inspect retained warnings and diagnostic details"),
+		c("title", "Choose the fields in the terminal title", {
+			args: "[items]",
+			dialog: true,
+		}),
+		c("statusline", "Choose the fields in the status line", {
+			args: "[items]",
+			dialog: true,
+		}),
+		c("theme", "Choose a syntax highlighting theme", { dialog: true }),
+		c("pets", "Choose or hide the terminal pet", {
+			args: "[name]",
+			dialog: true,
+		}),
 	],
 };
 
@@ -270,7 +341,7 @@ const PI: BuiltinList = {
 };
 
 const OMP: BuiltinList = {
-	version: "19.1.0",
+	version: "19.1.1",
 	commands: [
 		c("plan", "Enter plan mode", { args: "[prompt]" }),
 		c("vibe", "Toggle vibe mode"),
@@ -278,7 +349,7 @@ const OMP: BuiltinList = {
 			args: "<set|pause|resume|drop>",
 		}),
 		c("loop", "Run a prompt in a loop", { args: "<prompt>" }),
-		c("model", "Switch model", { args: "<model>", dialog: true }),
+		c("model", "Open the model picker", { dialog: true }),
 		c("effort", "Set the effort level", { args: "<level>", dialog: true }),
 		c("fast", "Toggle fast mode"),
 		c("new", "Start a new session"),
@@ -289,63 +360,233 @@ const OMP: BuiltinList = {
 		c("retry", "Retry the last turn"),
 		c("commit", "Commit the current changes"),
 		c("todo", "Show the todo list"),
-		c("skills", "Browse skills", { dialog: true }),
+		c("skills", "Search, install or update registry skills", {
+			args: "<search|install|installed|update>",
+		}),
 		c("mcp", "Manage MCP servers", { dialog: true }),
 		c("session", "Show session info"),
 		c("exit", "Exit omp"),
+		c("security", "Manage OMP security scans", {
+			args: "<plan|scan|status|cancel|scans|show|import|export|validate|compare|disposition>",
+		}),
+		c("settings", "Open OMP settings", { dialog: true }),
+		c("setup", "Configure model providers", { dialog: true }),
+		c("plan-review", "Review the latest plan", { dialog: true }),
+		c("guided-goal", "Define a goal through an interview", {
+			args: "[rough objective]",
+		}),
+		c("queue", "Queue a message for after this turn", { args: "<message>" }),
+		c("switch", "Select the model for this session", { args: "[model]" }),
+		c("slow", "Configure slow mode", { args: "[on|off|status]" }),
+		c("skillful", "Toggle installed skills in the system prompt", {
+			args: "[on|off|status]",
+		}),
+		c("extended-context", "Toggle extended context windows", {
+			args: "[on|off|status]",
+		}),
+		c("computer", "Configure native computer use", { args: "[on|off|status]" }),
+		c("ratchet", "Evaluate and improve a model workflow", {
+			args: "[flow and goal]",
+		}),
+		c("prewalk", "Configure a one-time model handoff", {
+			args: "[into] | restart [from] [into] | off",
+		}),
+		c("modelpreset", "Manage saved model and effort presets", {
+			args: "[save|switch|delete|list] [name]",
+		}),
+		c("advisor", "Manage the second model that reviews turns", {
+			args: "[on|off|status|dump [raw]|configure]",
+		}),
+		c("export", "Export the session as HTML", { args: "[--themes] [path]" }),
+		c("trace", "Open the session trace in the stats dashboard"),
+		c("dump", "Copy the transcript and export request details", {
+			args: "[all|anon]",
+		}),
+		c("share", "Create an encrypted link to this session"),
+		c("collab", "Share a live session through a relay", {
+			args: "[start|view|list|stop|status] [relayUrl]",
+		}),
+		c("join", "Join a shared session", { args: "<link>" }),
+		c("leave", "Leave the shared session"),
+		c("browser", "Choose a visible or headless browser", {
+			args: "[headless|visible]",
+		}),
+		c("copy", "Copy selected conversation text or code", { dialog: true }),
+		c("open", "Open a conversation link in the browser"),
+		c("jobs", "Show background job status", {
+			args: "[full|kill <id>|kill all]",
+		}),
+		c("usage", "Show provider usage and limits", {
+			args: "[show|reset [provider/credential-id|provider/active]]",
+		}),
+		c("stats", "Open the local statistics dashboard", {
+			args: "[--port <port>] [--host <host>]",
+		}),
+		c("changelog", "Show release notes", { args: "[full|last [N]]" }),
+		c("hotkeys", "Show keyboard shortcuts", { dialog: true }),
+		c("tools", "List tools available to the agent"),
+		c("context", "Inspect the current context", { dialog: true }),
+		c("extensions", "Open extension controls", { dialog: true }),
+		c("agents", "Configure agents and their models", { dialog: true }),
+		c("git", "Open the Git diff and staging interface", {
+			args: "[revision]",
+			dialog: true,
+		}),
+		c("local", "Open a session file in the editor", {
+			args: "[name]",
+			dialog: true,
+		}),
+		c("hub", "Inspect running and finished subagents", { dialog: true }),
+		c("branch", "Return to an earlier message and keep the old branch", {
+			dialog: true,
+		}),
+		c("fork", "Fork this session"),
+		c("tree", "Switch between session branches", { dialog: true }),
+		c("login", "Sign in to a provider", {
+			args: "[provider|redirect URL]",
+			dialog: true,
+		}),
+		c("logout", "Sign out of a provider", { args: "[provider]", dialog: true }),
+		c("ssh", "Manage SSH hosts", { args: "<subcommand>" }),
+		c("fresh", "Reset the provider stream and keep the transcript"),
+		c("clear", "Clear the current conversation context"),
+		c("delete", "Delete this session and open a new one"),
+		c("shake", "Remove large tool results from context", {
+			args: "[elide|images|thinking]",
+		}),
+		c("pin", "Pin a session in the resume list", { args: "[session id]" }),
+		c("unpin", "Remove a session pin", { args: "[session id]" }),
+		c("tan", "Start a background agent on a related task", { args: "<work>" }),
+		c("omfg", "Create a rule to prevent a recurring problem", {
+			args: "<complaint>",
+		}),
+		c("cleanse", "Check and repair project diagnostics", {
+			args: "[request] [--all]",
+		}),
+		c("debug", "Open the debugging tools", { dialog: true }),
+		c("memory", "Inspect and maintain memory", { args: "<subcommand>" }),
+		c("rename", "Rename the current session", { args: "[title]" }),
+		c("move", "Move this session to a directory", { args: "[<path>]" }),
+		c("wt", "Move the session and its changes to a new worktree", {
+			args: "[<branch>]",
+		}),
+		c("add-dir", "Add a directory to this workspace", { args: "<path>" }),
+		c("remove-dir", "Remove a directory from this workspace", {
+			args: "<path>",
+		}),
+		c("dirs", "List workspace directories"),
+		c("restart", "Restart and resume the current session"),
+		c("marketplace", "Manage plugin sources and installations", {
+			args: "<subcommand>",
+		}),
+		c("plugins", "Manage installed plugins", { args: "[list|enable|disable]" }),
+		c("reload-plugins", "Reload plugin commands, hooks and tools"),
+		c("force", "Select a tool for the next turn", {
+			args: "<tool-name> [prompt]",
+		}),
+		c("live", "Start real-time voice mode"),
+		c("record", "Start or stop recording this terminal session"),
+		c("pause", "Pause the session and its subagents"),
+		c("forget-approvals", "Clear remembered file and folder permissions"),
 	],
 };
 
-// The reference linked by the installed CLI's antigravity-guide skill:
+// The installed CLI links to this reference. Its bundled skills (including
+// swarm and antigravity-guide) come from the on-disk skill catalog:
 // https://antigravity.google/docs/cli/reference.md. Only the three read-only
 // lookups below have an equivalent outside the native terminal.
 const ANTIGRAVITY: BuiltinList = {
-	version: "1.5.16",
+	version: "1.5.18",
 	commands: [
 		c("help", "List commands or look up one command", { args: "[command]" }),
 		c("skills", "List installed skills matching a name", { args: "[name]" }),
 		c("changelog", "Read the latest installed release notes"),
-		c("add-dir", "Add a workspace folder", { terminalOnly: true }),
+		c("add-dir", "Add a workspace folder", {
+			args: "<path>",
+			terminalOnly: true,
+		}),
 		c("agents", "Browse agents", { terminalOnly: true }),
 		c("artifact", "Review artifacts", { terminalOnly: true }),
-		c("boost", "Start a deep reasoning task", { terminalOnly: true }),
-		c("browser", "Start a browser task", { terminalOnly: true }),
-		c("btw", "Ask a side question", { terminalOnly: true }),
+		c("boost", "Start a deep reasoning task", {
+			args: "<task>",
+			terminalOnly: true,
+		}),
+		c("browser", "Start a browser task", {
+			args: "<task>",
+			terminalOnly: true,
+		}),
+		c("btw", "Ask a side question", { args: "<query>", terminalOnly: true }),
 		c("clear", "Start a fresh conversation", { terminalOnly: true }),
-		c("codesearch", "Search the workspace", { terminalOnly: true }),
-		c("compact", "Compact the current conversation", { terminalOnly: true }),
+		c("codesearch", "Search the workspace", {
+			args: "<query>",
+			terminalOnly: true,
+		}),
+		c("compact", "Compact the current conversation", {
+			args: "[message]",
+			terminalOnly: true,
+		}),
 		c("config", "Edit settings", { terminalOnly: true }),
 		c("context", "Inspect context use", { terminalOnly: true }),
-		c("copy", "Copy a response", { terminalOnly: true }),
+		c("copy", "Copy a response", { args: "[n|btw]", terminalOnly: true }),
 		c("credits", "Check credits", { terminalOnly: true }),
 		c("diff", "Review changes", { terminalOnly: true }),
-		c("effort", "Set reasoning effort", { terminalOnly: true }),
+		c("effort", "Set reasoning effort", {
+			args: "[level]",
+			terminalOnly: true,
+		}),
 		c("exit", "Close the terminal session", { terminalOnly: true }),
 		c("feedback", "Send feedback", { terminalOnly: true }),
 		c("fork", "Fork the current conversation", { terminalOnly: true }),
-		c("goal", "Set a goal", { terminalOnly: true }),
-		c("grill-me", "Clarify requirements", { terminalOnly: true }),
+		c("goal", "Set a goal", { args: "<objective>", terminalOnly: true }),
+		c("grill-me", "Clarify requirements", {
+			args: "[task]",
+			terminalOnly: true,
+		}),
 		c("hooks", "Browse hooks", { terminalOnly: true }),
 		c("keybindings", "Edit keyboard shortcuts", { terminalOnly: true }),
-		c("learn", "Propose a rule or skill", { terminalOnly: true }),
+		c("learn", "Propose a rule or skill", {
+			args: "[instruction]",
+			terminalOnly: true,
+		}),
 		c("logout", "Sign out of Antigravity", { terminalOnly: true }),
 		c("mcp", "Manage MCP servers", { terminalOnly: true }),
-		c("model", "Select a model", { terminalOnly: true }),
-		c("open", "Open a file in the editor", { terminalOnly: true }),
+		c("model", "Select a model", {
+			args: "[model] [prompt]",
+			terminalOnly: true,
+		}),
+		c("open", "Open a file in the editor", {
+			args: "<path>",
+			terminalOnly: true,
+		}),
 		c("permissions", "Review permissions", { terminalOnly: true }),
-		c("plan", "Start planning", { terminalOnly: true }),
+		c("plan", "Start planning", { args: "[task]", terminalOnly: true }),
 		c("plugin", "Manage plugins", { terminalOnly: true }),
-		c("rename", "Rename this conversation", { terminalOnly: true }),
-		c("remote-control", "Configure remote control", { terminalOnly: true }),
+		c("rename", "Rename this conversation", {
+			args: "<name>",
+			terminalOnly: true,
+		}),
+		c("remote-control", "Configure remote control", {
+			args: "[on|off]",
+			terminalOnly: true,
+		}),
 		c("resume", "Select a conversation", { terminalOnly: true }),
 		c("rewind", "Rewind the conversation", { terminalOnly: true }),
-		c("schedule", "Schedule a task", { terminalOnly: true }),
+		c("schedule", "Schedule a task", {
+			args: "<when> <task>",
+			terminalOnly: true,
+		}),
 		c("statusline", "Configure the status bar", { terminalOnly: true }),
 		c("tasks", "Inspect background tasks", { terminalOnly: true }),
-		c("teamwork", "Start a team task", { terminalOnly: true }),
-		c("title", "Configure the window title", { terminalOnly: true }),
+		c("teamwork", "Start a team task", { args: "<task>", terminalOnly: true }),
+		c("title", "Configure the window title", {
+			args: "[on|off]",
+			terminalOnly: true,
+		}),
 		c("usage", "Show quota usage", { terminalOnly: true }),
-		c("voice", "Configure voice input", { terminalOnly: true }),
+		c("voice", "Configure voice input", {
+			args: "[live|dictate]",
+			terminalOnly: true,
+		}),
 	],
 };
 

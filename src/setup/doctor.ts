@@ -326,7 +326,7 @@ async function doctorChecks(
 		const list = builtinsFor(h.id, h.version);
 		if (list?.stale)
 			note(
-				`${h.label} ${h.version}: the app's list of its built-in commands was read from ${list.listVersion}; new commands are missing from the \`/\` menu (they still run when typed)`,
+				`${h.label} ${h.version}: the built-in command list was checked against ${list.listVersion}. The installed version is newer and its commands may differ.`,
 				"update pulsar",
 			);
 	}

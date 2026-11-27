@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { builtinsFor } from "../src/harnesses/builtins.ts";
 import type { ApiResult } from "../src/harnesses/opencode-api.ts";
 import type { Caller } from "../src/service/caller.ts";
 import { frontmatter } from "../src/service/catalog.ts";
@@ -1009,6 +1010,42 @@ describe("the / menu", () => {
 			version: "2.2.0",
 		});
 		expect((await controls.commands("claude:s1")).stale).toBe(true);
+	});
+
+	test("qualified native catalogs distinguish terminal dialogs, skills and commands", () => {
+		const claude = builtinsFor("claude", "2.1.331")!;
+		expect(claude.commands.map((command) => command.name)).toContain(
+			"list-agents",
+		);
+		const codex = builtinsFor("codex", "codex-cli 0.172.0")!;
+		const omp = builtinsFor("omp", "19.1.1")!;
+		const agy = builtinsFor("antigravity", "1.5.18")!;
+		for (const catalog of [claude, codex, omp, agy]) {
+			expect(catalog.stale).toBe(false);
+			const names = catalog.commands.map((command) => command.name);
+			expect(new Set(names).size).toBe(names.length);
+		}
+		const codexNames = codex.commands.map((command) => command.name);
+		expect(codexNames).toEqual(
+			expect.arrayContaining(["stop", "config", "subagents", "keymap"]),
+		);
+		expect(codexNames).not.toContain("test-approval");
+		expect(
+			omp.commands.find((command) => command.name === "model"),
+		).toMatchObject({ dialog: true });
+		expect(
+			omp.commands.find((command) => command.name === "model")?.args,
+		).toBeUndefined();
+		expect(
+			omp.commands.find((command) => command.name === "switch")?.args,
+		).toBe("[model]");
+		expect(
+			agy.commands.find((command) => command.name === "compact"),
+		).toMatchObject({ terminalOnly: true, args: "[message]" });
+		expect(agy.commands.some((command) => command.name === "swarm")).toBe(
+			false,
+		);
+		expect(builtinsFor("antigravity", "1.5.19")?.stale).toBe(true);
 	});
 
 	test("not runnable: the reason travels with the list", async () => {
