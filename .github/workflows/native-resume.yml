@@ -6,7 +6,7 @@ on:
       - src/harnesses/codex*.ts
       - src/service/launch.ts
       - src/harnesses/acp*.ts
-      - scripts/live/codex-acp.ts
+      - scripts/live/codex-acp*.ts
       - scripts/live/codex-resume.ts
       - scripts/live/resume-host.ts
       - .github/workflows/native-resume.yml

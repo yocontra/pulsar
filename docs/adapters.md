@@ -75,7 +75,7 @@ Extension host tests verified the steering and follow-up requests for pi and omp
 | Managed ACP adapter | Steering qualification |
 | --- | --- |
 | Claude Agent ACP 0.110.0 | The installed adapter accepted input during a held prompt. A local model fixture received the input in that turn. |
-| Codex ACP 2.12.0 | The installed adapter advertised steering. The adapter failed to synchronize managed preferences on the test Mac before a prompt could start. The bridge tests cover active-turn acknowledgement and fallback when the turn ends. |
+| Codex ACP 2.12.0 | On Linux, Pulsar received an `acp-steer` receipt while the original model request was held open. The provider consumed the extra message on its next inference within the same native turn. Bridge tests also cover fallback when the turn ends. [Linux qualification](https://github.com/yocontra/pulsar/actions/runs/45973972669) |
 | OpenCode 2.2.5 and Antigravity CLI 1.5.16 | Neither advertised ACP steering. Urgent input waits for the next managed prompt. |
 
 ## Prompts in the app

@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { PulsarService } from "../../src/service/index.ts";
+import { nativeTurns, type steeringFixture } from "./codex-acp-steering.ts";
 
 export async function checkCodexAcp(
 	service: PulsarService,
@@ -15,6 +16,7 @@ export async function checkCodexAcp(
 		followup: string;
 		resumedReply: string;
 	},
+	steering: ReturnType<typeof steeringFixture>,
 ) {
 	const user = {
 		kind: "human",
@@ -122,7 +124,46 @@ export async function checkCodexAcp(
 		console.log(
 			"Codex ACP completed two Pulsar-delivered turns with the selected conversation's history.",
 		);
+		await service.app.send(user, { ids: [agent.id], body: steering.start });
+		await until(steering.held, "held active turn");
+		const sid = agent.sessionId!;
+		const before = await nativeTurns(sid);
+		if (!before.length)
+			throw Error("Missing native Codex turn ID during steering");
+		try {
+			const sent = await service.app.send(user, {
+				ids: [agent.id],
+				body: steering.urgent,
+				priority: "urgent",
+			});
+			if (!("message" in sent)) throw Error("No urgent message");
+			await until(() => {
+				const receipt = service.store.receipt(sent.message.id, agent.id);
+				if (receipt?.state === "nacked" || receipt?.state === "failed")
+					throw Error(
+						`Unexpected active-turn receipt: ${JSON.stringify(receipt)}`,
+					);
+				return receipt?.via === "acp-steer" && receipt.state === "delivered";
+			}, "confirmed steering receipt");
+		} finally {
+			steering.release();
+		}
+		await until(
+			async () =>
+				steering.sawUrgent() &&
+				(await service.transcripts.page(agent.id)).events.some(
+					(e) => e.role === "assistant" && e.text.includes(steering.reply),
+				),
+			"steered model response",
+		);
+		const after = await nativeTurns(sid);
+		if (after.length !== before.length || after.at(-1) !== before.at(-1))
+			throw Error("Urgent message started a separate native turn");
+		console.log(
+			"Codex ACP delivered the urgent message with acp-steer; the local model consumed it in the original active turn.",
+		);
 	} finally {
+		steering.release();
 		child.kill("SIGTERM");
 		await closed;
 	}

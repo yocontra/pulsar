@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { codex } from "../../src/harnesses/codex.ts";
+import { steeringFixture } from "./codex-acp-steering.ts";
 
 const exec = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), "pulsar-codex-resume-"));
@@ -46,7 +47,9 @@ const requests: {
 }[] = [];
 let count = 0;
 const NativeResponse = globalThis.Response;
+const steering = steeringFixture();
 const server = Bun.serve({
+	idleTimeout: 60,
 	hostname: "127.0.0.1",
 	port: 0,
 	async fetch(req) {
@@ -70,7 +73,7 @@ const server = Bun.serve({
 			evidence.previousReply &&
 			!evidence.other;
 		const id = `resp_${++count}`;
-		const item = {
+		const item = (await steering.intercept(turns)) ?? {
 			type: "message",
 			id: `msg_${count}`,
 			role: "assistant",
@@ -138,6 +141,7 @@ enabled = false
 			cwd,
 			`http://127.0.0.1:${server.port}/v1`,
 			{ first, reply, followup, resumedReply },
+			steering,
 		);
 		return;
 	}
@@ -246,6 +250,7 @@ try {
 } finally {
 	await run("tmux", ["-L", "qualification", "kill-server"]).catch(() => {});
 	await host?.close();
+	steering.release();
 	server.stop(true);
 	await rm(root, { recursive: true, force: true });
 }
