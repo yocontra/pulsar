@@ -52,6 +52,42 @@ async function expectAtMatch(page: Page, q: string) {
 export function searchSuite(platform: "desktop" | "phone") {
 	const phone = platform === "phone";
 
+	test(`search opens a saved conversation by project (${platform})`, async ({
+		page,
+		request,
+	}) => {
+		const id = await agentId(request, "name=apparish-auth");
+		await page.route("**/api/v1/sessions/saved?*", (route) =>
+			route.fulfill({
+				json: {
+					items: [
+						{
+							id,
+							name: "Saved auth investigation",
+							project: "apparish",
+							harness: "claude",
+							lastSeen: Date.now(),
+						},
+					],
+				},
+			}),
+		);
+		await ready(page);
+		if (phone) {
+			await page.getByLabel("Search agents and messages").fill("apparish");
+			await page.getByText("Saved auth investigation", { exact: true }).click();
+		} else {
+			await page.locator("button.d-nav-item", { hasText: "Search" }).click();
+			const dialog = page.getByRole("dialog", { name: "Search the pool" });
+			await dialog.getByLabel("Search").fill("apparish");
+			await dialog
+				.getByRole("option")
+				.filter({ hasText: "Saved auth investigation" })
+				.click();
+		}
+		await expect(page).toHaveURL(new RegExp(encodeURIComponent(id) + "$"));
+	});
+
 	test(`a message hit opens its session at the match with the find bar (${platform})`, async ({
 		page,
 	}) => {
